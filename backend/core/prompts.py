@@ -379,7 +379,7 @@ def get_vocal_direction_prompt(provider: str = "google") -> str:
         "CRITICAL: NEVER translate voice tags into German or any other language (e.g. NEVER write [neugierig], ALWAYS write [curious]).\n\n"
         + build_voice_tag_catalog_prompt_block(provider) +
         "1. TONE TAGS: Open a paragraph or dialogue line with one tone tag from the Tone Catalog to set the sustained mood (for example [excited], [whispers], [shouting], [very fast]). "
-        "A tone tag applies to the entire paragraph or dialogue line it opens — start a new paragraph when switching to a different tag. Do not nest tone tags.\n"
+        "A tone tag applies to the entire paragraph or dialogue line it opens — start a new paragraph when switching to a different tag. Do not nest tags.\n"
         "2. INLINE VOCALIZATIONS: Insert momentary human sounds exactly where they happen using angle brackets from the Vocal Bursts Catalog (for example <cough>, <sigh>, <short pause>, <laugh>, <throat-clearing>).\n"
         "Use both whenever the mood calls for it — combat tension, hushed secrets, desperate warnings."
     )
