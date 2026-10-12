@@ -6,7 +6,7 @@ authors = [
     {name = "Jean Schmitz"}
 ]
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -17,7 +17,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.2.0",
     "cryptography>=42.0.0",
-    "litellm>=1.40.0",
+    "litellm>=1.88.6",
     "alembic>=1.13.0",
     "pillow>=10.0.0",
     "python-multipart>=0.0.9",
