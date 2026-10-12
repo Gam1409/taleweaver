@@ -1,20 +1,24 @@
-import binascii
-from typing import Optional
 import asyncio
 import base64
+import binascii
+import json
 import logging
 import math
 import os
 import random
 import struct
 import uuid
-import re
-import json
+from typing import Optional
 
 import httpx
 
 from backend.core.config import settings
-from backend.utils.path_security import ensure_within_data_dir, local_path_to_data_url, safe_data_path, sanitize_path_component
+from backend.utils.path_security import (
+    ensure_within_data_dir,
+    local_path_to_data_url,
+    safe_data_path,
+    sanitize_path_component,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +173,30 @@ def _strip_vocal_tags(text: str) -> str:
 
     return "".join(result).strip()
 
+
+def _convert_brackets_to_angles(text: str) -> str:
+    """Convert [tag] to <tag> safely in linear time without regular expressions."""
+    if not text or "[" not in text:
+        return text
+
+    result: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] == "[":
+            end = text.find("]", i + 1)
+            if end != -1:
+                inner = text[i + 1:end]
+                # Vocal tag must be non-empty, single-line, and cannot contain nested brackets
+                if inner and "\n" not in inner and "[" not in inner:
+                    result.append(f"<{inner}>")
+                    i = end + 1
+                    continue
+        result.append(text[i])
+        i += 1
+    return "".join(result)
+
+
 def _add_wav_header(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
     """Adds a WAV header to raw PCM data (Linear 16-bit)."""
     num_channels = 1
@@ -312,7 +340,7 @@ class TTSEngine:
             logger.info("[TTS] Vocal tags are ENABLED. Keeping tags in input text.")
             # Convert [tag] to <tag> as Gemini 3.8 TTS expects angle brackets
             if text and ("gemini" in (model_name or "").lower() or provider == "google"):
-                text = re.sub(r'\[([^\]\n]+)\]', r'<\1>', text)
+                text = _convert_brackets_to_angles(text)
 
         if provider == "elevenlabs":
             # Sanitize model_id: ElevenLabs models usually use underscores, but some might be sent with dots

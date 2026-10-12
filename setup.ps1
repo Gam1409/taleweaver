@@ -90,6 +90,13 @@ Set-Location frontend
 npm install
 Set-Location ..
 
+# 7. Git Hooks Setup
+if (Test-Path ".git") {
+    Write-Host "[*] Configuring Git pre-commit hooks..." -ForegroundColor Yellow
+    git config core.hooksPath .githooks
+    Write-Host "[+] Git hooks linked to .githooks" -ForegroundColor Green
+}
+
 Write-Host "`n--- Setup Complete! ---" -ForegroundColor Green
 Write-Host "To start the application:"
 Write-Host "Backend: $RUN_CMD python -m backend.main  (or: $RUN_CMD taleweaver)"

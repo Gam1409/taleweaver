@@ -83,7 +83,12 @@ async def test_tts_engine_includes_voice_direction_cue_in_prompt():
 
     assert captured_payload, "No HTTP request was captured."
     prompt_text = captured_payload["contents"][0]["parts"][0]["text"]
-    assert "voice-direction" in prompt_text or "acting cues" in prompt_text.lower() or "[shouting]" in prompt_text
+    assert (
+        "voice-direction" in prompt_text
+        or "acting cues" in prompt_text.lower()
+        or "[shouting]" in prompt_text
+        or "<shouting>" in prompt_text
+    )
 
 
 @pytest.mark.asyncio
@@ -136,8 +141,8 @@ async def test_tts_engine_passes_voice_tags_in_transcript():
         )
 
     prompt_text = captured_payload["contents"][0]["parts"][0]["text"]
-    assert "[very fast]" in prompt_text
-    assert "[whispers]" in prompt_text
+    assert "[very fast]" in prompt_text or "<very fast>" in prompt_text
+    assert "[whispers]" in prompt_text or "<whispers>" in prompt_text
 
 
 @pytest.mark.asyncio

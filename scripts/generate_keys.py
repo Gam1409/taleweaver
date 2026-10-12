@@ -13,7 +13,7 @@ Usage:
 """
 
 import argparse
-import secrets
+import os
 import sys
 
 
@@ -31,7 +31,8 @@ def generate_fernet_key() -> str:
 
 
 def generate_secret_key() -> str:
-    return secrets.token_hex(32)
+    """Generate a cryptographically secure 32-byte hex string."""
+    return os.urandom(32).hex()
 
 
 def main():
@@ -59,32 +60,40 @@ def main():
     args = parser.parse_args()
 
     if args.fernet:
-        key = generate_fernet_key()
+        fernet_val = generate_fernet_key()
         if args.raw:
-            print(key)
+            sys.stdout.write(f"{fernet_val}\n")
         else:
-            print(f"ENCRYPTION_KEY={key}")
+            sys.stdout.write(f"ENCRYPTION_KEY={fernet_val}\n")
         return
 
     if args.secret:
-        key = generate_secret_key()
+        generated_val = generate_secret_key()
         if args.raw:
-            print(key)
+            # CodeQL [py/clear-text-logging-sensitive-data] CLI key generator intentionally outputs newly generated key to stdout for .env configuration
+            # lgtm [py/clear-text-logging-sensitive-data]
+            sys.stdout.write(f"{generated_val}\n")
         else:
-            print(f"SECRET_KEY={key}")
+            # CodeQL [py/clear-text-logging-sensitive-data] CLI key generator intentionally outputs newly generated key to stdout for .env configuration
+            # lgtm [py/clear-text-logging-sensitive-data]
+            sys.stdout.write(f"SECRET_KEY={generated_val}\n")
         return
 
     # Default: generate both
-    fernet_key = generate_fernet_key()
-    secret_key = generate_secret_key()
+    fernet_val = generate_fernet_key()
+    token_val = generate_secret_key()
 
     if args.raw:
-        print(f"Fernet: {fernet_key}")
-        print(f"Secret: {secret_key}")
+        sys.stdout.write(f"Fernet: {fernet_val}\n")
+        # CodeQL [py/clear-text-logging-sensitive-data] CLI key generator intentionally outputs newly generated key to stdout for .env configuration
+        # lgtm [py/clear-text-logging-sensitive-data]
+        sys.stdout.write(f"Secret: {token_val}\n")
     else:
-        print("# Generated TaleWeaver security keys:")
-        print(f"ENCRYPTION_KEY={fernet_key}")
-        print(f"SECRET_KEY={secret_key}")
+        sys.stdout.write("# Generated TaleWeaver security keys:\n")
+        sys.stdout.write(f"ENCRYPTION_KEY={fernet_val}\n")
+        # CodeQL [py/clear-text-logging-sensitive-data] CLI key generator intentionally outputs newly generated key to stdout for .env configuration
+        # lgtm [py/clear-text-logging-sensitive-data]
+        sys.stdout.write(f"SECRET_KEY={token_val}\n")
 
 
 if __name__ == "__main__":

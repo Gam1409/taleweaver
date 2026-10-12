@@ -104,6 +104,13 @@ cd frontend
 npm install
 cd ..
 
+# 7. Git Hooks Setup
+if [ -d ".git" ]; then
+    echo "[*] Configuring Git pre-commit hooks..."
+    git config core.hooksPath .githooks
+    echo "[+] Git hooks linked to .githooks"
+fi
+
 echo -e "\n--- Setup Complete! ---"
 echo "To start the application:"
 echo "Backend: $RUN_CMD python -m backend.main (or: $RUN_CMD taleweaver)"
