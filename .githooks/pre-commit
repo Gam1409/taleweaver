@@ -1,0 +1,34 @@
+#!/bin/sh
+# TaleWeaver Git Pre-Commit Hook
+# Automatically runs Ruff linter & clean code checks on staged Python files
+
+echo "🔍 TaleWeaver pre-commit: Checking staged Python files..."
+
+# Determine python/poetry runner
+if command -v poetry >/dev/null 2>&1; then
+    poetry run python scripts/lint.py --staged
+    EXIT_CODE=$?
+elif [ -f "./venv/Scripts/python.exe" ]; then
+    ./venv/Scripts/python.exe scripts/lint.py --staged
+    EXIT_CODE=$?
+elif [ -f "./venv/bin/python" ]; then
+    ./venv/bin/python scripts/lint.py --staged
+    EXIT_CODE=$?
+elif command -v python >/dev/null 2>&1; then
+    python scripts/lint.py --staged
+    EXIT_CODE=$?
+elif command -v python3 >/dev/null 2>&1; then
+    python3 scripts/lint.py --staged
+    EXIT_CODE=$?
+else
+    echo "⚠️ Python/Poetry not found. Skipping lint hook."
+    exit 0
+fi
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "❌ Pre-commit hook aborted the commit due to lint/security errors."
+    echo "💡 Fix errors or run 'poetry run python scripts/lint.py --fix' before committing."
+    exit $EXIT_CODE
+fi
+
+exit 0

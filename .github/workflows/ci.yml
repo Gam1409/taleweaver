@@ -34,16 +34,10 @@ jobs:
       run: |
         poetry install
 
-    - name: Check Formatting with Black
+    - name: Code Quality & Security Linting (Ruff)
       run: |
-        poetry run black backend --check --line-length 120
-
-    - name: Lint with Flake8
-      run: |
-        # Stop the build if there are Python syntax errors or undefined names
-        poetry run flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings
-        poetry run flake8 backend --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+        poetry run ruff check backend scripts
+        poetry run ruff format --check backend scripts
 
     - name: Type checking with mypy
       run: |

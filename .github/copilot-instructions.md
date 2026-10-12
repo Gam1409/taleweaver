@@ -9,22 +9,68 @@ Please adhere to the following rules for all implementations to ensure high code
 
 ---
 
-## 1. Clean Code
+## 1. Clean Code, Architecture & Modularity
 
 * **Naming Conventions:**
   * Python: `PascalCase` for classes, `snake_case` for methods, variables, and modules. Constants in `UPPER_SNAKE_CASE`.
   * JavaScript/TypeScript: `PascalCase` for classes/components, `camelCase` for functions and variables.
   * Always use descriptive names (e.g., `calculate_damage` instead of `calc_dmg`).
-* **Single Responsibility Principle (SRP):**
-  * A function, class, or module should fulfill exactly one purpose. If a function becomes confusingly long, split it into smaller, testable units.
+
+* **Module & File Size Thresholds (Combating Monster Files):**
+  * **Target Size:** Python modules should ideally remain under **400 lines**, with a hard warning threshold at **600 lines**.
+  * **Legacy Monster Files Policy:** Certain existing modules have grown excessively large (e.g., `backend/api/routes/adventures/editor.py`, `gameplay_logic.py`, `templates.py`, `turn_guardrails.py`, `turn_combat.py`, `backend/core/llm_router.py`).
+    * **Strict Rule:** **Do NOT add new monolithic blocks or extensive methods directly into these files!**
+    * When introducing new features, refactoring, or extending functionality in these domains, extract logic into dedicated sub-packages, service classes, or handler modules (e.g., `backend/api/routes/adventures/services/`, `backend/engine/handlers/`).
+    * Separate route definitions (HTTP mapping, input validation) from business logic, database queries, and external service calls.
+
+* **Control Flow & Anti-Nesting Guidelines (No Deep `if` Pyramids):**
+  * **Maximum Nesting Depth:** Strict limit of **2 nesting levels** (at most 3 in rare algorithmic scenarios). Deeply nested code is a primary source of bugs and poor maintainability.
+  * **Guard Clauses / Early Returns:** Always invert conditions and exit early rather than wrapping the rest of the function in an indented block.
+    * *Anti-Pattern (Avoid):*
+      ```python
+      if session is not None:
+          if session.is_active:
+              if user.id == session.user_id:
+                  # 60 lines of logic indented 4 times
+      ```
+    * *Clean Code (Required):*
+      ```python
+      if session is None:
+          raise HTTPException(status_code=404, detail="Session not found")
+      if not session.is_active:
+          raise HTTPException(status_code=400, detail="Session is inactive")
+      if user.id != session.user_id:
+          raise HTTPException(status_code=403, detail="Forbidden")
+      # Flat, linear execution follows...
+      ```
+  * **Eliminate Redundant Nesting (`SIM102`):** Combine contiguous checks using boolean operators (`if a and b:` instead of `if a: if b:`).
+  * **Dispatch / Strategy Pattern Over Long `if-elif` Chains:** Replace sprawling `if/elif/elif/...` ladders (e.g. for entity types, action triggers, event types) with dictionary dispatch tables, handler classes, or Python 3.10 `match / case`.
+  * **No Single-Line Compound Statements (`E701`):** Never write statements like `if not avatar: return None` on a single line. Always write clear, multi-line conditionals.
+  * **Function Size & Statement Limits:** Functions should not exceed 30–40 statements (`PLR0915`). If a function requires comments like `# Step 1`, `# Step 2`, extract each step into a private helper function (`_validate_prerequisites()`, `_apply_state_mutations()`).
+
 * **Typing (Type Hints):**
-  * **Python:** Use type hinting consistently throughout the codebase (e.g., `str`, `int`, `dict`, `list`, `Optional`). This facilitates linting (with `mypy`) and makes the code more readable.
-  * **Frontend:** Use JSDoc in JavaScript wherever possible, or ideally TypeScript for clear interfaces.
-* **Error Handling:**
-  * Handle errors where they occur.
-  * In FastAPI, use `HTTPException` to return errors to the frontend with meaningful status codes (400, 404, 500) and clear messages.
+  * **Python:** Use type hinting consistently throughout the codebase (e.g., `str`, `int`, `dict`, `list`, `Optional`). This facilitates linting (with `mypy`) and makes the code self-documenting.
+  * **Frontend:** Use JSDoc in JavaScript wherever possible, or TypeScript for clear interfaces.
+
+* **Error Handling & Exception Hygiene:**
+  * Handle errors where they occur. Never use empty catch blocks (`except Exception: pass` / `S110`); always log or handle exceptions meaningfully.
+  * In FastAPI, use `HTTPException` with explicit status codes (400, 401, 403, 404, 500) and informative error messages.
 
 ---
+
+## 1.1 Mandatory Linter & Quality Execution Protocol
+
+To ensure codebase quality, security, and prevent regression:
+
+* **Automated Pre-Commit Hooks:** A Git pre-commit hook is active in `.githooks/pre-commit`. It automatically runs Ruff on all staged Python files before each commit.
+* **Developer / Agent Lint Command:**
+  * Quick check: `poetry run python scripts/lint.py` (or `poetry run ruff check <paths>`)
+  * Auto-fix & format: `poetry run python scripts/lint.py --fix` (or `poetry run ruff check --fix <paths>` and `poetry run ruff format <paths>`)
+  * Pre-commit staged check: `poetry run python scripts/lint.py --staged`
+* **Agent Requirement:** Before marking any implementation task complete, AI agents **must**:
+  1. Run `poetry run ruff check <modified_paths>` and verify that 0 errors are reported.
+  2. Run `poetry run ruff format --check <modified_paths>` to ensure clean formatting.
+  3. Never silence complexity (`C901`, `PLR0912`, `PLR0915`), nested blocks, or security (`S`) warnings with `# noqa`. Resolve the underlying structure instead.
 
 ## 2. Testing
 
