@@ -484,13 +484,8 @@ async function loadCoverSource() {
       form.value.time_auto = false
     }
 
-    if (source.scripts_generation_enabled !== undefined) {
-      form.value.scripts_generation_enabled = !!source.scripts_generation_enabled
-    } else if (Array.isArray(source.scripts) && source.scripts.length > 0) {
-      form.value.scripts_generation_enabled = true
-    } else if (Array.isArray(source.original_manifest?.scripts) && source.original_manifest.scripts.length > 0) {
-      form.value.scripts_generation_enabled = true
-    }
+    // Always default the scripts generation engine to true, even for cover generation
+    form.value.scripts_generation_enabled = true
   } catch (error: any) {
     sourceAdventure.value = null
     errorMsg.value = error?.message || 'Failed to load source adventure for cover mode.'

@@ -313,7 +313,7 @@ def _build_cover_guidance(
     cover_source_adventure_name: Optional[str],
     cover_similarity_percent: int,
     allow_reuse_source_assets: bool,
-    scripts_generation_enabled: bool = False,
+    scripts_generation_enabled: bool = True,
 ) -> str:
     if not cover_source_manifest:
         return ""
@@ -398,7 +398,7 @@ def build_world_generation_prompts(
     min_awards: Optional[int],
     max_awards: Optional[int],
     container_generation_enabled: bool,
-    scripts_generation_enabled: bool = False,
+    scripts_generation_enabled: bool = True,
     min_containers: Optional[int],
     max_containers: Optional[int],
     text_log_generation_enabled: bool,

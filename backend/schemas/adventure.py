@@ -77,7 +77,7 @@ class AdventureTemplateBase(BaseModel):
     min_items: Optional[int] = None
     max_items: Optional[int] = None
     container_generation_enabled: bool = True
-    scripts_generation_enabled: bool = False
+    scripts_generation_enabled: bool = True
     scripts: Optional[list[dict[str, Any]]] = None
     min_sequences: Optional[int] = None
     max_sequences: Optional[int] = 15
