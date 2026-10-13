@@ -992,6 +992,9 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
   const selectedNpc = type === 'npc'
     ? (debugData.value?.npcs || []).find((entry: any) => String(entry.id) === String(id))
     : null
+  const selectedScene = type === 'scene'
+    ? (editorScenes.value || []).find((entry: any) => String(entry.id) === String(id))
+    : null
 
   editEntityContext.value = { type, id }
   const resolvedDescription = type === 'object'
@@ -1023,7 +1026,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
         : [],
     text_log_content: fixNewlines(metadata?.text_log_content || ''),
     text_log_format: String(metadata?.text_log_format || selectedObject?.text_log_format || 'DOCUMENT').trim().toUpperCase(),
-    entity_id: String(selectedObject?.id || selectedNpc?.id || id || ''),
+    entity_id: String(selectedObject?.id || selectedNpc?.id || selectedScene?.id || id || ''),
     wearable_slots_input: selectedObject?.wearable_slots || [],
     combination_ingredients_input: Array.isArray(selectedObject?.combination_ingredients)
       ? [...selectedObject.combination_ingredients]
@@ -1051,8 +1054,8 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     on_equip_text: selectedObject?.on_equip_text || metadata?.on_equip_text || '',
     on_unequip_script: selectedObject?.on_unequip_script || metadata?.on_unequip_script || '',
     on_unequip_text: selectedObject?.on_unequip_text || metadata?.on_unequip_text || '',
-    on_enter_scene_script: selectedObject?.on_enter_scene_script || metadata?.on_enter_scene_script || '',
-    on_enter_scene_text: selectedObject?.on_enter_scene_text || metadata?.on_enter_scene_text || '',
+    on_enter_scene_script: selectedScene?.on_enter_scene_script || selectedObject?.on_enter_scene_script || metadata?.on_enter_scene_script || '',
+    on_enter_scene_text: selectedScene?.on_enter_scene_text || selectedObject?.on_enter_scene_text || metadata?.on_enter_scene_text || '',
     on_open_exit_script: selectedObject?.on_open_exit_script || metadata?.on_open_exit_script || '',
     on_open_exit_text: selectedObject?.on_open_exit_text || metadata?.on_open_exit_text || '',
     on_defeat_script: selectedNpc?.on_defeat_script || metadata?.on_defeat_script || '',
