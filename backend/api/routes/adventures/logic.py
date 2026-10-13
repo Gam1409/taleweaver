@@ -587,6 +587,7 @@ class AdventureLogic:
         new_scene_id: Optional[str] = None,
         updated_entities: Optional[list[Any]] = None,
         force_complete: bool = False,
+        script_context: Optional[Any] = None,
     ) -> list[str]:
         """Evaluates whether current active sequence hard rules (or forced completion) are met.
 
@@ -620,7 +621,12 @@ class AdventureLogic:
         req_item = str(current_seq.get("required_item_id") or "").strip()
         req_scene = str(current_seq.get("required_scene_id") or "").strip()
         req_npc = str(current_seq.get("required_defeated_npc_id") or "").strip()
-        has_hard_rules = bool(req_item or req_scene or req_npc)
+        req_guard = str(
+            current_seq.get("guard_expression")
+            or current_seq.get("completion_guard_expression")
+            or ""
+        ).strip()
+        has_hard_rules = bool(req_item or req_scene or req_npc or req_guard)
 
         sequence_completed = False
         if has_hard_rules:
@@ -705,7 +711,40 @@ class AdventureLogic:
                                 is_def = True
                 npc_met = is_def
 
-            if item_met and scene_met and npc_met:
+            # 4. Evaluate Deterministic Guard Rule expression
+            guard_met = True
+            if req_guard:
+                from backend.engine.switch_service import SwitchService
+
+                if script_context is not None:
+                    passed, _ = SwitchService.evaluate_gate_expression(req_guard, script_context)
+                    guard_met = bool(passed)
+                else:
+                    from backend.engine.scripting import GameContext
+
+                    avatar_dict = {
+                        "name": getattr(avatar, "name", "Protagonist") or "Protagonist",
+                        "hp": getattr(avatar, "hp", 100) or 100,
+                        "mana": getattr(avatar, "mana", 100) or 100,
+                        "stamina": getattr(avatar, "stamina", 100) or 100,
+                        "inventory": list(getattr(avatar, "inventory", None) or []),
+                    }
+                    session_overrides = dict(getattr(state, "entity_states", None) or {})
+                    script_vars = dict(session_overrides.get("__script_vars__", {}))
+                    story_flags = dict(session_overrides.get("__switch_story_flags__", {}))
+                    ctx = GameContext(
+                        avatar_data=avatar_dict,
+                        current_scene_id=str(getattr(state, "current_scene_id", "") or ""),
+                        entities={},
+                        exit_states=dict(getattr(state, "exit_states", None) or {}),
+                        quests=list(getattr(state, "quests", None) or []),
+                        script_vars=script_vars,
+                        story_flags=story_flags,
+                    )
+                    passed, _ = SwitchService.evaluate_gate_expression(req_guard, ctx)
+                    guard_met = bool(passed)
+
+            if item_met and scene_met and npc_met and guard_met:
                 sequence_completed = True
         else:
             sequence_completed = force_complete

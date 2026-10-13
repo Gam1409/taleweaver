@@ -16,6 +16,7 @@ import {
   Swords,
   ShieldCheck,
   Sparkles,
+  Code2,
 } from 'lucide-vue-next'
 
 const props = withDefaults(
@@ -100,6 +101,7 @@ const modalSequence = ref<any>({
   required_item_id: '',
   required_scene_id: '',
   required_defeated_npc_id: '',
+  guard_expression: '',
   exp_reward: 50,
   on_start_sequence_script: '',
   on_start_sequence_text: '',
@@ -129,6 +131,7 @@ function openAddModal() {
     required_item_id: '',
     required_scene_id: '',
     required_defeated_npc_id: '',
+    guard_expression: '',
     exp_reward: 50,
     on_start_sequence_script: '',
     on_start_sequence_text: '',
@@ -151,6 +154,7 @@ function openEditModal(seq: any) {
     required_item_id: seq.required_item_id || '',
     required_scene_id: seq.required_scene_id || '',
     required_defeated_npc_id: seq.required_defeated_npc_id || '',
+    guard_expression: seq.guard_expression || seq.completion_guard_expression || '',
     exp_reward: seq.exp_reward ?? 50,
     on_start_sequence_script: seq.on_start_sequence_script || '',
     on_start_sequence_text: seq.on_start_sequence_text || '',
@@ -328,7 +332,7 @@ function confirmDelete() {
               </div>
 
               <!-- Hard Rules Tags (if any) -->
-              <div v-if="seq.required_item_id || seq.required_scene_id || seq.required_defeated_npc_id" class="flex flex-wrap items-center gap-2 pt-1.5">
+              <div v-if="seq.required_item_id || seq.required_scene_id || seq.required_defeated_npc_id || seq.guard_expression || seq.completion_guard_expression" class="flex flex-wrap items-center gap-2 pt-1.5">
                 <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Hard Rules:</span>
                 <span v-if="seq.required_item_id" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] font-medium">
                   <Package class="w-3.5 h-3.5 text-emerald-400" />
@@ -341,6 +345,10 @@ function confirmDelete() {
                 <span v-if="seq.required_defeated_npc_id" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[11px] font-medium">
                   <Swords class="w-3.5 h-3.5 text-rose-400" />
                   <span>Defeat: <strong class="font-mono text-white">{{ seq.required_defeated_npc_id }}</strong></span>
+                </span>
+                <span v-if="seq.guard_expression || seq.completion_guard_expression" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] font-medium">
+                  <Code2 class="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Guard: <strong class="font-mono text-white">{{ seq.guard_expression || seq.completion_guard_expression }}</strong></span>
                 </span>
               </div>
             </div>
@@ -385,15 +393,15 @@ function confirmDelete() {
       </div>
     </div>
 
-    <!-- Edit/Add Modal (Larger, Non-clipping Scrollable Container) -->
+    <!-- Edit/Add Modal (Adaptive Scrollable Container) -->
     <div
       v-if="showModal"
-      class="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-8 bg-black/85 backdrop-blur-md flex items-center justify-center animate-fade-in"
+      class="fixed inset-0 z-50 p-4 sm:p-6 bg-black/85 backdrop-blur-md flex items-center justify-center animate-fade-in"
       @click.self="closeModal"
     >
-      <div class="relative bg-slate-900 border border-white/10 rounded-3xl p-6 sm:p-8 max-w-3xl w-full shadow-2xl flex flex-col max-h-[92vh] my-auto">
+      <div class="relative bg-slate-900 border border-white/10 rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh] overflow-hidden my-auto">
         <!-- Fixed Header -->
-        <div class="shrink-0 flex items-center justify-between border-b border-white/5 pb-4">
+        <div class="shrink-0 px-6 sm:px-8 pt-6 pb-4 flex items-center justify-between border-b border-white/5 bg-slate-900">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
               <BookOpen class="w-4 h-4 text-amber-400" />
@@ -413,7 +421,7 @@ function confirmDelete() {
         </div>
 
         <!-- Tabs -->
-        <div class="px-2 border-b border-white/10 flex gap-6 mt-2">
+        <div class="shrink-0 px-6 sm:px-8 border-b border-white/10 flex gap-6 pt-3 bg-slate-900">
           <button
             type="button"
             @click="activeModalTab = 'general'"
@@ -433,7 +441,7 @@ function confirmDelete() {
         </div>
 
         <!-- Scrollable Content Body -->
-        <div class="flex-1 overflow-y-auto space-y-5 pr-1.5 -mr-1.5 my-4">
+        <div class="flex-1 min-h-0 overflow-y-auto px-6 sm:px-8 py-5 space-y-5">
           <div v-show="activeModalTab === 'general'" class="space-y-5">
           <!-- Title & XP -->
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -628,6 +636,34 @@ function confirmDelete() {
                 <span class="block text-[10px] text-slate-500">Protagonist defeats NPC X</span>
               </div>
             </div>
+
+            <!-- Deterministic Guard Rule (Expression) -->
+            <div class="space-y-1.5 p-3 rounded-xl bg-slate-900/80 border border-white/5 mt-3">
+              <div class="flex items-center justify-between">
+                <span class="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+                  <Code2 class="w-3.5 h-3.5 text-emerald-400" />
+                  Deterministic Guard Rule (Python Expression)
+                </span>
+                <button
+                  v-if="modalSequence.guard_expression"
+                  type="button"
+                  @click="modalSequence.guard_expression = ''"
+                  class="text-[10px] text-slate-500 hover:text-rose-400 transition-colors"
+                  title="Clear guard expression"
+                >
+                  Clear
+                </button>
+              </div>
+              <input
+                v-model="modalSequence.guard_expression"
+                type="text"
+                placeholder="e.g. tw.vars.get('puzzle_solved') == True or tw.player.has_item('KEY')"
+                class="w-full bg-black/60 border border-white/10 focus:border-emerald-500/60 rounded-xl px-3 py-2 text-xs font-mono text-emerald-300 placeholder:text-slate-600 outline-none transition-all"
+              />
+              <p class="text-[10px] text-slate-500">
+                Optional deterministic Python condition evaluated in addition to the completion triggers above. The sequence only completes when this condition evaluates to True.
+              </p>
+            </div>
           </div>
 
           <!-- Walkthrough -->
@@ -696,7 +732,7 @@ function confirmDelete() {
       </div>
 
         <!-- Fixed Footer -->
-        <div class="shrink-0 flex items-center justify-end gap-3 pt-4 border-t border-white/5">
+        <div class="shrink-0 px-6 sm:px-8 py-4 flex items-center justify-end gap-3 border-t border-white/5 bg-slate-950/60">
           <button
             @click="closeModal"
             class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase tracking-wider transition-all"

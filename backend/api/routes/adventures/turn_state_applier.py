@@ -860,6 +860,12 @@ class TurnStateApplier:
 
         # Sequence Completion Logic
         old_seq_id = self.state.active_sequence_id
+        script_context = None
+        if hasattr(self, "manager") and hasattr(self.manager, "_build_script_context"):
+            try:
+                script_context = await self.manager._build_script_context()
+            except Exception as exc:
+                logger.warning("Could not build script context for sequence evaluation: %s", exc)
         seq_messages = AdventureLogic.evaluate_sequence_progress(
             adventure=self.adventure,
             state=self.state,
@@ -868,6 +874,7 @@ class TurnStateApplier:
             new_scene_id=event.new_scene_id,
             updated_entities=event.updated_entities,
             force_complete=bool(event.sequence_completed),
+            script_context=script_context,
         )
         event.sequence_completed = bool(seq_messages)
         if seq_messages:

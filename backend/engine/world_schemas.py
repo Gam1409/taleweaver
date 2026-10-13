@@ -539,6 +539,14 @@ class SequenceSchema(BaseModel):
         "",
         description="Optional hard rule: ID of the NPC the protagonist must defeat to complete the sequence",
     )
+    guard_expression: Optional[str] = Field(
+        "",
+        description="Optional deterministic script guard expression evaluated to complete the sequence (e.g. tw.vars.get('puzzle_solved') == True). Keep empty if none.",
+    )
+    completion_guard_expression: Optional[str] = Field(
+        "",
+        description="Alias for guard_expression.",
+    )
     exp_reward: int = Field(default=100, description="XP reward for completion")
     on_start_sequence_script: str = Field(
         "",

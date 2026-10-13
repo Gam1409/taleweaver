@@ -23,6 +23,8 @@ class SequenceSchema(BaseModel):
     required_item_id: Optional[str] = ""
     required_scene_id: Optional[str] = ""
     required_defeated_npc_id: Optional[str] = ""
+    guard_expression: Optional[str] = ""
+    completion_guard_expression: Optional[str] = ""
     exp_reward: Optional[int] = 50
     on_start_sequence_script: Optional[str] = ""
     on_start_sequence_text: Optional[str] = ""
