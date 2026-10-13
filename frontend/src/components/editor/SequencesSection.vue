@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import ScriptEditor from '@/components/editor/ScriptEditor.vue'
 import {
   Plus,
   Trash2,
@@ -14,6 +15,7 @@ import {
   MapPin,
   Swords,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-vue-next'
 
 const props = withDefaults(
@@ -87,6 +89,7 @@ const availableNpcs = computed(() => {
 
 const showModal = ref(false)
 const isNewSequence = ref(false)
+const activeModalTab = ref<'general' | 'advanced'>('general')
 const modalSequence = ref<any>({
   id: '',
   order: 1,
@@ -98,6 +101,10 @@ const modalSequence = ref<any>({
   required_scene_id: '',
   required_defeated_npc_id: '',
   exp_reward: 50,
+  on_start_sequence_script: '',
+  on_start_sequence_text: '',
+  on_end_sequence_script: '',
+  on_end_sequence_text: '',
 })
 
 const showDeleteConfirm = ref(false)
@@ -109,6 +116,7 @@ function openAddModal() {
     return
   }
   isNewSequence.value = true
+  activeModalTab.value = 'general'
   const nextOrder = sequences.value.length + 1
   const randSlug = Math.random().toString(36).substring(2, 8).toUpperCase()
   modalSequence.value = {
@@ -122,12 +130,17 @@ function openAddModal() {
     required_scene_id: '',
     required_defeated_npc_id: '',
     exp_reward: 50,
+    on_start_sequence_script: '',
+    on_start_sequence_text: '',
+    on_end_sequence_script: '',
+    on_end_sequence_text: '',
   }
   showModal.value = true
 }
 
 function openEditModal(seq: any) {
   isNewSequence.value = false
+  activeModalTab.value = 'general'
   modalSequence.value = {
     id: seq.id || `SEQ_${seq.order || 1}`,
     order: seq.order || 1,
@@ -139,6 +152,10 @@ function openEditModal(seq: any) {
     required_scene_id: seq.required_scene_id || '',
     required_defeated_npc_id: seq.required_defeated_npc_id || '',
     exp_reward: seq.exp_reward ?? 50,
+    on_start_sequence_script: seq.on_start_sequence_script || '',
+    on_start_sequence_text: seq.on_start_sequence_text || '',
+    on_end_sequence_script: seq.on_end_sequence_script || '',
+    on_end_sequence_text: seq.on_end_sequence_text || '',
   }
   showModal.value = true
 }
@@ -395,8 +412,29 @@ function confirmDelete() {
           </button>
         </div>
 
+        <!-- Tabs -->
+        <div class="px-2 border-b border-white/10 flex gap-6 mt-2">
+          <button
+            type="button"
+            @click="activeModalTab = 'general'"
+            :class="['pb-2 text-xs font-black uppercase tracking-widest transition-colors border-b-2', activeModalTab === 'general' ? 'text-amber-400 border-amber-400' : 'text-slate-500 border-transparent hover:text-white']"
+          >
+            General
+          </button>
+          <button
+            type="button"
+            @click="activeModalTab = 'advanced'"
+            :class="['pb-2 text-xs font-black uppercase tracking-widest transition-colors border-b-2 flex items-center gap-1.5', activeModalTab === 'advanced' ? 'text-amber-400 border-amber-400' : 'text-slate-500 border-transparent hover:text-white']"
+          >
+            <Sparkles class="w-3.5 h-3.5" />
+            <span>Advanced Triggers</span>
+            <span v-if="modalSequence.on_start_sequence_script || modalSequence.on_end_sequence_script" class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+          </button>
+        </div>
+
         <!-- Scrollable Content Body -->
         <div class="flex-1 overflow-y-auto space-y-5 pr-1.5 -mr-1.5 my-4">
+          <div v-show="activeModalTab === 'general'" class="space-y-5">
           <!-- Title & XP -->
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div class="sm:col-span-3 space-y-1">
@@ -603,6 +641,59 @@ function confirmDelete() {
             ></textarea>
           </div>
         </div>
+
+        <!-- Advanced Tab: Sequence Transitions -->
+        <div v-show="activeModalTab === 'advanced'" class="space-y-6">
+          <div class="space-y-1">
+            <p class="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+              <Sparkles class="w-4 h-4" /> Sequence Transition Triggers
+            </p>
+            <p class="text-[11px] text-slate-400">
+              Execute scripts or narrative cues when entering or completing this sequence chapter.
+            </p>
+          </div>
+
+          <!-- Start Sequence Trigger -->
+          <div class="space-y-4 border border-white/5 bg-black/30 p-4 rounded-2xl">
+            <ScriptEditor
+              v-model="modalSequence.on_start_sequence_script"
+              label="On Start Sequence Script"
+              help-text="Executed immediately when this sequence becomes active."
+              context="start_sequence"
+              min-height="100px"
+            />
+            <div class="space-y-1">
+              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Start Sequence Text</label>
+              <textarea
+                v-model="modalSequence.on_start_sequence_text"
+                rows="2"
+                placeholder="e.g. Chapter 2 begins: The sky darkens as thunder rumbles in the distance."
+                class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none resize-y"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- End Sequence Trigger -->
+          <div class="space-y-4 border border-white/5 bg-black/30 p-4 rounded-2xl">
+            <ScriptEditor
+              v-model="modalSequence.on_end_sequence_script"
+              label="On End Sequence Script"
+              help-text="Executed immediately when this sequence is completed."
+              context="end_sequence"
+              min-height="100px"
+            />
+            <div class="space-y-1">
+              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On End Sequence Text</label>
+              <textarea
+                v-model="modalSequence.on_end_sequence_text"
+                rows="2"
+                placeholder="e.g. Chapter Complete! You catch your breath as the dungeon gates seal shut behind you."
+                class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none resize-y"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
 
         <!-- Fixed Footer -->
         <div class="shrink-0 flex items-center justify-end gap-3 pt-4 border-t border-white/5">

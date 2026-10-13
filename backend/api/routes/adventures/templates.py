@@ -992,6 +992,9 @@ async def get_adventure(
         for aw in (adv.awards or [])
     ]
 
+    if not adv.sequences and isinstance(adv.original_manifest, dict) and adv.original_manifest.get("sequences"):
+        adv.sequences = adv.original_manifest.get("sequences")
+
     response_data = AdventureTemplateResponse.model_validate(adv).model_dump()
     response_data["awards"] = enriched_awards
     return response_data
@@ -1662,6 +1665,15 @@ async def update_adventure(
     # Sync strict_rules internally if mode changed (but not if strict_rules was patched directly)
     if "rule_enforcement_mode" in update_data and "strict_rules" not in update_data:
         adv.strict_rules = update_data["rule_enforcement_mode"] != "chat"
+
+    if "sequences" in update_data:
+        from sqlalchemy.orm.attributes import flag_modified
+        adv.sequences = list(update_data["sequences"] or [])
+        flag_modified(adv, "sequences")
+        manifest = deepcopy(adv.original_manifest or {})
+        manifest["sequences"] = adv.sequences
+        adv.original_manifest = manifest
+        flag_modified(adv, "original_manifest")
 
     # Sync to active sessions if narrative fields changed
     narrative_fields = {

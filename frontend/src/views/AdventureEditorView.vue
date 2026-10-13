@@ -95,7 +95,15 @@ const exitModalForm = ref({
   code_to_unlock: '',
   item_to_unlock: '',
   rule_to_unlock: '',
+  on_open_exit_script: '',
+  on_open_exit_text: '',
+  unlock_expression: '',
+  on_unlock_success_script: '',
+  on_unlock_success_text: '',
+  on_unlock_failure_script: '',
+  on_unlock_failure_text: '',
 })
+
 const editForm = ref({
   name: '',
   teaser: '',
@@ -1051,8 +1059,23 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     on_defeat_text: selectedNpc?.on_defeat_text || metadata?.on_defeat_text || '',
     on_protagonist_enters_scene_script: selectedNpc?.on_protagonist_enters_scene_script || metadata?.on_protagonist_enters_scene_script || '',
     on_protagonist_enters_scene_text: selectedNpc?.on_protagonist_enters_scene_text || metadata?.on_protagonist_enters_scene_text || '',
+    unlock_expression: selectedObject?.unlock_expression || metadata?.unlock_expression || '',
+    on_unlock_success_script: selectedObject?.on_unlock_success_script || metadata?.on_unlock_success_script || '',
+    on_unlock_success_text: selectedObject?.on_unlock_success_text || metadata?.on_unlock_success_text || '',
+    on_unlock_failure_script: selectedObject?.on_unlock_failure_script || metadata?.on_unlock_failure_script || '',
+    on_unlock_failure_text: selectedObject?.on_unlock_failure_text || metadata?.on_unlock_failure_text || '',
+    craft_guard_expression: selectedObject?.craft_guard_expression || metadata?.craft_guard_expression || '',
+    on_craft_success_script: selectedObject?.on_craft_success_script || metadata?.on_craft_success_script || '',
+    on_craft_success_text: selectedObject?.on_craft_success_text || metadata?.on_craft_success_text || '',
+    on_craft_failure_script: selectedObject?.on_craft_failure_script || metadata?.on_craft_failure_script || '',
+    on_craft_failure_text: selectedObject?.on_craft_failure_text || metadata?.on_craft_failure_text || '',
+    on_read_script: selectedObject?.on_read_script || metadata?.on_read_script || '',
+    on_read_text: selectedObject?.on_read_text || metadata?.on_read_text || '',
+    on_leave_scene_script: selectedScene?.on_leave_scene_script || metadata?.on_leave_scene_script || '',
+    on_leave_scene_text: selectedScene?.on_leave_scene_text || metadata?.on_leave_scene_text || '',
   }
   showEditModal.value = true
+
 }
 
 async function saveEntityText(data: any) {
@@ -1318,7 +1341,22 @@ async function saveEntityText(data: any) {
       on_protagonist_enters_scene_text: editEntityContext.value.type === 'npc' ? data.on_protagonist_enters_scene_text : undefined,
       on_enter_scene_script: editEntityContext.value.type === 'scene' ? data.on_enter_scene_script : undefined,
       on_enter_scene_text: editEntityContext.value.type === 'scene' ? data.on_enter_scene_text : undefined,
+      on_leave_scene_script: editEntityContext.value.type === 'scene' ? data.on_leave_scene_script : undefined,
+      on_leave_scene_text: editEntityContext.value.type === 'scene' ? data.on_leave_scene_text : undefined,
+      unlock_expression: editEntityContext.value.type === 'object' ? data.unlock_expression : undefined,
+      on_unlock_success_script: editEntityContext.value.type === 'object' ? data.on_unlock_success_script : undefined,
+      on_unlock_success_text: editEntityContext.value.type === 'object' ? data.on_unlock_success_text : undefined,
+      on_unlock_failure_script: editEntityContext.value.type === 'object' ? data.on_unlock_failure_script : undefined,
+      on_unlock_failure_text: editEntityContext.value.type === 'object' ? data.on_unlock_failure_text : undefined,
+      craft_guard_expression: editEntityContext.value.type === 'object' ? data.craft_guard_expression : undefined,
+      on_craft_success_script: editEntityContext.value.type === 'object' ? data.on_craft_success_script : undefined,
+      on_craft_success_text: editEntityContext.value.type === 'object' ? data.on_craft_success_text : undefined,
+      on_craft_failure_script: editEntityContext.value.type === 'object' ? data.on_craft_failure_script : undefined,
+      on_craft_failure_text: editEntityContext.value.type === 'object' ? data.on_craft_failure_text : undefined,
+      on_read_script: editEntityContext.value.type === 'object' ? data.on_read_script : undefined,
+      on_read_text: editEntityContext.value.type === 'object' ? data.on_read_text : undefined,
     })
+
     // Redirect if we renamed the scene we are currently viewing
     if (editEntityContext.value.type === 'scene' && newId && oldId !== newId && activeMapSceneId.value === oldId) {
       router.replace({
@@ -1408,7 +1446,12 @@ async function saveProtagonistField(field: string, newValue: any) {
         acc[k] = v ? (typeof v === 'string' ? v : (v?.id || null)) : null
         return acc
       }, {}) : {}),
+      on_hp_change_script: field === 'on_hp_change_script' ? String(newValue || '') : p.on_hp_change_script,
+      on_hp_change_text: field === 'on_hp_change_text' ? String(newValue || '') : p.on_hp_change_text,
+      on_status_change_script: field === 'on_status_change_script' ? String(newValue || '') : p.on_status_change_script,
+      on_status_change_text: field === 'on_status_change_text' ? String(newValue || '') : p.on_status_change_text,
     }
+
     await entityService.saveEntityText(props.adventureId, updatePayload as any)
     await Promise.all([fetchAdventure(), fetchDebugInfo()])
     addNotification('Protagonist updated successfully.', 'success')
@@ -2022,8 +2065,16 @@ function openCreateExitModal() {
     code_to_unlock: '',
     item_to_unlock: '',
     rule_to_unlock: '',
+    on_open_exit_script: '',
+    on_open_exit_text: '',
+    unlock_expression: '',
+    on_unlock_success_script: '',
+    on_unlock_success_text: '',
+    on_unlock_failure_script: '',
+    on_unlock_failure_text: '',
   }
   showExitModal.value = true
+
 }
 
 function requestDeleteRouteExit(exitId: string) {
@@ -2205,8 +2256,16 @@ function openEditExitModal(exitId: string) {
     code_to_unlock: String(exit.code_to_unlock || ''),
     item_to_unlock: String(exit.item_to_unlock || ''),
     rule_to_unlock: String(exit.rule_to_unlock || ''),
+    on_open_exit_script: String(exit.on_open_exit_script || ''),
+    on_open_exit_text: String(exit.on_open_exit_text || ''),
+    unlock_expression: String(exit.unlock_expression || ''),
+    on_unlock_success_script: String(exit.on_unlock_success_script || ''),
+    on_unlock_success_text: String(exit.on_unlock_success_text || ''),
+    on_unlock_failure_script: String(exit.on_unlock_failure_script || ''),
+    on_unlock_failure_text: String(exit.on_unlock_failure_text || ''),
   }
   showExitModal.value = true
+
 }
 
 async function saveExitModal(formData: any) {
@@ -2244,6 +2303,13 @@ async function saveExitModal(formData: any) {
         code_to_unlock: formData.code_to_unlock || undefined,
         item_to_unlock: formData.item_to_unlock || undefined,
         rule_to_unlock: formData.rule_to_unlock || undefined,
+        on_open_exit_script: formData.on_open_exit_script || undefined,
+        on_open_exit_text: formData.on_open_exit_text || undefined,
+        unlock_expression: formData.unlock_expression || undefined,
+        on_unlock_success_script: formData.on_unlock_success_script || undefined,
+        on_unlock_success_text: formData.on_unlock_success_text || undefined,
+        on_unlock_failure_script: formData.on_unlock_failure_script || undefined,
+        on_unlock_failure_text: formData.on_unlock_failure_text || undefined,
       })
       addNotification('Exit created.', 'success')
     } else {
@@ -2261,16 +2327,25 @@ async function saveExitModal(formData: any) {
         code_to_unlock: formData.code_to_unlock,
         item_to_unlock: formData.item_to_unlock,
         rule_to_unlock: formData.rule_to_unlock,
+        on_open_exit_script: formData.on_open_exit_script,
+        on_open_exit_text: formData.on_open_exit_text,
+        unlock_expression: formData.unlock_expression,
+        on_unlock_success_script: formData.on_unlock_success_script,
+        on_unlock_success_text: formData.on_unlock_success_text,
+        on_unlock_failure_script: formData.on_unlock_failure_script,
+        on_unlock_failure_text: formData.on_unlock_failure_text,
         locked:
           formData.locked !== undefined
             ? formData.locked
             : Boolean(
                 formData.code_to_unlock ||
                   formData.item_to_unlock ||
-                  formData.rule_to_unlock,
+                  formData.rule_to_unlock ||
+                  formData.unlock_expression,
               ),
       })
       addNotification('Exit updated.', 'success')
+
     }
     activeEditExitId.value = null
     isCreateExitMode.value = false

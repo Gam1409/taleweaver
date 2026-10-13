@@ -49,6 +49,20 @@ const props = defineProps<{
     moveable?: boolean
     allowed_scenes_input?: string[]
     notes?: string
+    unlock_expression?: string
+    on_unlock_success_script?: string
+    on_unlock_success_text?: string
+    on_unlock_failure_script?: string
+    on_unlock_failure_text?: string
+    craft_guard_expression?: string
+    on_craft_success_script?: string
+    on_craft_success_text?: string
+    on_craft_failure_script?: string
+    on_craft_failure_text?: string
+    on_read_script?: string
+    on_read_text?: string
+    on_leave_scene_script?: string
+    on_leave_scene_text?: string
   }
   referenceOptions?: Array<{ id: string; name?: string; imageUrl?: string | null; type?: string }>
   ruleEnforcementMode: string
@@ -66,6 +80,10 @@ const activeTab = ref<'simple' | 'advanced'>('simple')
 const editingTransitionIndex = ref<number | null>(null)
 const showTransitionGuards = ref<boolean>(false)
 const showTransitionScripts = ref<boolean>(false)
+const showContainerGuard = ref<boolean>(false)
+const showContainerTriggers = ref<boolean>(false)
+const showConstructableGuard = ref<boolean>(false)
+const showConstructableTriggers = ref<boolean>(false)
 
 function hasActiveGuards(t: any): boolean {
   if (!t || !t.gates) return false
@@ -94,6 +112,20 @@ const localForm = ref({
   pickup_trigger_mode: 'silent',
   pickup_trigger_cue: '',
   attack_mode: 'PASSIVE',
+  unlock_expression: '',
+  on_unlock_success_script: '',
+  on_unlock_success_text: '',
+  on_unlock_failure_script: '',
+  on_unlock_failure_text: '',
+  craft_guard_expression: '',
+  on_craft_success_script: '',
+  on_craft_success_text: '',
+  on_craft_failure_script: '',
+  on_craft_failure_text: '',
+  on_read_script: '',
+  on_read_text: '',
+  on_leave_scene_script: '',
+  on_leave_scene_text: '',
   on_pickup_script: '',
   on_pickup_text: '',
   on_drop_script: '',
@@ -564,6 +596,20 @@ function handleSave() {
     allowed_scenes: (localForm.value.allowed_scenes_input || []).map((s: any) => String(s).trim().toUpperCase()).filter(Boolean),
     notes: String(localForm.value.notes || '').trim(),
     attack_mode: localForm.value.attack_mode,
+    unlock_expression: String(localForm.value.unlock_expression || '').trim(),
+    on_unlock_success_script: String(localForm.value.on_unlock_success_script || '').trim(),
+    on_unlock_success_text: String(localForm.value.on_unlock_success_text || '').trim(),
+    on_unlock_failure_script: String(localForm.value.on_unlock_failure_script || '').trim(),
+    on_unlock_failure_text: String(localForm.value.on_unlock_failure_text || '').trim(),
+    craft_guard_expression: String(localForm.value.craft_guard_expression || '').trim(),
+    on_craft_success_script: String(localForm.value.on_craft_success_script || '').trim(),
+    on_craft_success_text: String(localForm.value.on_craft_success_text || '').trim(),
+    on_craft_failure_script: String(localForm.value.on_craft_failure_script || '').trim(),
+    on_craft_failure_text: String(localForm.value.on_craft_failure_text || '').trim(),
+    on_read_script: String(localForm.value.on_read_script || '').trim(),
+    on_read_text: String(localForm.value.on_read_text || '').trim(),
+    on_leave_scene_script: String(localForm.value.on_leave_scene_script || '').trim(),
+    on_leave_scene_text: String(localForm.value.on_leave_scene_text || '').trim(),
     on_pickup_script: localForm.value.on_pickup_script,
     on_pickup_text: localForm.value.on_pickup_text,
     on_drop_script: localForm.value.on_drop_script,
@@ -1290,6 +1336,102 @@ const textLogPreviewClass = computed(() => {
                   </p>
                 </div>
 
+                <!-- CONSTRUCTABLE Panels: Deterministic Guard & Transition Rules -->
+                <div v-if="currentItemType === 'CONSTRUCTABLE'" class="space-y-4 pt-2">
+                  <!-- Collapsible Panel 1: Script Guard (Default Collapsed) -->
+                  <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                    <button
+                      type="button"
+                      @click="showConstructableGuard = !showConstructableGuard"
+                      class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div class="flex items-center gap-2">
+                        <Lock class="w-3.5 h-3.5 text-orange-400" />
+                        <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                          Crafting Script Guard
+                        </span>
+                        <span v-if="localForm.craft_guard_expression" class="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-[9px] font-bold">
+                          Configured
+                        </span>
+                      </div>
+                      <component :is="showConstructableGuard ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                    </button>
+
+                    <div v-if="showConstructableGuard" class="p-4 border-t border-white/5 space-y-2">
+                      <div class="flex justify-between items-center">
+                        <span class="text-[9px] font-bold text-orange-400 uppercase tracking-widest flex items-center gap-1">
+                          <Code2 class="w-3.5 h-3.5 text-orange-400" /> Deterministic Script Guard Expression
+                        </span>
+                        <span class="text-[9px] text-orange-400/80 font-mono">Optional</span>
+                      </div>
+                      <input
+                        v-model="localForm.craft_guard_expression"
+                        placeholder="e.g. tw.vars.get('has_hammer') == True or tw.switches.get('FORGE') == 'ON'"
+                        class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-orange-500/50 outline-none"
+                      />
+                      <p class="text-[10px] text-slate-400">
+                        Optional Python boolean expression evaluated in addition to required items. If false, crafting fails.
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Collapsible Panel 2: Crafting Transition Rules (Default Collapsed) -->
+                  <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                    <button
+                      type="button"
+                      @click="showConstructableTriggers = !showConstructableTriggers"
+                      class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div class="flex items-center gap-2">
+                        <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+                        <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                          Crafting Transition Rules
+                        </span>
+                        <span v-if="localForm.on_craft_success_script || localForm.on_craft_failure_script" class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-bold">
+                          Configured
+                        </span>
+                      </div>
+                      <component :is="showConstructableTriggers ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                    </button>
+
+                    <div v-if="showConstructableTriggers" class="p-4 border-t border-white/5 space-y-4">
+                      <ScriptEditor
+                        v-model="localForm.on_craft_success_script"
+                        label="On Craft Success Script"
+                        help-text="Executed when this constructable item is successfully crafted."
+                        context="constructable_success"
+                        min-height="100px"
+                      />
+                      <div class="space-y-1">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Craft Success Text</label>
+                        <textarea
+                          v-model="localForm.on_craft_success_text"
+                          rows="2"
+                          placeholder="e.g. With careful precision, you forge the ingredients into a masterwork."
+                          class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none"
+                        ></textarea>
+                      </div>
+
+                      <ScriptEditor
+                        v-model="localForm.on_craft_failure_script"
+                        label="On Craft Failure Script"
+                        help-text="Executed when crafting this item fails or is blocked by guard."
+                        context="constructable_failure"
+                        min-height="100px"
+                      />
+                      <div class="space-y-1">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Craft Failure Text</label>
+                        <textarea
+                          v-model="localForm.on_craft_failure_text"
+                          rows="2"
+                          placeholder="e.g. The forge is too cold to fuse the metal together."
+                          class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none"
+                        ></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- COMBINABLE: spatial / hidden / reveal-rule / reveals-item -->
                 <div v-if="currentItemType === 'COMBINABLE'" class="space-y-5 pt-4 border-t border-violet-500/20">
                   <div class="space-y-2">
@@ -1789,6 +1931,102 @@ const textLogPreviewClass = computed(() => {
                   <p class="text-[10px] text-slate-500 uppercase tracking-wider">Select items contained inside this container.</p>
                 </div>
 
+                <!-- CONTAINER Panels: Deterministic Guard & Unlocking Transition Rules -->
+                <div v-if="currentItemType === 'CONTAINER'" class="space-y-4 pt-2">
+                  <!-- Collapsible Panel 1: Deterministic Guard (Default Collapsed) -->
+                  <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                    <button
+                      type="button"
+                      @click="showContainerGuard = !showContainerGuard"
+                      class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div class="flex items-center gap-2">
+                        <Lock class="w-3.5 h-3.5 text-amber-400" />
+                        <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                          Deterministic Guard Expression
+                        </span>
+                        <span v-if="localForm.unlock_expression" class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-bold">
+                          Configured
+                        </span>
+                      </div>
+                      <component :is="showContainerGuard ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                    </button>
+
+                    <div v-if="showContainerGuard" class="p-4 border-t border-white/5 space-y-2">
+                      <div class="flex justify-between items-center">
+                        <span class="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                          <Code2 class="w-3.5 h-3.5 text-amber-400" /> Deterministic Script Guard Expression
+                        </span>
+                        <span class="text-[9px] text-amber-400/80 font-mono">Optional</span>
+                      </div>
+                      <input
+                        v-model="localForm.unlock_expression"
+                        placeholder="e.g. tw.vars.get('has_badge') == True or tw.switches.get('CHEST_LOCK') == 'OPEN'"
+                        class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500/50 outline-none"
+                      />
+                      <p class="text-[10px] text-slate-400">
+                        Deterministic Python boolean expression evaluated when attempting to unlock. If evaluated to false, unlocking fails.
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Collapsible Panel 2: Unlocking Transition Rules (Default Collapsed) -->
+                  <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                    <button
+                      type="button"
+                      @click="showContainerTriggers = !showContainerTriggers"
+                      class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div class="flex items-center gap-2">
+                        <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+                        <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                          Unlocking Transition Rules
+                        </span>
+                        <span v-if="localForm.on_unlock_success_script || localForm.on_unlock_failure_script" class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-bold">
+                          Configured
+                        </span>
+                      </div>
+                      <component :is="showContainerTriggers ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                    </button>
+
+                    <div v-if="showContainerTriggers" class="p-4 border-t border-white/5 space-y-4">
+                      <ScriptEditor
+                        v-model="localForm.on_unlock_success_script"
+                        label="On Unlock Success Script"
+                        help-text="Executed immediately when this container is successfully unlocked."
+                        context="container_unlock_success"
+                        min-height="100px"
+                      />
+                      <div class="space-y-1">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Unlock Success Text</label>
+                        <textarea
+                          v-model="localForm.on_unlock_success_text"
+                          rows="2"
+                          placeholder="e.g. The heavy chest lid springs open with a satisfying clack."
+                          class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none"
+                        ></textarea>
+                      </div>
+
+                      <ScriptEditor
+                        v-model="localForm.on_unlock_failure_script"
+                        label="On Unlock Failure Script"
+                        help-text="Executed when unlocking this container fails or is blocked by guard."
+                        context="container_unlock_failure"
+                        min-height="100px"
+                      />
+                      <div class="space-y-1">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Unlock Failure Text</label>
+                        <textarea
+                          v-model="localForm.on_unlock_failure_text"
+                          rows="2"
+                          placeholder="e.g. A small jolt zaps your fingers! The container remains shut."
+                          class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500/50 outline-none"
+                        ></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- READABLE -->
                 <div v-if="currentItemType === 'READABLE'" class="space-y-2">
                   <div class="space-y-2">
@@ -2011,6 +2249,32 @@ const textLogPreviewClass = computed(() => {
                     <textarea v-model="localForm.on_unequip_text" rows="4" class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
                   </div>
                 </div>
+
+                <!-- READABLE Triggers in Advanced Tab -->
+                <div v-if="currentItemType === 'READABLE'" class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+                  <div class="flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase tracking-wider">
+                    <FileText class="w-4 h-4" /> On Read Trigger & Script
+                  </div>
+                  <ScriptEditor
+                    v-model="localForm.on_read_script"
+                    label="On Read Script"
+                    help-text="Executed immediately when the player reads or inspects this readable item."
+                    context="on_read"
+                    min-height="120px"
+                  />
+                  <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                      <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Read Text</label>
+                      <div class="group relative flex items-center">
+                        <i class="ra ra-help text-slate-500 hover:text-white cursor-help transition-colors text-xs"></i>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-[10px] text-slate-300 font-normal normal-case tracking-normal rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 z-50">
+                          A narrative text string shown to the player upon reading this document.
+                        </div>
+                      </div>
+                    </div>
+                    <textarea v-model="localForm.on_read_text" rows="4" class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
+                  </div>
+                </div>
               </div>
 
               <div v-else-if="context.type === 'scene'" class="space-y-6">
@@ -2034,6 +2298,28 @@ const textLogPreviewClass = computed(() => {
                     </div>
                   </div>
                     <textarea v-model="localForm.on_enter_scene_text" rows="4" class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
+                  </div>
+                </div>
+
+                <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+                  <ScriptEditor
+                    v-model="localForm.on_leave_scene_script"
+                    label="On Leave Scene Script"
+                    help-text="Executed immediately when the protagonist leaves this scene."
+                    context="on_leave_scene"
+                    min-height="120px"
+                  />
+                  <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Leave Scene Text</label>
+                    <div class="group relative flex items-center">
+                      <i class="ra ra-help text-slate-500 hover:text-white cursor-help transition-colors text-xs"></i>
+                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-[10px] text-slate-300 font-normal normal-case tracking-normal rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 z-50">
+                        A narrative text string shown right when the player leaves this scene.
+                      </div>
+                    </div>
+                  </div>
+                    <textarea v-model="localForm.on_leave_scene_text" rows="4" class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
                   </div>
                 </div>
               </div>

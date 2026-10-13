@@ -687,6 +687,22 @@ class TurnGuardrailsManager:
                 if not referenced:
                     continue
 
+                meta = dict(e.metadata_json or {})
+                craft_expr = str(meta.get("craft_guard_expression") or "").strip()
+                if craft_expr:
+                    ctx = await self.manager._build_script_context()
+                    passed, err_detail = SwitchService.evaluate_gate_expression(craft_expr, ctx)
+                    if not passed:
+                        if meta.get("on_craft_failure_script"):
+                            fail_msgs = await self.manager._execute_inline_script(
+                                meta["on_craft_failure_script"], "on_craft_failure", e.id
+                            )
+                            messages.extend(fail_msgs)
+                        fail_text = str(meta.get("on_craft_failure_text") or err_detail or f"You cannot construct {e.name} right now.")
+                        await self._save_chat_message("system", fail_text)
+                        messages.append(fail_text)
+                        continue
+
                 # CONSTRUCT — consume ingredients, reveal result.
                 all_in_inventory = True
                 for ing_upper in needed_upper:
@@ -723,12 +739,23 @@ class TurnGuardrailsManager:
                     ing_names.append(ing_ent.name if ing_ent and ing_ent.name else ing_upper)
                 msg = f"You combine {', '.join(ing_names)} to create {e.name}!"
                 messages.append(msg)
+
+                if meta.get("on_craft_success_script"):
+                    succ_msgs = await self.manager._execute_inline_script(
+                        meta["on_craft_success_script"], "on_craft_success", e.id
+                    )
+                    messages.extend(succ_msgs)
+                if meta.get("on_craft_success_text"):
+                    await self._save_chat_message("system", meta["on_craft_success_text"])
+                    messages.append(meta["on_craft_success_text"])
+
                 logger.info(
                     "[Turn %s] CONSTRUCTABLE '%s' materialized from ingredients %s",
                     self.game_id,
                     e.id,
                     sorted(needed_upper),
                 )
+
 
         # Reconcile / Guardrail Step: Ensure no constructable item has been spawned/revealed illegally by the LLM
         for cid_upper in constructable_ids:
@@ -1275,10 +1302,27 @@ class TurnGuardrailsManager:
                     unlock_allowed = False
                     reason = f"You try using the item to unlock {ent.name}."
 
+            # 4. Scripted boolean guard expression
+            metadata_json = dict(ent.metadata_json or {})
+            required_expr = str(metadata_json.get("unlock_expression") or "").strip()
+            if unlock_allowed and required_expr:
+                ctx = await self.manager._build_script_context()
+                passed, err_detail = SwitchService.evaluate_gate_expression(required_expr, ctx)
+                if not passed:
+                    unlock_allowed = False
+                    reason = str(metadata_json.get("on_unlock_failure_text") or err_detail or f"{ent.name} stays locked.")
+
             if not is_being_unlocked:
                 unlock_allowed = False
 
             if not unlock_allowed:
+                if metadata_json.get("on_unlock_failure_script"):
+                    await self.manager._execute_inline_script(
+                        metadata_json["on_unlock_failure_script"], "on_unlock_failure", ent.id
+                    )
+                if metadata_json.get("on_unlock_failure_text"):
+                    reason = metadata_json["on_unlock_failure_text"]
+
                 sanitized_updates: list[WorldEntityUpdate] = []
                 for update in (event.updated_entities or []):
                     if update.entity_id == ent.id and update.locked is False:
@@ -1295,6 +1339,7 @@ class TurnGuardrailsManager:
                 event.spawned_items = []
 
                 reasons.append(reason or f"{ent.name} stays locked.")
+
 
         for item in inventory_containers:
             inv_id = str(item.get("id") or "").strip()
@@ -1489,7 +1534,23 @@ class TurnGuardrailsManager:
                     unlock_allowed = False
                     reason = f"You must specify which item you are using to unlock {ex.label}."
 
+            # Deterministic boolean guard expression
+            required_expr = str(getattr(ex, "unlock_expression", None) or "").strip()
+            if unlock_allowed and required_expr:
+                ctx = await self.manager._build_script_context()
+                passed, err_detail = SwitchService.evaluate_gate_expression(required_expr, ctx)
+                if not passed:
+                    unlock_allowed = False
+                    reason = str(getattr(ex, "on_unlock_failure_text", None) or err_detail or f"{ex.label} is locked.")
+
             if not unlock_allowed:
+                if getattr(ex, "on_unlock_failure_script", None):
+                    await self.manager._execute_inline_script(
+                        ex.on_unlock_failure_script, "on_unlock_failure", ex.id
+                    )
+                if getattr(ex, "on_unlock_failure_text", None):
+                    reason = ex.on_unlock_failure_text
+
                 # Force stays locked in event.updated_exits
                 sanitized_updates: list[ExitUpdate] = []
                 for up in (event.updated_exits or []):
@@ -1512,6 +1573,7 @@ class TurnGuardrailsManager:
                 event.updated_inventory_items = []
                 event.removed_inventory_item_ids = []
                 event.spawned_items = []
+
 
                 reasons.append(reason or f"{ex.label} stays locked.")
             else:
@@ -1785,6 +1847,10 @@ class TurnGuardrailsManager:
             if isinstance(item, dict):
                 if item.get("name", "").lower() == target_lower or item.get("id", "").lower() == target_lower:
                     if str(item.get("item_type") or "").upper() == "READABLE":
+                        if item.get("on_read_script"):
+                            await self.manager._execute_inline_script(item["on_read_script"], "on_read", item.get("id"))
+                        if item.get("on_read_text"):
+                            await self._save_chat_message("system", item["on_read_text"])
                         await self._check_special_action_unlocks("READ_ITEM", item.get("id"))
                         return
                         
@@ -1800,12 +1866,15 @@ class TurnGuardrailsManager:
         )
         candidates = ent_res.scalars().all()
         for candidate in candidates:
-            if candidate.id and candidate.id.lower() == target_lower:
+            if candidate.id and (candidate.id.lower() == target_lower or (candidate.name and candidate.name.lower() == target_lower)):
+                meta = dict(candidate.metadata_json or {})
+                if meta.get("on_read_script"):
+                    await self.manager._execute_inline_script(meta["on_read_script"], "on_read", candidate.id)
+                if meta.get("on_read_text"):
+                    await self._save_chat_message("system", meta["on_read_text"])
                 await self._check_special_action_unlocks("READ_ITEM", candidate.id)
                 return
-            if candidate.name and candidate.name.lower() == target_lower:
-                await self._check_special_action_unlocks("READ_ITEM", candidate.id)
-                return
+
 
     async def _check_special_action_unlocks(self, condition_type: str, target_id: str) -> None:
         """Checks if a readable item ID or found item ID unlocks any special actions for the protagonist."""

@@ -611,6 +611,8 @@ async def _persist_scenes(
             decorative_objects=clean_decor or None,
             on_enter_scene_script=s.get("on_enter_scene_script") or None,
             on_enter_scene_text=s.get("on_enter_scene_text") or None,
+            on_leave_scene_script=s.get("on_leave_scene_script") or None,
+            on_leave_scene_text=s.get("on_leave_scene_text") or None,
         ))
 
 
@@ -661,8 +663,13 @@ def _persist_exits(
             code_to_unlock=code_to_unlock,
             item_to_unlock=item_to_unlock,
             rule_to_unlock=rule_to_unlock,
+            unlock_expression=e.get("unlock_expression") or None,
             on_open_exit_script=e.get("on_open_exit_script") or None,
             on_open_exit_text=e.get("on_open_exit_text") or None,
+            on_unlock_success_script=e.get("on_unlock_success_script") or None,
+            on_unlock_success_text=e.get("on_unlock_success_text") or None,
+            on_unlock_failure_script=e.get("on_unlock_failure_script") or None,
+            on_unlock_failure_text=e.get("on_unlock_failure_text") or None,
         ))
 
 
@@ -1000,15 +1007,30 @@ async def _persist_objects(
                 text_log_format = "DOCUMENT"
             metadata_json["text_log_content"] = text_log_content
             metadata_json["text_log_format"] = text_log_format
+            metadata_json["on_read_script"] = o.get("on_read_script") or metadata_json.get("on_read_script") or None
+            metadata_json["on_read_text"] = o.get("on_read_text") or metadata_json.get("on_read_text") or None
 
         if str(o.get("item_type") or "").upper() == "CONTAINER":
             code_to_unlock, item_to_unlock, rule_to_unlock = _normalize_unlock_requirements(
                 o.get("code_to_unlock"), o.get("item_to_unlock"), o.get("rule_to_unlock")
             )
+            unlock_expression = o.get("unlock_expression") or metadata_json.get("unlock_expression") or None
             metadata_json["code_to_unlock"] = code_to_unlock
             metadata_json["item_to_unlock"] = item_to_unlock
             metadata_json["rule_to_unlock"] = rule_to_unlock
-            metadata_json["locked"] = bool(code_to_unlock or item_to_unlock or rule_to_unlock)
+            metadata_json["unlock_expression"] = unlock_expression
+            metadata_json["locked"] = bool(code_to_unlock or item_to_unlock or rule_to_unlock or unlock_expression)
+            metadata_json["on_unlock_success_script"] = o.get("on_unlock_success_script") or metadata_json.get("on_unlock_success_script") or None
+            metadata_json["on_unlock_success_text"] = o.get("on_unlock_success_text") or metadata_json.get("on_unlock_success_text") or None
+            metadata_json["on_unlock_failure_script"] = o.get("on_unlock_failure_script") or metadata_json.get("on_unlock_failure_script") or None
+            metadata_json["on_unlock_failure_text"] = o.get("on_unlock_failure_text") or metadata_json.get("on_unlock_failure_text") or None
+
+        if str(o.get("item_type") or "").upper() == "CONSTRUCTABLE":
+            metadata_json["craft_guard_expression"] = o.get("craft_guard_expression") or metadata_json.get("craft_guard_expression") or None
+            metadata_json["on_craft_success_script"] = o.get("on_craft_success_script") or metadata_json.get("on_craft_success_script") or None
+            metadata_json["on_craft_success_text"] = o.get("on_craft_success_text") or metadata_json.get("on_craft_success_text") or None
+            metadata_json["on_craft_failure_script"] = o.get("on_craft_failure_script") or metadata_json.get("on_craft_failure_script") or None
+            metadata_json["on_craft_failure_text"] = o.get("on_craft_failure_text") or metadata_json.get("on_craft_failure_text") or None
 
         if str(o.get("item_type") or "").upper() == "SWITCH":
             raw_states = o.get("switch_states") or []

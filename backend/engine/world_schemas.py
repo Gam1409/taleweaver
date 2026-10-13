@@ -32,6 +32,14 @@ class WorldSceneSchema(BaseModel):
         "",
         description="Optional text output when the protagonist enters the scene. Use empty string for none.",
     )
+    on_leave_scene_script: str = Field(
+        "",
+        description="Optional script executed when the protagonist leaves the scene. Use empty string for none.",
+    )
+    on_leave_scene_text: str = Field(
+        "",
+        description="Optional text output when the protagonist leaves the scene. Use empty string for none.",
+    )
 
     model_config = {"extra": "forbid"}
 
@@ -75,6 +83,26 @@ class WorldExitSchema(BaseModel):
     on_open_exit_text: str = Field(
         "",
         description="Optional text output when this exit is opened/traversed. Use empty string for none.",
+    )
+    unlock_expression: str = Field(
+        "",
+        description="Deterministic script guard expression evaluated to allow unlocking the exit (e.g. tw.vars.get('puzzle_solved') == True). Keep empty if none.",
+    )
+    on_unlock_success_script: str = Field(
+        "",
+        description="Optional script executed when unlocking this exit succeeds. Use empty string for none.",
+    )
+    on_unlock_success_text: str = Field(
+        "",
+        description="Optional text output when unlocking this exit succeeds. Use empty string for none.",
+    )
+    on_unlock_failure_script: str = Field(
+        "",
+        description="Optional script executed when unlocking this exit fails. Use empty string for none.",
+    )
+    on_unlock_failure_text: str = Field(
+        "",
+        description="Optional text output when unlocking this exit fails. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
@@ -438,6 +466,54 @@ class WorldObjectSchema(BaseModel):
         "",
         description="Optional text output when the item is unequipped. Use empty string for none.",
     )
+    unlock_expression: str = Field(
+        "",
+        description="Deterministic script guard expression evaluated when unlocking this container. Keep empty if none.",
+    )
+    on_unlock_success_script: str = Field(
+        "",
+        description="Optional script executed when container unlocking succeeds. Use empty string for none.",
+    )
+    on_unlock_success_text: str = Field(
+        "",
+        description="Optional text output when container unlocking succeeds. Use empty string for none.",
+    )
+    on_unlock_failure_script: str = Field(
+        "",
+        description="Optional script executed when container unlocking fails. Use empty string for none.",
+    )
+    on_unlock_failure_text: str = Field(
+        "",
+        description="Optional text output when container unlocking fails. Use empty string for none.",
+    )
+    on_read_script: str = Field(
+        "",
+        description="Only for READABLE objects: optional script executed when read. Use empty string for none.",
+    )
+    on_read_text: str = Field(
+        "",
+        description="Only for READABLE objects: optional text output when read. Use empty string for none.",
+    )
+    craft_guard_expression: str = Field(
+        "",
+        description="Only for CONSTRUCTABLE objects: optional script guard expression evaluated during crafting. Keep empty if none.",
+    )
+    on_craft_success_script: str = Field(
+        "",
+        description="Only for CONSTRUCTABLE objects: optional script executed when crafting succeeds. Use empty string for none.",
+    )
+    on_craft_success_text: str = Field(
+        "",
+        description="Only for CONSTRUCTABLE objects: optional text output when crafting succeeds. Use empty string for none.",
+    )
+    on_craft_failure_script: str = Field(
+        "",
+        description="Only for CONSTRUCTABLE objects: optional script executed when crafting fails. Use empty string for none.",
+    )
+    on_craft_failure_text: str = Field(
+        "",
+        description="Only for CONSTRUCTABLE objects: optional text output when crafting fails. Use empty string for none.",
+    )
 
     model_config = {"extra": "forbid"}
 
@@ -464,6 +540,22 @@ class SequenceSchema(BaseModel):
         description="Optional hard rule: ID of the NPC the protagonist must defeat to complete the sequence",
     )
     exp_reward: int = Field(default=100, description="XP reward for completion")
+    on_start_sequence_script: str = Field(
+        "",
+        description="Optional script executed when this sequence begins. Use empty string for none.",
+    )
+    on_start_sequence_text: str = Field(
+        "",
+        description="Optional text output when this sequence begins. Use empty string for none.",
+    )
+    on_end_sequence_script: str = Field(
+        "",
+        description="Optional script executed when this sequence ends/completes. Use empty string for none.",
+    )
+    on_end_sequence_text: str = Field(
+        "",
+        description="Optional text output when this sequence ends/completes. Use empty string for none.",
+    )
 
     model_config = {"extra": "ignore"}
 
@@ -543,6 +635,22 @@ class ProtagonistSchema(BaseModel):
     special_actions: list[SpecialActionSchema] = Field(
         default=[],
         description="List of up to 5 special actions the protagonist has at the start. Max 5.",
+    )
+    on_hp_change_script: str = Field(
+        "",
+        description="Optional script executed when protagonist HP changes. Use empty string for none.",
+    )
+    on_hp_change_text: str = Field(
+        "",
+        description="Optional text output when protagonist HP changes. Use empty string for none.",
+    )
+    on_status_change_script: str = Field(
+        "",
+        description="Optional script executed when protagonist status or stats change. Use empty string for none.",
+    )
+    on_status_change_text: str = Field(
+        "",
+        description="Optional text output when protagonist status or stats change. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}

@@ -30,12 +30,38 @@ INLINE_TRIGGERS: dict[str, tuple[tuple[str, str], ...]] = {
         ("on_drop", "the item is dropped"),
         ("on_equip", "the item is equipped (only WEAPON/WEARABLE items)"),
         ("on_unequip", "the item is unequipped (only WEAPON/WEARABLE items)"),
+        ("on_read", "the readable item is inspected or read (only READABLE items)"),
+        ("on_unlock_success", "container is successfully unlocked (only CONTAINER items)"),
+        (
+            "on_unlock_failure",
+            "container unlock fails or is blocked by guard (only CONTAINER items)",
+        ),
+        ("on_craft_success", "constructable item is crafted (only CONSTRUCTABLE items)"),
+        (
+            "on_craft_failure",
+            "constructable item crafting fails or is blocked by guard (only CONSTRUCTABLE items)",
+        ),
     ),
-    "SCENES": (("on_enter_scene", "the protagonist enters this scene"),),
-    "EXITS": (("on_open_exit", "this exit is opened/traversed"),),
+    "SCENES": (
+        ("on_enter_scene", "the protagonist enters this scene"),
+        ("on_leave_scene", "the protagonist leaves this scene"),
+    ),
+    "EXITS": (
+        ("on_open_exit", "this exit is opened/traversed"),
+        ("on_unlock_success", "this exit is successfully unlocked"),
+        ("on_unlock_failure", "this exit unlock fails or is blocked by guard"),
+    ),
     "NPCS": (
         ("on_defeat", "the NPC is defeated"),
         ("on_protagonist_enters_scene", "the protagonist enters the scene containing this NPC"),
+    ),
+    "PROTAGONIST": (
+        ("on_hp_change", "the protagonist HP changes (e.g. damaged or healed)"),
+        ("on_status_change", "the protagonist status effects change"),
+    ),
+    "SEQUENCES": (
+        ("on_start_sequence", "this chapter sequence becomes active"),
+        ("on_end_sequence", "this chapter sequence is completed"),
     ),
 }
 
@@ -85,6 +111,12 @@ _EXAMPLES = (
     "6. Switch activation (inline on switch: on_success_script):\n"
     "   tw.exits.unlock('SCENE_LAB', 'SCENE_VAULT')\n"
     "   tw.story.show_message('A loud click echoes through the vault corridors.')\n"
+    "7. Secret document on read (inline on READABLE object: on_read_script):\n"
+    "   tw.vars.set('read_secret_plans', True)\n"
+    "   tw.story.show_message('You memorize the classified blueprints.')\n"
+    "8. Container unlock guard (inline on CONTAINER object: unlock_expression & on_unlock_success_script):\n"
+    "   unlock_expression = \"tw.switches.get('POWER_CORE') == 'ACTIVE'\"\n"
+    "   on_unlock_success_script = \"tw.story.show_message('The cryo-chamber decompresses with a hiss.')\"\n"
 )
 
 

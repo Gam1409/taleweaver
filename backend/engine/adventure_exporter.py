@@ -68,6 +68,18 @@ _OBJECT_ENTITY_KEYS = {
     "on_equip_text",
     "on_unequip_script",
     "on_unequip_text",
+    "unlock_expression",
+    "on_unlock_success_script",
+    "on_unlock_success_text",
+    "on_unlock_failure_script",
+    "on_unlock_failure_text",
+    "on_read_script",
+    "on_read_text",
+    "craft_guard_expression",
+    "on_craft_success_script",
+    "on_craft_success_text",
+    "on_craft_failure_script",
+    "on_craft_failure_text",
 }
 
 _NPC_ENTITY_KEYS = {
@@ -150,6 +162,18 @@ _INLINE_OBJECT_SCRIPT_KEYS = (
     "on_equip_text",
     "on_unequip_script",
     "on_unequip_text",
+    "unlock_expression",
+    "on_unlock_success_script",
+    "on_unlock_success_text",
+    "on_unlock_failure_script",
+    "on_unlock_failure_text",
+    "on_read_script",
+    "on_read_text",
+    "craft_guard_expression",
+    "on_craft_success_script",
+    "on_craft_success_text",
+    "on_craft_failure_script",
+    "on_craft_failure_text",
 )
 
 
@@ -214,6 +238,8 @@ def _normalize_exported_object_metadata(filtered: dict[str, Any]) -> None:
     else:
         metadata.pop("text_log_content", None)
         metadata.pop("text_log_format", None)
+        metadata.pop("on_read_script", None)
+        metadata.pop("on_read_text", None)
 
     if item_type == "CONTAINER":
         filtered["code_to_unlock"] = metadata.pop("code_to_unlock", "")
@@ -223,7 +249,19 @@ def _normalize_exported_object_metadata(filtered: dict[str, Any]) -> None:
         metadata.pop("code_to_unlock", None)
         metadata.pop("item_to_unlock", None)
         metadata.pop("rule_to_unlock", None)
+        metadata.pop("unlock_expression", None)
+        metadata.pop("on_unlock_success_script", None)
+        metadata.pop("on_unlock_success_text", None)
+        metadata.pop("on_unlock_failure_script", None)
+        metadata.pop("on_unlock_failure_text", None)
     metadata.pop("locked", None)
+
+    if item_type != "CONSTRUCTABLE":
+        metadata.pop("craft_guard_expression", None)
+        metadata.pop("on_craft_success_script", None)
+        metadata.pop("on_craft_success_text", None)
+        metadata.pop("on_craft_failure_script", None)
+        metadata.pop("on_craft_failure_text", None)
 
     _extract_item_switch_metadata(metadata, filtered, item_type)
     _extract_item_script_metadata(metadata, filtered)

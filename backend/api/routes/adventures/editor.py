@@ -158,8 +158,26 @@ class EntityUpdateRequest(BaseModel):
     on_protagonist_enters_scene_text: Optional[str] = None
     on_enter_scene_script: Optional[str] = None
     on_enter_scene_text: Optional[str] = None
+    on_leave_scene_script: Optional[str] = None
+    on_leave_scene_text: Optional[str] = None
     on_open_exit_script: Optional[str] = None
     on_open_exit_text: Optional[str] = None
+    unlock_expression: Optional[str] = None
+    on_unlock_success_script: Optional[str] = None
+    on_unlock_success_text: Optional[str] = None
+    on_unlock_failure_script: Optional[str] = None
+    on_unlock_failure_text: Optional[str] = None
+    on_read_script: Optional[str] = None
+    on_read_text: Optional[str] = None
+    craft_guard_expression: Optional[str] = None
+    on_craft_success_script: Optional[str] = None
+    on_craft_success_text: Optional[str] = None
+    on_craft_failure_script: Optional[str] = None
+    on_craft_failure_text: Optional[str] = None
+    on_hp_change_script: Optional[str] = None
+    on_hp_change_text: Optional[str] = None
+    on_status_change_script: Optional[str] = None
+    on_status_change_text: Optional[str] = None
     is_hidden: Optional[bool] = None
     reveal_rule: Optional[str] = None
     moveable: Optional[bool] = None
@@ -250,6 +268,26 @@ def _serialize_model(obj):
         if not isinstance(decor, list):
             decor = []
         data["decorative_objects"] = [str(d) for d in decor if isinstance(d, (str, int, float))]
+        data["on_enter_scene_script"] = str(getattr(obj, "on_enter_scene_script", "") or "")
+        data["on_enter_scene_text"] = str(getattr(obj, "on_enter_scene_text", "") or "")
+        data["on_leave_scene_script"] = str(getattr(obj, "on_leave_scene_script", "") or "")
+        data["on_leave_scene_text"] = str(getattr(obj, "on_leave_scene_text", "") or "")
+
+    if isinstance(obj, WorldExit):
+        data["unlock_expression"] = str(getattr(obj, "unlock_expression", "") or "")
+        data["on_unlock_success_script"] = str(getattr(obj, "on_unlock_success_script", "") or "")
+        data["on_unlock_success_text"] = str(getattr(obj, "on_unlock_success_text", "") or "")
+        data["on_unlock_failure_script"] = str(getattr(obj, "on_unlock_failure_script", "") or "")
+        data["on_unlock_failure_text"] = str(getattr(obj, "on_unlock_failure_text", "") or "")
+        data["on_open_exit_script"] = str(getattr(obj, "on_open_exit_script", "") or "")
+        data["on_open_exit_text"] = str(getattr(obj, "on_open_exit_text", "") or "")
+
+    if isinstance(obj, Avatar):
+        stats = dict(obj.stats or {})
+        data["on_hp_change_script"] = str(stats.get("on_hp_change_script") or "")
+        data["on_hp_change_text"] = str(stats.get("on_hp_change_text") or "")
+        data["on_status_change_script"] = str(stats.get("on_status_change_script") or "")
+        data["on_status_change_text"] = str(stats.get("on_status_change_text") or "")
 
     # Group stats for easier frontend access
     if isinstance(obj, WorldEntity):
@@ -274,6 +312,22 @@ def _serialize_model(obj):
             data["code_to_unlock"] = str(metadata_json.get("code_to_unlock") or "")
             data["item_to_unlock"] = str(metadata_json.get("item_to_unlock") or "")
             data["rule_to_unlock"] = str(metadata_json.get("rule_to_unlock") or "")
+            data["unlock_expression"] = str(metadata_json.get("unlock_expression") or "")
+            data["on_unlock_success_script"] = str(metadata_json.get("on_unlock_success_script") or "")
+            data["on_unlock_success_text"] = str(metadata_json.get("on_unlock_success_text") or "")
+            data["on_unlock_failure_script"] = str(metadata_json.get("on_unlock_failure_script") or "")
+            data["on_unlock_failure_text"] = str(metadata_json.get("on_unlock_failure_text") or "")
+            data["on_read_script"] = str(metadata_json.get("on_read_script") or "")
+            data["on_read_text"] = str(metadata_json.get("on_read_text") or "")
+            data["craft_guard_expression"] = str(metadata_json.get("craft_guard_expression") or "")
+            data["on_craft_success_script"] = str(metadata_json.get("on_craft_success_script") or "")
+            data["on_craft_success_text"] = str(metadata_json.get("on_craft_success_text") or "")
+            data["on_craft_failure_script"] = str(metadata_json.get("on_craft_failure_script") or "")
+            data["on_craft_failure_text"] = str(metadata_json.get("on_craft_failure_text") or "")
+            data["on_equip_script"] = str(metadata_json.get("on_equip_script") or "")
+            data["on_equip_text"] = str(metadata_json.get("on_equip_text") or "")
+            data["on_unequip_script"] = str(metadata_json.get("on_unequip_script") or "")
+            data["on_unequip_text"] = str(metadata_json.get("on_unequip_text") or "")
             if isinstance(metadata_json.get("locked"), bool):
                 data["locked"] = metadata_json.get("locked")
             else:
@@ -281,6 +335,7 @@ def _serialize_model(obj):
                     metadata_json.get("code_to_unlock")
                     or metadata_json.get("item_to_unlock")
                     or metadata_json.get("rule_to_unlock")
+                    or metadata_json.get("unlock_expression")
                 )
 
             # Serialize switch fields for the editor UI
@@ -1229,6 +1284,10 @@ _FIX_PROTAGONIST_FIELDS = frozenset(
         "charisma",
         "armor_class",
         "exp",
+        "on_hp_change_script",
+        "on_hp_change_text",
+        "on_status_change_script",
+        "on_status_change_text",
     }
 )
 
@@ -1246,7 +1305,17 @@ _FIX_ADVENTURE_FIELDS = frozenset(
     }
 )
 
-_FIX_SCENE_FIELDS = frozenset({"label", "description", "decorative_objects"})
+_FIX_SCENE_FIELDS = frozenset(
+    {
+        "label",
+        "description",
+        "decorative_objects",
+        "on_enter_scene_script",
+        "on_enter_scene_text",
+        "on_leave_scene_script",
+        "on_leave_scene_text",
+    }
+)
 
 _FIX_EXIT_FIELDS = frozenset(
     {
@@ -1257,6 +1326,13 @@ _FIX_EXIT_FIELDS = frozenset(
         "code_to_unlock",
         "item_to_unlock",
         "rule_to_unlock",
+        "unlock_expression",
+        "on_open_exit_script",
+        "on_open_exit_text",
+        "on_unlock_success_script",
+        "on_unlock_success_text",
+        "on_unlock_failure_script",
+        "on_unlock_failure_text",
     }
 )
 
@@ -1284,8 +1360,20 @@ _FIX_OBJECT_FIELDS = frozenset(
         "code_to_unlock",
         "item_to_unlock",
         "rule_to_unlock",
+        "unlock_expression",
+        "on_unlock_success_script",
+        "on_unlock_success_text",
+        "on_unlock_failure_script",
+        "on_unlock_failure_text",
         "text_log_content",
         "text_log_format",
+        "on_read_script",
+        "on_read_text",
+        "craft_guard_expression",
+        "on_craft_success_script",
+        "on_craft_success_text",
+        "on_craft_failure_script",
+        "on_craft_failure_text",
         "is_hidden",
         "reveal_rule",
         "spatial_position",
@@ -3424,11 +3512,37 @@ async def update_editor_entity(
                                 if start_sc:
                                     obj_ent.current_scene_id = start_sc
 
+                if (
+                    payload.on_hp_change_script is not None
+                    or payload.on_hp_change_text is not None
+                    or payload.on_status_change_script is not None
+                    or payload.on_status_change_text is not None
+                ):
+                    stats = dict(avatar.stats or {})
+                    if payload.on_hp_change_script is not None:
+                        stats["on_hp_change_script"] = payload.on_hp_change_script.strip() or None
+                    if payload.on_hp_change_text is not None:
+                        stats["on_hp_change_text"] = payload.on_hp_change_text.strip() or None
+                    if payload.on_status_change_script is not None:
+                        stats["on_status_change_script"] = payload.on_status_change_script.strip() or None
+                    if payload.on_status_change_text is not None:
+                        stats["on_status_change_text"] = payload.on_status_change_text.strip() or None
+                    avatar.stats = stats
+                    flag_modified(avatar, "stats")
+
                 if isinstance(adv.original_manifest, dict):
                     manifest = deepcopy(adv.original_manifest)
                     if "protagonist" in manifest and isinstance(manifest["protagonist"], dict):
                         manifest["protagonist"]["starting_inventory"] = list(inv_item_ids)
                         manifest["protagonist"]["starting_equipment"] = dict(avatar.equipment or {})
+                        if payload.on_hp_change_script is not None:
+                            manifest["protagonist"]["on_hp_change_script"] = payload.on_hp_change_script.strip() or ""
+                        if payload.on_hp_change_text is not None:
+                            manifest["protagonist"]["on_hp_change_text"] = payload.on_hp_change_text.strip() or ""
+                        if payload.on_status_change_script is not None:
+                            manifest["protagonist"]["on_status_change_script"] = payload.on_status_change_script.strip() or ""
+                        if payload.on_status_change_text is not None:
+                            manifest["protagonist"]["on_status_change_text"] = payload.on_status_change_text.strip() or ""
                         adv.original_manifest = manifest
                         flag_modified(adv, "original_manifest")
     elif payload.target_type == "scene":
@@ -3545,6 +3659,27 @@ async def update_editor_entity(
                 scene.on_enter_scene_text = (
                     payload.on_enter_scene_text.strip() if payload.on_enter_scene_text else None
                 )
+            if payload.on_leave_scene_script is not None:
+                scene.on_leave_scene_script = (
+                    payload.on_leave_scene_script.strip() if payload.on_leave_scene_script else None
+                )
+            if payload.on_leave_scene_text is not None:
+                scene.on_leave_scene_text = (
+                    payload.on_leave_scene_text.strip() if payload.on_leave_scene_text else None
+                )
+
+            if isinstance(adv.original_manifest, dict) and isinstance(
+                adv.original_manifest.get("scenes"), list
+            ):
+                manifest = deepcopy(adv.original_manifest)
+                for sc_item in manifest.get("scenes", []):
+                    if isinstance(sc_item, dict) and sc_item.get("id") == scene.id:
+                        sc_item["on_enter_scene_script"] = scene.on_enter_scene_script
+                        sc_item["on_enter_scene_text"] = scene.on_enter_scene_text
+                        sc_item["on_leave_scene_script"] = scene.on_leave_scene_script
+                        sc_item["on_leave_scene_text"] = scene.on_leave_scene_text
+                adv.original_manifest = manifest
+                flag_modified(adv, "original_manifest")
 
     elif payload.target_type == "exit":
         ex_res = await db.execute(
@@ -3563,6 +3698,10 @@ async def update_editor_entity(
             if payload.exit_type is not None:
                 world_exit.exit_type = payload.exit_type
 
+            if payload.unlock_expression is not None:
+                world_exit.unlock_expression = (
+                    payload.unlock_expression.strip() if payload.unlock_expression else None
+                )
             if payload.on_open_exit_script is not None:
                 world_exit.on_open_exit_script = (
                     payload.on_open_exit_script.strip() if payload.on_open_exit_script else None
@@ -3570,6 +3709,22 @@ async def update_editor_entity(
             if payload.on_open_exit_text is not None:
                 world_exit.on_open_exit_text = (
                     payload.on_open_exit_text.strip() if payload.on_open_exit_text else None
+                )
+            if payload.on_unlock_success_script is not None:
+                world_exit.on_unlock_success_script = (
+                    payload.on_unlock_success_script.strip() if payload.on_unlock_success_script else None
+                )
+            if payload.on_unlock_success_text is not None:
+                world_exit.on_unlock_success_text = (
+                    payload.on_unlock_success_text.strip() if payload.on_unlock_success_text else None
+                )
+            if payload.on_unlock_failure_script is not None:
+                world_exit.on_unlock_failure_script = (
+                    payload.on_unlock_failure_script.strip() if payload.on_unlock_failure_script else None
+                )
+            if payload.on_unlock_failure_text is not None:
+                world_exit.on_unlock_failure_text = (
+                    payload.on_unlock_failure_text.strip() if payload.on_unlock_failure_text else None
                 )
 
             # Enforce mutual exclusivity and priority on exit lock attributes
@@ -3637,6 +3792,13 @@ async def update_editor_entity(
                         ex_item["code_to_unlock"] = world_exit.code_to_unlock
                         ex_item["item_to_unlock"] = world_exit.item_to_unlock
                         ex_item["rule_to_unlock"] = world_exit.rule_to_unlock
+                        ex_item["unlock_expression"] = world_exit.unlock_expression
+                        ex_item["on_open_exit_script"] = world_exit.on_open_exit_script
+                        ex_item["on_open_exit_text"] = world_exit.on_open_exit_text
+                        ex_item["on_unlock_success_script"] = world_exit.on_unlock_success_script
+                        ex_item["on_unlock_success_text"] = world_exit.on_unlock_success_text
+                        ex_item["on_unlock_failure_script"] = world_exit.on_unlock_failure_script
+                        ex_item["on_unlock_failure_text"] = world_exit.on_unlock_failure_text
                 adv.original_manifest = manifest
                 flag_modified(adv, "original_manifest")
     else:
@@ -4050,12 +4212,28 @@ async def update_editor_entity(
                         else:
                             metadata_json["locked"] = bool(code or item or rule)
 
+                        if payload.unlock_expression is not None:
+                            metadata_json["unlock_expression"] = payload.unlock_expression.strip() or None
+                        if payload.on_unlock_success_script is not None:
+                            metadata_json["on_unlock_success_script"] = payload.on_unlock_success_script.strip() or None
+                        if payload.on_unlock_success_text is not None:
+                            metadata_json["on_unlock_success_text"] = payload.on_unlock_success_text.strip() or None
+                        if payload.on_unlock_failure_script is not None:
+                            metadata_json["on_unlock_failure_script"] = payload.on_unlock_failure_script.strip() or None
+                        if payload.on_unlock_failure_text is not None:
+                            metadata_json["on_unlock_failure_text"] = payload.on_unlock_failure_text.strip() or None
+
                         ent.unlock_rule = None
                 else:
                     # Clean up unlock fields if the item is not a CONTAINER anymore
                     metadata_json.pop("code_to_unlock", None)
                     metadata_json.pop("item_to_unlock", None)
                     metadata_json.pop("rule_to_unlock", None)
+                    metadata_json.pop("unlock_expression", None)
+                    metadata_json.pop("on_unlock_success_script", None)
+                    metadata_json.pop("on_unlock_success_text", None)
+                    metadata_json.pop("on_unlock_failure_script", None)
+                    metadata_json.pop("on_unlock_failure_text", None)
                     metadata_json.pop("locked", None)
 
                 if payload.inventory is not None:
@@ -4080,10 +4258,28 @@ async def update_editor_entity(
                                 detail="text_log_format must be one of DOCUMENT, SCROLL, BOOK, SIGN.",
                             )
                         metadata_json["text_log_format"] = normalized_format
+                    if payload.on_read_script is not None:
+                        metadata_json["on_read_script"] = payload.on_read_script.strip() or None
+                    if payload.on_read_text is not None:
+                        metadata_json["on_read_text"] = payload.on_read_text.strip() or None
                 else:
                     # Clean up readable fields
                     metadata_json.pop("text_log_content", None)
                     metadata_json.pop("text_log_format", None)
+                    metadata_json.pop("on_read_script", None)
+                    metadata_json.pop("on_read_text", None)
+
+                if str(ent.item_type or "").upper() == "CONSTRUCTABLE":
+                    if payload.craft_guard_expression is not None:
+                        metadata_json["craft_guard_expression"] = payload.craft_guard_expression.strip() or None
+                    if payload.on_craft_success_script is not None:
+                        metadata_json["on_craft_success_script"] = payload.on_craft_success_script.strip() or None
+                    if payload.on_craft_success_text is not None:
+                        metadata_json["on_craft_success_text"] = payload.on_craft_success_text.strip() or None
+                    if payload.on_craft_failure_script is not None:
+                        metadata_json["on_craft_failure_script"] = payload.on_craft_failure_script.strip() or None
+                    if payload.on_craft_failure_text is not None:
+                        metadata_json["on_craft_failure_text"] = payload.on_craft_failure_text.strip() or None
 
                 if payload.wearable_slots is not None:
                     ent.wearable_slots = payload.wearable_slots

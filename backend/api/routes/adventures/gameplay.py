@@ -36,6 +36,7 @@ from backend.core.prompts import (
 )
 from backend.engine.map_engine import MapEngine
 from backend.engine.switch_service import SwitchService
+from backend.engine.trigger_service import TriggerService
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -990,6 +991,18 @@ async def mark_text_log_read(
     entity_states[entity.id] = override_entry
 
     state.entity_states = entity_states
+
+    meta = dict(entity.metadata_json or {})
+    if meta.get("on_read_script") or meta.get("on_read_text"):
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_read",
+            entity.id,
+            script_code=meta.get("on_read_script"),
+            narrative_text=meta.get("on_read_text"),
+        )
+
     await db.commit()
 
     return {"status": "ok", "entity_id": entity.id, "is_read": True}
@@ -1029,6 +1042,24 @@ async def unlock_container_with_code(
     if submitted_code.lower() != expected_code.lower():
         raise HTTPException(status_code=403, detail=INVALID_CONTAINER_CODE_MESSAGE)
 
+    if metadata_json.get("unlock_expression"):
+        passed, err = await TriggerService.evaluate_guard(db, state, metadata_json["unlock_expression"])
+        if not passed:
+            if metadata_json.get("on_unlock_failure_script") or metadata_json.get("on_unlock_failure_text"):
+                await TriggerService.execute_trigger(
+                    db,
+                    state,
+                    "on_unlock_failure",
+                    entity.id,
+                    script_code=metadata_json.get("on_unlock_failure_script"),
+                    narrative_text=metadata_json.get("on_unlock_failure_text") or err,
+                )
+                await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail=metadata_json.get("on_unlock_failure_text") or err or "Guard condition not met.",
+            )
+
     entity_states = dict(state.entity_states or {})
     entry = dict(entity_states.get(entity.id) or {})
     
@@ -1058,6 +1089,16 @@ async def unlock_container_with_code(
                     role="system",
                     content=f"you gained {xp_reward} XP",
                 )
+            )
+
+        if metadata_json.get("on_unlock_success_script") or metadata_json.get("on_unlock_success_text"):
+            await TriggerService.execute_trigger(
+                db,
+                state,
+                "on_unlock_success",
+                entity.id,
+                script_code=metadata_json.get("on_unlock_success_script"),
+                narrative_text=metadata_json.get("on_unlock_success_text"),
             )
             
     await db.commit()
@@ -1117,6 +1158,24 @@ async def unlock_container_with_item(
     if submitted_item_id not in inventory_ids:
         raise HTTPException(status_code=403, detail="You do not possess the required key item.")
 
+    if metadata_json.get("unlock_expression"):
+        passed, err = await TriggerService.evaluate_guard(db, state, metadata_json["unlock_expression"])
+        if not passed:
+            if metadata_json.get("on_unlock_failure_script") or metadata_json.get("on_unlock_failure_text"):
+                await TriggerService.execute_trigger(
+                    db,
+                    state,
+                    "on_unlock_failure",
+                    entity.id,
+                    script_code=metadata_json.get("on_unlock_failure_script"),
+                    narrative_text=metadata_json.get("on_unlock_failure_text") or err,
+                )
+                await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail=metadata_json.get("on_unlock_failure_text") or err or "Guard condition not met.",
+            )
+
     entity_states = dict(state.entity_states or {})
     entry = dict(entity_states.get(entity.id) or {})
     
@@ -1151,6 +1210,16 @@ async def unlock_container_with_item(
                 content=f"you gained {xp_reward} XP",
             )
         )
+
+        if metadata_json.get("on_unlock_success_script") or metadata_json.get("on_unlock_success_text"):
+            await TriggerService.execute_trigger(
+                db,
+                state,
+                "on_unlock_success",
+                entity.id,
+                script_code=metadata_json.get("on_unlock_success_script"),
+                narrative_text=metadata_json.get("on_unlock_success_text"),
+            )
         
     await db.commit()
 
@@ -1480,6 +1549,24 @@ async def unlock_exit_with_code(
     if submitted.lower() != expected.lower():
         raise HTTPException(status_code=403, detail=INVALID_EXIT_CODE_MESSAGE)
 
+    if world_exit.unlock_expression:
+        passed, err = await TriggerService.evaluate_guard(db, state, world_exit.unlock_expression)
+        if not passed:
+            if world_exit.on_unlock_failure_script or world_exit.on_unlock_failure_text:
+                await TriggerService.execute_trigger(
+                    db,
+                    state,
+                    "on_unlock_failure",
+                    world_exit.id,
+                    script_code=world_exit.on_unlock_failure_script,
+                    narrative_text=world_exit.on_unlock_failure_text or err,
+                )
+                await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail=world_exit.on_unlock_failure_text or err or "Guard condition not met.",
+            )
+
     world_exit.is_locked = False
     db.add(
         ChatMessage(
@@ -1488,6 +1575,17 @@ async def unlock_exit_with_code(
             content=f"{world_exit.label or 'The exit'} accepts the code and the way is open.",
         )
     )
+
+    if world_exit.on_unlock_success_script or world_exit.on_unlock_success_text:
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_unlock_success",
+            world_exit.id,
+            script_code=world_exit.on_unlock_success_script,
+            narrative_text=world_exit.on_unlock_success_text,
+        )
+
     await db.commit()
     return {"status": "ok", "exit_id": world_exit.id, "is_locked": False}
 
@@ -1537,6 +1635,24 @@ async def unlock_exit_with_item(
             item_name = item.get("name") or item_name
             break
 
+    if world_exit.unlock_expression:
+        passed, err = await TriggerService.evaluate_guard(db, state, world_exit.unlock_expression)
+        if not passed:
+            if world_exit.on_unlock_failure_script or world_exit.on_unlock_failure_text:
+                await TriggerService.execute_trigger(
+                    db,
+                    state,
+                    "on_unlock_failure",
+                    world_exit.id,
+                    script_code=world_exit.on_unlock_failure_script,
+                    narrative_text=world_exit.on_unlock_failure_text or err,
+                )
+                await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail=world_exit.on_unlock_failure_text or err or "Guard condition not met.",
+            )
+
     world_exit.is_locked = False
     db.add(
         ChatMessage(
@@ -1545,8 +1661,20 @@ async def unlock_exit_with_item(
             content=f"{world_exit.label or 'The exit'} yields to {item_name} and the way is open.",
         )
     )
+
+    if world_exit.on_unlock_success_script or world_exit.on_unlock_success_text:
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_unlock_success",
+            world_exit.id,
+            script_code=world_exit.on_unlock_success_script,
+            narrative_text=world_exit.on_unlock_success_text,
+        )
+
     await db.commit()
     return {"status": "ok", "exit_id": world_exit.id, "is_locked": False}
+
 
 
 @router.post("/{game_id}/exits/{exit_id}/traverse")
@@ -1592,6 +1720,37 @@ async def traverse_exit(
     if not scene:
         raise HTTPException(status_code=400, detail="The target scene is not available.")
 
+    # Trigger on_leave_scene for previous scene
+    old_sc_res = await db.execute(
+        select(WorldScene).where(
+            or_(
+                WorldScene.session_id == state.session_id,
+                and_(WorldScene.template_id == state.template_id, WorldScene.session_id.is_(None)),
+            ),
+            WorldScene.id == current_scene_id,
+        )
+    )
+    old_scene = old_sc_res.scalars().first()
+    if old_scene and (old_scene.on_leave_scene_script or old_scene.on_leave_scene_text):
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_leave_scene",
+            old_scene.id,
+            script_code=old_scene.on_leave_scene_script,
+            narrative_text=old_scene.on_leave_scene_text,
+        )
+
+    if world_exit.on_open_exit_script or world_exit.on_open_exit_text:
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_open_exit",
+            world_exit.id,
+            script_code=world_exit.on_open_exit_script,
+            narrative_text=world_exit.on_open_exit_text,
+        )
+
     state.current_scene_id = target_scene_id
 
     db.add(
@@ -1601,5 +1760,16 @@ async def traverse_exit(
             content=f"You pass through {world_exit.label or 'the exit'} into {scene.label}.",
         )
     )
+
+    if scene.on_enter_scene_script or scene.on_enter_scene_text:
+        await TriggerService.execute_trigger(
+            db,
+            state,
+            "on_enter_scene",
+            scene.id,
+            script_code=scene.on_enter_scene_script,
+            narrative_text=scene.on_enter_scene_text,
+        )
+
     await db.commit()
     return {"status": "ok", "exit_id": world_exit.id, "scene_id": target_scene_id}

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -8,6 +8,7 @@ from backend.schemas.adventure import AdventureTemplateDebugResponse
 
 class CreateAdventureTemplatePayload(BaseModel):
     """Payload for creating a new adventure. Backwards-compatible with previous tests (avatar_name optional)."""
+
     id: Optional[str] = None  # Client-side UUID optional; server will generate if missing
     title: str
     avatar_name: Optional[str] = None
@@ -144,7 +145,6 @@ class CreateAdventureTemplatePayload(BaseModel):
             raise ValueError("tts_director_notes must be at most 5000 characters")
         return value
 
-
     @field_validator("selected_tone", mode="before")
     @classmethod
     def parse_legacy_tone(cls, v):
@@ -248,24 +248,50 @@ class CreateAdventureTemplatePayload(BaseModel):
             return None
         return max(1, min(30, int(value)))
 
-    @model_validator(mode='after')
-    def validate_scene_range(self) -> 'CreateAdventureTemplatePayload':
-        if self.max_scenes is not None and self.min_scenes is not None and self.max_scenes < self.min_scenes:
+    @model_validator(mode="after")
+    def validate_scene_range(self) -> "CreateAdventureTemplatePayload":
+        if (
+            self.max_scenes is not None
+            and self.min_scenes is not None
+            and self.max_scenes < self.min_scenes
+        ):
             raise ValueError("max_scenes must be greater than or equal to min_scenes")
-        if self.max_quests is not None and self.min_quests is not None and self.max_quests < self.min_quests:
+        if (
+            self.max_quests is not None
+            and self.min_quests is not None
+            and self.max_quests < self.min_quests
+        ):
             raise ValueError("max_quests must be greater than or equal to min_quests")
-        if self.max_items is not None and self.min_items is not None and self.max_items < self.min_items:
+        if (
+            self.max_items is not None
+            and self.min_items is not None
+            and self.max_items < self.min_items
+        ):
             raise ValueError("max_items must be greater than or equal to min_items")
-        if self.max_containers is not None and self.min_containers is not None and self.max_containers < self.min_containers:
+        if (
+            self.max_containers is not None
+            and self.min_containers is not None
+            and self.max_containers < self.min_containers
+        ):
             raise ValueError("max_containers must be greater than or equal to min_containers")
-        if self.max_text_logs is not None and self.min_text_logs is not None and self.max_text_logs < self.min_text_logs:
+        if (
+            self.max_text_logs is not None
+            and self.min_text_logs is not None
+            and self.max_text_logs < self.min_text_logs
+        ):
             raise ValueError("max_text_logs must be greater than or equal to min_text_logs")
-        if self.max_awards is not None and self.min_awards is not None and self.max_awards < self.min_awards:
+        if (
+            self.max_awards is not None
+            and self.min_awards is not None
+            and self.max_awards < self.min_awards
+        ):
             raise ValueError("max_awards must be greater than or equal to min_awards")
         return self
 
+
 class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
+
     id: str
     title: str
     teaser: Optional[str] = None
@@ -319,7 +345,6 @@ class AdventureTemplateResponse(BaseModel):
     can_damage_npcs: bool = True
     npcs_can_damage_protagonist: bool = True
 
-
     @field_validator("selected_tone", mode="before")
     @classmethod
     def parse_legacy_tone(cls, v):
@@ -348,8 +373,10 @@ class AdventureTemplateResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
 class GameSessionResponse(BaseModel):
     """Summary of a game session (SessionState + linked entities)."""
+
     game_id: str
     template_id: Optional[str] = None
     adventure_id: Optional[str] = None
@@ -404,8 +431,10 @@ class GameSessionResponse(BaseModel):
             return res
         return v
 
+
 class AdventureTemplateSummaryResponse(BaseModel):
     """Summary of an adventure template for management views."""
+
     template_id: str
     title: str
     teaser: Optional[str] = None
@@ -459,14 +488,17 @@ class AdventureTemplateSummaryResponse(BaseModel):
             return res
         return v
 
+
 class ImportCheckItem(BaseModel):
     title: str
     origin_id: Optional[str] = None
     already_exists: bool
     existing_template_id: Optional[str] = None
 
+
 class ImportCheckResponse(BaseModel):
     available_imports: list[ImportCheckItem]
+
 
 class ChatRequest(BaseModel):
     content: str
@@ -496,6 +528,7 @@ class TranslateTextResponse(BaseModel):
     translated_text: str
     language: str
 
+
 class ChatResponse(BaseModel):
     messages: list[dict[str, Any]]
     sheet: dict[str, Any]
@@ -521,15 +554,18 @@ class ChatResponse(BaseModel):
     is_legacy_format: bool = False
     full_world: Optional[AdventureTemplateDebugResponse] = None
 
+
 class AdventureTemplateImportPayload(BaseModel):
     url: Optional[str] = None
     file_path: Optional[str] = None
     content: Optional[dict[str, Any]] = None
     rule_enforcement_mode: Optional[str] = None
 
+
 class SuggestPromptRequest(BaseModel):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
     target_id: str
+
 
 class SuggestPromptResponse(BaseModel):
     suggested_prompt: str
@@ -555,8 +591,10 @@ class StoryIdeaSuggestionResponse(BaseModel):
             raise ValueError("title is required")
         return cleaned[:50]
 
+
 class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
+
     title: Optional[str] = None
     teaser: Optional[str] = None
     version: Optional[str] = None
@@ -585,6 +623,8 @@ class AdventureTemplateUpdate(BaseModel):
     award_generation_enabled: Optional[bool] = None
     min_awards: Optional[int] = None
     max_awards: Optional[int] = None
+    awards: Optional[list[dict[str, Any]]] = None
+    sequences: Optional[list[dict[str, Any]]] = None
     quests: Optional[list[dict[str, Any]]] = None
     min_quests: Optional[int] = None
     max_quests: Optional[int] = None
@@ -693,7 +733,6 @@ class AdventureTemplateUpdate(BaseModel):
             raise ValueError("length must be at most 2000 characters")
         return value
 
-
     @field_validator("selected_tone", mode="before")
     @classmethod
     def parse_legacy_tone(cls, v):
@@ -715,6 +754,7 @@ class TraitGenerationRequest(BaseModel):
     description: str
     adventure_theme: Optional[str] = None
     target_field: Optional[Literal["goal", "character"]] = None
+
 
 class TraitGenerationResponse(BaseModel):
     goal: str
@@ -742,7 +782,15 @@ class QuestGenerationResponse(BaseModel):
 
 
 class TemplateFieldGenerationRequest(BaseModel):
-    field: Literal["plot", "rules", "intro_text", "walkthrough", "completed_condition", "gameover_condition", "tts_director_notes"]
+    field: Literal[
+        "plot",
+        "rules",
+        "intro_text",
+        "walkthrough",
+        "completed_condition",
+        "gameover_condition",
+        "tts_director_notes",
+    ]
     title: Optional[str] = None
     original_prompt: Optional[str] = None
     plot: Optional[str] = None
@@ -851,7 +899,3 @@ class ScriptValidateResponse(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-
-
-
-

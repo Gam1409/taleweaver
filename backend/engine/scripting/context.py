@@ -996,8 +996,10 @@ class GameContext:
         in_game_time: int = 0,
         story_flags: Optional[dict[str, Any]] = None,
         variables: Optional[dict[str, Any]] = None,
+        is_debug_enabled: bool = False,
     ):
         raw_vars = dict(script_vars if script_vars is not None else (variables or {}))
+        self.is_debug_enabled = bool(is_debug_enabled)
         self.changeset = ScriptChangeset()
         self.player = PlayerProxy(avatar_data or {}, self.changeset)
         entity_dict = entities or {}

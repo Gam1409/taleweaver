@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,6 +12,7 @@ class QuestSchema(BaseModel):
     exp_reward: int
     status: Literal["open", "completed"] = "open"
 
+
 class SequenceSchema(BaseModel):
     id: str
     order: int
@@ -23,6 +24,11 @@ class SequenceSchema(BaseModel):
     required_scene_id: Optional[str] = ""
     required_defeated_npc_id: Optional[str] = ""
     exp_reward: Optional[int] = 50
+    on_start_sequence_script: Optional[str] = ""
+    on_start_sequence_text: Optional[str] = ""
+    on_end_sequence_script: Optional[str] = ""
+    on_end_sequence_text: Optional[str] = ""
+
 
 class AwardSchema(BaseModel):
     key: str
@@ -31,6 +37,7 @@ class AwardSchema(BaseModel):
     tier: Literal["bronze", "silver", "gold", "negative"]
     requirement: str
     is_earned: bool = False
+
 
 class AdventureTemplateBase(BaseModel):
     title: str = Field(..., max_length=50)
@@ -51,12 +58,12 @@ class AdventureTemplateBase(BaseModel):
     clock_enabled: Optional[bool] = False
     time_system: Optional[str] = "calendar"
     time_config: Optional[dict[str, Any]] = None
-    
+
     generate_npc_images: bool = True
     generate_item_images: bool = True
     generate_scene_images: bool = True
     automatic_cover_generation: bool = True
-    
+
     selected_image_styles: Optional[list[dict[str, Any]]] = None
     selected_tone: Optional[dict[str, Any]] = None
     game_over_rules: Optional[dict[str, Any]] = None
@@ -78,7 +85,7 @@ class AdventureTemplateBase(BaseModel):
     text_log_generation_enabled: bool = True
     min_text_logs: Optional[int] = None
     max_text_logs: Optional[int] = None
-    
+
     award_generation_enabled: bool = True
     min_awards: Optional[int] = None
     max_awards: Optional[int] = None
@@ -86,7 +93,6 @@ class AdventureTemplateBase(BaseModel):
     min_quests: Optional[int] = None
     max_quests: Optional[int] = None
     is_adventure_generator: bool = False
-
 
     # Narrative Meta (User editable in Plot tab)
     plot: Optional[str] = None
@@ -102,6 +108,7 @@ class AdventureTemplateBase(BaseModel):
 
 class AdventureTemplateCreate(AdventureTemplateBase):
     pass
+
 
 class AdventureTemplateUpdate(BaseModel):
     title: Optional[str] = None
@@ -148,7 +155,7 @@ class AdventureTemplateUpdate(BaseModel):
     max_quests: Optional[int] = None
     quests: Optional[list[QuestSchema]] = None
     is_adventure_generator: Optional[bool] = None
-    
+
     # Editable Narrative Meta
     plot: Optional[str] = None
     rules: Optional[str] = None
@@ -159,10 +166,10 @@ class AdventureTemplateUpdate(BaseModel):
 
     # GM Capabilities
     allow_dynamic_items: Optional[bool] = None
-    
+
     # Status and Warnings
     creation_error: Optional[str] = None
-    
+
     # Extra fields for frontend convenience
     selected_style_id: Optional[str] = None
     selected_tone_id: Optional[str] = None
@@ -181,12 +188,15 @@ class AdventureTemplateUpdate(BaseModel):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
 
+
 class AdventureTemplateInDBBase(AdventureTemplateBase):
     id: str
     model_config = {"from_attributes": True}
 
+
 class AdventureTemplate(AdventureTemplateInDBBase):
     pass
+
 
 class AdventureTemplateDebugResponse(BaseModel):
     adventure: dict[str, Any]

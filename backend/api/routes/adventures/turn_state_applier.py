@@ -166,7 +166,9 @@ class TurnStateApplier:
     async def _apply_game_event(self, event: GameEvent) -> list[str]:
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         system_messages: list[str] = []
+        states = dict(self.state.entity_states or {})
         existing_item_ids = await self._collect_existing_item_ids()
+
 
         def _is_consumable(item: Any) -> bool:
             return str(getattr(item, "item_type", "") or "").upper() == "CONSUMABLE"
@@ -318,7 +320,28 @@ class TurnStateApplier:
                 await self._save_chat_message("system", msg)
                 system_messages.append(msg)
 
+        old_hp = self.avatar.hp
+        old_status = list(self.avatar.status_effects or [])
         RuleEngine.apply_event(self.avatar, event)
+        prot_meta = getattr(self.avatar, "stats", None) or {}
+        if self.avatar.hp != old_hp:
+            if prot_meta.get("on_hp_change_script"):
+                msgs = await self.manager._execute_inline_script(
+                    prot_meta["on_hp_change_script"], "on_hp_change", "protagonist"
+                )
+                system_messages.extend(msgs)
+            if prot_meta.get("on_hp_change_text"):
+                await self._save_chat_message("system", prot_meta["on_hp_change_text"])
+                system_messages.append(prot_meta["on_hp_change_text"])
+        if list(self.avatar.status_effects or []) != old_status:
+            if prot_meta.get("on_status_change_script"):
+                msgs = await self.manager._execute_inline_script(
+                    prot_meta["on_status_change_script"], "on_status_change", "protagonist"
+                )
+                system_messages.extend(msgs)
+            if prot_meta.get("on_status_change_text"):
+                await self._save_chat_message("system", prot_meta["on_status_change_text"])
+                system_messages.append(prot_meta["on_status_change_text"])
         
         state_dirty = False
         if event.new_scene_id and event.new_scene_id != self.state.current_scene_id:
@@ -354,6 +377,24 @@ class TurnStateApplier:
                 event.exit_label = None
             else:
                 old_scene_id = self.state.current_scene_id
+                if old_scene_id:
+                    old_sc_res = await self.db.execute(
+                        select(WorldScene).where(
+                            WorldScene.id == old_scene_id,
+                            WorldScene.session_id == self.state.session_id,
+                        )
+                    )
+                    old_sc_db = old_sc_res.scalars().first()
+                    if old_sc_db:
+                        if old_sc_db.on_leave_scene_script:
+                            msgs = await self.manager._execute_inline_script(
+                                old_sc_db.on_leave_scene_script, "on_leave_scene", old_sc_db.id
+                            )
+                            system_messages.extend(msgs)
+                        if old_sc_db.on_leave_scene_text:
+                            await self._save_chat_message("system", old_sc_db.on_leave_scene_text)
+                            system_messages.append(old_sc_db.on_leave_scene_text)
+
                 self.state.current_scene_id = event.new_scene_id
                 state_dirty = True
                 
@@ -595,6 +636,15 @@ class TurnStateApplier:
                                 msg = f"Container unlocked: {ent_obj.name}."
                                 await self._save_chat_message("system", msg)
                                 system_messages.append(msg)
+
+                            if metadata_json.get("on_unlock_success_script"):
+                                msgs = await self.manager._execute_inline_script(
+                                    metadata_json["on_unlock_success_script"], "on_unlock_success", ent_obj.id
+                                )
+                                system_messages.extend(msgs)
+                            if metadata_json.get("on_unlock_success_text"):
+                                await self._save_chat_message("system", metadata_json["on_unlock_success_text"])
+                                system_messages.append(metadata_json["on_unlock_success_text"])
                     states[eid]["locked"] = update.locked
                 if update.inventory is not None: 
                     states[eid]["inventory"] = [i.model_dump(exclude_none=True) for i in update.inventory]
@@ -809,6 +859,7 @@ class TurnStateApplier:
                 system_messages.append(msg)
 
         # Sequence Completion Logic
+        old_seq_id = self.state.active_sequence_id
         seq_messages = AdventureLogic.evaluate_sequence_progress(
             adventure=self.adventure,
             state=self.state,
@@ -824,6 +875,27 @@ class TurnStateApplier:
             for seq_msg in seq_messages:
                 await self._save_chat_message("system", seq_msg)
                 system_messages.append(seq_msg)
+            sequences = sorted(getattr(self.adventure, "sequences", None) or [], key=lambda x: x.get("order", 1))
+            completed_seq = next((s for s in sequences if s.get("id") == old_seq_id), None)
+            if completed_seq:
+                if completed_seq.get("on_end_sequence_script"):
+                    end_msgs = await self.manager._execute_inline_script(
+                        completed_seq["on_end_sequence_script"], "on_end_sequence", completed_seq.get("id")
+                    )
+                    system_messages.extend(end_msgs)
+                if completed_seq.get("on_end_sequence_text"):
+                    await self._save_chat_message("system", completed_seq["on_end_sequence_text"])
+                    system_messages.append(completed_seq["on_end_sequence_text"])
+            new_seq = next((s for s in sequences if s.get("id") == self.state.active_sequence_id), None)
+            if new_seq and new_seq != completed_seq:
+                if new_seq.get("on_start_sequence_script"):
+                    start_msgs = await self.manager._execute_inline_script(
+                        new_seq["on_start_sequence_script"], "on_start_sequence", new_seq.get("id")
+                    )
+                    system_messages.extend(start_msgs)
+                if new_seq.get("on_start_sequence_text"):
+                    await self._save_chat_message("system", new_seq["on_start_sequence_text"])
+                    system_messages.append(new_seq["on_start_sequence_text"])
             if getattr(self.state, "is_completed", False):
                 event.game_completed = True
                 if not event.status_note:
@@ -869,6 +941,14 @@ class TurnStateApplier:
                             msg = f"Exit unlocked: {exit_name}."
                             await self._save_chat_message("system", msg)
                             system_messages.append(msg)
+                            if exit_db.on_unlock_success_script:
+                                msgs = await self.manager._execute_inline_script(
+                                    exit_db.on_unlock_success_script, "on_unlock_success", exit_db.id
+                                )
+                                system_messages.extend(msgs)
+                            if exit_db.on_unlock_success_text:
+                                await self._save_chat_message("system", exit_db.on_unlock_success_text)
+                                system_messages.append(exit_db.on_unlock_success_text)
             except Exception as e:
                 logger.error(f"Manual map exit update failed: {e}")
 

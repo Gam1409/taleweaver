@@ -2753,6 +2753,9 @@ class GameTurnManager:
             "status_effects": list(self.avatar.status_effects or []),
         }
 
+        is_debug = bool(
+            settings.TALEWEAVER_DEBUG_ENABLED or (self.state and getattr(self.state, "is_debug_enabled", False))
+        )
         return GameContext(
             avatar_data=avatar_dict,
             current_scene_id=self.state.current_scene_id,
@@ -2762,6 +2765,7 @@ class GameTurnManager:
             script_vars=script_vars,
             in_game_time=self.state.in_game_time,
             story_flags=story_flags,
+            is_debug_enabled=is_debug,
         )
 
     def _get_script_runner(self) -> ScriptRunner:
@@ -2777,7 +2781,13 @@ class GameTurnManager:
         runner = self._get_script_runner()
         scope = {"tw": context, "game": context}
         runner.execute_code(code, scope, script_id=f"inline_{trigger_name}_{target_id}")
-        return await self._apply_script_changeset(context.changeset)
+        applied_messages = await self._apply_script_changeset(context.changeset)
+        if context.is_debug_enabled:
+            debug_msg = f"[DEBUG: Trigger fired] {trigger_name} on {target_id}"
+            await self._save_chat_message("system", debug_msg)
+            return [debug_msg, *applied_messages]
+        return applied_messages
+
 
 
     async def _apply_script_changeset(self, changeset: ScriptChangeset, game_event: Any = None) -> list[str]:
@@ -2788,6 +2798,18 @@ class GameTurnManager:
             self.avatar.hp = max(0, min(RESOURCE_CAP, self.avatar.hp + changeset.player_hp_change))
             verb = "gain" if changeset.player_hp_change > 0 else "lose"
             system_messages.append(ScriptMessage(f"You {verb} {abs(changeset.player_hp_change)} HP (Script).", role="system"))
+            if not getattr(self, "_in_protagonist_hp_trigger", False):
+                self._in_protagonist_hp_trigger = True
+                try:
+                    prot_meta = getattr(self.avatar, "stats", None) or {}
+                    if prot_meta.get("on_hp_change_script"):
+                        hp_msgs = await self._execute_inline_script(prot_meta["on_hp_change_script"], "on_hp_change", "protagonist")
+                        system_messages.extend(hp_msgs)
+                    if prot_meta.get("on_hp_change_text"):
+                        await self._save_chat_message("system", prot_meta["on_hp_change_text"])
+                        system_messages.append(ScriptMessage(prot_meta["on_hp_change_text"], role="system"))
+                finally:
+                    self._in_protagonist_hp_trigger = False
             if self.avatar.hp <= 0:
                 raise GameOverException(f"{self.avatar.name} has fallen! Game Over.")
 
@@ -2820,6 +2842,19 @@ class GameTurnManager:
             effs.update(changeset.player_status_effects_add)
             effs.difference_update(changeset.player_status_effects_remove)
             self.avatar.status_effects = list(effs)
+            if not getattr(self, "_in_protagonist_status_trigger", False):
+                self._in_protagonist_status_trigger = True
+                try:
+                    prot_meta = getattr(self.avatar, "stats", None) or {}
+                    if prot_meta.get("on_status_change_script"):
+                        st_msgs = await self._execute_inline_script(prot_meta["on_status_change_script"], "on_status_change", "protagonist")
+                        system_messages.extend(st_msgs)
+                    if prot_meta.get("on_status_change_text"):
+                        await self._save_chat_message("system", prot_meta["on_status_change_text"])
+                        system_messages.append(ScriptMessage(prot_meta["on_status_change_text"], role="system"))
+                finally:
+                    self._in_protagonist_status_trigger = False
+
 
         if changeset.teleport_scene_id:
             self.state.current_scene_id = changeset.teleport_scene_id
@@ -2944,6 +2979,16 @@ class GameTurnManager:
             if current_seq_idx >= 0:
                 completed_seq = sequences[current_seq_idx]
                 seq_title = completed_seq.get("title") or completed_seq.get("id") or f"Chapter {current_seq_idx + 1}"
+
+                if completed_seq.get("on_end_sequence_script"):
+                    end_msgs = await self._execute_inline_script(
+                        completed_seq["on_end_sequence_script"], "on_end_sequence", completed_seq.get("id", f"seq_{current_seq_idx}")
+                    )
+                    system_messages.extend(end_msgs)
+                if completed_seq.get("on_end_sequence_text"):
+                    await self._save_chat_message("system", completed_seq["on_end_sequence_text"])
+                    system_messages.append(completed_seq["on_end_sequence_text"])
+
                 xp_reward = int(completed_seq.get("exp_reward") or 0)
                 if xp_reward > 0:
                     self.avatar.exp = (self.avatar.exp or 0) + xp_reward
@@ -2963,8 +3008,18 @@ class GameTurnManager:
                     next_msg = f"New Sequence unlocked: {next_title}"
                     await self._save_chat_message("system", next_msg)
                     system_messages.append(next_msg)
+
+                    if next_seq.get("on_start_sequence_script"):
+                        start_msgs = await self._execute_inline_script(
+                            next_seq["on_start_sequence_script"], "on_start_sequence", next_seq.get("id", f"seq_{next_seq_idx}")
+                        )
+                        system_messages.extend(start_msgs)
+                    if next_seq.get("on_start_sequence_text"):
+                        await self._save_chat_message("system", next_seq["on_start_sequence_text"])
+                        system_messages.append(next_seq["on_start_sequence_text"])
                 else:
                     await self._finalize_session("completed", "Congratulations! You have completed the final sequence.")
+
 
         return system_messages
 

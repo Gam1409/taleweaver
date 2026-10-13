@@ -92,31 +92,61 @@ Scripts declare a trigger event and an optional target entity or scene.
 
 ### Inline Entity Triggers
 
-In addition to standalone script assets, TaleWeaver allows configuring short inline scripts directly on entities, NPCs, and scenes via the World Editor's **Advanced Tab**. These execute automatically during specific interactions.
+In addition to standalone script assets, TaleWeaver allows configuring short inline scripts directly on entities, NPCs, scenes, exits, protagonist, and sequences via the World Editor. These execute automatically during specific interactions.
 
-| Entity Type | Available Triggers | Description |
+| Entity Type | Available Triggers / Guards | Description |
 | :--- | :--- | :--- |
-| **Objects** | `on_pickup_script` | Executes when the item is taken into inventory. |
-| | `on_drop_script` | Executes when the item is dropped into the scene. |
-| | `on_equip_script` | Executes when the player equips a WEAPON or WEARABLE. |
-| | `on_unequip_script` | Executes when the player unequips a WEAPON or WEARABLE. |
-| **NPCs** | `on_defeat_script` | Executes when the NPC is defeated. Use to spawn loot or change state. |
+| **Objects (General)** | `on_pickup_script`, `on_pickup_text` | Executes when the item is taken into inventory. |
+| | `on_drop_script`, `on_drop_text` | Executes when the item is dropped into the scene. |
+| **Wearables & Weapons** | `on_equip_script`, `on_equip_text` | Executes when the player equips a WEAPON or WEARABLE. |
+| | `on_unequip_script`, `on_unequip_text` | Executes when the player unequips a WEAPON or WEARABLE. |
+| **Readable Items** | `on_read_script`, `on_read_text` | Executes when the player inspects or reads this item. |
+| **Container Items** | `unlock_expression` *(Guard)* | Deterministic Python boolean expression evaluated when attempting to unlock. If false, unlocking fails. |
+| | `on_unlock_success_script`, `..._text` | Executes immediately when this container is successfully unlocked. |
+| | `on_unlock_failure_script`, `..._text` | Executes when unlocking this container fails or is blocked by guard. |
+| **Constructable Items** | `craft_guard_expression` *(Guard)* | Optional Python boolean expression evaluated in addition to ingredients. If false, crafting fails. |
+| | `on_craft_success_script`, `..._text` | Executes when this constructable item is successfully crafted. |
+| | `on_craft_failure_script`, `..._text` | Executes when crafting fails or is blocked by guard. |
+| **NPCs** | `on_defeat_script`, `on_defeat_text` | Executes when the NPC is defeated. Use to spawn loot or change state. |
 | | `on_protagonist_enters_scene_script` | Executes when the player enters the room containing this NPC. |
-| **Scenes** | `on_enter_scene_script` | Executes when the player enters this specific scene. |
-| **Switches** | `on_success_script` | Executes when any state transition succeeds on this switch. |
-| | `on_failure_script` | Executes when any state transition fails on this switch. |
+| **Scenes** | `on_enter_scene_script`, `..._text` | Executes when the player enters this specific scene. |
+| | `on_leave_scene_script`, `..._text` | Executes immediately when the player leaves this specific scene. |
+| **Exits** | `on_open_exit_script`, `..._text` | Executes when the player opens or traverses this exit. |
+| | `unlock_expression` *(Guard)* | Deterministic Python boolean expression evaluated when unlocking. If false, unlocking fails. |
+| | `on_unlock_success_script`, `..._text` | Executes immediately when this exit is successfully unlocked. |
+| | `on_unlock_failure_script`, `..._text` | Executes when unlocking this exit fails or is blocked by guard. |
+| **Switches** | `gates.expression` *(Guard)* | Deterministic Python boolean condition required for a specific transition. |
+| | `on_success_script` | Executes when any state transition succeeds on this switch (or transition-specific). |
+| | `on_failure_script` | Executes when any state transition fails on this switch (or transition-specific). |
+| **Protagonist** | `on_hp_change_script`, `..._text` | Executes when protagonist HP changes (e.g. taking damage or healing). |
+| | `on_status_change_script`, `..._text` | Executes when protagonist status effects or conditions change. |
+| **Sequences** | `on_start_sequence_script`, `..._text` | Executes immediately when a sequence chapter becomes active. |
+| | `on_end_sequence_script`, `..._text` | Executes immediately when a sequence chapter is completed. |
 
-### Switch Transition Guards & Triggers
+### In-Game Debug Notifications
 
-Switch mechanisms define state transitions that support deterministic lock guards (`gates`) and script hooks:
-- **Guards (`gates`)**:
-  - `gates.expression`: A deterministic Python boolean condition evaluated in the safe AST sandbox against `tw` (e.g. `tw.vars.get('generator_on') == True` or `tw.switches.get_state('VALVE') == 'OPEN'`). If evaluation yields `False` or raises an error, the transition is blocked and `fail_message` is displayed.
-  - `gates.item`: Required item in avatar inventory.
-  - `gates.code`: Required access code or PIN.
-  - `gates.rule`: Soft narrative story flag.
-- **Transition Scripts**:
-  - `on_success_script`: Executes when this individual transition successfully passes all guards.
-  - `on_failure_script`: Executes when this transition is blocked or fails.
+When **Debug Mode** is active (configured via `TALEWEAVER_DEBUG_ENABLED` or toggled in the runtime session), the engine emits an immediate in-game system message whenever any trigger is fired:
+
+```
+[DEBUG: Trigger fired] <trigger_name> on <target_id>
+```
+
+For example:
+- `[DEBUG: Trigger fired] on_read on ANCIENT_PARCHMENT`
+- `[DEBUG: Trigger fired] on_unlock_success on VAULT_CHEST`
+- `[DEBUG: Trigger fired] on_leave_scene on SCENE_CELL`
+- `[DEBUG: Trigger fired] on_hp_change on protagonist`
+
+This provides instant, transparent feedback during playtesting and debugging without opening server terminal logs.
+
+### Deterministic Guard Expressions
+
+Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches) evaluate safe Python expressions against the `tw` context:
+- `tw.switches.get('POWER') == 'ON'`
+- `tw.vars.get('has_badge', False) == True and tw.player.hp > 20`
+- `tw.player.has_item('KEYCARD_RED') or tw.switches.is_state('OVERRIDE', 'ACTIVE')`
+
+If the expression evaluates to truthy, the guard passes; otherwise, the action is blocked and failure transition scripts are triggered.
 
 ### Priority Execution
 Scripts carry an integer `priority` (default: `100`). Scripts with **lower** priority numbers execute before scripts with higher numbers.
