@@ -756,15 +756,24 @@ async def _persist_npcs(
             npc_image_cache[n["id"]] = image_url
         processed_npcs.append(n)
 
+        n_meta = n.get("metadata_json") if isinstance(n.get("metadata_json"), dict) else {}
         npc_metadata = {
             "equipped_weapon_id": n.get("equipped_weapon_id"),
             "equipped_armor_id": n.get("equipped_armor_id"),
             "special_actions": n.get("special_actions") or [],
             "attack_mode": n.get("attack_mode") or "PASSIVE",
-            "on_defeat_script": n.get("on_defeat_script") or None,
-            "on_defeat_text": n.get("on_defeat_text") or None,
-            "on_protagonist_enters_scene_script": n.get("on_protagonist_enters_scene_script") or None,
-            "on_protagonist_enters_scene_text": n.get("on_protagonist_enters_scene_text") or None,
+            "on_defeat_script": n.get("on_defeat_script") or n_meta.get("on_defeat_script") or None,
+            "on_defeat_text": n.get("on_defeat_text") or n_meta.get("on_defeat_text") or None,
+            "on_protagonist_enters_scene_script": (
+                n.get("on_protagonist_enters_scene_script")
+                or n_meta.get("on_protagonist_enters_scene_script")
+                or None
+            ),
+            "on_protagonist_enters_scene_text": (
+                n.get("on_protagonist_enters_scene_text")
+                or n_meta.get("on_protagonist_enters_scene_text")
+                or None
+            ),
         }
 
         db.add(WorldEntity(
@@ -956,14 +965,14 @@ async def _persist_objects(
         }
 
         metadata_json = dict(o.get("metadata_json") or {})
-        metadata_json["on_pickup_script"] = o.get("on_pickup_script") or None
-        metadata_json["on_pickup_text"] = o.get("on_pickup_text") or None
-        metadata_json["on_drop_script"] = o.get("on_drop_script") or None
-        metadata_json["on_drop_text"] = o.get("on_drop_text") or None
-        metadata_json["on_equip_script"] = o.get("on_equip_script") or None
-        metadata_json["on_equip_text"] = o.get("on_equip_text") or None
-        metadata_json["on_unequip_script"] = o.get("on_unequip_script") or None
-        metadata_json["on_unequip_text"] = o.get("on_unequip_text") or None
+        metadata_json["on_pickup_script"] = o.get("on_pickup_script") or metadata_json.get("on_pickup_script") or None
+        metadata_json["on_pickup_text"] = o.get("on_pickup_text") or metadata_json.get("on_pickup_text") or None
+        metadata_json["on_drop_script"] = o.get("on_drop_script") or metadata_json.get("on_drop_script") or None
+        metadata_json["on_drop_text"] = o.get("on_drop_text") or metadata_json.get("on_drop_text") or None
+        metadata_json["on_equip_script"] = o.get("on_equip_script") or metadata_json.get("on_equip_script") or None
+        metadata_json["on_equip_text"] = o.get("on_equip_text") or metadata_json.get("on_equip_text") or None
+        metadata_json["on_unequip_script"] = o.get("on_unequip_script") or metadata_json.get("on_unequip_script") or None
+        metadata_json["on_unequip_text"] = o.get("on_unequip_text") or metadata_json.get("on_unequip_text") or None
         
         if hp_change is not None:
             metadata_json["hp_change"] = hp_change
