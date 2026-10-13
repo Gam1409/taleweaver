@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, or_, and_, func
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.config import settings
 
@@ -1092,10 +1093,20 @@ async def mark_text_log_read(
     if not state:
         raise HTTPException(status_code=404, detail="Session not found.")
 
+    clean_id = (entity_id or "").strip()
     ent_res = await db.execute(
         select(WorldEntity).where(
-            WorldEntity.session_id == state.session_id,
-            WorldEntity.id == entity_id,
+            or_(
+                WorldEntity.session_id == state.session_id,
+                and_(
+                    WorldEntity.template_id == state.template_id,
+                    WorldEntity.session_id.is_(None),
+                ),
+            ),
+            or_(
+                WorldEntity.id == clean_id,
+                func.lower(WorldEntity.id) == clean_id.lower(),
+            ),
         )
     )
     entity = ent_res.scalars().first()
@@ -1112,6 +1123,7 @@ async def mark_text_log_read(
     entity_states[entity.id] = override_entry
 
     state.entity_states = entity_states
+    flag_modified(state, "entity_states")
 
     meta = dict(entity.metadata_json or {})
     if meta.get("on_read_script") or meta.get("on_read_text"):

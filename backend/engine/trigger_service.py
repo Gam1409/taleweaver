@@ -61,8 +61,8 @@ class TriggerService:
                 "current_scene_id": ent.current_scene_id,
                 "is_hidden": ent.is_hidden,
                 "is_in_inventory": ent.is_in_inventory,
-                "hp": ent.hp,
-                "is_defeated": ent.is_defeated,
+                "hp": getattr(ent, "hp", 0) or 0,
+                "is_defeated": bool(session_overrides.get(ent.id, {}).get("is_defeated", False)),
                 "metadata_json": dict(ent.metadata_json or {}),
             }
             if ent.id in session_overrides:
@@ -160,5 +160,40 @@ class TriggerService:
                     )
                 )
                 messages.append(sys_msg)
+
+            if (
+                context.changeset.var_updates
+                or context.changeset.entity_updates
+                or context.changeset.exit_updates
+            ):
+                from sqlalchemy.orm.attributes import flag_modified
+
+                cur_states = dict(state.entity_states or {})
+                if context.changeset.var_updates:
+                    sv = dict(cur_states.get("__script_vars__", {}))
+                    sv.update(context.changeset.var_updates)
+                    cur_states["__script_vars__"] = sv
+                for upd in context.changeset.entity_updates:
+                    eid = upd.get("entity_id")
+                    if eid:
+                        st = dict(cur_states.get(eid, {}))
+                        for k, v in upd.items():
+                            if k != "entity_id":
+                                st[k] = v
+                        cur_states[eid] = st
+                state.entity_states = cur_states
+                flag_modified(state, "entity_states")
+
+                if context.changeset.exit_updates:
+                    exit_states = dict(state.exit_states or {})
+                    for eu in context.changeset.exit_updates:
+                        k = f"{eu['from_scene_id']}:{eu['to_scene_id']}"
+                        st_item = dict(exit_states.get(k, {}))
+                        st_item["is_locked"] = eu["is_locked"]
+                        if "lock_description" in eu:
+                            st_item["lock_description"] = eu["lock_description"]
+                        exit_states[k] = st_item
+                    state.exit_states = exit_states
+                    flag_modified(state, "exit_states")
 
         return messages
