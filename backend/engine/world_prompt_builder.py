@@ -269,33 +269,42 @@ def _build_item_requirement(min_items: Optional[int], max_items: Optional[int]) 
     return f"\n\nITEM COUNT LIMIT:\n- Generate between {max(1, min_items)} and {max(1, max_items)} total objects/items in `objects`."  # type: ignore[arg-type]
 
 
+_SWITCH_DETAILS_HINT = (
+    "- Every SWITCH must include switch_states (>=2), switch_initial_state, and switch_transitions.\n"
+    "- Transition objects shape: {from (optional), to, gates{item,code,rule,expression}, fail_message, success_message, on_success_script, on_failure_script}.\n"
+    "- Transition guards (`gates`):\n"
+    "  * `item`: inventory item ID required to operate switch (e.g. 'RUSTY_KEY').\n"
+    "  * `code`: passcode or sequence code required (e.g. '4711').\n"
+    "  * `rule`: soft story flag required.\n"
+    "  * `expression`: deterministic Python boolean expression evaluated with tw (e.g. \"tw.player.has_item('KEY')\" or \"tw.vars.get('power_on') == True\").\n"
+    "- Transition and switch scripts: optionally provide `on_success_script` and `on_failure_script` for deterministic logic executed upon state changes.\n"
+    "- Optionally include switch_outcomes with deterministic effects: unlock_exit, unlock_container, story_flag."
+)
+
+
 def _build_switch_requirement(original_prompt: str) -> str:
     prompt_lower = str(original_prompt or "").lower()
-    wants_switches = any(
-        token in prompt_lower
-        for token in [
-            "switch",
-            "switches",
-            "lever",
-            "control panel",
-            "schalter",
-            "hebel",
-            "mechanism",
-            "mechanik",
-        ]
-    )
+    switch_tokens = [
+        "switch",
+        "switches",
+        "lever",
+        "control panel",
+        "schalter",
+        "hebel",
+        "mechanism",
+        "mechanik",
+    ]
+    wants_switches = any(token in prompt_lower for token in switch_tokens)
     if wants_switches:
         return (
             "\n\nSWITCH MECHANISMS:\n"
             "- Generate at least one object with item_type SWITCH if the story idea mentions a switch/lever/mechanism.\n"
-            "- Every SWITCH must include switch_states (>=2), switch_initial_state, and switch_transitions.\n"
-            "- Transition objects must use: from (optional — omit to apply regardless of current state), to, gates{item,code,rule}, fail_message.\n"
-            "- Optionally include switch_outcomes with deterministic effects: unlock_exit, unlock_container, story_flag."
+            f"{_SWITCH_DETAILS_HINT}"
         )
     return (
         "\n\nSWITCH MECHANISMS:\n"
         "- You may generate item_type SWITCH for puzzle/mechanism interactions when narratively appropriate.\n"
-        "- If used, include switch_states, switch_initial_state, and switch_transitions in deterministic form."
+        f"{_SWITCH_DETAILS_HINT}"
     )
 
 

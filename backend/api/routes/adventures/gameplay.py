@@ -35,6 +35,7 @@ from backend.core.prompts import (
     BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE,
 )
 from backend.engine.map_engine import MapEngine
+from backend.engine.switch_service import SwitchService
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -1168,34 +1169,12 @@ class SwitchFlipItemRequest(BaseModel):
 
 def _get_switch_config(entity: WorldEntity) -> dict:
     """Returns the parsed switch config from metadata_json."""
-    raw = entity.metadata_json or {}
-    return raw.get("switch") or {}
+    return SwitchService.resolve_switch_config(entity)
 
 
 def _resolve_switch_transition(config: dict, current_state: str, target_state: str) -> dict | None:
-    """Finds the matching transition definition for current -> target (or None).
-
-    Matching precedence:
-    1. Exact from/to match (both fields specified).
-    2. Wildcard match (only ``to`` specified) — applies regardless of current state.
-    """
-    transitions = config.get("transitions") or []
-    if not isinstance(transitions, list):
-        return None
-
-    wildcard_match: dict | None = None
-    for t in transitions:
-        if not isinstance(t, dict):
-            continue
-        from_s = str(t.get("from") or "").strip().upper()
-        to_s = str(t.get("to") or "").strip().upper()
-        if not to_s or to_s != target_state:
-            continue
-        if from_s and from_s == current_state:
-            return t
-        if not from_s and wildcard_match is None:
-            wildcard_match = t
-    return wildcard_match
+    """Finds the matching transition definition for current -> target (or None)."""
+    return SwitchService.resolve_transition(config, current_state, target_state)
 
 
 @router.post("/{game_id}/switches/{entity_id}/flip-code")
@@ -1249,13 +1228,41 @@ async def flip_switch_with_code(
     submitted_code = str(payload.code or "").strip()
     if not submitted_code:
         raise HTTPException(status_code=400, detail="Code is required.")
+
+    manager = GameTurnManager(db=db, game_id=game_id, user=current_user, state=state)
+    script_context = await manager._build_script_context()
+    runner = manager._get_script_runner()
+
     if submitted_code.lower() != required_code.lower():
+        SwitchService.execute_transition_triggers(
+            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+        )
+        await manager._apply_script_changeset(script_context.changeset)
+        await db.commit()
         fail_message = str(transition.get("fail_message") or "").strip()
         raise HTTPException(status_code=403, detail=fail_message or "Incorrect code. The switch does not move.")
+
+    expr = str(gates.get("expression") or gates.get("condition") or "").strip()
+    if expr:
+        passed, err = SwitchService.evaluate_gate_expression(expr, script_context)
+        if not passed:
+            SwitchService.execute_transition_triggers(
+                runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+            )
+            await manager._apply_script_changeset(script_context.changeset)
+            await db.commit()
+            fail_message = str(transition.get("fail_message") or "").strip()
+            raise HTTPException(status_code=403, detail=fail_message or err or "Guard condition not met.")
 
     entry["switch_state"] = target_state
     session_states[entity.id] = entry
     state.entity_states = session_states
+
+    SwitchService.execute_transition_triggers(
+        runner=runner, config=config, transition=transition, success=True, context=script_context, switch_id=entity.id
+    )
+    await manager._apply_script_changeset(script_context.changeset)
+    await manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
 
     db.add(
         ChatMessage(
@@ -1320,7 +1327,17 @@ async def flip_switch_with_item(
     submitted_item_id = str(payload.item_id or "").strip().upper()
     if not submitted_item_id:
         raise HTTPException(status_code=400, detail="Item ID is required.")
+
+    manager = GameTurnManager(db=db, game_id=game_id, user=current_user, state=state)
+    script_context = await manager._build_script_context()
+    runner = manager._get_script_runner()
+
     if submitted_item_id != required_item_id:
+        SwitchService.execute_transition_triggers(
+            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+        )
+        await manager._apply_script_changeset(script_context.changeset)
+        await db.commit()
         fail_message = str(transition.get("fail_message") or "").strip()
         raise HTTPException(status_code=403, detail=fail_message or "This item cannot activate the switch.")
 
@@ -1335,11 +1352,34 @@ async def flip_switch_with_item(
         for item in (avatar.inventory or [])
     }
     if submitted_item_id not in inventory_ids:
+        SwitchService.execute_transition_triggers(
+            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+        )
+        await manager._apply_script_changeset(script_context.changeset)
+        await db.commit()
         raise HTTPException(status_code=403, detail="You do not possess the required item.")
+
+    expr = str(gates.get("expression") or gates.get("condition") or "").strip()
+    if expr:
+        passed, err = SwitchService.evaluate_gate_expression(expr, script_context)
+        if not passed:
+            SwitchService.execute_transition_triggers(
+                runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+            )
+            await manager._apply_script_changeset(script_context.changeset)
+            await db.commit()
+            fail_message = str(transition.get("fail_message") or "").strip()
+            raise HTTPException(status_code=403, detail=fail_message or err or "Guard condition not met.")
 
     entry["switch_state"] = target_state
     session_states[entity.id] = entry
     state.entity_states = session_states
+
+    SwitchService.execute_transition_triggers(
+        runner=runner, config=config, transition=transition, success=True, context=script_context, switch_id=entity.id
+    )
+    await manager._apply_script_changeset(script_context.changeset)
+    await manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
 
     # Resolve item name for narration
     item_name = submitted_item_id

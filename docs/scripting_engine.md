@@ -14,6 +14,7 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
    - [tw.exits](#twexits)
    - [tw.npcs](#twnpcs)
    - [tw.objects](#twobjects)
+   - [tw.switches](#twswitches)
    - [tw.vars](#twvars-persistent-state)
    - [tw.story](#twstory)
    - [tw.memories](#twmemories)
@@ -27,6 +28,7 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
    - [Example 3: Three-Lever Puzzle with Persistent State](#example-3-three-lever-puzzle-with-persistent-state)
    - [Example 4: Boss Encounter & Victory Condition](#example-4-boss-encounter--victory-condition)
    - [Example 5: Turn-Based Survival Countdown](#example-5-turn-based-survival-countdown)
+   - [Example 8: Switch Mechanism State & Guard Expression](#example-8-switch-mechanism-state--guard-expression)
 6. [Authoring in the World-Editor](#authoring-in-the-world-editor)
 
 ---
@@ -101,6 +103,20 @@ In addition to standalone script assets, TaleWeaver allows configuring short inl
 | **NPCs** | `on_defeat_script` | Executes when the NPC is defeated. Use to spawn loot or change state. |
 | | `on_protagonist_enters_scene_script` | Executes when the player enters the room containing this NPC. |
 | **Scenes** | `on_enter_scene_script` | Executes when the player enters this specific scene. |
+| **Switches** | `on_success_script` | Executes when any state transition succeeds on this switch. |
+| | `on_failure_script` | Executes when any state transition fails on this switch. |
+
+### Switch Transition Guards & Triggers
+
+Switch mechanisms define state transitions that support deterministic lock guards (`gates`) and script hooks:
+- **Guards (`gates`)**:
+  - `gates.expression`: A deterministic Python boolean condition evaluated in the safe AST sandbox against `tw` (e.g. `tw.vars.get('generator_on') == True` or `tw.switches.get_state('VALVE') == 'OPEN'`). If evaluation yields `False` or raises an error, the transition is blocked and `fail_message` is displayed.
+  - `gates.item`: Required item in avatar inventory.
+  - `gates.code`: Required access code or PIN.
+  - `gates.rule`: Soft narrative story flag.
+- **Transition Scripts**:
+  - `on_success_script`: Executes when this individual transition successfully passes all guards.
+  - `on_failure_script`: Executes when this transition is blocked or fails.
 
 ### Priority Execution
 Scripts carry an integer `priority` (default: `100`). Scripts with **lower** priority numbers execute before scripts with higher numbers.
@@ -163,7 +179,30 @@ Manages world objects and inventory items:
 - `tw.objects.remove_from_player(item_id: str)`: Removes an item from the player's inventory.
 - `tw.objects.hide(item_id: str)`: Hides an object in the scene until uncovered.
 - `tw.objects.reveal(item_id: str)`: Reveals a previously hidden object.
-- `tw.objects.get(item_id: str) -> ObjectProxy`: Returns an `ObjectProxy` with `.move_to_scene(scene_id)` and `.give_to_npc(npc_id)`.
+- `tw.objects.get(item_id: str) -> ObjectProxy`: Returns an `ObjectProxy` with `.move_to_scene(scene_id)` and `.give_to_npc(npc_id)`. For switch items, `ObjectProxy` also exposes `.state`, `.switch_state`, `.get_state()`, `.set_state()`, `.is_state()`, `.flip()`, and `.toggle()`.
+
+### `tw.switches`
+Inspects and manipulates interactive switches, levers, buttons, and puzzle mechanisms across the adventure:
+- `tw.switches.get(switch_id: str) -> SwitchProxy`: Retrieves a `SwitchProxy` for the switch entity. Also accessible via shortcut `tw.switch(switch_id)`.
+- `tw.switches.get_state(switch_id: str, default: str = "") -> str`: Returns the current state string (e.g. `"OFF"`, `"ON"`, `"ACTIVE"`).
+- `tw.switches.set_state(switch_id: str, new_state: str, apply_outcomes: bool = True) -> bool`: Deterministically transitions the switch to `new_state`, optionally triggering any associated switch outcomes (unlocking exits, containers, or setting story flags).
+- `tw.switches.is_state(switch_id: str, state: str) -> bool`: Returns `True` if the switch currently matches `state`.
+- `tw.switches.flip(switch_id: str, apply_outcomes: bool = True) -> str`: Cycles or toggles the switch to its next configured state, returning the new state.
+- `tw.switches.toggle(switch_id: str, apply_outcomes: bool = True) -> str`: Alias for `flip()`.
+- `tw.switch(switch_id: str) -> SwitchProxy`: Convenience shortcut for `tw.switches.get(switch_id)`.
+
+#### `SwitchProxy` and `ObjectProxy` Switch Attributes
+When interacting with a `SwitchProxy` or an `ObjectProxy` for a switch entity:
+- `.state` *(str)*: Gets or sets the switch state. Assigning a new state (e.g. `switch.state = "ON"`) triggers the state transition and runs configured outcomes.
+- `.switch_state` *(str)*: Alias for `.state`.
+- `.get_state() -> str`: Returns current state.
+- `.set_state(new_state: str, apply_outcomes: bool = True)`: Sets state and optionally applies outcomes.
+- `.is_state(state: str) -> bool`: Checks if the switch matches `state`.
+- `.flip(apply_outcomes: bool = True) -> str`: Cycles to the next state in sequence.
+- `.toggle(apply_outcomes: bool = True) -> str`: Alias for `flip()`.
+- `.states` *(list[str])*: List of declared switch states.
+- `.initial_state` *(str)*: Configured initial state.
+- `.is_switch` *(bool)*: `True` if the object is a switch.
 
 ### `tw.vars` (Persistent State)
 A persistent key-value store saved into the session state under `__script_vars__`. State persists across turns, saves, and reloads:
@@ -337,6 +376,29 @@ tw.player.damage(5)
 tw.story.show_message("The goblin leaps from the shadows, scoring a quick hit with a rusty dagger! (-5 HP)")
 tw.memories.add("A goblin ambushed me from the shadows.")
 ```
+
+---
+
+### Example 8: Switch Mechanism State & Guard Expression
+Trigger: `on_interact` (or switch transition trigger)  
+Target: `LEVER_POWER_GRID`
+
+```python
+# Check state of another mechanism before powering the main grid
+if tw.switches.is_state("VALVE_COOLANT", "OPEN"):
+    tw.switches.set_state("LEVER_POWER_GRID", "ONLINE")
+    tw.exits.unlock("EXIT_VAULT_DOOR")
+    tw.story.show_message("Coolant surges into the coils. The main power grid hums online and the vault unseals!")
+else:
+    tw.story.show_message("The lever clicks, but nothing happens. A red warning light blinks: 'Coolant valve must be opened first!'")
+```
+
+**Using Guard Expressions (`gates.expression`):**  
+Within the Switch Configurator, a transition to `"ONLINE"` can declare a deterministic guard condition:
+```python
+tw.switches.get_state("VALVE_COOLANT") == "OPEN" and tw.player.has_item("SAFETY_KEY")
+```
+If this condition evaluates to `False`, the transition is blocked and the transition's `fail_message` is narrated to the player.
 
 ---
 

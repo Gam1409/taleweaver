@@ -32,6 +32,7 @@ class ScriptTimeoutError(ScriptExecutionError):
 ALLOWED_AST_NODES: set[type[ast.AST]] = {
     # Module & Structure
     ast.Module,
+    ast.Expression,
     ast.Expr,
     ast.Pass,
     # Statements
@@ -188,6 +189,42 @@ class SafeAstInterpreter:
 
         return errors
 
+    @classmethod
+    def check_expression_syntax(cls, code: str) -> list[str]:
+        """Statically parses and validates Python expression syntax without running it."""
+        if not code or not code.strip():
+            return []
+
+        errors: list[str] = []
+        try:
+            tree = ast.parse(code.strip(), mode="eval")
+        except SyntaxError as exc:
+            msg = f"Syntax error at line {exc.lineno or 1}"
+            if exc.offset:
+                msg += f", col {exc.offset}"
+            msg += f": {exc.msg}"
+            return [msg]
+        except Exception as exc:
+            return [f"Parser error: {exc}"]
+
+        for node in ast.walk(tree):
+            if type(node) not in ALLOWED_AST_NODES:
+                lineno = getattr(node, "lineno", "?")
+                errors.append(
+                    f"Line {lineno}: Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
+                )
+            elif isinstance(node, ast.Attribute) and node.attr.startswith("_"):
+                lineno = getattr(node, "lineno", "?")
+                errors.append(
+                    f"Line {lineno}: Access to private/dunder attribute '{node.attr}' is forbidden."
+                )
+            elif isinstance(node, ast.Name) and node.id.startswith("__"):
+                lineno = getattr(node, "lineno", "?")
+                errors.append(
+                    f"Line {lineno}: Use of dunder variable '{node.id}' is forbidden."
+                )
+
+        return errors
 
     def execute(self, code: str, context: dict[str, Any]) -> None:
         """
@@ -211,6 +248,20 @@ class SafeAstInterpreter:
         for k, v in self.env.items():
             if k not in SAFE_BUILTINS:
                 context[k] = v
+
+    def evaluate_expression(self, expr_str: str, context: dict[str, Any]) -> Any:
+        """
+        Parses, validates, and evaluates a Python expression string within the given context.
+        """
+        self.step_count = 0
+        try:
+            tree = ast.parse(expr_str.strip(), mode="eval")
+        except SyntaxError as exc:
+            raise ScriptExecutionError(f"Syntax error in expression: {exc}") from exc
+
+        self.validate_ast(tree)
+        self.env = {**SAFE_BUILTINS, **context}
+        return self._eval_expr(tree.body)
 
     # -------------------------------------------------------------------------
     # Statement Handlers
@@ -322,6 +373,10 @@ class SafeAstInterpreter:
 
     def _eval_expr(self, expr: ast.expr) -> Any:
         self._tick()
+        if isinstance(expr, ast.JoinedStr):
+            return self._eval_joined_str(expr)
+        if isinstance(expr, ast.FormattedValue):
+            return self._eval_formatted_value(expr)
         method_name = f"_eval_{type(expr).__name__}"
         handler = getattr(self, method_name, None)
         if handler is None:
@@ -467,16 +522,16 @@ class SafeAstInterpreter:
     def _eval_Dict(self, expr: ast.Dict) -> dict[Any, Any]:
         return {
             self._eval_expr(k): self._eval_expr(v)
-            for k, v in zip(expr.keys, expr.values)
+            for k, v in zip(expr.keys, expr.values, strict=False)
             if k is not None
         }
 
-    def _eval_JoinedStr(self, expr: ast.JoinedStr) -> str:
+    def _eval_joined_str(self, expr: ast.JoinedStr) -> str:
         parts = []
         for val in expr.values:
             parts.append(str(self._eval_expr(val)))
         return "".join(parts)
 
-    def _eval_FormattedValue(self, expr: ast.FormattedValue) -> str:
+    def _eval_formatted_value(self, expr: ast.FormattedValue) -> str:
         val = self._eval_expr(expr.value)
         return str(val)

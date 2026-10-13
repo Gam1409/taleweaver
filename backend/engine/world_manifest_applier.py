@@ -1028,12 +1028,20 @@ async def _persist_objects(
             outcomes = o.get("switch_outcomes")
             if not isinstance(outcomes, list):
                 outcomes = []
+            on_success_script = str(o.get("on_success_script") or metadata_json.get("on_success_script") or "").strip()
+            on_failure_script = str(o.get("on_failure_script") or metadata_json.get("on_failure_script") or "").strip()
             metadata_json["switch"] = {
                 "states": states_normalized,
                 "initial_state": initial_state,
                 "transitions": transitions,
                 "outcomes": outcomes,
+                "on_success_script": on_success_script,
+                "on_failure_script": on_failure_script,
             }
+            if on_success_script:
+                metadata_json["on_success_script"] = on_success_script
+            if on_failure_script:
+                metadata_json["on_failure_script"] = on_failure_script
             metadata_json.setdefault("discovery_visibility", {
                 "mentioned_in_scene": True,
                 "listed_in_discoveries": False,

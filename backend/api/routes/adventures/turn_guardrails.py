@@ -23,6 +23,7 @@ from backend.engine.rule_engine import (
     InventoryItem,
     WorldEntityUpdate,
 )
+from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 if TYPE_CHECKING:
@@ -1565,58 +1566,33 @@ class TurnGuardrailsManager:
             if current_state == target_state:
                 continue
 
-            transitions = metadata_json.get("switch_transitions") or config.get("transitions") or []
-            trans = None
-            if isinstance(transitions, list):
-                wildcard_trans = None
-                for t in transitions:
-                    if not isinstance(t, dict):
-                        continue
-                    from_s = str(t.get("from") or t.get("from_state") or "").strip().upper()
-                    to_s = str(t.get("to") or t.get("to_state") or "").strip().upper()
-                    if not to_s or to_s != target_state:
-                        continue
-                    if from_s and from_s == current_state:
-                        trans = t
-                        break
-                    if not from_s and wildcard_trans is None:
-                        wildcard_trans = t
-                if trans is None:
-                    trans = wildcard_trans
-
+            trans = SwitchService.resolve_transition(config, current_state, target_state)
             transition_allowed = True
             reason = ""
+            script_context = await self.manager._build_script_context()
+            runner = self.manager._get_script_runner()
 
             if trans is not None:
-                gates = trans.get("gates") if isinstance(trans.get("gates"), dict) else {}
-                required_item = str(gates.get("item") or trans.get("required_item") or "").strip().upper()
-                required_code = str(gates.get("code") or trans.get("code") or "").strip()
-                required_rule = str(gates.get("rule") or trans.get("required_rule") or "").strip()
-                fail_message = str(trans.get("fail_message") or "").strip()
+                inv_ids = {
+                    str(item.get("id") or "").strip().upper()
+                    for item in (self.avatar.inventory or [])
+                    if isinstance(item, dict)
+                }
+                transition_allowed, reason = SwitchService.evaluate_transition_gates(
+                    transition=trans,
+                    context=script_context,
+                    avatar_inventory_ids=inv_ids,
+                    story_flags=self._switch_story_flags(),
+                    user_prompt=lowered,
+                    switch_name=switch_entity.name,
+                )
 
-                # Code validation: language-agnostic substring check (see container guardrails).
-                if required_code:
-                    if required_code.lower() not in lowered:
+                if transition_allowed:
+                    gates = trans.get("gates") if isinstance(trans.get("gates"), dict) else {}
+                    required_item = str(gates.get("item") or trans.get("required_item") or "").strip().upper()
+                    if required_item and not await self._is_key_item_referenced(required_item, lowered, switch_entity.name):
                         transition_allowed = False
-                        reason = fail_message or f"{switch_entity.name} does not move."
-
-                if transition_allowed and required_item:
-                    inventory_ids = {
-                        str(item.get("id") or "").strip().upper()
-                        for item in (self.avatar.inventory or [])
-                        if isinstance(item, dict)
-                    }
-                    if required_item.upper() not in inventory_ids:
-                        transition_allowed = False
-                        reason = fail_message or f"{switch_entity.name} does not move."
-                    elif not await self._is_key_item_referenced(required_item, lowered, switch_entity.name):
-                        transition_allowed = False
-                        reason = fail_message or f"You must specify which item you are using on {switch_entity.name}."
-
-                if transition_allowed and required_rule:
-                    if not self._switch_story_flags().get(required_rule, False):
-                        transition_allowed = False
-                        reason = fail_message or f"{switch_entity.name} does not move."
+                        reason = str(trans.get("fail_message") or "").strip() or f"You must specify which item you are using on {switch_entity.name}."
 
             if not transition_allowed:
                 update.switch_state = current_state
@@ -1627,6 +1603,27 @@ class TurnGuardrailsManager:
                 event.updated_inventory_items = []
                 event.removed_inventory_item_ids = []
                 event.spawned_items = []
+
+                SwitchService.execute_transition_triggers(
+                    runner=runner,
+                    config=config,
+                    transition=trans,
+                    success=False,
+                    context=script_context,
+                    switch_id=switch_entity.id,
+                )
+                await self.manager._apply_script_changeset(script_context.changeset, game_event=event)
+            else:
+                SwitchService.execute_transition_triggers(
+                    runner=runner,
+                    config=config,
+                    transition=trans,
+                    success=True,
+                    context=script_context,
+                    switch_id=switch_entity.id,
+                )
+                await self.manager._apply_script_changeset(script_context.changeset, game_event=event)
+                await self.manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
 
         return reasons
 

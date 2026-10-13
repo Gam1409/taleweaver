@@ -325,6 +325,10 @@ const SNIPPET_TEMPLATES = [
     label: 'Dice Roll Check',
     code: '# Roll a safe die (1 to 20)\nroll = tw.dice.d20()\nif roll >= 12:\n    tw.story.show_message("You skillfully dodge the falling rocks! (Roll: " + str(roll) + ")")\nelse:\n    tw.player.damage(10)\n    tw.story.show_message("A falling boulder grazes your shoulder! (Roll: " + str(roll) + ")")\n',
   },
+  {
+    label: 'Switch Mechanism State',
+    code: '# Inspect or toggle switch mechanism\ncurrent = tw.switches.get_state("LEVER_01")\nif current == "OFF":\n    tw.switches.set_state("LEVER_01", "ON")\n    tw.story.show_message("You pull the lever. Heavy gears churn inside the wall!")\n',
+  },
 ]
 
 function insertSnippet(code: string) {
@@ -763,6 +767,13 @@ function handleTabKey(e: KeyboardEvent) {
                   <span class="font-bold text-emerald-400">tw.vars</span>
                   <p class="text-[11px] text-slate-400 font-sans mt-0.5">
                     <code>tw.vars.get(key, default)</code>, <code>tw.vars.set(key, val)</code>, <code>tw.vars.has(key)</code>
+                  </p>
+                </div>
+
+                <div class="bg-slate-900/60 p-2.5 rounded-lg border border-white/5">
+                  <span class="font-bold text-emerald-400">tw.switches</span>
+                  <p class="text-[11px] text-slate-400 font-sans mt-0.5">
+                    <code>tw.switches.get_state(id)</code>, <code>tw.switches.set_state(id, state)</code>, <code>tw.switches.flip(id)</code>
                   </p>
                 </div>
 

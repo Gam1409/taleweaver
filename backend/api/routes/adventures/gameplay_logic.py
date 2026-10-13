@@ -2742,6 +2742,7 @@ class GameTurnManager:
                 entities_map[eid] = ent_copy
 
         script_vars = dict(session_overrides.get("__script_vars__", {}))
+        story_flags = dict(session_overrides.get("__switch_story_flags__", {}))
 
         avatar_dict = {
             "name": self.avatar.name,
@@ -2760,6 +2761,7 @@ class GameTurnManager:
             quests=self.state.quests or [],
             script_vars=script_vars,
             in_game_time=self.state.in_game_time,
+            story_flags=story_flags,
         )
 
     def _get_script_runner(self) -> ScriptRunner:

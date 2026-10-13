@@ -24,6 +24,7 @@ from backend.core.config import settings
 from backend.engine.command_parser import CommandParser
 from backend.engine.debug_engine import DebugEngine
 from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
+from backend.engine.switch_service import SwitchService
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -649,57 +650,61 @@ class TurnInteractionsManager:
         if current_state == target_state:
             return f"{switch_entity.name} is already set to {target_state}."
 
-        transitions = config.get("transitions")
-        transition = None
-        if isinstance(transitions, list):
-            wildcard_candidate = None
-            for candidate in transitions:
-                if not isinstance(candidate, dict):
-                    continue
-                from_state = str(candidate.get("from") or "").strip().upper()
-                to_state = str(candidate.get("to") or "").strip().upper()
-                if not to_state or to_state != target_state:
-                    continue
-                if from_state:
-                    if from_state == current_state:
-                        transition = candidate
-                        break
-                elif wildcard_candidate is None:
-                    wildcard_candidate = candidate
-            if transition is None:
-                transition = wildcard_candidate
+        transition = SwitchService.resolve_transition(config, current_state, target_state)
+        script_context = await self.manager._build_script_context()
+        runner = self.manager._get_script_runner()
 
         if transition is not None:
-            gates = transition.get("gates") if isinstance(transition.get("gates"), dict) else {}
-            required_item = str(gates.get("item") or "").strip().upper()
-            required_code = str(gates.get("code") or "").strip()
-            required_rule = str(gates.get("rule") or "").strip()
-            fail_message = str(transition.get("fail_message") or "").strip()
-
-            if required_item and required_item not in self._avatar_inventory_ids():
-                return fail_message or f"{switch_entity.name} does not move."
-
-            if required_code and str(provided_code or "").strip() != required_code:
-                return fail_message or f"{switch_entity.name} does not move."
-
-            if required_rule and not self._switch_story_flags().get(required_rule, False):
-                return fail_message or f"{switch_entity.name} does not move."
+            allowed, fail_msg = SwitchService.evaluate_transition_gates(
+                transition=transition,
+                context=script_context,
+                provided_code=provided_code,
+                avatar_inventory_ids=self._avatar_inventory_ids(),
+                story_flags=self._switch_story_flags(),
+                switch_name=switch_entity.name,
+            )
+            if not allowed:
+                SwitchService.execute_transition_triggers(
+                    runner=runner,
+                    config=config,
+                    transition=transition,
+                    success=False,
+                    context=script_context,
+                    switch_id=switch_entity.id,
+                )
+                await self.manager._apply_script_changeset(script_context.changeset)
+                return fail_msg or f"{switch_entity.name} does not move."
 
         entry["switch_state"] = target_state
         session_states[switch_entity.id] = entry
         self.state.entity_states = session_states
         flag_modified(self.state, "entity_states")
 
+        SwitchService.execute_transition_triggers(
+            runner=runner,
+            config=config,
+            transition=transition,
+            success=True,
+            context=script_context,
+            switch_id=switch_entity.id,
+        )
+        script_messages = await self.manager._apply_script_changeset(script_context.changeset)
+
         narration = config.get("narration") if isinstance(config.get("narration"), dict) else {}
         state_change_notes = narration.get("on_state_change") if isinstance(narration.get("on_state_change"), dict) else {}
         state_note = str(state_change_notes.get(target_state) or "").strip()
+        trans_success_msg = str(transition.get("success_message") or "").strip() if transition else ""
 
         outcome_notes = await self._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
         message = f"{switch_entity.name} set to {target_state}."
+        if trans_success_msg:
+            message = f"{message} {trans_success_msg}"
         if state_note:
             message = f"{message} {state_note}"
         if outcome_notes:
             message = f"{message} {' '.join(outcome_notes)}"
+        if script_messages:
+            message = f"{message} {' '.join(str(m) for m in script_messages)}"
         return message
 
     async def _handle_slash(self, user_msg: str, response: str) -> AsyncGenerator[str, None]:

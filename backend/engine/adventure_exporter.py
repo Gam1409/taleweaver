@@ -177,11 +177,19 @@ def _extract_item_switch_metadata(
             switch_config.get("transitions") or metadata.pop("switch_transitions", []) or []
         )
         filtered["switch_outcomes"] = switch_config.get("outcomes") or []
+        filtered["on_success_script"] = (
+            switch_config.get("on_success_script") or metadata.pop("on_success_script", "") or ""
+        )
+        filtered["on_failure_script"] = (
+            switch_config.get("on_failure_script") or metadata.pop("on_failure_script", "") or ""
+        )
         return
     metadata.pop("switch", None)
     metadata.pop("switch_states", None)
     metadata.pop("switch_initial_state", None)
     metadata.pop("switch_transitions", None)
+    metadata.pop("on_success_script", None)
+    metadata.pop("on_failure_script", None)
 
 
 def _normalize_exported_object_metadata(filtered: dict[str, Any]) -> None:

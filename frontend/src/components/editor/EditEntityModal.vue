@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
-import { Plus, Trash2, Key, FileText, Lock } from 'lucide-vue-next'
+import { Plus, Trash2, Key, FileText, Lock, Code2, Sparkles, ToggleLeft, ChevronDown, ChevronRight, Edit3 } from 'lucide-vue-next'
 
 const props = defineProps<{
   show: boolean
@@ -38,6 +38,8 @@ const props = defineProps<{
     switch_states_json: string
     switch_initial_state: string
     switch_transitions_json: string
+    on_success_script?: string
+    on_failure_script?: string
     effects_hp: number
     effects_stamina: number
     effects_mana: number
@@ -61,6 +63,27 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'simple' | 'advanced'>('simple')
+const editingTransitionIndex = ref<number | null>(null)
+const showTransitionGuards = ref<boolean>(false)
+const showTransitionScripts = ref<boolean>(false)
+
+function hasActiveGuards(t: any): boolean {
+  if (!t || !t.gates) return false
+  return Boolean(
+    (t.gates.item && String(t.gates.item).trim()) ||
+    (t.gates.code && String(t.gates.code).trim()) ||
+    (t.gates.rule && String(t.gates.rule).trim()) ||
+    (t.gates.expression && String(t.gates.expression).trim())
+  )
+}
+
+function hasActiveScripts(t: any): boolean {
+  if (!t) return false
+  return Boolean(
+    (t.on_success_script && String(t.on_success_script).trim()) ||
+    (t.on_failure_script && String(t.on_failure_script).trim())
+  )
+}
 
 const localForm = ref({
   is_hidden: false,
@@ -87,6 +110,8 @@ const localForm = ref({
   on_defeat_text: '',
   on_protagonist_enters_scene_script: '',
   on_protagonist_enters_scene_text: '',
+  on_success_script: '',
+  on_failure_script: '',
   ...props.initialForm
 })
 const switchStates = ref<string[]>([])
@@ -119,15 +144,26 @@ function syncFromForm() {
   }
   
   switchTransitions.value = transitions.map((t: any) => ({
-    from: String(t.from || '').toUpperCase(),
-    to: String(t.to || '').toUpperCase(),
+    from: String(t.from || t.from_state || '').toUpperCase(),
+    to: String(t.to || t.to_state || '').toUpperCase(),
     gates: {
-      item: t.gates?.item || '',
-      code: t.gates?.code || '',
-      rule: t.gates?.rule || '',
+      item: t.gates?.item || t.required_item || '',
+      code: t.gates?.code || t.code || '',
+      rule: t.gates?.rule || t.required_rule || '',
+      expression: t.gates?.expression || t.gates?.condition || '',
     },
     fail_message: t.fail_message || '',
+    success_message: t.success_message || '',
+    on_success_script: t.on_success_script || '',
+    on_failure_script: t.on_failure_script || '',
   }))
+
+  editingTransitionIndex.value = null
+  showTransitionGuards.value = false
+  showTransitionScripts.value = false
+
+  localForm.value.on_success_script = props.initialForm?.on_success_script || (props.context as any)?.on_success_script || ''
+  localForm.value.on_failure_script = props.initialForm?.on_failure_script || (props.context as any)?.on_failure_script || ''
 }
 
 // Initial sync
@@ -157,6 +193,10 @@ function removeState(index: number) {
   switchTransitions.value = switchTransitions.value.filter(
     t => t.from !== removed && t.to !== removed
   )
+
+  if (editingTransitionIndex.value !== null && editingTransitionIndex.value >= switchTransitions.value.length) {
+    editingTransitionIndex.value = null
+  }
 }
 
 function updateStateValue(index: number, val: string) {
@@ -174,7 +214,7 @@ function updateStateValue(index: number, val: string) {
   })
 }
 
-function addTransition() {
+function startAddTransition() {
   switchTransitions.value.push({
     from: '',
     to: switchStates.value[0] || '',
@@ -182,13 +222,35 @@ function addTransition() {
       item: '',
       code: '',
       rule: '',
+      expression: '',
     },
     fail_message: '',
+    success_message: '',
+    on_success_script: '',
+    on_failure_script: '',
   })
+  editingTransitionIndex.value = switchTransitions.value.length - 1
+  showTransitionGuards.value = false
+  showTransitionScripts.value = false
+}
+
+function toggleEditTransition(index: number) {
+  if (editingTransitionIndex.value === index) {
+    editingTransitionIndex.value = null
+  } else {
+    editingTransitionIndex.value = index
+    showTransitionGuards.value = false
+    showTransitionScripts.value = false
+  }
 }
 
 function removeTransition(index: number) {
   switchTransitions.value.splice(index, 1)
+  if (editingTransitionIndex.value === index) {
+    editingTransitionIndex.value = null
+  } else if (editingTransitionIndex.value !== null && editingTransitionIndex.value > index) {
+    editingTransitionIndex.value--
+  }
 }
 
 const itemReferenceOptions = computed(() => {
@@ -430,6 +492,10 @@ function handleSave() {
         if (t.gates?.item) gates.item = t.gates.item.trim().toUpperCase()
         if (t.gates?.code) gates.code = t.gates.code.trim()
         if (t.gates?.rule) gates.rule = t.gates.rule.trim()
+        if (t.gates?.expression) {
+          gates.expression = t.gates.expression.trim()
+          gates.condition = t.gates.expression.trim()
+        }
 
         const transition: Record<string, any> = {
           to: t.to.trim().toUpperCase(),
@@ -440,6 +506,15 @@ function handleSave() {
         }
         if (t.fail_message?.trim()) {
           transition.fail_message = t.fail_message.trim()
+        }
+        if (t.success_message?.trim()) {
+          transition.success_message = t.success_message.trim()
+        }
+        if (t.on_success_script?.trim()) {
+          transition.on_success_script = t.on_success_script.trim()
+        }
+        if (t.on_failure_script?.trim()) {
+          transition.on_failure_script = t.on_failure_script.trim()
         }
         return transition
       })
@@ -477,6 +552,8 @@ function handleSave() {
     wearable_slots: parsedWearableSlots,
     switch_states: parsedSwitchStates,
     switch_transitions: parsedSwitchTransitions,
+    on_success_script: String(localForm.value.on_success_script || '').trim(),
+    on_failure_script: String(localForm.value.on_failure_script || '').trim(),
     effects: parsedEffects,
     combination_ingredients: parsedIngredients,
     reveal_rule: revealRule,
@@ -603,7 +680,7 @@ const textLogPreviewClass = computed(() => {
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="show && context" class="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
-        <div class="modal-content w-full max-w-2xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+        <div class="modal-content w-full max-w-4xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
           <!-- Fixed Header -->
           <div class="px-8 py-5 flex justify-between items-center border-b border-white/5">
             <div class="space-y-1">
@@ -1295,6 +1372,12 @@ const textLogPreviewClass = computed(() => {
 
                 <!-- SWITCH: Visual Configurator -->
                 <div v-if="currentItemType === 'SWITCH'" class="space-y-6">
+                  <!-- Section Header -->
+                  <div class="flex items-center gap-2 pb-2 border-b border-white/5">
+                    <ToggleLeft class="w-4 h-4 text-lime-400" />
+                    <span class="text-xs font-black text-white uppercase tracking-wider">Switch Configurator</span>
+                  </div>
+
                   <!-- 1. States Management -->
                   <div class="space-y-3 bg-black/20 border border-white/5 p-4 rounded-2xl">
                     <div class="flex justify-between items-center">
@@ -1349,110 +1432,288 @@ const textLogPreviewClass = computed(() => {
                   <!-- 3. Transitions Management -->
                   <div class="space-y-3 bg-black/20 border border-white/5 p-4 rounded-2xl">
                     <div class="flex justify-between items-center">
-                      <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Transitions & Rules</label>
-                      <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{{ switchTransitions.length }} defined</span>
+                      <div class="flex items-center gap-2">
+                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Transitions & Rules</label>
+                        <span class="px-2 py-0.5 rounded-full bg-lime-500/10 text-lime-400 text-[10px] font-mono font-bold border border-lime-500/20">
+                          {{ switchTransitions.length }}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        @click="startAddTransition"
+                        class="px-3 py-1.5 bg-lime-500/10 border border-lime-500/30 hover:bg-lime-500/20 rounded-xl text-[10px] font-black text-lime-400 uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm"
+                      >
+                        <Plus class="w-3.5 h-3.5" /> Add Transition
+                      </button>
                     </div>
 
-                    <div class="space-y-4">
+                    <!-- Transitions List -->
+                    <div class="space-y-2.5">
                       <div
                         v-for="(t, idx) in switchTransitions"
                         :key="idx"
-                        class="p-4 bg-black/40 border border-white/5 rounded-2xl space-y-3 relative group"
+                        :class="[
+                          'p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3',
+                          editingTransitionIndex === idx
+                            ? 'bg-lime-500/10 border-lime-500/40 shadow-md ring-1 ring-lime-500/30'
+                            : 'bg-black/30 border-white/5 hover:border-white/10 hover:bg-black/40'
+                        ]"
                       >
-                        <button
-                          type="button"
-                          @click="removeTransition(idx)"
-                          class="absolute top-3 right-3 p-1.5 rounded-lg border border-red-500/10 text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all"
-                          title="Remove Transition"
-                        >
-                          <Trash2 class="w-4.5 h-4.5" />
-                        </button>
+                        <!-- Route & Badges -->
+                        <div class="flex flex-wrap items-center gap-2 min-w-0">
+                          <span class="text-[10px] font-mono font-bold text-slate-500">#{{ idx + 1 }}</span>
+                          
+                          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono font-bold text-white">
+                            <span :class="t.from ? 'text-amber-300' : 'text-slate-400'">{{ t.from || 'ANY' }}</span>
+                            <span class="text-lime-400">→</span>
+                            <span class="text-emerald-300">{{ t.to || '?' }}</span>
+                          </div>
 
-                        <!-- From/To Row -->
-                        <div class="grid grid-cols-2 gap-4 mr-8">
-                          <div class="space-y-1">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">From State (optional)</span>
-                            <select
-                              v-model="t.from"
-                              class="w-full bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold uppercase outline-none"
-                            >
-                              <option value="">ANY</option>
-                              <option v-for="state in switchStates" :key="state" :value="state">{{ state }}</option>
-                            </select>
-                          </div>
-                          <div class="space-y-1">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">To State</span>
-                            <select
-                              v-model="t.to"
-                              class="w-full bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold uppercase outline-none"
-                            >
-                              <option v-for="state in switchStates" :key="state" :value="state">{{ state }}</option>
-                            </select>
-                          </div>
+                          <span v-if="t.gates?.item" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-[10px] font-mono text-amber-400">
+                            <Key class="w-2.5 h-2.5" /> {{ t.gates.item }}
+                          </span>
+                          <span v-if="t.gates?.code" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-mono text-cyan-400">
+                            <Lock class="w-2.5 h-2.5" /> PIN: {{ t.gates.code }}
+                          </span>
+                          <span v-if="t.gates?.rule" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[10px] font-mono text-violet-400">
+                            <FileText class="w-2.5 h-2.5" /> {{ t.gates.rule }}
+                          </span>
+                          <span v-if="t.gates?.expression" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 border border-teal-500/20 text-[10px] font-mono text-teal-300" title="Script Guard">
+                            <Code2 class="w-2.5 h-2.5" /> Guard
+                          </span>
+                          <span v-if="hasActiveScripts(t)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-mono text-indigo-300">
+                            <Sparkles class="w-2.5 h-2.5" /> Scripts
+                          </span>
+                          <span v-if="t.fail_message || t.success_message" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800 border border-white/5 text-[10px] text-slate-400" title="Custom message attached">
+                            Msg
+                          </span>
                         </div>
 
-                        <!-- Requirements (Gates) Grid -->
-                        <div class="bg-black/20 p-3 rounded-xl space-y-2.5">
-                          <div class="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            <Lock class="w-3 h-3 text-lime-500" /> Requirements (Gates)
+                        <!-- Actions -->
+                        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+                          <button
+                            type="button"
+                            @click="toggleEditTransition(idx)"
+                            :class="[
+                              'px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all',
+                              editingTransitionIndex === idx
+                                ? 'bg-lime-500 text-slate-950 font-black shadow-sm'
+                                : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5'
+                            ]"
+                          >
+                            <Edit3 class="w-3.5 h-3.5" />
+                            <span>{{ editingTransitionIndex === idx ? 'Editing' : 'Edit' }}</span>
+                          </button>
+                          <button
+                            type="button"
+                            @click="removeTransition(idx)"
+                            class="p-1.5 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-all"
+                            title="Delete Transition"
+                          >
+                            <Trash2 class="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div v-if="switchTransitions.length === 0" class="text-xs text-slate-500 italic py-3 text-center bg-black/20 rounded-xl border border-white/5">
+                        No transitions configured. Any state can be activated freely.
+                      </div>
+                    </div>
+
+                    <!-- Input / Editing Panel (Visible when editing or creating a transition) -->
+                    <div
+                      v-if="editingTransitionIndex !== null && switchTransitions[editingTransitionIndex]"
+                      class="mt-4 p-4 bg-black/40 border border-lime-500/30 rounded-2xl space-y-4 shadow-xl"
+                    >
+                      <!-- Panel Header -->
+                      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                        <div class="flex items-center gap-2">
+                          <span class="w-2 h-2 rounded-full bg-lime-400 animate-pulse"></span>
+                          <h4 class="text-xs font-black text-lime-400 uppercase tracking-widest">
+                            Editing Transition #{{ editingTransitionIndex + 1 }}
+                            <span v-if="switchTransitions[editingTransitionIndex].from || switchTransitions[editingTransitionIndex].to" class="text-white/70 font-mono font-normal ml-1">
+                              ({{ switchTransitions[editingTransitionIndex].from || 'ANY' }} → {{ switchTransitions[editingTransitionIndex].to || '?' }})
+                            </span>
+                          </h4>
+                        </div>
+                        <button
+                          type="button"
+                          @click="editingTransitionIndex = null"
+                          class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-bold text-slate-300 uppercase tracking-wider transition-all"
+                        >
+                          Close Editor
+                        </button>
+                      </div>
+
+                      <!-- From / To States -->
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">From State (optional)</span>
+                          <select
+                            v-model="switchTransitions[editingTransitionIndex].from"
+                            class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:border-lime-500 outline-none"
+                          >
+                            <option value="">ANY (Matches all states)</option>
+                            <option v-for="state in switchStates" :key="state" :value="state">{{ state }}</option>
+                          </select>
+                        </div>
+                        <div class="space-y-1.5">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">To State <span class="text-red-400">*</span></span>
+                          <select
+                            v-model="switchTransitions[editingTransitionIndex].to"
+                            class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:border-lime-500 outline-none"
+                          >
+                            <option v-for="state in switchStates" :key="state" :value="state">{{ state }}</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <!-- Messages Grid -->
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Failure Message</span>
+                          <input
+                            v-model="switchTransitions[editingTransitionIndex].fail_message"
+                            placeholder="e.g. The lever refuses to budge. It seems locked."
+                            class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-red-500/50 outline-none transition-all"
+                          />
+                        </div>
+                        <div class="space-y-1.5">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Success Message (Optional)</span>
+                          <input
+                            v-model="switchTransitions[editingTransitionIndex].success_message"
+                            placeholder="e.g. The mechanism clicks smoothly into place."
+                            class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-lime-500/50 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Collapsible Panel 1: Requirements & Guards (Default Collapsed) -->
+                      <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                        <button
+                          type="button"
+                          @click="showTransitionGuards = !showTransitionGuards"
+                          class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                        >
+                          <div class="flex items-center gap-2">
+                            <Lock class="w-3.5 h-3.5 text-lime-400" />
+                            <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                              Requirements & Guards
+                            </span>
+                            <span v-if="hasActiveGuards(switchTransitions[editingTransitionIndex])" class="px-2 py-0.5 rounded-full bg-lime-500/20 text-lime-400 text-[9px] font-bold">
+                              Configured
+                            </span>
                           </div>
-                          
-                          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <!-- Required Item -->
-                            <div class="space-y-1">
-                              <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1"><Key class="w-3 h-3 text-amber-500" /> Required Key Item</span>
+                          <component :is="showTransitionGuards ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                        </button>
+
+                        <div v-if="showTransitionGuards" class="p-4 border-t border-white/5 space-y-4">
+                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Required Key Item -->
+                            <div class="space-y-1.5">
+                              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                <Key class="w-3 h-3 text-amber-500" /> Required Key Item
+                              </span>
                               <EntityReferenceCombobox
-                                v-model="t.gates.item"
+                                v-model="switchTransitions[editingTransitionIndex].gates.item"
                                 :options="itemReferenceOptions"
                                 placeholder="None"
                                 :enable-search="true"
                               />
                             </div>
-                            
-                            <!-- Required Code -->
-                            <div class="space-y-1">
-                              <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1"><Lock class="w-3 h-3 text-cyan-500" /> Required Code / PIN</span>
+
+                            <!-- Required Code / PIN -->
+                            <div class="space-y-1.5">
+                              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                <Lock class="w-3 h-3 text-cyan-500" /> Required Code / PIN
+                              </span>
                               <input
-                                v-model="t.gates.code"
+                                v-model="switchTransitions[editingTransitionIndex].gates.code"
                                 placeholder="None"
-                                class="w-full bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-cyan-500/50 outline-none"
+                                class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-cyan-500/50 outline-none"
                               />
                             </div>
                           </div>
 
                           <!-- Required Story Flag -->
-                          <div class="space-y-1">
-                            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1"><FileText class="w-3 h-3 text-violet-500" /> Required Story Flag (Rule Key)</span>
+                          <div class="space-y-1.5">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                              <FileText class="w-3 h-3 text-violet-500" /> Required Story Flag (Rule Key)
+                            </span>
                             <input
-                              v-model="t.gates.rule"
+                              v-model="switchTransitions[editingTransitionIndex].gates.rule"
                               placeholder="None"
-                              class="w-full bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-violet-500/50 outline-none"
+                              class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-violet-500/50 outline-none"
                             />
                           </div>
-                        </div>
 
-                        <!-- Fail Message -->
-                        <div class="space-y-1">
-                          <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Failure Message</span>
-                          <input
-                            v-model="t.fail_message"
-                            placeholder="e.g. The lever refuses to budge. It seems locked."
-                            class="w-full bg-slate-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-lime-500/50 outline-none"
+                          <!-- Deterministic Script Guard (Python Boolean Expression) -->
+                          <div class="space-y-1.5 bg-black/40 p-3 rounded-xl border border-cyan-500/20">
+                            <div class="flex justify-between items-center">
+                              <span class="text-[9px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1">
+                                <Code2 class="w-3.5 h-3.5 text-cyan-400" /> Deterministic Script Guard (Python Boolean Expression)
+                              </span>
+                              <span class="text-[8px] text-slate-500 font-mono">tw.*</span>
+                            </div>
+                            <input
+                              v-model="switchTransitions[editingTransitionIndex].gates.expression"
+                              placeholder="e.g. tw.vars.get('microwave_safe') and tw.vars.get('sink_fixed')"
+                              class="w-full bg-slate-900 border border-cyan-500/30 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-mono focus:border-cyan-400 outline-none transition-all"
+                            />
+                            <p class="text-[9px] text-slate-400">
+                              Evaluated via sandboxed Python engine. Allows transition only when expression evaluates to True. Examples: <code class="text-cyan-300">tw.vars.get('flag') == True</code>, <code class="text-cyan-300">tw.player.hp > 50</code>.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Collapsible Panel 2: Transition-Specific Scripts (Default Collapsed) -->
+                      <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
+                        <button
+                          type="button"
+                          @click="showTransitionScripts = !showTransitionScripts"
+                          class="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                        >
+                          <div class="flex items-center gap-2">
+                            <Code2 class="w-3.5 h-3.5 text-cyan-400" />
+                            <span class="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                              Transition-Specific Scripts
+                            </span>
+                            <span v-if="hasActiveScripts(switchTransitions[editingTransitionIndex])" class="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[9px] font-bold">
+                              Configured
+                            </span>
+                          </div>
+                          <component :is="showTransitionScripts ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-400" />
+                        </button>
+
+                        <div v-if="showTransitionScripts" class="p-4 border-t border-white/5 space-y-4">
+                          <ScriptEditor
+                            v-model="switchTransitions[editingTransitionIndex].on_success_script"
+                            label="Transition On Success Script"
+                            help-text="Executed only when this specific transition succeeds."
+                            context="transition_success"
+                            min-height="90px"
+                          />
+                          <ScriptEditor
+                            v-model="switchTransitions[editingTransitionIndex].on_failure_script"
+                            label="Transition On Failure Script"
+                            help-text="Executed only when this specific transition fails."
+                            context="transition_failure"
+                            min-height="90px"
                           />
                         </div>
                       </div>
 
-                      <div v-if="switchTransitions.length === 0" class="text-xs text-slate-500 italic py-2 text-center">
-                        No transitions configured. Any state can be activated freely.
+                      <!-- Close Editor Button -->
+                      <div class="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          @click="editingTransitionIndex = null"
+                          class="px-4 py-2 bg-lime-500/10 border border-lime-500/30 hover:bg-lime-500/20 text-lime-400 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                        >
+                          Done Editing Transition
+                        </button>
                       </div>
-
-                      <button
-                        type="button"
-                        @click="addTransition"
-                        class="w-full py-2 bg-lime-500/5 border border-lime-500/10 hover:bg-lime-500/10 hover:border-lime-500/30 rounded-xl text-[10px] font-black text-lime-400 uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all"
-                      >
-                        <Plus class="w-3.5 h-3.5" /> Add Transition Rule
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1611,8 +1872,36 @@ const textLogPreviewClass = computed(() => {
               </div>
 
               <div v-if="context.type === 'object'" class="space-y-6">
-                <!-- Object Triggers -->
-                <div v-if="localForm.is_portable && currentItemType !== 'WEARABLE'" class="space-y-3 border border-white/5 bg-black/20 p-4 rounded-xl">
+                <!-- SWITCH Triggers in Advanced Tab -->
+                <div v-if="currentItemType === 'SWITCH'" class="space-y-4">
+                  <div class="p-4 bg-lime-500/10 border border-lime-500/20 rounded-2xl space-y-1">
+                    <div class="flex items-center gap-2 text-lime-400 font-bold text-xs uppercase tracking-wider">
+                      <Sparkles class="w-4 h-4" /> Global Switch Script Triggers
+                    </div>
+                    <p class="text-xs text-slate-300">
+                      These global scripts are executed every time any transition on this switch is triggered: immediately when a transition succeeds, or when it fails / is blocked by guards.
+                    </p>
+                  </div>
+                  <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+                    <ScriptEditor
+                      v-model="localForm.on_success_script"
+                      label="Global On Success Script"
+                      help-text="Executed every time any transition on this switch succeeds (e.g. tw.vars.set('safe', True), tw.story.narrate(...))."
+                      context="switch_success"
+                      min-height="120px"
+                    />
+                    <ScriptEditor
+                      v-model="localForm.on_failure_script"
+                      label="Global On Failure Script"
+                      help-text="Executed every time a transition on this switch fails or is blocked by guards (e.g. tw.player.damage(10), trigger trap)."
+                      context="switch_failure"
+                      min-height="120px"
+                    />
+                  </div>
+                </div>
+
+                <!-- Non-Switch Object Triggers -->
+                <div v-if="currentItemType !== 'SWITCH' && localForm.is_portable && currentItemType !== 'WEARABLE'" class="space-y-3 border border-white/5 bg-black/20 p-4 rounded-xl">
                   <div class="space-y-1">
                     <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest">On Pickup Mode</label>
                     <p class="text-[10px] text-slate-500 uppercase tracking-tighter">Choose whether the Game Master or an NPC reacts when the player takes this item.</p>
@@ -1635,7 +1924,7 @@ const textLogPreviewClass = computed(() => {
                   ></textarea>
                 </div>
 
-                <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+                <div v-if="currentItemType !== 'SWITCH'" class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
                   <ScriptEditor
                     v-model="localForm.on_pickup_script"
                     label="On Pickup Script"
@@ -1657,7 +1946,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                 </div>
 
-                <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+                <div v-if="currentItemType !== 'SWITCH'" class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
                   <ScriptEditor
                     v-model="localForm.on_drop_script"
                     label="On Drop Script"

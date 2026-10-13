@@ -130,6 +130,8 @@ class EntityUpdateRequest(BaseModel):
     switch_states: Optional[list[str]] = None
     switch_initial_state: Optional[str] = None
     switch_transitions: Optional[list[dict[str, Any]]] = None
+    on_success_script: Optional[str] = None
+    on_failure_script: Optional[str] = None
     effects: Optional[dict[str, Any]] = None
     stat_modifier_strength: Optional[int] = None
     current_scene_id: Optional[str] = None
@@ -293,6 +295,12 @@ def _serialize_model(obj):
             )
             data["switch_transitions"] = (
                 metadata_json.get("switch_transitions") or switch_config.get("transitions") or []
+            )
+            data["on_success_script"] = (
+                metadata_json.get("on_success_script") or switch_config.get("on_success_script") or ""
+            )
+            data["on_failure_script"] = (
+                metadata_json.get("on_failure_script") or switch_config.get("on_failure_script") or ""
             )
     return data
 
@@ -4158,6 +4166,8 @@ async def update_editor_entity(
                         payload.switch_states is not None
                         or payload.switch_initial_state is not None
                         or payload.switch_transitions is not None
+                        or payload.on_success_script is not None
+                        or payload.on_failure_script is not None
                     ):
                         switch_config = metadata_json.get("switch")
                         if not isinstance(switch_config, dict):
@@ -4168,6 +4178,12 @@ async def update_editor_entity(
                             switch_config["initial_state"] = payload.switch_initial_state
                         if payload.switch_transitions is not None:
                             switch_config["transitions"] = payload.switch_transitions
+                        if payload.on_success_script is not None:
+                            switch_config["on_success_script"] = payload.on_success_script.strip()
+                            metadata_json["on_success_script"] = payload.on_success_script.strip()
+                        if payload.on_failure_script is not None:
+                            switch_config["on_failure_script"] = payload.on_failure_script.strip()
+                            metadata_json["on_failure_script"] = payload.on_failure_script.strip()
 
                         states = switch_config.get("states") or []
                         states_list = [str(s).strip().upper() for s in states if str(s).strip()]

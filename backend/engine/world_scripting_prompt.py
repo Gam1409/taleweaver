@@ -7,7 +7,7 @@ The trigger catalogue below mirrors what the gameplay engine actually executes:
 * Inline ``on_*_script`` / ``on_*_text`` fields on entities are executed by the turn
   state applier (``turn_state_applier.py`` / ``turn_interactions.py``).
 
-Keep this catalogue in sync with ``docs/guides/scripting_engine.md``.
+Keep this catalogue in sync with ``docs/scripting_engine.md``.
 """
 
 # (trigger, when it fires, target_id meaning)
@@ -50,7 +50,10 @@ TW_API_REFERENCE = (
     "unlock(from_scene_id, to_scene_id)  (ALWAYS pass the two scene IDs of the exit)\n"
     "- tw.npcs / tw.objects (alias tw.items): get(id), exists(id), say(id, text), move(id, scene_id), "
     "move_to_player(id), kill(id), give_item(npc_id, item_id), drop_item(npc_id, item_id, scene_id=None)\n"
-    "- entity proxies from get(): id, name, current_scene_id, is_hidden, set_hidden(bool); NPCs also hp, is_defeated, say(text)\n"
+    "- entity proxies from get(): id, name, current_scene_id, is_hidden, set_hidden(bool); NPCs also hp, is_defeated, say(text); "
+    "objects also state, switch_state, flip(), toggle()\n"
+    "- tw.switches: get(id), get_state(id, default), set_state(id, new_state, apply_outcomes=True), "
+    "is_state(id, state), flip(id, apply_outcomes=True), toggle(id, apply_outcomes=True) | switch proxies from get() or tw.switch(id): id, state, switch_state, states, initial_state, flip(), toggle()\n"
     "- tw.vars: get(key, default), set(key, value)  (persistent story flags)\n"
     "- tw.story: narrate(text) / show_message(text), system_message(text), reject_action(reason)\n"
     "- tw.memories.add(description, scope='global'|'local', emotion='positive'|'negative'|'neutral')\n"
@@ -79,6 +82,9 @@ _EXAMPLES = (
     "   tw.story.show_message('The warlord drops a heavy iron key.')\n"
     "5. Atmosphere only (inline `..._text` field, no code): on_enter_scene_text = "
     "'A cold draft carries the smell of old blood.'\n"
+    "6. Switch activation (inline on switch: on_success_script):\n"
+    "   tw.exits.unlock('SCENE_LAB', 'SCENE_VAULT')\n"
+    "   tw.story.show_message('A loud click echoes through the vault corridors.')\n"
 )
 
 

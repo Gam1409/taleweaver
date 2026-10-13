@@ -210,7 +210,27 @@ class SwitchGatesSchema(BaseModel):
     rule: Optional[str] = Field(
         default="", description="A soft narrative rule needed to pass this transition."
     )
-    model_config = {"extra": "forbid"}
+    expression: Optional[str] = Field(
+        default="",
+        description="A boolean Python expression evaluated against tw (e.g. tw.vars.get('flag') == True).",
+    )
+    condition: Optional[str] = Field(
+        default="",
+        description="Alias for expression.",
+    )
+
+    @model_serializer
+    def serialize_model(self) -> dict[str, Any]:
+        expr = self.expression or self.condition or ""
+        return {
+            "item": self.item or "",
+            "code": self.code or "",
+            "rule": self.rule or "",
+            "expression": expr,
+            "condition": expr,
+        }
+
+    model_config = {"populate_by_name": True, "extra": "forbid"}
 
 
 class SwitchTransitionSchema(BaseModel):
@@ -226,16 +246,31 @@ class SwitchTransitionSchema(BaseModel):
     fail_message: Optional[str] = Field(
         default="", description="The failure message narrated if gates are not met."
     )
+    success_message: Optional[str] = Field(
+        default="", description="Optional success message narrated when transition passes."
+    )
+    on_success_script: Optional[str] = Field(
+        default="", description="Optional script executed when this transition succeeds."
+    )
+    on_failure_script: Optional[str] = Field(
+        default="", description="Optional script executed when this transition fails."
+    )
 
     @model_serializer
     def serialize_model(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "to": self.to_state,
             "gates": self.gates.model_dump() if self.gates else None,
-            "fail_message": self.fail_message,
+            "fail_message": self.fail_message or "",
         }
         if self.from_state:
             payload["from"] = self.from_state
+        if self.success_message:
+            payload["success_message"] = self.success_message
+        if self.on_success_script:
+            payload["on_success_script"] = self.on_success_script
+        if self.on_failure_script:
+            payload["on_failure_script"] = self.on_failure_script
         return payload
 
     model_config = {"populate_by_name": True, "extra": "forbid"}
@@ -352,6 +387,14 @@ class WorldObjectSchema(BaseModel):
     switch_outcomes: list[SwitchOutcomeSchema] = Field(
         default_factory=list,
         description="Only for SWITCH objects: state-based effects (unlock_exit, unlock_container, story_flag).",
+    )
+    on_success_script: str = Field(
+        "",
+        description="Only for SWITCH objects: optional script executed when a transition succeeds. Use empty string for none.",
+    )
+    on_failure_script: str = Field(
+        "",
+        description="Only for SWITCH objects: optional script executed when a transition fails. Use empty string for none.",
     )
     source_asset_id: Optional[str] = Field(
         None, description="Optional source object ID to reuse an old item image."

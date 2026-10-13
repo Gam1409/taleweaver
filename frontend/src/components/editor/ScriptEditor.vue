@@ -142,6 +142,20 @@ const availableSnippets = computed(() => {
     ]
   }
 
+  if (['switch_success', 'switch_failure', 'transition_success', 'transition_failure'].includes(props.context || '')) {
+    return [
+      {
+        label: 'Flip / change another switch',
+        code: 'tw.switches.set_state("OTHER_SWITCH", "ON")\ntw.story.narrate("You hear heavy machinery hum to life in the distance.")\n',
+      },
+      {
+        label: 'Inspect switch state',
+        code: 'if tw.switches.get_state("LEVER_ID") == "ACTIVE":\n    tw.vars.set("puzzle_solved", True)\n    tw.story.narrate("The final seal is broken!")\n',
+      },
+      ...common,
+    ]
+  }
+
   return common
 })
 
@@ -291,6 +305,7 @@ function insertNamedSnippet(type: string) {
     scene: "tw.scene.set_attribute('visited', True)\n",
     exits: "tw.exits.unlock('EXIT_ID')\n",
     npcs: "tw.npcs.move('NPC_ID', 'SCENE_ID')\n",
+    switches: "tw.switches.set_state('SWITCH_ID', 'ON')\n",
   }
   if (snippets[type]) {
     insertSnippet(snippets[type])
@@ -622,6 +637,16 @@ onBeforeUnmount(() => {
           </div>
           <p class="text-[10px] text-slate-400 font-sans">
             <code>.get(id)</code>, <code>.move(id, target_scene)</code>
+          </p>
+        </div>
+
+        <div class="p-2 bg-slate-950/70 border border-white/5 rounded-lg space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-emerald-400">tw.switches</span>
+            <button type="button" @click="insertNamedSnippet('switches')" class="text-[10px] text-slate-500 hover:text-amber-300 font-sans">Insert</button>
+          </div>
+          <p class="text-[10px] text-slate-400 font-sans">
+            <code>.get_state(id)</code>, <code>.set_state(id, s)</code>, <code>.flip(id)</code>, <code>.is_state(id, s)</code>
           </p>
         </div>
       </div>
