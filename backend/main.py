@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -12,8 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from backend.core.config import settings
-from backend.core.database import engine, apply_sqlite_compat_migrations
-from backend.models.base import Base
+from backend.core.database import run_db_migrations
 
 # Configure logging based on .env settings
 logging.basicConfig(
@@ -61,12 +61,8 @@ from backend.api.routes import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Manages application startup and shutdown lifecycle."""
-    # Startup: Database schema is managed by Alembic. 
-    # Base.metadata.create_all is removed to prevent conflicts with migrations.
-
-    # Note: We now use Alembic for all schema migrations. 
-    # Manual apply_sqlite_compat_migrations() is deprecated and disabled to avoid conflicts.
-    await apply_sqlite_compat_migrations()
+    # Database schema is managed exclusively by Alembic.
+    await asyncio.to_thread(run_db_migrations)
 
     # Auto-import adventures
     from backend.core.database import AsyncSessionLocal
