@@ -672,9 +672,11 @@ class WorldScriptSchema(BaseModel):
         "on_interact",
         "on_turn_start",
         "on_turn_end",
+        "on_logic_pass_done",
+        "on_narration_done",
     ] = Field(
         ...,
-        description="The game event trigger: on_enter_scene, on_interact, on_turn_start, on_turn_end",
+        description="The game event trigger: on_enter_scene, on_interact, on_turn_start, on_turn_end, on_logic_pass_done, on_narration_done",
     )
     target_id: Optional[str] = Field(
         None,

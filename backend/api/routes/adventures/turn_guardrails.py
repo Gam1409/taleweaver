@@ -192,7 +192,11 @@ class TurnGuardrailsManager:
             is_hidden = bool(ent_state.get("is_hidden", ent.is_hidden))
             is_in_inventory = bool(ent_state.get("is_in_inventory", ent.is_in_inventory))
 
-            is_allowed_entity = current_scene_id == self.state.current_scene_id and not is_hidden and not is_in_inventory
+            is_allowed_entity = (
+                current_scene_id == self.state.current_scene_id
+                and not is_hidden
+                and not is_in_inventory
+            )
             _add_token(allowed_tokens if is_allowed_entity else disallowed_tokens, ent.id)
             _add_token(allowed_tokens if is_allowed_entity else disallowed_tokens, ent.name)
 
@@ -203,14 +207,18 @@ class TurnGuardrailsManager:
             if not isinstance(npc_inventory, list):
                 npc_inventory = []
 
-            inventory_bucket = allowed_tokens if (current_scene_id == self.state.current_scene_id and not is_hidden) else disallowed_tokens
+            inventory_bucket = (
+                allowed_tokens
+                if (current_scene_id == self.state.current_scene_id and not is_hidden)
+                else disallowed_tokens
+            )
             for item in npc_inventory:
                 if not isinstance(item, dict):
                     continue
                 _add_token(inventory_bucket, item.get("id"))
                 _add_token(inventory_bucket, item.get("name"))
 
-        for item in (self.avatar.inventory or []):
+        for item in self.avatar.inventory or []:
             if not isinstance(item, dict):
                 continue
             _add_token(allowed_tokens, item.get("id"))
@@ -266,7 +274,7 @@ class TurnGuardrailsManager:
                 _add_token(item.get("id"))
                 _add_token(item.get("name"))
 
-        for item in (self.avatar.inventory or []):
+        for item in self.avatar.inventory or []:
             if not isinstance(item, dict):
                 continue
             _add_token(item.get("id"))
@@ -300,12 +308,13 @@ class TurnGuardrailsManager:
             "Only objects in the current scene and items from your inventory or local NPC inventories are available."
         )
 
-
     @staticmethod
     def _is_container_item(item: Any) -> bool:
         return isinstance(item, dict) and str(item.get("item_type") or "").upper() == "CONTAINER"
 
-    def _is_container_locked(self, scene_container: WorldEntity | None, inventory_container: dict[str, Any] | None) -> bool:
+    def _is_container_locked(
+        self, scene_container: WorldEntity | None, inventory_container: dict[str, Any] | None
+    ) -> bool:
         states = self.state.entity_states or {}
 
         def _requirements_from_metadata(metadata: dict[str, Any]) -> tuple[str, str, str]:
@@ -320,7 +329,9 @@ class TurnGuardrailsManager:
             if isinstance(state_locked, bool):
                 return state_locked
             metadata_json = dict(getattr(scene_container, "metadata_json", None) or {})
-            code_to_unlock, item_to_unlock, rule_to_unlock = _requirements_from_metadata(metadata_json)
+            code_to_unlock, item_to_unlock, rule_to_unlock = _requirements_from_metadata(
+                metadata_json
+            )
             return bool(code_to_unlock or item_to_unlock or rule_to_unlock)
 
         if inventory_container:
@@ -335,7 +346,9 @@ class TurnGuardrailsManager:
             metadata_json = inventory_container.get("metadata_json")
             if not isinstance(metadata_json, dict):
                 metadata_json = {}
-            code_to_unlock, item_to_unlock, rule_to_unlock = _requirements_from_metadata(metadata_json)
+            code_to_unlock, item_to_unlock, rule_to_unlock = _requirements_from_metadata(
+                metadata_json
+            )
             return bool(code_to_unlock or item_to_unlock or rule_to_unlock)
 
         return False
@@ -350,7 +363,9 @@ class TurnGuardrailsManager:
         match = re.search(r"\b(\d{3,8})\b", text)
         return match.group(1) if match else None
 
-    async def _resolve_container_from_free_text(self, text: str) -> tuple[str, str, str, str, str, bool] | None:
+    async def _resolve_container_from_free_text(
+        self, text: str
+    ) -> tuple[str, str, str, str, str, bool] | None:
         lowered = (text or "").strip().lower()
         if not lowered:
             return None
@@ -379,11 +394,19 @@ class TurnGuardrailsManager:
             code_to_unlock = str(metadata_json.get("code_to_unlock") or "").strip()
             item_to_unlock = str(metadata_json.get("item_to_unlock") or "").strip().upper()
             rule_to_unlock = str(metadata_json.get("rule_to_unlock") or "").strip()
-            candidate = (len(token), cid, cname or cid, code_to_unlock, item_to_unlock, rule_to_unlock, locked)
+            candidate = (
+                len(token),
+                cid,
+                cname or cid,
+                code_to_unlock,
+                item_to_unlock,
+                rule_to_unlock,
+                locked,
+            )
             if best_match is None or candidate[0] > best_match[0]:
                 best_match = candidate
 
-        for inv_item in (self.avatar.inventory or []):
+        for inv_item in self.avatar.inventory or []:
             if not self._is_container_item(inv_item):
                 continue
             cid = str(inv_item.get("id") or "").strip()
@@ -399,7 +422,15 @@ class TurnGuardrailsManager:
             code_to_unlock = str(metadata_json.get("code_to_unlock") or "").strip()
             item_to_unlock = str(metadata_json.get("item_to_unlock") or "").strip().upper()
             rule_to_unlock = str(metadata_json.get("rule_to_unlock") or "").strip()
-            candidate = (len(token), cid or cname, cname or cid or "container", code_to_unlock, item_to_unlock, rule_to_unlock, locked)
+            candidate = (
+                len(token),
+                cid or cname,
+                cname or cid or "container",
+                code_to_unlock,
+                item_to_unlock,
+                rule_to_unlock,
+                locked,
+            )
             if best_match is None or candidate[0] > best_match[0]:
                 best_match = candidate
 
@@ -427,12 +458,14 @@ class TurnGuardrailsManager:
         )
         db_entities = res.scalars().all()
         entity_by_id: dict[str, WorldEntity] = {e.id.upper(): e for e in db_entities if e.id}
-        entity_by_name: dict[str, WorldEntity] = {(e.name or "").strip().lower(): e for e in db_entities if e.name}
+        entity_by_name: dict[str, WorldEntity] = {
+            (e.name or "").strip().lower(): e for e in db_entities if e.name
+        }
 
         # 2. Collect avatar inventory items
         avatar_inv_by_id: dict[str, dict] = {}
         avatar_inv_by_name: dict[str, dict] = {}
-        for item in (self.avatar.inventory or []):
+        for item in self.avatar.inventory or []:
             if isinstance(item, dict):
                 iid = str(item.get("id") or "").strip().upper()
                 iname = str(item.get("name") or "").strip().lower()
@@ -483,7 +516,9 @@ class TurnGuardrailsManager:
                 )
 
                 if not matched_entity and not matched_inv:
-                    reasons.append(f"Spontaneous item generation blocked: '{item.name}' does not exist in the world template.")
+                    reasons.append(
+                        f"Spontaneous item generation blocked: '{item.name}' does not exist in the world template."
+                    )
                     logger.warning(
                         f"[Turn {self.game_id}] Blocked dynamic inventory item generation: ID={item.id}, Name={item.name}"
                     )
@@ -523,7 +558,9 @@ class TurnGuardrailsManager:
                 )
 
                 if not matched_entity and not matched_inv:
-                    reasons.append(f"Spontaneous item generation blocked: '{item.name}' does not exist in the world template.")
+                    reasons.append(
+                        f"Spontaneous item generation blocked: '{item.name}' does not exist in the world template."
+                    )
                     logger.warning(
                         f"[Turn {self.game_id}] Blocked dynamic scene item spawn: ID={item.id}, Name={item.name}"
                     )
@@ -549,7 +586,9 @@ class TurnGuardrailsManager:
 
         return reasons
 
-    async def _enforce_constructable_combination(self, event: GameEvent, user_msg: str) -> list[str]:
+    async def _enforce_constructable_combination(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
         """Deterministically resolve CONSTRUCTABLE items and prevent illegal spawning/revealing of them.
 
         A CONSTRUCTABLE is a hidden object that materializes when the player
@@ -567,8 +606,7 @@ class TurnGuardrailsManager:
         all_entities = list(ent_res.scalars().all())
 
         constructable_entities = [
-            e for e in all_entities
-            if e.id and str(e.item_type or "").upper() == "CONSTRUCTABLE"
+            e for e in all_entities if e.id and str(e.item_type or "").upper() == "CONSTRUCTABLE"
         ]
         if not constructable_entities:
             return []
@@ -587,8 +625,18 @@ class TurnGuardrailsManager:
                 or any(
                     kw in lowered
                     for kw in (
-                        "combine", "assembl", "craft", " mix ", "put together",
-                        "kombi", "misch", "zusammen", "herstell", "erzeug", "bastel", "bau "
+                        "combine",
+                        "assembl",
+                        "craft",
+                        " mix ",
+                        "put together",
+                        "kombi",
+                        "misch",
+                        "zusammen",
+                        "herstell",
+                        "erzeug",
+                        "bastel",
+                        "bau ",
                     )
                 )
             )
@@ -609,7 +657,7 @@ class TurnGuardrailsManager:
 
             # Inventory ingredient ids (preserve original case for removal matching).
             inventory_id_lookup: dict[str, str] = {}
-            for item in (self.avatar.inventory or []):
+            for item in self.avatar.inventory or []:
                 if isinstance(item, dict) and item.get("id"):
                     inventory_id_lookup[str(item["id"]).strip().upper()] = str(item["id"])
 
@@ -658,7 +706,9 @@ class TurnGuardrailsManager:
                         tokens.append(ing_ent.name)
                     for tok in tokens:
                         tok_low = (tok or "").lower()
-                        if len(tok_low) >= 3 and re.search(r"\b" + re.escape(tok_low) + r"\b", lowered):
+                        if len(tok_low) >= 3 and re.search(
+                            r"\b" + re.escape(tok_low) + r"\b", lowered
+                        ):
                             referenced = True
                             break
                     if referenced:
@@ -698,7 +748,11 @@ class TurnGuardrailsManager:
                                 meta["on_craft_failure_script"], "on_craft_failure", e.id
                             )
                             messages.extend(fail_msgs)
-                        fail_text = str(meta.get("on_craft_failure_text") or err_detail or f"You cannot construct {e.name} right now.")
+                        fail_text = str(
+                            meta.get("on_craft_failure_text")
+                            or err_detail
+                            or f"You cannot construct {e.name} right now."
+                        )
                         await self._save_chat_message("system", fail_text)
                         messages.append(fail_text)
                         continue
@@ -721,16 +775,19 @@ class TurnGuardrailsManager:
                 self._upsert_entity_movement(event, e.id, current_scene_id)
                 if all_in_inventory:
                     from backend.engine.rule_engine import InventoryItem
+
                     if event.new_inventory_items is None:
                         event.new_inventory_items = []
                     # Check if already added
                     if not any(i.id == e.id for i in event.new_inventory_items):
-                        event.new_inventory_items.append(InventoryItem(
-                            id=e.id, 
-                            name=e.name or "Unknown Item",
-                            description=e.description,
-                            item_type=e.item_type
-                        ))
+                        event.new_inventory_items.append(
+                            InventoryItem(
+                                id=e.id,
+                                name=e.name or "Unknown Item",
+                                description=e.description,
+                                item_type=e.item_type,
+                            )
+                        )
                 constructed_this_turn.add(e.id.upper())
 
                 ing_names: list[str] = []
@@ -756,7 +813,6 @@ class TurnGuardrailsManager:
                     sorted(needed_upper),
                 )
 
-
         # Reconcile / Guardrail Step: Ensure no constructable item has been spawned/revealed illegally by the LLM
         for cid_upper in constructable_ids:
             if cid_upper in constructed_this_turn:
@@ -768,7 +824,9 @@ class TurnGuardrailsManager:
                 for item in event.new_inventory_items:
                     item_id = getattr(item, "id", None) or getattr(item, "entity_id", None)
                     if item_id and str(item_id).strip().upper() == cid_upper:
-                        original_ent = next((x for x in constructable_entities if x.id.upper() == cid_upper), None)
+                        original_ent = next(
+                            (x for x in constructable_entities if x.id.upper() == cid_upper), None
+                        )
                         name = original_ent.name if original_ent else item.name
                         ingredients = original_ent.combination_ingredients if original_ent else []
                         messages.append(
@@ -794,7 +852,9 @@ class TurnGuardrailsManager:
                 for item in event.spawned_items:
                     item_id = getattr(item, "id", None) or getattr(item, "entity_id", None)
                     if item_id and str(item_id).strip().upper() == cid_upper:
-                        original_ent = next((x for x in constructable_entities if x.id.upper() == cid_upper), None)
+                        original_ent = next(
+                            (x for x in constructable_entities if x.id.upper() == cid_upper), None
+                        )
                         name = original_ent.name if original_ent else item.name
                         ingredients = original_ent.combination_ingredients if original_ent else []
                         messages.append(
@@ -810,9 +870,14 @@ class TurnGuardrailsManager:
                 for up in event.updated_entities:
                     if up.entity_id and up.entity_id.upper() == cid_upper:
                         if up.is_hidden is False:
-                            original_ent = next((x for x in constructable_entities if x.id.upper() == cid_upper), None)
+                            original_ent = next(
+                                (x for x in constructable_entities if x.id.upper() == cid_upper),
+                                None,
+                            )
                             name = original_ent.name if original_ent else up.entity_id
-                            ingredients = original_ent.combination_ingredients if original_ent else []
+                            ingredients = (
+                                original_ent.combination_ingredients if original_ent else []
+                            )
                             messages.append(
                                 f"Rule Violation: Attempted to reveal constructable entity '{name}' ({cid_upper}) without combining its ingredients: {', '.join(ingredients) if ingredients else 'unknown'}."
                             )
@@ -849,10 +914,7 @@ class TurnGuardrailsManager:
 
         for move in event.moved_entities:
             raw_eid = str(move.entity_id or "").strip()
-            ent = (
-                ent_lookup_by_id.get(raw_eid.upper())
-                or ent_lookup_by_name.get(raw_eid.lower())
-            )
+            ent = ent_lookup_by_id.get(raw_eid.upper()) or ent_lookup_by_name.get(raw_eid.lower())
             if not ent or ent.entity_type != "NPC" or not move.to_scene_id:
                 valid_moves.append(move)
                 continue
@@ -869,7 +931,10 @@ class TurnGuardrailsManager:
             is_moveable = ent_state.get("moveable")
             if is_moveable is None:
                 is_moveable = getattr(ent, "moveable", False)
-                if not is_moveable and str(getattr(ent, "movement_type", "") or "").upper() == "MOVABLE":
+                if (
+                    not is_moveable
+                    and str(getattr(ent, "movement_type", "") or "").upper() == "MOVABLE"
+                ):
                     is_moveable = True
 
             if not is_moveable:
@@ -917,8 +982,7 @@ class TurnGuardrailsManager:
             return bool(e.is_hidden)
 
         container_payloads = [
-            {"item_type": e.item_type, "inventory": e.inventory}
-            for e in all_entities
+            {"item_type": e.item_type, "inventory": e.inventory} for e in all_entities
         ]
         contained_item_ids = AdventureLogic.collect_container_item_ids(container_payloads)
 
@@ -938,7 +1002,9 @@ class TurnGuardrailsManager:
         revealed_messages: list[str] = []
 
         # Prepare list of explicitly discovered IDs from the LLM
-        discovered_ids = {str(eid).strip().upper() for eid in (getattr(event, "discovered_entity_ids", []) or [])}
+        discovered_ids = {
+            str(eid).strip().upper() for eid in (getattr(event, "discovered_entity_ids", []) or [])
+        }
 
         for e in hidden_entities:
             eid = e.id
@@ -947,7 +1013,7 @@ class TurnGuardrailsManager:
 
             # Check if already revealed in event.updated_entities
             already_revealed = False
-            for up in (event.updated_entities or []):
+            for up in event.updated_entities or []:
                 if (up.entity_id or "").upper() == eid.upper() and up.is_hidden is False:
                     already_revealed = True
                     break
@@ -955,7 +1021,7 @@ class TurnGuardrailsManager:
                 continue
 
             should_reveal = False
-            
+
             # Condition 1: Explicitly flagged by LLM as discovered
             if eid.upper() in discovered_ids:
                 should_reveal = True
@@ -983,7 +1049,11 @@ class TurnGuardrailsManager:
                     if not up.entity_id:
                         continue
                     parent_ent = next((pe for pe in all_entities if pe.id == up.entity_id), None)
-                    if parent_ent and parent_ent.reveals_item_id and parent_ent.reveals_item_id.strip().upper() == eid.upper():
+                    if (
+                        parent_ent
+                        and parent_ent.reveals_item_id
+                        and parent_ent.reveals_item_id.strip().upper() == eid.upper()
+                    ):
                         should_reveal = True
                         break
                     parent_tag = f"##{up.entity_id.upper()}"
@@ -1000,6 +1070,7 @@ class TurnGuardrailsManager:
                 try:
                     from backend.core.llm_router import GameMasterLLM
                     from pydantic import BaseModel
+
                     llm_settings = self.user.llm_settings or {}
                     small_model_provider = (
                         llm_settings.get("small_model_provider")
@@ -1007,12 +1078,19 @@ class TurnGuardrailsManager:
                         or "openai"
                     )
                     small_model = (
-                        llm_settings.get("small_model_name")
+                        llm_settings.get("small_model")
+                        or llm_settings.get("small_model_name")
                         or llm_settings.get("model")
-                        or "gpt-4o-mini"
+                        or (
+                            "openai/gpt-4o-mini"
+                            if small_model_provider == "openrouter"
+                            else "gpt-4o-mini"
+                        )
                     )
-                    llm = GameMasterLLM(self.user, provider=small_model_provider, model_category="small")
-                    
+                    llm = GameMasterLLM(
+                        self.user, provider=small_model_provider, model_category="small"
+                    )
+
                     system_prompt = (
                         "You are a mechanics checker for an AI Text Adventure RPG.\n"
                         "Determine if the Game Master's narration or the player's message explicitly describes finding, discovering, or revealing a specific hidden entity.\n"
@@ -1021,25 +1099,25 @@ class TurnGuardrailsManager:
                         "1. If the narration describes the player finding the item, or the item being uncovered (even using synonyms or translated words), 'discovered' must be true.\n"
                         "2. If the player searches the exact hiding spot (e.g. they search the couch, and the entity is hidden in the couch cushions), 'discovered' must be true.\n"
                         "3. Otherwise, if the item remains hidden or unmentioned, 'discovered' must be false.\n"
-                        "4. Respond with exactly the JSON structure: {\"discovered\": true} or {\"discovered\": false}."
+                        '4. Respond with exactly the JSON structure: {"discovered": true} or {"discovered": false}.'
                     )
-                    
+
                     user_prompt = (
                         f"Hidden Entity ID: {eid}\n"
                         f"Hidden Entity Name: {e.name}\n"
                         f"Entity Hidden At/Reveal Rule: {e.spatial_position or ''} {e.reveal_rule or ''}\n"
-                        f"Player Message: \"{user_msg}\"\n"
-                        f"Game Master Narration: \"{draft_narration}\""
+                        f'Player Message: "{user_msg}"\n'
+                        f'Game Master Narration: "{draft_narration}"'
                     )
-                    
+
                     class DiscoveryCheckResponse(BaseModel):
                         discovered: bool
-                        
+
                     res = await llm.aexecute_complex_task(
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
                         model=small_model,
-                        response_model=DiscoveryCheckResponse
+                        response_model=DiscoveryCheckResponse,
                     )
                     if isinstance(res, DiscoveryCheckResponse):
                         should_reveal = res.discovered
@@ -1047,7 +1125,10 @@ class TurnGuardrailsManager:
                         should_reveal = bool(res.get("discovered", False))
                 except Exception as ex:
                     import logging
-                    logging.getLogger("backend").error(f"Error checking hidden entity discovery with LLM: {ex}")
+
+                    logging.getLogger("backend").error(
+                        f"Error checking hidden entity discovery with LLM: {ex}"
+                    )
 
             if should_reveal:
                 self._upsert_entity_update(event, eid, is_hidden=False)
@@ -1087,7 +1168,9 @@ class TurnGuardrailsManager:
                 return
         event.moved_entities.append(EntityMovement(entity_id=entity_id, to_scene_id=to_scene_id))
 
-    async def _is_key_item_referenced(self, item_id: str, lowered_msg: str, target_name: str | None = None) -> bool:
+    async def _is_key_item_referenced(
+        self, item_id: str, lowered_msg: str, target_name: str | None = None
+    ) -> bool:
         """Checks if the key item ID or its name/significant name tokens are referenced in the message."""
         if not item_id:
             return False
@@ -1099,8 +1182,11 @@ class TurnGuardrailsManager:
         # 2. Find item name
         item_name = None
         # Look in avatar inventory first
-        for item in (self.avatar.inventory or []):
-            if isinstance(item, dict) and str(item.get("id") or "").strip().upper() == item_id.upper():
+        for item in self.avatar.inventory or []:
+            if (
+                isinstance(item, dict)
+                and str(item.get("id") or "").strip().upper() == item_id.upper()
+            ):
                 item_name = item.get("name")
                 break
 
@@ -1108,8 +1194,7 @@ class TurnGuardrailsManager:
             # Look in database WorldEntities
             res = await self.db.execute(
                 select(WorldEntity).where(
-                    WorldEntity.session_id == self.game_id,
-                    WorldEntity.id == item_id
+                    WorldEntity.session_id == self.game_id, WorldEntity.id == item_id
                 )
             )
             db_ent = res.scalars().first()
@@ -1128,21 +1213,20 @@ class TurnGuardrailsManager:
         try:
             from pydantic import BaseModel
             from backend.core.llm_router import GameMasterLLM
-            
+
             llm_settings = self.user.llm_settings or {}
             small_model_provider = (
-                llm_settings.get("small_model_provider")
-                or llm_settings.get("provider")
-                or "openai"
+                llm_settings.get("small_model_provider") or llm_settings.get("provider") or "openai"
             )
             small_model = (
-                llm_settings.get("small_model_name")
+                llm_settings.get("small_model")
+                or llm_settings.get("small_model_name")
                 or llm_settings.get("model")
-                or "gpt-4o-mini"
+                or ("openai/gpt-4o-mini" if small_model_provider == "openrouter" else "gpt-4o-mini")
             )
-            
+
             llm = GameMasterLLM(self.user, provider=small_model_provider, model_category="small")
-            
+
             system_prompt = (
                 "You are a mechanics checker for an AI Text Adventure RPG.\n"
                 "Determine if the player's message explicitly references, mentions, or utilizes a specific required item in the current turn.\n"
@@ -1150,23 +1234,23 @@ class TurnGuardrailsManager:
                 "Guidelines:\n"
                 "1. If the player mentions the name of the item, the item's ID, or a direct synonym or translation (e.g. 'Schlüssel' for 'key', 'Schraubenzieher' or 'Schraubendreher' for 'screwdriver', 'Karte' for 'card'), 'referenced' must be true.\n"
                 "2. If the player only says a generic action (like 'öffne die kiste' or 'turn the switch') without specifying the item or tool they are using, 'referenced' must be false (even if the item is in their inventory).\n"
-                "3. Respond with exactly the JSON structure: {\"referenced\": true} or {\"referenced\": false}."
+                '3. Respond with exactly the JSON structure: {"referenced": true} or {"referenced": false}.'
             )
-            
+
             user_prompt = (
                 f"Required Item ID: {item_id}\n"
                 f"Required Item Name: {item_name}\n"
-                f"Player Message: \"{lowered_msg}\""
+                f'Player Message: "{lowered_msg}"'
             )
-            
+
             class ReferenceCheckResponse(BaseModel):
                 referenced: bool
-                
+
             res = await llm.aexecute_complex_task(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=small_model,
-                response_model=ReferenceCheckResponse
+                response_model=ReferenceCheckResponse,
             )
             if isinstance(res, ReferenceCheckResponse):
                 return res.referenced
@@ -1183,7 +1267,7 @@ class TurnGuardrailsManager:
             select(WorldEntity).where(
                 WorldEntity.session_id == self.game_id,
                 WorldEntity.entity_type == "OBJECT",
-                WorldEntity.item_type == "SWITCH"
+                WorldEntity.item_type == "SWITCH",
             )
         )
         switches = res.scalars().all()
@@ -1201,7 +1285,9 @@ class TurnGuardrailsManager:
                         flags.add(str(eff.get("key")).strip())
         return flags
 
-    async def _enforce_container_unlock_guardrails(self, event: GameEvent, user_msg: str) -> list[str]:
+    async def _enforce_container_unlock_guardrails(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
         container_res = await self.db.execute(
             select(WorldEntity).where(
                 WorldEntity.session_id == self.game_id,
@@ -1212,7 +1298,7 @@ class TurnGuardrailsManager:
         db_containers = list(container_res.scalars().all())
 
         inventory_containers = []
-        for item in (self.avatar.inventory or []):
+        for item in self.avatar.inventory or []:
             if isinstance(item, dict) and str(item.get("item_type") or "").upper() == "CONTAINER":
                 inventory_containers.append(item)
 
@@ -1259,12 +1345,16 @@ class TurnGuardrailsManager:
                 if is_switch_flag:
                     if not flag_active:
                         unlock_allowed = False
-                        reason = f"{ent.name} stays shut. It seems to require some mechanism to trigger."
+                        reason = (
+                            f"{ent.name} stays shut. It seems to require some mechanism to trigger."
+                        )
                 else:
                     if not is_being_unlocked:
                         unlock_allowed = False
                         hinted_actor = ""
-                        distract_match = re.search(r"\bdistract\w*\s+([A-Za-z0-9_\- ]{2,60})", required_rule, re.IGNORECASE)
+                        distract_match = re.search(
+                            r"\bdistract\w*\s+([A-Za-z0-9_\- ]{2,60})", required_rule, re.IGNORECASE
+                        )
                         if distract_match:
                             hinted_actor = distract_match.group(1).strip(" .,:;!?")
 
@@ -1310,7 +1400,11 @@ class TurnGuardrailsManager:
                 passed, err_detail = SwitchService.evaluate_gate_expression(required_expr, ctx)
                 if not passed:
                     unlock_allowed = False
-                    reason = str(metadata_json.get("on_unlock_failure_text") or err_detail or f"{ent.name} stays locked.")
+                    reason = str(
+                        metadata_json.get("on_unlock_failure_text")
+                        or err_detail
+                        or f"{ent.name} stays locked."
+                    )
 
             if not is_being_unlocked:
                 unlock_allowed = False
@@ -1324,7 +1418,7 @@ class TurnGuardrailsManager:
                     reason = metadata_json["on_unlock_failure_text"]
 
                 sanitized_updates: list[WorldEntityUpdate] = []
-                for update in (event.updated_entities or []):
+                for update in event.updated_entities or []:
                     if update.entity_id == ent.id and update.locked is False:
                         continue
                     sanitized_updates.append(update)
@@ -1339,7 +1433,6 @@ class TurnGuardrailsManager:
                 event.spawned_items = []
 
                 reasons.append(reason or f"{ent.name} stays locked.")
-
 
         for item in inventory_containers:
             inv_id = str(item.get("id") or "").strip()
@@ -1387,7 +1480,9 @@ class TurnGuardrailsManager:
                     if not is_being_unlocked:
                         unlock_allowed = False
                         hinted_actor = ""
-                        distract_match = re.search(r"\bdistract\w*\s+([A-Za-z0-9_\- ]{2,60})", required_rule, re.IGNORECASE)
+                        distract_match = re.search(
+                            r"\bdistract\w*\s+([A-Za-z0-9_\- ]{2,60})", required_rule, re.IGNORECASE
+                        )
                         if distract_match:
                             hinted_actor = distract_match.group(1).strip(" .,:;!?")
 
@@ -1418,7 +1513,9 @@ class TurnGuardrailsManager:
                 if required_item_id.upper() not in inventory_ids:
                     unlock_allowed = False
                     reason = f"You need a specific item to unlock {item.get('name', 'Container')}."
-                elif not await self._is_key_item_referenced(required_item_id, lowered, item.get("name")):
+                elif not await self._is_key_item_referenced(
+                    required_item_id, lowered, item.get("name")
+                ):
                     unlock_allowed = False
                     reason = f"You must specify which item you are using to unlock {item.get('name', 'Container')}."
                 elif not is_being_unlocked:
@@ -1430,7 +1527,7 @@ class TurnGuardrailsManager:
 
             if not unlock_allowed:
                 sanitized_updates: list[WorldEntityUpdate] = []
-                for update in (event.updated_entities or []):
+                for update in event.updated_entities or []:
                     if update.entity_id == inv_id and update.locked is False:
                         continue
                     sanitized_updates.append(update)
@@ -1460,9 +1557,9 @@ class TurnGuardrailsManager:
                     WorldExit.from_scene_id == self.state.current_scene_id,
                     and_(
                         WorldExit.to_scene_id == self.state.current_scene_id,
-                        WorldExit.exit_type == "bidirectional"
-                    )
-                )
+                        WorldExit.exit_type == "bidirectional",
+                    ),
+                ),
             )
         )
         db_scene_exits = list(exit_res.scalars().all())
@@ -1471,20 +1568,22 @@ class TurnGuardrailsManager:
             if e.from_scene_id == self.state.current_scene_id:
                 scene_exits.append(e)
             else:
-                scene_exits.append(WorldExit(
-                    id=e.id,
-                    template_id=e.template_id,
-                    session_id=e.session_id,
-                    from_scene_id=e.to_scene_id,
-                    to_scene_id=e.from_scene_id,
-                    label=e.label,
-                    exit_type=e.exit_type,
-                    is_locked=e.is_locked,
-                    lock_description=e.lock_description,
-                    code_to_unlock=e.code_to_unlock,
-                    item_to_unlock=e.item_to_unlock,
-                    rule_to_unlock=e.rule_to_unlock
-                ))
+                scene_exits.append(
+                    WorldExit(
+                        id=e.id,
+                        template_id=e.template_id,
+                        session_id=e.session_id,
+                        from_scene_id=e.to_scene_id,
+                        to_scene_id=e.from_scene_id,
+                        label=e.label,
+                        exit_type=e.exit_type,
+                        is_locked=e.is_locked,
+                        lock_description=e.lock_description,
+                        code_to_unlock=e.code_to_unlock,
+                        item_to_unlock=e.item_to_unlock,
+                        rule_to_unlock=e.rule_to_unlock,
+                    )
+                )
 
         reasons = []
         for ex in scene_exits:
@@ -1493,8 +1592,12 @@ class TurnGuardrailsManager:
 
             # Is the GM trying to unlock it, or is the player trying to traverse it?
             is_being_unlocked = False
-            for up in (event.updated_exits or []):
-                if up.from_scene_id == ex.from_scene_id and up.to_scene_id == ex.to_scene_id and not up.is_locked:
+            for up in event.updated_exits or []:
+                if (
+                    up.from_scene_id == ex.from_scene_id
+                    and up.to_scene_id == ex.to_scene_id
+                    and not up.is_locked
+                ):
                     is_being_unlocked = True
                     break
 
@@ -1519,7 +1622,9 @@ class TurnGuardrailsManager:
             if unlock_allowed and required_code:
                 if required_code.lower() not in lowered:
                     unlock_allowed = False
-                    reason = f"{ex.label} answers with a cold red blink. That code won't open the way."
+                    reason = (
+                        f"{ex.label} answers with a cold red blink. That code won't open the way."
+                    )
 
             if unlock_allowed and required_item_id:
                 inventory_ids = {
@@ -1541,7 +1646,11 @@ class TurnGuardrailsManager:
                 passed, err_detail = SwitchService.evaluate_gate_expression(required_expr, ctx)
                 if not passed:
                     unlock_allowed = False
-                    reason = str(getattr(ex, "on_unlock_failure_text", None) or err_detail or f"{ex.label} is locked.")
+                    reason = str(
+                        getattr(ex, "on_unlock_failure_text", None)
+                        or err_detail
+                        or f"{ex.label} is locked."
+                    )
 
             if not unlock_allowed:
                 if getattr(ex, "on_unlock_failure_script", None):
@@ -1553,11 +1662,15 @@ class TurnGuardrailsManager:
 
                 # Force stays locked in event.updated_exits
                 sanitized_updates: list[ExitUpdate] = []
-                for up in (event.updated_exits or []):
+                for up in event.updated_exits or []:
                     if up.from_scene_id == ex.from_scene_id and up.to_scene_id == ex.to_scene_id:
                         continue
                     sanitized_updates.append(up)
-                sanitized_updates.append(ExitUpdate(from_scene_id=ex.from_scene_id, to_scene_id=ex.to_scene_id, is_locked=True))
+                sanitized_updates.append(
+                    ExitUpdate(
+                        from_scene_id=ex.from_scene_id, to_scene_id=ex.to_scene_id, is_locked=True
+                    )
+                )
                 event.updated_exits = sanitized_updates
 
                 # Block movement
@@ -1574,7 +1687,6 @@ class TurnGuardrailsManager:
                 event.removed_inventory_item_ids = []
                 event.spawned_items = []
 
-
                 reasons.append(reason or f"{ex.label} stays locked.")
             else:
                 # Automatically add unlock status to event.updated_exits so the DB updates
@@ -1587,15 +1699,19 @@ class TurnGuardrailsManager:
                         already_present = True
                         break
                 if not already_present:
-                    event.updated_exits.append(ExitUpdate(
-                        from_scene_id=ex.from_scene_id,
-                        to_scene_id=ex.to_scene_id,
-                        is_locked=False
-                    ))
+                    event.updated_exits.append(
+                        ExitUpdate(
+                            from_scene_id=ex.from_scene_id,
+                            to_scene_id=ex.to_scene_id,
+                            is_locked=False,
+                        )
+                    )
 
         return reasons
 
-    async def _enforce_switch_transition_guardrails(self, event: GameEvent, user_msg: str) -> list[str]:
+    async def _enforce_switch_transition_guardrails(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
         if not event.updated_entities:
             return []
 
@@ -1621,7 +1737,9 @@ class TurnGuardrailsManager:
             entry = dict(session_states.get(switch_entity.id) or {})
             metadata_json = switch_entity.metadata_json or {}
             config = metadata_json.get("switch") or {}
-            configured_current = config.get("initial_state") or metadata_json.get("switch_initial_state") or ""
+            configured_current = (
+                config.get("initial_state") or metadata_json.get("switch_initial_state") or ""
+            )
             current_state = str(entry.get("switch_state") or configured_current).strip().upper()
             target_state = str(update.switch_state).strip().upper()
 
@@ -1651,10 +1769,17 @@ class TurnGuardrailsManager:
 
                 if transition_allowed:
                     gates = trans.get("gates") if isinstance(trans.get("gates"), dict) else {}
-                    required_item = str(gates.get("item") or trans.get("required_item") or "").strip().upper()
-                    if required_item and not await self._is_key_item_referenced(required_item, lowered, switch_entity.name):
+                    required_item = (
+                        str(gates.get("item") or trans.get("required_item") or "").strip().upper()
+                    )
+                    if required_item and not await self._is_key_item_referenced(
+                        required_item, lowered, switch_entity.name
+                    ):
                         transition_allowed = False
-                        reason = str(trans.get("fail_message") or "").strip() or f"You must specify which item you are using on {switch_entity.name}."
+                        reason = (
+                            str(trans.get("fail_message") or "").strip()
+                            or f"You must specify which item you are using on {switch_entity.name}."
+                        )
 
             if not transition_allowed:
                 update.switch_state = current_state
@@ -1674,7 +1799,9 @@ class TurnGuardrailsManager:
                     context=script_context,
                     switch_id=switch_entity.id,
                 )
-                await self.manager._apply_script_changeset(script_context.changeset, game_event=event)
+                await self.manager._apply_script_changeset(
+                    script_context.changeset, game_event=event
+                )
             else:
                 SwitchService.execute_transition_triggers(
                     runner=runner,
@@ -1684,8 +1811,13 @@ class TurnGuardrailsManager:
                     context=script_context,
                     switch_id=switch_entity.id,
                 )
-                await self.manager._apply_script_changeset(script_context.changeset, game_event=event)
-                await self.manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
+                await self.manager._apply_script_changeset(
+                    script_context.changeset, game_event=event
+                )
+                await self.manager._apply_switch_outcomes(
+                    config.get("outcomes") if isinstance(config.get("outcomes"), list) else [],
+                    target_state,
+                )
 
         return reasons
 
@@ -1723,7 +1855,7 @@ class TurnGuardrailsManager:
             # Check if present in the current scene
             if entity.current_scene_id == current_scene_id:
                 mark_accessible(entity.id, entity.name)
-            
+
             # Check if NPC in current scene has items in inventory
             if entity.entity_type == "NPC" and entity.current_scene_id == current_scene_id:
                 npc_inv = entity.inventory or []
@@ -1740,7 +1872,7 @@ class TurnGuardrailsManager:
             for item in self.avatar.inventory:
                 if isinstance(item, dict):
                     mark_accessible(item.get("id"), item.get("name"))
-        
+
         if self.avatar.equipment:
             for slot, item in self.avatar.equipment.items():
                 if isinstance(item, dict):
@@ -1767,26 +1899,26 @@ class TurnGuardrailsManager:
         def has_inaccessible_entity_dependency(text: str | None) -> bool:
             if not text:
                 return False
-            
+
             text_lower = text.lower()
             for entity in all_entities:
                 ent_id = entity.id
                 ent_name = entity.name
                 if not ent_id and not ent_name:
                     continue
-                
+
                 # Check if this specific entity is mentioned in the requirement/goal text
                 # We use word boundaries to prevent partial matches (e.g. "key" in "keyboard")
                 mentioned = False
                 if ent_id:
-                    pattern_id = r'\b' + re.escape(ent_id.lower()) + r'\b'
+                    pattern_id = r"\b" + re.escape(ent_id.lower()) + r"\b"
                     if re.search(pattern_id, text_lower):
                         mentioned = True
                 if not mentioned and ent_name:
-                    pattern_name = r'\b' + re.escape(ent_name.lower()) + r'\b'
+                    pattern_name = r"\b" + re.escape(ent_name.lower()) + r"\b"
                     if re.search(pattern_name, text_lower):
                         mentioned = True
-                
+
                 if mentioned:
                     # Entity is mentioned. Is it accessible?
                     is_accessible = False
@@ -1794,11 +1926,13 @@ class TurnGuardrailsManager:
                         is_accessible = True
                     elif ent_name and ent_name.lower().strip() in accessible_entity_names:
                         is_accessible = True
-                    
+
                     if not is_accessible:
                         logger.info(
                             "[Quest/Award Guardrail] Blocked because text '%s' mentions inaccessible entity '%s' (%s)",
-                            text, ent_name or "", ent_id or ""
+                            text,
+                            ent_name or "",
+                            ent_id or "",
                         )
                         return True
             return False
@@ -1811,11 +1945,16 @@ class TurnGuardrailsManager:
                 if not quest:
                     validated_quest_ids.append(qid)
                     continue
-                
+
                 goal = quest.get("goal")
                 desc = quest.get("description")
-                if has_inaccessible_entity_dependency(goal) or has_inaccessible_entity_dependency(desc):
-                    logger.info("[Quest Guardrail] Blocked completion of quest '%s' due to inaccessible entity dependency.", qid)
+                if has_inaccessible_entity_dependency(goal) or has_inaccessible_entity_dependency(
+                    desc
+                ):
+                    logger.info(
+                        "[Quest Guardrail] Blocked completion of quest '%s' due to inaccessible entity dependency.",
+                        qid,
+                    )
                     continue
                 validated_quest_ids.append(qid)
             event.completed_quest_ids = validated_quest_ids
@@ -1824,36 +1963,47 @@ class TurnGuardrailsManager:
         if event.earned_award_keys:
             validated_award_keys = []
             for key in event.earned_award_keys:
-                award = next((aw for aw in (self.adventure.awards or []) if aw.get("key") == key), None)
+                award = next(
+                    (aw for aw in (self.adventure.awards or []) if aw.get("key") == key), None
+                )
                 if not award:
                     validated_award_keys.append(key)
                     continue
-                
+
                 req = award.get("requirement")
                 desc = award.get("description")
-                if has_inaccessible_entity_dependency(req) or has_inaccessible_entity_dependency(desc):
-                    logger.info("[Award Guardrail] Blocked award '%s' due to inaccessible entity dependency.", key)
+                if has_inaccessible_entity_dependency(req) or has_inaccessible_entity_dependency(
+                    desc
+                ):
+                    logger.info(
+                        "[Award Guardrail] Blocked award '%s' due to inaccessible entity dependency.",
+                        key,
+                    )
                     continue
                 validated_award_keys.append(key)
             event.earned_award_keys = validated_award_keys
 
-
     async def _handle_read_action_unlock(self, read_target: str) -> None:
         """Finds the read item and checks if it unlocks any special actions."""
         target_lower = read_target.strip().lower()
-        
+
         # 1. Search player inventory
-        for item in (self.avatar.inventory or []):
+        for item in self.avatar.inventory or []:
             if isinstance(item, dict):
-                if item.get("name", "").lower() == target_lower or item.get("id", "").lower() == target_lower:
+                if (
+                    item.get("name", "").lower() == target_lower
+                    or item.get("id", "").lower() == target_lower
+                ):
                     if str(item.get("item_type") or "").upper() == "READABLE":
                         if item.get("on_read_script"):
-                            await self.manager._execute_inline_script(item["on_read_script"], "on_read", item.get("id"))
+                            await self.manager._execute_inline_script(
+                                item["on_read_script"], "on_read", item.get("id")
+                            )
                         if item.get("on_read_text"):
                             await self._save_chat_message("system", item["on_read_text"])
                         await self._check_special_action_unlocks("READ_ITEM", item.get("id"))
                         return
-                        
+
         # 2. Search scene objects
         ent_res = await self.db.execute(
             select(WorldEntity).where(
@@ -1861,49 +2011,52 @@ class TurnGuardrailsManager:
                 WorldEntity.current_scene_id == self.state.current_scene_id,
                 WorldEntity.entity_type == "OBJECT",
                 WorldEntity.is_hidden.is_(False),
-                WorldEntity.item_type == "READABLE"
+                WorldEntity.item_type == "READABLE",
             )
         )
         candidates = ent_res.scalars().all()
         for candidate in candidates:
-            if candidate.id and (candidate.id.lower() == target_lower or (candidate.name and candidate.name.lower() == target_lower)):
+            if candidate.id and (
+                candidate.id.lower() == target_lower
+                or (candidate.name and candidate.name.lower() == target_lower)
+            ):
                 meta = dict(candidate.metadata_json or {})
                 if meta.get("on_read_script"):
-                    await self.manager._execute_inline_script(meta["on_read_script"], "on_read", candidate.id)
+                    await self.manager._execute_inline_script(
+                        meta["on_read_script"], "on_read", candidate.id
+                    )
                 if meta.get("on_read_text"):
                     await self._save_chat_message("system", meta["on_read_text"])
                 await self._check_special_action_unlocks("READ_ITEM", candidate.id)
                 return
 
-
     async def _check_special_action_unlocks(self, condition_type: str, target_id: str) -> None:
         """Checks if a readable item ID or found item ID unlocks any special actions for the protagonist."""
         if not target_id:
             return
-            
+
         player_specials = self.avatar.stats.get("special_actions") or []
         unlocked_actions = list(self.avatar.stats.get("unlocked_actions") or [])
-        
+
         updated_unlocked = False
         for action in player_specials:
             action_id = action.get("id")
             if action_id in unlocked_actions:
                 continue
-                
+
             is_locked = action.get("is_locked", False)
             cond_type = action.get("unlock_condition_type")
             cond_target = action.get("unlock_condition_target")
-            
+
             if is_locked and cond_type == condition_type and cond_target == target_id:
                 unlocked_actions.append(action_id)
                 updated_unlocked = True
                 msg = f"✨ Spezialaktion freigeschaltet: {action.get('name')}! ✨"
                 await self._save_chat_message("system", msg)
-                
+
         if updated_unlocked:
             stats = dict(self.avatar.stats or {})
             stats["unlocked_actions"] = unlocked_actions
             self.avatar.stats = stats
             flag_modified(self.avatar, "stats")
             await self.db.commit()
-

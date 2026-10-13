@@ -3320,7 +3320,14 @@ async def validate_editor_script(
     errors = SafeAstInterpreter.check_syntax(payload.code)
     warnings: list[str] = []
 
-    valid_triggers = {"on_turn_start", "on_enter_scene", "on_interact", "on_turn_end"}
+    valid_triggers = {
+        "on_turn_start",
+        "on_enter_scene",
+        "on_interact",
+        "on_turn_end",
+        "on_logic_pass_done",
+        "on_narration_done",
+    }
     if payload.trigger and payload.trigger not in valid_triggers:
         errors.append(
             f"Invalid trigger '{payload.trigger}'. Must be one of: {', '.join(sorted(valid_triggers))}."

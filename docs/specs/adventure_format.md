@@ -202,7 +202,7 @@ Custom sandboxed event scripts reacting to game hooks. For full syntax, API refe
 | :--- | :--- | :--- |
 | `id` | `string` | Unique uppercase slug (e.g., `"SCRIPT_LEVER_PUZZLE"`). |
 | `name` | `string` | Human-readable title for the script. |
-| `trigger` | `string` | Event hook: `"on_turn_start"`, `"on_enter_scene"`, `"on_interact"`, or `"on_turn_end"`. |
+| `trigger` | `string` | Event hook: `"on_turn_start"`, `"on_enter_scene"`, `"on_interact"`, `"on_logic_pass_done"`, `"on_narration_done"`, or `"on_turn_end"`. |
 | `target_id` | `string \| null` | Optional target scene ID or entity ID that filters when this script fires. |
 | `code` | `string` | Safe Python script utilizing the sandboxed `tw` GameContext API. |
 | `description` | `string \| null` | Optional narrative/technical description of the script logic. |

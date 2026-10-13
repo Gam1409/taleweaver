@@ -49,7 +49,9 @@ router = APIRouter(tags=["Gameplay"])
 logger = logging.getLogger(__name__)
 
 TERMINAL_EPILOGUE_STATE_KEY = "__terminal_epilogue__"
-INVALID_CONTAINER_CODE_MESSAGE = "The lock gives a mocking click. That code won't open this container."
+INVALID_CONTAINER_CODE_MESSAGE = (
+    "The lock gives a mocking click. That code won't open this container."
+)
 
 
 class ContainerUnlockCodeRequest(BaseModel):
@@ -72,6 +74,7 @@ def _terminal_flags_from_state(state: SessionState) -> tuple[bool, bool]:
     input_locked = status == "game_over" and game_over_sent
     return pending_terminal_epilogue, input_locked
 
+
 async def _build_session_debug_payload(
     db: AsyncSession,
     state: SessionState,
@@ -82,12 +85,14 @@ async def _build_session_debug_payload(
     """Assembles unified debug data including all NPCs with stats/locations, full map with NPC indicators, and complete items matrix."""
     # 1. Scenes
     scenes_res = await db.execute(
-        select(WorldScene).where(
+        select(WorldScene)
+        .where(
             or_(
                 WorldScene.session_id == state.session_id,
                 and_(WorldScene.template_id == state.template_id, WorldScene.session_id.is_(None)),
             )
-        ).order_by(WorldScene.id)
+        )
+        .order_by(WorldScene.id)
     )
     scenes_all = scenes_res.scalars().all()
     scene_lookup: dict[str, WorldScene] = {}
@@ -117,24 +122,30 @@ async def _build_session_debug_payload(
     exits_data = []
     for ex in exit_lookup.values():
         over = exit_overrides.get(ex.id, {})
-        exits_data.append({
-            "id": ex.id,
-            "from_scene_id": ex.from_scene_id,
-            "to_scene_id": ex.to_scene_id,
-            "label": ex.label or "Passage",
-            "is_locked": bool(over.get("is_locked", ex.is_locked)),
-            "is_secret": bool(over.get("is_secret", getattr(ex, "is_secret", False))),
-            "lock_description": ex.lock_description,
-        })
+        exits_data.append(
+            {
+                "id": ex.id,
+                "from_scene_id": ex.from_scene_id,
+                "to_scene_id": ex.to_scene_id,
+                "label": ex.label or "Passage",
+                "is_locked": bool(over.get("is_locked", ex.is_locked)),
+                "is_secret": bool(over.get("is_secret", getattr(ex, "is_secret", False))),
+                "lock_description": ex.lock_description,
+            }
+        )
 
     # 3. Entities
     ent_res = await db.execute(
-        select(WorldEntity).where(
+        select(WorldEntity)
+        .where(
             or_(
                 WorldEntity.session_id == state.session_id,
-                and_(WorldEntity.template_id == state.template_id, WorldEntity.session_id.is_(None)),
+                and_(
+                    WorldEntity.template_id == state.template_id, WorldEntity.session_id.is_(None)
+                ),
             )
-        ).order_by(WorldEntity.id)
+        )
+        .order_by(WorldEntity.id)
     )
     entities_all = ent_res.scalars().all()
     entity_lookup: dict[str, WorldEntity] = {}
@@ -154,32 +165,67 @@ async def _build_session_debug_payload(
         if ent.entity_type != "NPC":
             continue
         over = entity_overrides.get(ent.id, {})
-        loc_id = over.get("current_scene_id") or getattr(ent, "current_scene_id", None) or getattr(ent, "start_scene_id", None) or "UNKNOWN"
+        loc_id = (
+            over.get("current_scene_id")
+            or getattr(ent, "current_scene_id", None)
+            or getattr(ent, "start_scene_id", None)
+            or "UNKNOWN"
+        )
         loc_name = scene_names.get(loc_id, loc_id)
-        hp = over.get("hp", getattr(ent, "hp", 100) if getattr(ent, "hp", None) is not None else 100)
-        max_hp = over.get("max_hp", getattr(ent, "max_hp", 100) if getattr(ent, "max_hp", None) is not None else 100)
-        stamina = over.get("stamina", getattr(ent, "stamina", 50) if getattr(ent, "stamina", None) is not None else 50)
-        max_stamina = over.get("max_stamina", getattr(ent, "max_stamina", 50) if getattr(ent, "max_stamina", None) is not None else 50)
-        mana = over.get("mana", getattr(ent, "mana", 50) if getattr(ent, "mana", None) is not None else 50)
-        max_mana = over.get("max_mana", getattr(ent, "max_mana", 50) if getattr(ent, "max_mana", None) is not None else 50)
+        hp = over.get(
+            "hp", getattr(ent, "hp", 100) if getattr(ent, "hp", None) is not None else 100
+        )
+        max_hp = over.get(
+            "max_hp",
+            getattr(ent, "max_hp", 100) if getattr(ent, "max_hp", None) is not None else 100,
+        )
+        stamina = over.get(
+            "stamina",
+            getattr(ent, "stamina", 50) if getattr(ent, "stamina", None) is not None else 50,
+        )
+        max_stamina = over.get(
+            "max_stamina",
+            getattr(ent, "max_stamina", 50)
+            if getattr(ent, "max_stamina", None) is not None
+            else 50,
+        )
+        mana = over.get(
+            "mana", getattr(ent, "mana", 50) if getattr(ent, "mana", None) is not None else 50
+        )
+        max_mana = over.get(
+            "max_mana",
+            getattr(ent, "max_mana", 50) if getattr(ent, "max_mana", None) is not None else 50,
+        )
         is_defeated = bool(over.get("is_defeated", False))
         is_alive = not is_defeated and hp > 0
         is_hidden = bool(over.get("is_hidden", getattr(ent, "is_hidden", False)))
         is_hostile = bool(over.get("is_hostile", getattr(ent, "is_hostile", False)))
         inv = over.get("inventory", getattr(ent, "inventory", None) or [])
         notes = over.get("notes") or getattr(ent, "notes", None) or ""
-        is_moveable = bool(over.get("moveable")) if over.get("moveable") is not None else (bool(getattr(ent, "moveable", False)) if getattr(ent, "moveable", None) is not None else (str(getattr(ent, "movement_type", "") or "").upper() == "MOVABLE"))
+        is_moveable = (
+            bool(over.get("moveable"))
+            if over.get("moveable") is not None
+            else (
+                bool(getattr(ent, "moveable", False))
+                if getattr(ent, "moveable", None) is not None
+                else (str(getattr(ent, "movement_type", "") or "").upper() == "MOVABLE")
+            )
+        )
         allowed_scenes = over.get("allowed_scenes") or getattr(ent, "allowed_scenes", None) or []
 
         npc_info = {
             "id": ent.id,
             "name": ent.name,
             "description": getattr(ent, "description", "") or "",
-            "role": getattr(ent, "role", None) or getattr(ent, "npc_type", None) or (getattr(ent, "metadata_json", None) or {}).get("role") or "NPC",
+            "role": getattr(ent, "role", None)
+            or getattr(ent, "npc_type", None)
+            or (getattr(ent, "metadata_json", None) or {}).get("role")
+            or "NPC",
             "image_url": getattr(ent, "image_url", None),
             "current_scene_id": loc_id,
             "current_scene_name": loc_name,
-            "start_scene_id": getattr(ent, "start_scene_id", None) or getattr(ent, "current_scene_id", "UNKNOWN"),
+            "start_scene_id": getattr(ent, "start_scene_id", None)
+            or getattr(ent, "current_scene_id", "UNKNOWN"),
             "hp": hp,
             "max_hp": max_hp,
             "stamina": stamina,
@@ -208,18 +254,20 @@ async def _build_session_debug_payload(
 
         if loc_id not in scene_npcs:
             scene_npcs[loc_id] = []
-        scene_npcs[loc_id].append({
-            "id": ent.id,
-            "name": ent.name,
-            "image_url": ent.image_url,
-            "hp": hp,
-            "max_hp": max_hp,
-            "is_alive": is_alive,
-            "is_hidden": is_hidden,
-            "notes": notes,
-            "moveable": is_moveable,
-            "allowed_scenes": allowed_scenes,
-        })
+        scene_npcs[loc_id].append(
+            {
+                "id": ent.id,
+                "name": ent.name,
+                "image_url": ent.image_url,
+                "hp": hp,
+                "max_hp": max_hp,
+                "is_alive": is_alive,
+                "is_hidden": is_hidden,
+                "notes": notes,
+                "moveable": is_moveable,
+                "allowed_scenes": allowed_scenes,
+            }
+        )
 
     # 5. Items Matrix (Avatar, Scenes, Containers, NPCs)
     items_data = []
@@ -228,99 +276,116 @@ async def _build_session_debug_payload(
     if avatar and avatar.inventory:
         for itm in avatar.inventory:
             if isinstance(itm, dict):
-                items_data.append({
-                    "id": itm.get("id") or itm.get("key") or itm.get("name"),
-                    "name": itm.get("name") or "Unnamed Item",
-                    "description": itm.get("description") or "",
-                    "item_type": itm.get("item_type") or "PICKABLE",
-                    "slot": itm.get("slot"),
-                    "image_url": itm.get("image_url"),
-                    "location_type": "avatar",
-                    "location_id": avatar.id,
-                    "location_name": f"Hero ({avatar.name})",
-                    "is_hidden": False,
-                    "is_portable": True,
-                    "is_locked": False,
-                    "switch_state": None,
-                    "is_open": False,
-                    "metadata": itm.get("metadata_json") or {},
-                })
+                items_data.append(
+                    {
+                        "id": itm.get("id") or itm.get("key") or itm.get("name"),
+                        "name": itm.get("name") or "Unnamed Item",
+                        "description": itm.get("description") or "",
+                        "item_type": itm.get("item_type") or "PICKABLE",
+                        "slot": itm.get("slot"),
+                        "image_url": itm.get("image_url"),
+                        "location_type": "avatar",
+                        "location_id": avatar.id,
+                        "location_name": f"Hero ({avatar.name})",
+                        "is_hidden": False,
+                        "is_portable": True,
+                        "is_locked": False,
+                        "switch_state": None,
+                        "is_open": False,
+                        "metadata": itm.get("metadata_json") or {},
+                    }
+                )
 
     # B) Scene entities (non-NPC)
     for ent in entity_lookup.values():
         if ent.entity_type == "NPC":
             continue
         over = entity_overrides.get(ent.id, {})
-        loc_id = over.get("current_scene_id") or getattr(ent, "current_scene_id", None) or getattr(ent, "start_scene_id", None) or "UNKNOWN"
+        loc_id = (
+            over.get("current_scene_id")
+            or getattr(ent, "current_scene_id", None)
+            or getattr(ent, "start_scene_id", None)
+            or "UNKNOWN"
+        )
         loc_name = scene_names.get(loc_id, loc_id)
         is_hidden = bool(over.get("is_hidden", getattr(ent, "is_hidden", False)))
         is_locked = bool(over.get("is_locked", getattr(ent, "is_locked", False)))
         switch_state = over.get("switch_state", getattr(ent, "switch_state", None))
         is_open = bool(over.get("is_open", getattr(ent, "is_open", False)))
-        is_portable = getattr(ent, "is_portable", True) if getattr(ent, "is_portable", None) is not None else True
+        is_portable = (
+            getattr(ent, "is_portable", True)
+            if getattr(ent, "is_portable", None) is not None
+            else True
+        )
 
-        items_data.append({
-            "id": ent.id,
-            "name": ent.name,
-            "description": ent.description or "",
-            "item_type": ent.item_type or ent.entity_type or "OBJECT",
-            "slot": getattr(ent, "slot", None),
-            "image_url": ent.image_url,
-            "location_type": "scene",
-            "location_id": loc_id,
-            "location_name": loc_name,
-            "is_hidden": is_hidden,
-            "is_portable": is_portable,
-            "is_locked": is_locked,
-            "switch_state": switch_state,
-            "is_open": is_open,
-            "metadata": ent.metadata_json or {},
-        })
+        items_data.append(
+            {
+                "id": ent.id,
+                "name": ent.name,
+                "description": ent.description or "",
+                "item_type": ent.item_type or ent.entity_type or "OBJECT",
+                "slot": getattr(ent, "slot", None),
+                "image_url": ent.image_url,
+                "location_type": "scene",
+                "location_id": loc_id,
+                "location_name": loc_name,
+                "is_hidden": is_hidden,
+                "is_portable": is_portable,
+                "is_locked": is_locked,
+                "switch_state": switch_state,
+                "is_open": is_open,
+                "metadata": ent.metadata_json or {},
+            }
+        )
 
         # Items inside containers
         ent_inv = over.get("inventory", getattr(ent, "inventory", None) or [])
         if ent_inv and isinstance(ent_inv, list):
             for c_itm in ent_inv:
                 if isinstance(c_itm, dict):
-                    items_data.append({
-                        "id": c_itm.get("id") or c_itm.get("name"),
-                        "name": c_itm.get("name") or "Unnamed Item",
-                        "description": c_itm.get("description") or "",
-                        "item_type": c_itm.get("item_type") or "PICKABLE",
-                        "slot": c_itm.get("slot"),
-                        "image_url": c_itm.get("image_url"),
-                        "location_type": "container",
-                        "location_id": ent.id,
-                        "location_name": f"{ent.name} (in {loc_name})",
-                        "is_hidden": is_hidden,
-                        "is_portable": True,
-                        "is_locked": False,
-                        "switch_state": None,
-                        "is_open": False,
-                        "metadata": c_itm.get("metadata_json") or {},
-                    })
+                    items_data.append(
+                        {
+                            "id": c_itm.get("id") or c_itm.get("name"),
+                            "name": c_itm.get("name") or "Unnamed Item",
+                            "description": c_itm.get("description") or "",
+                            "item_type": c_itm.get("item_type") or "PICKABLE",
+                            "slot": c_itm.get("slot"),
+                            "image_url": c_itm.get("image_url"),
+                            "location_type": "container",
+                            "location_id": ent.id,
+                            "location_name": f"{ent.name} (in {loc_name})",
+                            "is_hidden": is_hidden,
+                            "is_portable": True,
+                            "is_locked": False,
+                            "switch_state": None,
+                            "is_open": False,
+                            "metadata": c_itm.get("metadata_json") or {},
+                        }
+                    )
 
     # C) NPC inventory items
     for npc in npcs_data:
         for n_itm in npc["inventory"]:
             if isinstance(n_itm, dict):
-                items_data.append({
-                    "id": n_itm.get("id") or n_itm.get("name"),
-                    "name": n_itm.get("name") or "Unnamed Item",
-                    "description": n_itm.get("description") or "",
-                    "item_type": n_itm.get("item_type") or "PICKABLE",
-                    "slot": n_itm.get("slot"),
-                    "image_url": n_itm.get("image_url"),
-                    "location_type": "npc",
-                    "location_id": npc["id"],
-                    "location_name": f"{npc['name']} (in {npc['current_scene_name']})",
-                    "is_hidden": npc["is_hidden"],
-                    "is_portable": True,
-                    "is_locked": False,
-                    "switch_state": None,
-                    "is_open": False,
-                    "metadata": n_itm.get("metadata_json") or {},
-                })
+                items_data.append(
+                    {
+                        "id": n_itm.get("id") or n_itm.get("name"),
+                        "name": n_itm.get("name") or "Unnamed Item",
+                        "description": n_itm.get("description") or "",
+                        "item_type": n_itm.get("item_type") or "PICKABLE",
+                        "slot": n_itm.get("slot"),
+                        "image_url": n_itm.get("image_url"),
+                        "location_type": "npc",
+                        "location_id": npc["id"],
+                        "location_name": f"{npc['name']} (in {npc['current_scene_name']})",
+                        "is_hidden": npc["is_hidden"],
+                        "is_portable": True,
+                        "is_locked": False,
+                        "switch_state": None,
+                        "is_open": False,
+                        "metadata": n_itm.get("metadata_json") or {},
+                    }
+                )
 
     # 6. Map nodes structure
     nodes_data = {}
@@ -337,6 +402,7 @@ async def _build_session_debug_payload(
     blueprint_data = None
     try:
         from backend.api.routes.adventures.editor import _build_adventure_editor_assets
+
         blueprint_obj = await _build_adventure_editor_assets(state.template_id, db)
         blueprint_data = blueprint_obj.model_dump()
     except Exception as exc:
@@ -346,7 +412,9 @@ async def _build_session_debug_payload(
         "session": {
             "id": state.session_id,
             "template_id": state.template_id,
-            "adventure_title": adventure.title if adventure else (state.session.adventure_title if state.session else "Adventure"),
+            "adventure_title": adventure.title
+            if adventure
+            else (state.session.adventure_title if state.session else "Adventure"),
             "current_scene_id": state.current_scene_id,
             "current_scene_name": scene_names.get(state.current_scene_id, state.current_scene_id),
             "in_game_time": state.in_game_time,
@@ -431,7 +499,9 @@ async def get_session_debug(
             detail="Debug mode is not enabled for this session. Type /debug on to activate.",
         )
 
-    adv_res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == state.template_id))
+    adv_res = await db.execute(
+        select(AdventureTemplate).where(AdventureTemplate.id == state.template_id)
+    )
     adventure = adv_res.scalars().first()
 
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
@@ -452,15 +522,21 @@ async def get_chat_history(
     if not state:
         raise HTTPException(status_code=404, detail="Session not found.")
 
-    adv_res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == state.template_id))
+    adv_res = await db.execute(
+        select(AdventureTemplate).where(AdventureTemplate.id == state.template_id)
+    )
     adventure = adv_res.scalars().first()
-    
+
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
     avatar = cv_res.scalars().first()
 
-    chat_res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == state.session_id).order_by(ChatMessage.created_at.asc()))
+    chat_res = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == state.session_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
     history = [{"id": m.id, "role": m.role, "content": m.content} for m in chat_res.scalars().all()]
-    
+
     # Use the canonical template map so all sessions of the same adventure share one topology.
     world_map = await AdventureLogic.get_or_create_map(db, state.template_id)
     map_dict = MapEngine.to_dict(world_map) if world_map else None
@@ -469,14 +545,15 @@ async def get_chat_history(
         # Heal stale image_url values (e.g. from deleted sessions) in the map nodes
         for node in map_dict.get("nodes", {}).values():
             if isinstance(node, dict) and node.get("image_url"):
-                node["image_url"] = AdventureLogic.resolve_existing_data_asset_url(node["image_url"])
-    
+                node["image_url"] = AdventureLogic.resolve_existing_data_asset_url(
+                    node["image_url"]
+                )
+
     # Augment with adjacent unvisited scenes
     if world_map:
         exit_query = select(WorldExit).where(
             or_(
-                WorldExit.session_id == state.session_id,
-                WorldExit.template_id == state.template_id
+                WorldExit.session_id == state.session_id, WorldExit.template_id == state.template_id
             )
         )
         exits_res = await db.execute(exit_query)
@@ -484,7 +561,7 @@ async def get_chat_history(
         map_dict = MapEngine.augment_map_data(map_dict, exits, state.current_scene_id)
 
     entities = await AdventureLogic.build_session_entities(db, state)
-    
+
     scene_image = await AdventureLogic.resolve_scene_image(db, state, state.current_scene_id)
     pending_terminal_epilogue, input_locked = _terminal_flags_from_state(state)
 
@@ -492,6 +569,7 @@ async def get_chat_history(
     if include_full_world and (settings.TALEWEAVER_DEBUG_ENABLED or state.is_debug_enabled):
         try:
             from backend.api.routes.adventures.editor import _build_adventure_editor_assets
+
             full_world_debug = await _build_adventure_editor_assets(state.template_id, db)
         except Exception as exc:
             logger.warning("Could not build full_world debug payload: %s", exc)
@@ -524,9 +602,13 @@ async def get_chat_history(
                 db.add(ChatMessage(session_id=state.session_id, role="system", content=seq_msg))
             await db.commit()
             chat_res = await db.execute(
-                select(ChatMessage).where(ChatMessage.session_id == state.session_id).order_by(ChatMessage.created_at.asc())
+                select(ChatMessage)
+                .where(ChatMessage.session_id == state.session_id)
+                .order_by(ChatMessage.created_at.asc())
             )
-            history = [{"id": m.id, "role": m.role, "content": m.content} for m in chat_res.scalars().all()]
+            history = [
+                {"id": m.id, "role": m.role, "content": m.content} for m in chat_res.scalars().all()
+            ]
 
     active_sequence = AdventureLogic.resolve_active_sequence(adventure, state)
 
@@ -535,16 +617,29 @@ async def get_chat_history(
         sheet=await AdventureLogic.build_sheet_snapshot(avatar, state, db),
         combat=AdventureLogic.get_combat_snapshot(state),
         map_data=map_dict,
-        nodes=await AdventureLogic.get_all_scene_metadata(db, state.template_id, session_id=state.session_id),
+        nodes=await AdventureLogic.get_all_scene_metadata(
+            db, state.template_id, session_id=state.session_id
+        ),
         entities=entities,
-        npc_metadata=await AdventureLogic.get_npc_metadata(db, state.template_id, session_id=state.session_id),
+        npc_metadata=await AdventureLogic.get_npc_metadata(
+            db, state.template_id, session_id=state.session_id
+        ),
         image_url=scene_image,
-        adventure_image=AdventureLogic.resolve_session_asset(state, "cover", adventure.image_url if adventure else None),
+        adventure_image=AdventureLogic.resolve_session_asset(
+            state, "cover", adventure.image_url if adventure else None
+        ),
         active_sequence=active_sequence,
         quests=state.quests,
         awards=AdventureLogic.build_awards_payload(
             user_earned_awards=current_user.earned_awards,
-            adventure_awards=(adventure.awards if adventure else (AdventureLogic.extract_manifest_snapshot(state).get("adventure") or {}).get("awards")) or [],
+            adventure_awards=(
+                adventure.awards
+                if adventure
+                else (AdventureLogic.extract_manifest_snapshot(state).get("adventure") or {}).get(
+                    "awards"
+                )
+            )
+            or [],
             adventure_id=adventure.id if adventure else state.template_id,
             session_id=state.session_id,
         ),
@@ -557,9 +652,12 @@ async def get_chat_history(
         prompt_suggestions=prompt_suggestions,
         world_memories=state.world_memories or [],
         world_rumors=state.world_rumors or [],
-        is_legacy_format=is_legacy_session(session=state.session if state else None, state=state, template=adventure),
+        is_legacy_format=is_legacy_session(
+            session=state.session if state else None, state=state, template=adventure
+        ),
         full_world=full_world_debug,
     )
+
 
 @router.post("/{game_id}/chat")
 async def post_chat_message(
@@ -578,7 +676,9 @@ async def post_chat_message(
         manager = GameTurnManager(db, game_id, current_user)
         turn_id = uuid4().hex
 
-        async def _stream_with_turn_id(source: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
+        async def _stream_with_turn_id(
+            source: AsyncGenerator[str, None],
+        ) -> AsyncGenerator[str, None]:
             try:
                 async for chunk in source:
                     if isinstance(chunk, str) and chunk.startswith("event:"):
@@ -642,7 +742,7 @@ async def run_agent_turn(
 
     async def _agent_stream() -> AsyncGenerator[str, None]:
         yield f"event: status\ndata: {json.dumps({'content': 'Agent is thinking...'})}\n\n"
-        
+
         async with AsyncSessionLocal() as db:
             manager = GameTurnManager(db, game_id, current_user)
             await manager.initialize()
@@ -664,14 +764,18 @@ async def run_agent_turn(
                     decision_err = True
 
                 if not decision or decision.is_stuck_or_bug:
-                    desc = decision.issue_description if decision else (
-                        "Agent decision generation failed due to an internal error."
-                        if decision_err
-                        else "Agent did not return a valid decision."
+                    desc = (
+                        decision.issue_description
+                        if decision
+                        else (
+                            "Agent decision generation failed due to an internal error."
+                            if decision_err
+                            else "Agent did not return a valid decision."
+                        )
                     )
                     thoughts = decision.thoughts if decision else "Failed to get decision thoughts."
                     action = decision.action if decision else "None"
-                    
+
                     hist_res = await db.execute(
                         select(ChatMessage)
                         .where(ChatMessage.session_id == game_id)
@@ -680,36 +784,44 @@ async def run_agent_turn(
                     )
                     recent_msgs = list(reversed(list(hist_res.scalars().all())))
                     history_summary = " | ".join([f"{m.role}: {m.content}" for m in recent_msgs])
-                    
+
                     failures = AgentService.increment_failure(state)
-                    AgentService.log_issue(state.session_id, thoughts, action, desc, history_summary)
+                    AgentService.log_issue(
+                        state.session_id, thoughts, action, desc, history_summary
+                    )
                     await db.commit()
 
                     msg = f"Agent issue detected: {desc} (Attempt {failures}/3)"
                     if failures >= 3:
                         msg += " - Agent mode has been deactivated."
-                    
+
                     await manager._save_chat_message("system", msg)
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg})}\n\n"
-                    
-                    final_data = jsonable_encoder({
-                        'sheet': await AdventureLogic.build_sheet_snapshot(manager.avatar, state, db),
-                        'entities': await AdventureLogic.build_session_entities(db, state),
-                        'combat': AdventureLogic.get_combat_snapshot(state),
-                        'prompt_suggestions': GameTurnManager.extract_prompt_suggestions(state.exit_states or {}),
-                        **manager._build_terminal_flags_payload(),
-                        'status': 'success',
-                    })
+
+                    final_data = jsonable_encoder(
+                        {
+                            "sheet": await AdventureLogic.build_sheet_snapshot(
+                                manager.avatar, state, db
+                            ),
+                            "entities": await AdventureLogic.build_session_entities(db, state),
+                            "combat": AdventureLogic.get_combat_snapshot(state),
+                            "prompt_suggestions": GameTurnManager.extract_prompt_suggestions(
+                                state.exit_states or {}
+                            ),
+                            **manager._build_terminal_flags_payload(),
+                            "status": "success",
+                        }
+                    )
                     yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
                     return
 
                 yield f"event: thought\ndata: {json.dumps({'content': decision.thoughts})}\n\n"
                 await asyncio.sleep(0.5)
-                
+
                 await manager._save_chat_message("player", decision.action)
                 yield f"event: player_action\ndata: {json.dumps({'content': decision.action})}\n\n"
                 yield f"event: status\ndata: {json.dumps({'content': f'Agent decides: {decision.action}'})}\n\n"
-                
+
                 AgentService.reset_failures(state)
                 await db.commit()
 
@@ -777,7 +889,9 @@ async def translate_text(
         llm = GameMasterLLM(current_user, provider=small_model_provider, model_category="small")
     except ValueError:
         logger.warning("Invalid LLM configuration for translation (user %s)", current_user.id)
-        raise HTTPException(status_code=400, detail="Selected translation model is unavailable.") from None
+        raise HTTPException(
+            status_code=400, detail="Selected translation model is unavailable."
+        ) from None
 
     system_prompt = BABLE_FISH_TRANSLATION_SYSTEM_PROMPT
     user_prompt = BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE.format(
@@ -806,6 +920,7 @@ async def translate_text(
 
     return TranslateTextResponse(translated_text=cleaned or source_text, language=target_language)
 
+
 def _parse_walkthrough_steps(text: str) -> list[dict[str, str]]:
     """Parse walkthrough markdown/text into structured steps if possible."""
     if not text or not text.strip():
@@ -822,10 +937,12 @@ def _parse_walkthrough_steps(text: str) -> list[dict[str, str]]:
         m = step_pattern.match(stripped)
         if m:
             if current_content or current_title:
-                steps.append({
-                    "title": current_title or f"Step {len(steps) + 1}",
-                    "content": "\n".join(current_content).strip(),
-                })
+                steps.append(
+                    {
+                        "title": current_title or f"Step {len(steps) + 1}",
+                        "content": "\n".join(current_content).strip(),
+                    }
+                )
                 current_content = []
             matched_title = m.group(1).strip()
             current_title = matched_title if matched_title else f"Step {len(steps) + 1}"
@@ -833,25 +950,29 @@ def _parse_walkthrough_steps(text: str) -> list[dict[str, str]]:
                 current_content.append(stripped)
         elif stripped.startswith(("# ", "## ", "### ")):
             if current_content or current_title:
-                steps.append({
-                    "title": current_title or f"Step {len(steps) + 1}",
-                    "content": "\n".join(current_content).strip(),
-                })
+                steps.append(
+                    {
+                        "title": current_title or f"Step {len(steps) + 1}",
+                        "content": "\n".join(current_content).strip(),
+                    }
+                )
                 current_content = []
             current_title = stripped.lstrip("#").strip()
         else:
             current_content.append(line)
 
     if current_content or current_title:
-        steps.append({
-            "title": current_title or f"Step {len(steps) + 1}",
-            "content": "\n".join(current_content).strip(),
-        })
+        steps.append(
+            {
+                "title": current_title or f"Step {len(steps) + 1}",
+                "content": "\n".join(current_content).strip(),
+            }
+        )
 
     if len(steps) <= 1:
         paragraphs = [p.strip() for p in text.strip().split("\n\n") if p.strip()]
         if len(paragraphs) > 1:
-            steps = [{"title": f"Step {i+1}", "content": p} for i, p in enumerate(paragraphs)]
+            steps = [{"title": f"Step {i + 1}", "content": p} for i, p in enumerate(paragraphs)]
 
     return steps
 
@@ -1028,7 +1149,11 @@ async def unlock_container_with_code(
         )
     )
     entity = ent_res.scalars().first()
-    if not entity or entity.entity_type != "OBJECT" or str(entity.item_type or "").upper() != "CONTAINER":
+    if (
+        not entity
+        or entity.entity_type != "OBJECT"
+        or str(entity.item_type or "").upper() != "CONTAINER"
+    ):
         raise HTTPException(status_code=404, detail="Container not found.")
 
     metadata_json = dict(entity.metadata_json or {})
@@ -1043,9 +1168,13 @@ async def unlock_container_with_code(
         raise HTTPException(status_code=403, detail=INVALID_CONTAINER_CODE_MESSAGE)
 
     if metadata_json.get("unlock_expression"):
-        passed, err = await TriggerService.evaluate_guard(db, state, metadata_json["unlock_expression"])
+        passed, err = await TriggerService.evaluate_guard(
+            db, state, metadata_json["unlock_expression"]
+        )
         if not passed:
-            if metadata_json.get("on_unlock_failure_script") or metadata_json.get("on_unlock_failure_text"):
+            if metadata_json.get("on_unlock_failure_script") or metadata_json.get(
+                "on_unlock_failure_text"
+            ):
                 await TriggerService.execute_trigger(
                     db,
                     state,
@@ -1057,19 +1186,21 @@ async def unlock_container_with_code(
                 await db.commit()
             raise HTTPException(
                 status_code=403,
-                detail=metadata_json.get("on_unlock_failure_text") or err or "Guard condition not met.",
+                detail=metadata_json.get("on_unlock_failure_text")
+                or err
+                or "Guard condition not met.",
             )
 
     entity_states = dict(state.entity_states or {})
     entry = dict(entity_states.get(entity.id) or {})
-    
+
     # Check if already unlocked to avoid double XP
     was_locked = entry.get("locked") if "locked" in entry else True
 
     entry["locked"] = False
     entity_states[entity.id] = entry
     state.entity_states = entity_states
-    
+
     if was_locked:
         cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
         avatar = cv_res.scalars().first()
@@ -1091,7 +1222,9 @@ async def unlock_container_with_code(
                 )
             )
 
-        if metadata_json.get("on_unlock_success_script") or metadata_json.get("on_unlock_success_text"):
+        if metadata_json.get("on_unlock_success_script") or metadata_json.get(
+            "on_unlock_success_text"
+        ):
             await TriggerService.execute_trigger(
                 db,
                 state,
@@ -1100,7 +1233,7 @@ async def unlock_container_with_code(
                 script_code=metadata_json.get("on_unlock_success_script"),
                 narrative_text=metadata_json.get("on_unlock_success_text"),
             )
-            
+
     await db.commit()
 
     return {"status": "ok", "entity_id": entity.id, "locked": False}
@@ -1130,13 +1263,19 @@ async def unlock_container_with_item(
         )
     )
     entity = ent_res.scalars().first()
-    if not entity or entity.entity_type != "OBJECT" or str(entity.item_type or "").upper() != "CONTAINER":
+    if (
+        not entity
+        or entity.entity_type != "OBJECT"
+        or str(entity.item_type or "").upper() != "CONTAINER"
+    ):
         raise HTTPException(status_code=404, detail="Container not found.")
 
     metadata_json = dict(entity.metadata_json or {})
     expected_item_id = str(metadata_json.get("item_to_unlock") or "").strip().upper()
     if not expected_item_id:
-        raise HTTPException(status_code=400, detail="This container does not require an item to unlock.")
+        raise HTTPException(
+            status_code=400, detail="This container does not require an item to unlock."
+        )
 
     submitted_item_id = str(payload.item_id or "").strip().upper()
     if not submitted_item_id:
@@ -1151,7 +1290,9 @@ async def unlock_container_with_item(
         raise HTTPException(status_code=404, detail="Avatar not found.")
 
     inventory_ids = {
-        str(item.get("id") or "").strip().upper() if isinstance(item, dict) else str(item).strip().upper()
+        str(item.get("id") or "").strip().upper()
+        if isinstance(item, dict)
+        else str(item).strip().upper()
         for item in (avatar.inventory or [])
     }
 
@@ -1159,9 +1300,13 @@ async def unlock_container_with_item(
         raise HTTPException(status_code=403, detail="You do not possess the required key item.")
 
     if metadata_json.get("unlock_expression"):
-        passed, err = await TriggerService.evaluate_guard(db, state, metadata_json["unlock_expression"])
+        passed, err = await TriggerService.evaluate_guard(
+            db, state, metadata_json["unlock_expression"]
+        )
         if not passed:
-            if metadata_json.get("on_unlock_failure_script") or metadata_json.get("on_unlock_failure_text"):
+            if metadata_json.get("on_unlock_failure_script") or metadata_json.get(
+                "on_unlock_failure_text"
+            ):
                 await TriggerService.execute_trigger(
                     db,
                     state,
@@ -1173,26 +1318,31 @@ async def unlock_container_with_item(
                 await db.commit()
             raise HTTPException(
                 status_code=403,
-                detail=metadata_json.get("on_unlock_failure_text") or err or "Guard condition not met.",
+                detail=metadata_json.get("on_unlock_failure_text")
+                or err
+                or "Guard condition not met.",
             )
 
     entity_states = dict(state.entity_states or {})
     entry = dict(entity_states.get(entity.id) or {})
-    
+
     was_locked = entry.get("locked") if "locked" in entry else True
 
     entry["locked"] = False
     entity_states[entity.id] = entry
     state.entity_states = entity_states
-    
+
     if was_locked:
         xp_reward = metadata_json.get("exp_reward") or metadata_json.get("xp_reward") or 100
         avatar.exp = (avatar.exp or 0) + xp_reward
-        
+
         # Resolve item name for narration
         item_name = submitted_item_id
-        for item in (avatar.inventory or []):
-            if isinstance(item, dict) and str(item.get("id") or "").strip().upper() == submitted_item_id:
+        for item in avatar.inventory or []:
+            if (
+                isinstance(item, dict)
+                and str(item.get("id") or "").strip().upper() == submitted_item_id
+            ):
                 item_name = item.get("name") or item_name
                 break
 
@@ -1211,7 +1361,9 @@ async def unlock_container_with_item(
             )
         )
 
-        if metadata_json.get("on_unlock_success_script") or metadata_json.get("on_unlock_success_text"):
+        if metadata_json.get("on_unlock_success_script") or metadata_json.get(
+            "on_unlock_success_text"
+        ):
             await TriggerService.execute_trigger(
                 db,
                 state,
@@ -1220,7 +1372,7 @@ async def unlock_container_with_item(
                 script_code=metadata_json.get("on_unlock_success_script"),
                 narrative_text=metadata_json.get("on_unlock_success_text"),
             )
-        
+
     await db.commit()
 
     return {"status": "ok", "entity_id": entity.id, "locked": False}
@@ -1266,7 +1418,11 @@ async def flip_switch_with_code(
         )
     )
     entity = ent_res.scalars().first()
-    if not entity or entity.entity_type != "OBJECT" or str(entity.item_type or "").upper() != "SWITCH":
+    if (
+        not entity
+        or entity.entity_type != "OBJECT"
+        or str(entity.item_type or "").upper() != "SWITCH"
+    ):
         raise HTTPException(status_code=404, detail="Switch not found.")
 
     config = _get_switch_config(entity)
@@ -1279,7 +1435,11 @@ async def flip_switch_with_code(
 
     session_states = dict(state.entity_states or {})
     entry = dict(session_states.get(entity.id) or {})
-    configured_current = str(config.get("initial_state") or (allowed_states[0] if allowed_states else "")).strip().upper()
+    configured_current = (
+        str(config.get("initial_state") or (allowed_states[0] if allowed_states else ""))
+        .strip()
+        .upper()
+    )
     current_state = str(entry.get("switch_state") or configured_current).strip().upper()
 
     if current_state == target_state:
@@ -1287,7 +1447,9 @@ async def flip_switch_with_code(
 
     transition = _resolve_switch_transition(config, current_state, target_state)
     if transition is None:
-        raise HTTPException(status_code=400, detail="No transition definition found for this state change.")
+        raise HTTPException(
+            status_code=400, detail="No transition definition found for this state change."
+        )
 
     gates = transition.get("gates") if isinstance(transition.get("gates"), dict) else {}
     required_code = str(gates.get("code") or "").strip()
@@ -1299,39 +1461,61 @@ async def flip_switch_with_code(
         raise HTTPException(status_code=400, detail="Code is required.")
 
     manager = GameTurnManager(db=db, game_id=game_id, user=current_user, state=state)
+    await manager.initialize()
     script_context = await manager._build_script_context()
     runner = manager._get_script_runner()
 
     if submitted_code.lower() != required_code.lower():
         SwitchService.execute_transition_triggers(
-            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+            runner=runner,
+            config=config,
+            transition=transition,
+            success=False,
+            context=script_context,
+            switch_id=entity.id,
         )
         await manager._apply_script_changeset(script_context.changeset)
         await db.commit()
         fail_message = str(transition.get("fail_message") or "").strip()
-        raise HTTPException(status_code=403, detail=fail_message or "Incorrect code. The switch does not move.")
+        raise HTTPException(
+            status_code=403, detail=fail_message or "Incorrect code. The switch does not move."
+        )
 
     expr = str(gates.get("expression") or gates.get("condition") or "").strip()
     if expr:
         passed, err = SwitchService.evaluate_gate_expression(expr, script_context)
         if not passed:
             SwitchService.execute_transition_triggers(
-                runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+                runner=runner,
+                config=config,
+                transition=transition,
+                success=False,
+                context=script_context,
+                switch_id=entity.id,
             )
             await manager._apply_script_changeset(script_context.changeset)
             await db.commit()
             fail_message = str(transition.get("fail_message") or "").strip()
-            raise HTTPException(status_code=403, detail=fail_message or err or "Guard condition not met.")
+            raise HTTPException(
+                status_code=403, detail=fail_message or err or "Guard condition not met."
+            )
 
     entry["switch_state"] = target_state
     session_states[entity.id] = entry
     state.entity_states = session_states
 
     SwitchService.execute_transition_triggers(
-        runner=runner, config=config, transition=transition, success=True, context=script_context, switch_id=entity.id
+        runner=runner,
+        config=config,
+        transition=transition,
+        success=True,
+        context=script_context,
+        switch_id=entity.id,
     )
     await manager._apply_script_changeset(script_context.changeset)
-    await manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
+    await manager._apply_switch_outcomes(
+        config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state
+    )
 
     db.add(
         ChatMessage(
@@ -1365,7 +1549,11 @@ async def flip_switch_with_item(
         )
     )
     entity = ent_res.scalars().first()
-    if not entity or entity.entity_type != "OBJECT" or str(entity.item_type or "").upper() != "SWITCH":
+    if (
+        not entity
+        or entity.entity_type != "OBJECT"
+        or str(entity.item_type or "").upper() != "SWITCH"
+    ):
         raise HTTPException(status_code=404, detail="Switch not found.")
 
     config = _get_switch_config(entity)
@@ -1378,7 +1566,11 @@ async def flip_switch_with_item(
 
     session_states = dict(state.entity_states or {})
     entry = dict(session_states.get(entity.id) or {})
-    configured_current = str(config.get("initial_state") or (allowed_states[0] if allowed_states else "")).strip().upper()
+    configured_current = (
+        str(config.get("initial_state") or (allowed_states[0] if allowed_states else ""))
+        .strip()
+        .upper()
+    )
     current_state = str(entry.get("switch_state") or configured_current).strip().upper()
 
     if current_state == target_state:
@@ -1386,7 +1578,9 @@ async def flip_switch_with_item(
 
     transition = _resolve_switch_transition(config, current_state, target_state)
     if transition is None:
-        raise HTTPException(status_code=400, detail="No transition definition found for this state change.")
+        raise HTTPException(
+            status_code=400, detail="No transition definition found for this state change."
+        )
 
     gates = transition.get("gates") if isinstance(transition.get("gates"), dict) else {}
     required_item_id = str(gates.get("item") or "").strip().upper()
@@ -1398,17 +1592,25 @@ async def flip_switch_with_item(
         raise HTTPException(status_code=400, detail="Item ID is required.")
 
     manager = GameTurnManager(db=db, game_id=game_id, user=current_user, state=state)
+    await manager.initialize()
     script_context = await manager._build_script_context()
     runner = manager._get_script_runner()
 
     if submitted_item_id != required_item_id:
         SwitchService.execute_transition_triggers(
-            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+            runner=runner,
+            config=config,
+            transition=transition,
+            success=False,
+            context=script_context,
+            switch_id=entity.id,
         )
         await manager._apply_script_changeset(script_context.changeset)
         await db.commit()
         fail_message = str(transition.get("fail_message") or "").strip()
-        raise HTTPException(status_code=403, detail=fail_message or "This item cannot activate the switch.")
+        raise HTTPException(
+            status_code=403, detail=fail_message or "This item cannot activate the switch."
+        )
 
     # Verify the player has the item
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
@@ -1417,12 +1619,19 @@ async def flip_switch_with_item(
         raise HTTPException(status_code=404, detail="Avatar not found.")
 
     inventory_ids = {
-        str(item.get("id") or "").strip().upper() if isinstance(item, dict) else str(item).strip().upper()
+        str(item.get("id") or "").strip().upper()
+        if isinstance(item, dict)
+        else str(item).strip().upper()
         for item in (avatar.inventory or [])
     }
     if submitted_item_id not in inventory_ids:
         SwitchService.execute_transition_triggers(
-            runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+            runner=runner,
+            config=config,
+            transition=transition,
+            success=False,
+            context=script_context,
+            switch_id=entity.id,
         )
         await manager._apply_script_changeset(script_context.changeset)
         await db.commit()
@@ -1433,27 +1642,44 @@ async def flip_switch_with_item(
         passed, err = SwitchService.evaluate_gate_expression(expr, script_context)
         if not passed:
             SwitchService.execute_transition_triggers(
-                runner=runner, config=config, transition=transition, success=False, context=script_context, switch_id=entity.id
+                runner=runner,
+                config=config,
+                transition=transition,
+                success=False,
+                context=script_context,
+                switch_id=entity.id,
             )
             await manager._apply_script_changeset(script_context.changeset)
             await db.commit()
             fail_message = str(transition.get("fail_message") or "").strip()
-            raise HTTPException(status_code=403, detail=fail_message or err or "Guard condition not met.")
+            raise HTTPException(
+                status_code=403, detail=fail_message or err or "Guard condition not met."
+            )
 
     entry["switch_state"] = target_state
     session_states[entity.id] = entry
     state.entity_states = session_states
 
     SwitchService.execute_transition_triggers(
-        runner=runner, config=config, transition=transition, success=True, context=script_context, switch_id=entity.id
+        runner=runner,
+        config=config,
+        transition=transition,
+        success=True,
+        context=script_context,
+        switch_id=entity.id,
     )
     await manager._apply_script_changeset(script_context.changeset)
-    await manager._apply_switch_outcomes(config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state)
+    await manager._apply_switch_outcomes(
+        config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state
+    )
 
     # Resolve item name for narration
     item_name = submitted_item_id
-    for item in (avatar.inventory or []):
-        if isinstance(item, dict) and str(item.get("id") or "").strip().upper() == submitted_item_id:
+    for item in avatar.inventory or []:
+        if (
+            isinstance(item, dict)
+            and str(item.get("id") or "").strip().upper() == submitted_item_id
+        ):
             item_name = item.get("name") or item_name
             break
 
@@ -1476,7 +1702,9 @@ async def flip_switch_with_item(
 INVALID_EXIT_CODE_MESSAGE = "That code does not open this way."
 
 
-async def _resolve_session_exit(db: AsyncSession, state: SessionState, exit_id: str) -> WorldExit | None:
+async def _resolve_session_exit(
+    db: AsyncSession, state: SessionState, exit_id: str
+) -> WorldExit | None:
     """Returns the exit used for the current session, preferring the session-scoped row."""
     clean_id = (exit_id or "").strip()
     res = await db.execute(
@@ -1504,7 +1732,7 @@ async def _resolve_session_exit(db: AsyncSession, state: SessionState, exit_id: 
             select(WorldExit).where(
                 WorldExit.session_id == state.session_id,
                 WorldExit.from_scene_id == resolved.from_scene_id,
-                WorldExit.to_scene_id == resolved.to_scene_id
+                WorldExit.to_scene_id == resolved.to_scene_id,
             )
         )
         session_exit = session_res.scalars().first()
@@ -1623,14 +1851,16 @@ async def unlock_exit_with_item(
         raise HTTPException(status_code=404, detail="Avatar not found.")
 
     inventory_ids = {
-        str(item.get("id") or "").strip().upper() if isinstance(item, dict) else str(item).strip().upper()
+        str(item.get("id") or "").strip().upper()
+        if isinstance(item, dict)
+        else str(item).strip().upper()
         for item in (avatar.inventory or [])
     }
     if submitted_item not in inventory_ids:
         raise HTTPException(status_code=403, detail="You do not possess the required key item.")
 
     item_name = submitted_item
-    for item in (avatar.inventory or []):
+    for item in avatar.inventory or []:
         if isinstance(item, dict) and str(item.get("id") or "").strip().upper() == submitted_item:
             item_name = item.get("name") or item_name
             break
@@ -1676,7 +1906,6 @@ async def unlock_exit_with_item(
     return {"status": "ok", "exit_id": world_exit.id, "is_locked": False}
 
 
-
 @router.post("/{game_id}/exits/{exit_id}/traverse")
 async def traverse_exit(
     game_id: str,
@@ -1694,15 +1923,22 @@ async def traverse_exit(
         raise HTTPException(status_code=404, detail="Exit not found.")
 
     if world_exit.is_locked:
-        raise HTTPException(status_code=403, detail=str(world_exit.lock_description or "The way is locked."))
+        raise HTTPException(
+            status_code=403, detail=str(world_exit.lock_description or "The way is locked.")
+        )
 
     current_scene_id = str(state.current_scene_id or "").strip().upper()
     if world_exit.from_scene_id == current_scene_id:
         target_scene_id = world_exit.to_scene_id
-    elif world_exit.exit_type.lower() == "bidirectional" and world_exit.to_scene_id == current_scene_id:
+    elif (
+        world_exit.exit_type.lower() == "bidirectional"
+        and world_exit.to_scene_id == current_scene_id
+    ):
         target_scene_id = world_exit.from_scene_id
     else:
-        raise HTTPException(status_code=400, detail="This exit does not connect to the current scene.")
+        raise HTTPException(
+            status_code=400, detail="This exit does not connect to the current scene."
+        )
 
     scene_res = await db.execute(
         select(WorldScene).where(

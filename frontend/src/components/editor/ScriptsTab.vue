@@ -74,6 +74,8 @@ const TRIGGER_OPTIONS = [
   { value: 'on_turn_start', label: 'On Turn Start', desc: 'Runs before player prompt and GM logic' },
   { value: 'on_enter_scene', label: 'On Enter Scene', desc: 'Runs when player enters target scene' },
   { value: 'on_interact', label: 'On Interact', desc: 'Runs when interacting with target entity/item' },
+  { value: 'on_logic_pass_done', label: 'On Logic Pass Done', desc: 'Runs after game mechanics and state mutations finish, before narration' },
+  { value: 'on_narration_done', label: 'On Narration Done', desc: 'Runs after narration generation completes' },
   { value: 'on_turn_end', label: 'On Turn End', desc: 'Runs after scene narrative and entity mutations' },
 ] as const
 
@@ -85,6 +87,10 @@ function getTriggerBadgeClass(trigger: string): string {
       return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
     case 'on_interact':
       return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+    case 'on_logic_pass_done':
+      return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+    case 'on_narration_done':
+      return 'bg-pink-500/15 text-pink-300 border-pink-500/30'
     case 'on_turn_end':
       return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
     default:

@@ -371,6 +371,7 @@ export function renderFormattedHtml(text: string): string {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const withVoiceTags = escaped.replace(/(\[[^\]\n]+\])/g, (match, tag) => {
     const raw = tag.slice(1, -1).trim()
+    if (/^DEBUG/i.test(raw)) return match
     const en = normalizeTagToEnglish(raw)
     return `<span class="comic-voice-tag">[${en}]</span>`
   })

@@ -61,6 +61,37 @@ class ScriptChangeset:
     completed_condition_override: Optional[str] = None
     gameover_condition_override: Optional[str] = None
 
+    @property
+    def has_changes(self) -> bool:
+        """Returns True if any mutation or message is present in the changeset."""
+        return bool(
+            self.player_hp_change
+            or self.player_mana_change
+            or self.player_stamina_change
+            or self.player_xp_change
+            or self.player_new_items
+            or self.player_removed_item_ids
+            or self.player_status_effects_add
+            or self.player_status_effects_remove
+            or self.teleport_scene_id
+            or self.entity_movements
+            or self.entity_updates
+            or self.exit_updates
+            or self.narrative_messages
+            or self.system_messages
+            or self.rejected_actions
+            or self.new_memories
+            or self.completed_quest_ids
+            or self.failed_quest_ids
+            or self.granted_award_keys
+            or self.sequence_completed
+            or self.var_updates
+            or self.game_completed
+            or self.game_over
+            or self.completed_condition_override
+            or self.gameover_condition_override
+        )
+
 
 class PlayerProxy:
     """Safe proxy for inspecting and mutating the player character."""

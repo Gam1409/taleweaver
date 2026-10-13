@@ -20,6 +20,8 @@ def test_top_level_and_inline_triggers_catalog():
     assert "on_enter_scene" in top_level_names
     assert "on_interact" in top_level_names
     assert "on_turn_start" in top_level_names
+    assert "on_logic_pass_done" in top_level_names
+    assert "on_narration_done" in top_level_names
     assert "on_turn_end" in top_level_names
 
     assert "SCENES" in INLINE_TRIGGERS
@@ -49,6 +51,8 @@ def test_build_scripts_requirement_prompt_content():
     assert "on_enter_scene" in prompt
     assert "on_interact" in prompt
     assert "on_turn_start" in prompt
+    assert "on_logic_pass_done" in prompt
+    assert "on_narration_done" in prompt
     assert "on_turn_end" in prompt
     assert "INLINE TRIGGERS" in prompt
     assert "on_enter_scene_script" in prompt

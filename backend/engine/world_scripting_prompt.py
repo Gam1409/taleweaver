@@ -3,7 +3,8 @@
 The trigger catalogue below mirrors what the gameplay engine actually executes:
 
 * Top-level ``scripts`` (see ``WorldScriptSchema``) are dispatched by the script runner
-  for ``on_turn_start``, ``on_enter_scene``, ``on_interact`` and ``on_turn_end``.
+  for ``on_turn_start``, ``on_enter_scene``, ``on_interact``, ``on_logic_pass_done``,
+  ``on_narration_done``, and ``on_turn_end``.
 * Inline ``on_*_script`` / ``on_*_text`` fields on entities are executed by the turn
   state applier (``turn_state_applier.py`` / ``turn_interactions.py``).
 
@@ -19,6 +20,12 @@ TOP_LEVEL_TRIGGERS: tuple[tuple[str, str, str], ...] = (
         "when the protagonist examines/attacks/talks to/manipulates an entity",
         "NPC or object ID (or None for any entity)",
     ),
+    (
+        "on_logic_pass_done",
+        "after game mechanics and state changes are evaluated, before narration generation",
+        "None (global)",
+    ),
+    ("on_narration_done", "after narrative generation completes", "None (global)"),
     ("on_turn_end", "after narration and state changes of every turn", "None (global)"),
 )
 

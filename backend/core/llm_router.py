@@ -24,15 +24,12 @@ _sorted_tags = sorted(_all_tags, key=len, reverse=True)
 _tag_pattern = "|".join(re.escape(t) for t in _sorted_tags)
 
 BRACKETED_RE = re.compile(
-    rf"^\s*\[(?P<tag>{_tag_pattern})\]\s*:?\s*(?P<rest>.*)",
-    re.IGNORECASE | re.DOTALL
+    rf"^\s*\[(?P<tag>{_tag_pattern})\]\s*:?\s*(?P<rest>.*)", re.IGNORECASE | re.DOTALL
 )
 
 UNBRACKETED_RE = re.compile(
-    rf"^\s*(?P<tag>{_tag_pattern})\s*:?\s*\n\s*(?P<rest>.*)",
-    re.IGNORECASE | re.DOTALL
+    rf"^\s*(?P<tag>{_tag_pattern})\s*:?\s*\n\s*(?P<rest>.*)", re.IGNORECASE | re.DOTALL
 )
-
 
 
 class GameMasterLLM:
@@ -40,7 +37,6 @@ class GameMasterLLM:
     DEFAULT_COMPLEX_MAX_TOKENS = 8192
     DEFAULT_GENERATOR_MAX_TOKENS = 16384
     DEFAULT_COMPRESSION_MAX_TOKENS = 4096
-
 
     @staticmethod
     def _is_transient_llm_error(exc: Exception) -> bool:
@@ -55,7 +51,10 @@ class GameMasterLLM:
             or "connecterror" in err_type
             or "readtimeout" in err_type
             or "connecttimeout" in err_type
-            or ("deepseekexception" in err_type and ("timeout" in err_msg or "connection" in err_msg))
+            or (
+                "deepseekexception" in err_type
+                and ("timeout" in err_msg or "connection" in err_msg)
+            )
             or "disconnected" in err_msg
             or "connection reset" in err_msg
             or "connection timed out" in err_msg
@@ -89,7 +88,9 @@ class GameMasterLLM:
                 unique.append(provider)
         return unique
 
-    def _retry_kwargs_with_openrouter_provider_order(self, kwargs: dict, providers: list[str]) -> dict:
+    def _retry_kwargs_with_openrouter_provider_order(
+        self, kwargs: dict, providers: list[str]
+    ) -> dict:
         """Build retry kwargs that explicitly prefer providers OpenRouter says are available."""
         retry_kwargs = dict(kwargs)
         extra_body = dict(retry_kwargs.get("extra_body") or {})
@@ -105,7 +106,9 @@ class GameMasterLLM:
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
-                return self._get_litellm().completion(**kwargs, request_timeout=self.request_timeout)
+                return self._get_litellm().completion(
+                    **kwargs, request_timeout=self.request_timeout
+                )
             except Exception as exc:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
@@ -115,8 +118,12 @@ class GameMasterLLM:
                             kwargs.get("model"),
                             ",".join(available_providers),
                         )
-                        retry_kwargs = self._retry_kwargs_with_openrouter_provider_order(kwargs, available_providers)
-                        return self._get_litellm().completion(**retry_kwargs, request_timeout=self.request_timeout)
+                        retry_kwargs = self._retry_kwargs_with_openrouter_provider_order(
+                            kwargs, available_providers
+                        )
+                        return self._get_litellm().completion(
+                            **retry_kwargs, request_timeout=self.request_timeout
+                        )
 
                     err_str = str(exc)
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
@@ -130,7 +137,9 @@ class GameMasterLLM:
                             new_extra_body = dict(extra_body)
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
-                            return self._get_litellm().completion(**retry_kwargs, request_timeout=self.request_timeout)
+                            return self._get_litellm().completion(
+                                **retry_kwargs, request_timeout=self.request_timeout
+                            )
 
                 if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
                     backoff_delay = 0.75 * (attempt + 1)
@@ -161,7 +170,9 @@ class GameMasterLLM:
                     attempt + 1,
                     max_transient_retries,
                 )
-                return await self._get_litellm().acompletion(**kwargs, request_timeout=self.request_timeout)
+                return await self._get_litellm().acompletion(
+                    **kwargs, request_timeout=self.request_timeout
+                )
             except Exception as exc:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
@@ -171,13 +182,17 @@ class GameMasterLLM:
                             kwargs.get("model"),
                             ",".join(available_providers),
                         )
-                        retry_kwargs = self._retry_kwargs_with_openrouter_provider_order(kwargs, available_providers)
+                        retry_kwargs = self._retry_kwargs_with_openrouter_provider_order(
+                            kwargs, available_providers
+                        )
                         logger.info(
                             "GameMasterLLM calling LLM (Fallback) for user %s with model %s",
                             self.user.id,
                             kwargs.get("model"),
                         )
-                        return await self._get_litellm().acompletion(**retry_kwargs, request_timeout=self.request_timeout)
+                        return await self._get_litellm().acompletion(
+                            **retry_kwargs, request_timeout=self.request_timeout
+                        )
 
                     err_str = str(exc)
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
@@ -191,7 +206,9 @@ class GameMasterLLM:
                             new_extra_body = dict(extra_body)
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
-                            return await self._get_litellm().acompletion(**retry_kwargs, request_timeout=self.request_timeout)
+                            return await self._get_litellm().acompletion(
+                                **retry_kwargs, request_timeout=self.request_timeout
+                            )
 
                 if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
                     backoff_delay = 0.75 * (attempt + 1)
@@ -231,13 +248,13 @@ class GameMasterLLM:
         # Further refine: find first [ or { and last ] or }
         first_json_char = -1
         for i, char in enumerate(content):
-            if char in ('{', '['):
+            if char in ("{", "["):
                 first_json_char = i
                 break
 
         last_json_char = -1
         for i, char in enumerate(reversed(content)):
-            if char in ('}', ']'):
+            if char in ("}", "]"):
                 last_json_char = len(content) - 1 - i
                 break
 
@@ -259,7 +276,7 @@ class GameMasterLLM:
         if not stripped:
             return False
         # A well-formed JSON document ends with } or ]
-        if stripped[-1] in (']', '}'):
+        if stripped[-1] in ("]", "}"):
             return False
         # If the last non-whitespace char is a quote followed by a colon or
         # comma, or the string appears to end mid-value, treat as truncated.
@@ -289,7 +306,7 @@ class GameMasterLLM:
             if escape_next:
                 escape_next = False
                 continue
-            if ch == '\\':
+            if ch == "\\":
                 escape_next = True
                 continue
             if ch == '"':
@@ -302,11 +319,11 @@ class GameMasterLLM:
                 continue
             if in_string:
                 continue
-            if ch == '{':
-                stack.append('}')
-            elif ch == '[':
-                stack.append(']')
-            elif ch in ('}', ']'):
+            if ch == "{":
+                stack.append("}")
+            elif ch == "[":
+                stack.append("]")
+            elif ch in ("}", "]"):
                 if stack and stack[-1] == ch:
                     stack.pop()
 
@@ -317,13 +334,13 @@ class GameMasterLLM:
             # on a comma we strip it (and any preceding whitespace) so
             # the resulting JSON doesn't have a trailing comma.
             last_safe = -1
-            last_safe_kind = ''
+            last_safe_kind = ""
             for i in range(string_open_at - 1, -1, -1):
-                if content[i] in (',', '{', '['):
+                if content[i] in (",", "{", "["):
                     last_safe = i
                     last_safe_kind = content[i]
                     break
-            if last_safe >= 0 and last_safe_kind == ',':
+            if last_safe >= 0 and last_safe_kind == ",":
                 # Strip the trailing comma so the result is valid JSON
                 repaired = content[:last_safe].rstrip()
             elif last_safe >= 0:
@@ -337,7 +354,7 @@ class GameMasterLLM:
 
         # Strip any trailing comma (or comma+whitespace) from the close-out
         # point so the appended closing braces/brackets produce valid JSON.
-        repaired = re.sub(r',\s*$', '', repaired)
+        repaired = re.sub(r",\s*$", "", repaired)
 
         # Close any open structures
         while stack:
@@ -352,29 +369,29 @@ class GameMasterLLM:
         """
         if not content:
             return ""
-        
+
         # 1. Strip trailing commas before closing braces or brackets
-        content = re.sub(r',\s*([\}\]])', r'\1', content)
-        
+        content = re.sub(r",\s*([\}\]])", r"\1", content)
+
         # 2. Try parsing to see if it is already valid
         try:
             json.loads(content)
             return content
         except json.JSONDecodeError:
             pass
-            
+
         # 3. Handle single quotes for keys (e.g. 'key': -> "key":)
         content = re.sub(r"'\s*([a-zA-Z0-9_-]+)\s*'\s*:", r'"\1":', content)
-        
+
         # 4. Handle single quotes for string values (e.g. : 'value' -> : "value")
         def _replace_val(match):
             val = match.group(1)
             # Escape double quotes since they will be wrapped in double quotes now
-            val = val.replace('"', r'\"')
+            val = val.replace('"', r"\"")
             # Unescape single quotes
             val = val.replace(r"\'", "'")
             return f': "{val}"'
-            
+
         content = re.sub(r":\s*'([^'\\]*(?:\\.[^'\\]*)*)'", _replace_val, content)
 
         # 5. Try parsing again; if it still fails, attempt to fix unescaped double quotes inside values
@@ -391,13 +408,13 @@ class GameMasterLLM:
                 prefix, val, suffix = m.group(1), m.group(2), m.group(3)
                 if '"' in val:
                     # Escape any double quotes that are not already preceded by backslash
-                    escaped_val = re.sub(r'(?<!\\)"', r'\"', val)
+                    escaped_val = re.sub(r'(?<!\\)"', r"\"", val)
                     return f"{prefix}{escaped_val}{suffix}"
             return line
 
         lines = content.splitlines(keepends=True)
         content = "".join(_fix_unescaped_line_quotes(l) for l in lines)
-        
+
         return content
 
     @staticmethod
@@ -431,7 +448,9 @@ class GameMasterLLM:
         return ""
 
     @staticmethod
-    async def _append_generation_log_async(adventure_id: Optional[str], log_type: str, content: str, image_url: Optional[str] = None):
+    async def _append_generation_log_async(
+        adventure_id: Optional[str], log_type: str, content: str, image_url: Optional[str] = None
+    ):
         """Append a status, thinking, or image generation log to the adventure template's generation_logs list."""
         if not adventure_id:
             return
@@ -442,16 +461,20 @@ class GameMasterLLM:
             import datetime
 
             async with AsyncSessionLocal() as db:
-                res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == adventure_id))
+                res = await db.execute(
+                    select(AdventureTemplate).where(AdventureTemplate.id == adventure_id)
+                )
                 adv = res.scalars().first()
                 if adv:
                     logs = list(adv.generation_logs or [])
-                    logs.append({
-                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                        "type": log_type,
-                        "content": content,
-                        "image_url": image_url
-                    })
+                    logs.append(
+                        {
+                            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                            "type": log_type,
+                            "content": content,
+                            "image_url": image_url,
+                        }
+                    )
                     adv.generation_logs = logs
                     await db.commit()
         except Exception as e:
@@ -491,12 +514,8 @@ class GameMasterLLM:
         speaker_re = re.compile(
             r"^(?P<speaker>\s*(?:\*\*[^*:\n]+?\*\*|[^\n:]{1,60}):\s*)(?P<speech>.*)$"
         )
-        tag_extract_re = re.compile(
-            r'^"?\[(?P<tag>[^\]\n]+)\]"?\s*"?\s*(?P<body>.*)$'
-        )
-        para_tag_re = re.compile(
-            r'^\s*\[(?P<tag>[^\]\n]+)\]\s*(?P<body>.*)$'
-        )
+        tag_extract_re = re.compile(r'^"?\[(?P<tag>[^\]\n]+)\]"?\s*"?\s*(?P<body>.*)$')
+        para_tag_re = re.compile(r"^\s*\[(?P<tag>[^\]\n]+)\]\s*(?P<body>.*)$")
 
         for line in lines:
             trimmed = line.strip()
@@ -512,7 +531,16 @@ class GameMasterLLM:
                 if tag_match:
                     canon_tag = GameMasterLLM._to_canonical_voice_tag(tag_match.group("tag"))
                     body = tag_match.group("body").strip()
-                    body = body.rstrip('"').rstrip('”').rstrip('»').lstrip('"').lstrip('“').lstrip('„').lstrip('«').strip()
+                    body = (
+                        body.rstrip('"')
+                        .rstrip("”")
+                        .rstrip("»")
+                        .lstrip('"')
+                        .lstrip("“")
+                        .lstrip("„")
+                        .lstrip("«")
+                        .strip()
+                    )
                     normalized_lines.append(f'{speaker_part}[{canon_tag}] "{body}"')
                     continue
                 normalized_lines.append(line)
@@ -653,27 +681,27 @@ class GameMasterLLM:
         """Async generator that strips <think>...</think> blocks from stream chunks on-the-fly."""
         in_think = False
         buffer = ""
-        
+
         async for chunk in stream:
             try:
                 delta = chunk.choices[0].delta.content
             except (AttributeError, IndexError, TypeError):
                 delta = None
-                
+
             if not isinstance(delta, str) or not delta:
                 yield chunk
                 continue
-                
+
             buffer += delta
             cleaned_delta = ""
-            
+
             while buffer:
                 if not in_think:
                     think_idx = buffer.find("<think>")
                     if think_idx != -1:
                         cleaned_delta += buffer[:think_idx]
                         in_think = True
-                        buffer = buffer[think_idx + 7:]
+                        buffer = buffer[think_idx + 7 :]
                     else:
                         partial_match = False
                         for i in range(1, 7):
@@ -691,7 +719,7 @@ class GameMasterLLM:
                     end_idx = buffer.find("</think>")
                     if end_idx != -1:
                         in_think = False
-                        buffer = buffer[end_idx + 8:]
+                        buffer = buffer[end_idx + 8 :]
                     else:
                         partial_match = False
                         for i in range(1, 8):
@@ -702,7 +730,7 @@ class GameMasterLLM:
                                 break
                         if not partial_match:
                             buffer = ""
-            
+
             try:
                 chunk.choices[0].delta.content = cleaned_delta
             except Exception:
@@ -735,7 +763,11 @@ class GameMasterLLM:
         else:
             provider_specific = getattr(message, "provider_specific_fields", None) or {}
 
-        nested = provider_specific.get("reasoning_content") if isinstance(provider_specific, dict) else None
+        nested = (
+            provider_specific.get("reasoning_content")
+            if isinstance(provider_specific, dict)
+            else None
+        )
         if isinstance(nested, str) and nested.strip():
             return nested
         return ""
@@ -800,8 +832,19 @@ class GameMasterLLM:
         if isinstance(value, str):
             normalized = value.strip().lower()
             return normalized in {
-                "1", "true", "yes", "on", "enabled",
-                "0", "false", "no", "off", "disabled", "", "none", "null",
+                "1",
+                "true",
+                "yes",
+                "on",
+                "enabled",
+                "0",
+                "false",
+                "no",
+                "off",
+                "disabled",
+                "",
+                "none",
+                "null",
             }
         return False
 
@@ -844,9 +887,9 @@ class GameMasterLLM:
         self.provider = (provider or "openai").lower()
         self.api_key = None
         self.api_base = None
-        
+
         llm_settings = self.user.llm_settings or {}
-        
+
         if model_category == "generator":
             prefix = "generator_"
         elif model_category == "complex":
@@ -857,6 +900,7 @@ class GameMasterLLM:
             prefix = "small_"
 
         from backend.core.config import settings
+
         if model_category == "generator":
             self.request_timeout = self._coerce_int(
                 getattr(settings, "WORLDBUILDING_TIMEOUT", settings.INTELLIGENCE_TIMEOUT),
@@ -868,10 +912,18 @@ class GameMasterLLM:
                 default=settings.INTELLIGENCE_TIMEOUT,
             )
         self.stream_chunk_timeout = float(getattr(settings, "STREAM_CHUNK_TIMEOUT", 12.0) or 12.0)
-        self.stream_initial_timeout = float(getattr(settings, "STREAM_INITIAL_TIMEOUT", 40.0) or 40.0)
-        self.kimi_api_base = (getattr(settings, "KIMI_API_BASE", "https://api.moonshot.ai/v1") or "https://api.moonshot.ai/v1").rstrip("/")
-        self.minimax_api_base = (getattr(settings, "MINIMAX_API_BASE", "https://api.minimax.io/v1") or "https://api.minimax.io/v1").rstrip("/")
-        
+        self.stream_initial_timeout = float(
+            getattr(settings, "STREAM_INITIAL_TIMEOUT", 40.0) or 40.0
+        )
+        self.kimi_api_base = (
+            getattr(settings, "KIMI_API_BASE", "https://api.moonshot.ai/v1")
+            or "https://api.moonshot.ai/v1"
+        ).rstrip("/")
+        self.minimax_api_base = (
+            getattr(settings, "MINIMAX_API_BASE", "https://api.minimax.io/v1")
+            or "https://api.minimax.io/v1"
+        ).rstrip("/")
+
         # Pull granular settings with fallbacks to global/legacy names.
         # Thinking must stay disabled unless explicitly configured truthy.
         enable_thinking_key = f"{prefix}enable_thinking"
@@ -880,7 +932,9 @@ class GameMasterLLM:
             enable_thinking_key = "enable_thinking"
             raw_enable_thinking = llm_settings.get(enable_thinking_key)
 
-        if raw_enable_thinking is not None and not self._is_supported_bool_value(raw_enable_thinking):
+        if raw_enable_thinking is not None and not self._is_supported_bool_value(
+            raw_enable_thinking
+        ):
             logger.warning(
                 "Invalid thinking setting '%s'=%r for user '%s'. Falling back to False.",
                 enable_thinking_key,
@@ -899,7 +953,7 @@ class GameMasterLLM:
         raw_max_tokens = llm_settings.get(f"{prefix}max_tokens")
         if raw_max_tokens is None:
             raw_max_tokens = llm_settings.get("max_tokens")
-        
+
         if model_category == "generator":
             default_max_tokens = self.DEFAULT_GENERATOR_MAX_TOKENS
         elif model_category == "complex":
@@ -908,7 +962,7 @@ class GameMasterLLM:
             default_max_tokens = self.DEFAULT_COMPRESSION_MAX_TOKENS
         else:
             default_max_tokens = self.DEFAULT_SMALL_MAX_TOKENS
-            
+
         self.max_tokens = self._coerce_int(raw_max_tokens, default=default_max_tokens)
 
         # OpenRouter provider routing preferences
@@ -921,7 +975,7 @@ class GameMasterLLM:
             self.api_base = (llm_settings.get("ollama_url") or "http://localhost:11434").rstrip("/")
         else:
             self.api_key = self._get_decrypted_key(self.provider)
-            
+
         self.model_category = model_category
         logger.info(
             "Router initialized: category=%s, provider=%s, thinking=%s, max_tokens=%s, timeout=%ss",
@@ -948,10 +1002,25 @@ class GameMasterLLM:
             return normalized
 
         if self.provider == "openrouter":
-            # OpenRouter model ids often require provider prefixes (e.g. openai/gpt-5-mini).
+            # OpenRouter model ids often require provider prefixes (e.g. openai/gpt-4o-mini).
             # Only strip an optional leading openrouter/ wrapper if present.
             if normalized.lower().startswith("openrouter/"):
-                return normalized.split("/", 1)[1].strip()
+                normalized = normalized.split("/", 1)[1].strip()
+            if "/" not in normalized:
+                if normalized.startswith(("gpt-", "o1", "o3", "o4", "text-", "chatgpt-")):
+                    return f"openai/{normalized}"
+                if normalized.startswith("claude-"):
+                    return f"anthropic/{normalized}"
+                if normalized.startswith("gemini-"):
+                    return f"google/{normalized}"
+                if normalized.startswith("deepseek-"):
+                    return f"deepseek/{normalized}"
+                if normalized.startswith(("mistral-", "mixtral-")):
+                    return f"mistralai/{normalized}"
+                if normalized.startswith(("llama-", "meta-")):
+                    return f"meta-llama/{normalized}"
+                if normalized.startswith("qwen-"):
+                    return f"qwen/{normalized}"
             return normalized
 
         if self.provider == "anthropic":
@@ -976,16 +1045,14 @@ class GameMasterLLM:
             return normalized.split("/", 1)[1].strip()
 
         return normalized
-    
+
     def _apply_thinking_settings(self, kwargs: dict) -> None:
         """Inject thinking parameters based on user settings and provider."""
         # MiniMax defaults to thinking-on server-side, so we must explicitly opt-out
         # when the user has not enabled thinking in their settings.
         if self.provider == "minimax":
             kwargs["thinking"] = (
-                {"type": "adaptive"}
-                if self.enable_thinking
-                else {"type": "disabled"}
+                {"type": "adaptive"} if self.enable_thinking else {"type": "disabled"}
             )
             return
 
@@ -993,10 +1060,7 @@ class GameMasterLLM:
             return
 
         # LiteLLM maps 'thinking' to provider-specific params (budget_tokens for Anthropic, etc.)
-        kwargs["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": self.max_thinking_tokens
-        }
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": self.max_thinking_tokens}
 
     def _apply_openrouter_provider_routing(self, kwargs: dict) -> None:
         """Inject provider routing ordering into OpenRouter requests if configured."""
@@ -1008,7 +1072,9 @@ class GameMasterLLM:
         if not self.openrouter_provider:
             return
 
-        providers = [p.strip() for p in self.openrouter_provider.split(",") if p.strip() and "/" not in p]
+        providers = [
+            p.strip() for p in self.openrouter_provider.split(",") if p.strip() and "/" not in p
+        ]
         if not providers:
             return
 
@@ -1021,7 +1087,7 @@ class GameMasterLLM:
 
     def _get_decrypted_key(self, provider: str) -> str:
         from backend.core.config import settings
-        
+
         # 1. Check environment variables first (precedence)
         env_key = settings.get_env_api_key(provider)
         if env_key:
@@ -1030,7 +1096,7 @@ class GameMasterLLM:
         # 2. Fallback to database
         if not self.user.encrypted_api_keys or provider not in self.user.encrypted_api_keys:
             raise ValueError(f"No API key configured for provider: {provider}")
-        
+
         encrypted_key = self.user.encrypted_api_keys[provider]
         return encryption_util.decrypt_key(encrypted_key)
 
@@ -1076,15 +1142,16 @@ class GameMasterLLM:
         """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         normalized_model = self._normalize_model(model)
 
         kwargs = {
             "model": normalized_model,
             "messages": messages,
-            "max_tokens": self.max_tokens + (self.max_thinking_tokens if self.enable_thinking else 0),
+            "max_tokens": self.max_tokens
+            + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
         self._apply_thinking_settings(kwargs)
 
@@ -1110,7 +1177,7 @@ class GameMasterLLM:
             elif self.provider == "minimax":
                 kwargs["custom_llm_provider"] = "openai"
                 kwargs["api_base"] = self.minimax_api_base
-        
+
         # Auto-detect OpenRouter keys (only when no other OpenAI-compatible provider is explicitly set)
         openai_compatible_providers = ("kimi", "minimax", "deepseek")
         if (
@@ -1138,7 +1205,7 @@ class GameMasterLLM:
         result = response.choices[0].message.content or ""
         result = self.clean_thinking_tags(result)
         result = self.normalize_voice_tags(result)
-        
+
         log_llm_interaction(
             model=model,
             provider=self.provider,
@@ -1153,7 +1220,7 @@ class GameMasterLLM:
             phase=phase,
             metadata=metadata,
         )
-        
+
         return result
 
     async def aexecute_simple_task(
@@ -1173,15 +1240,16 @@ class GameMasterLLM:
         """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         normalized_model = self._normalize_model(model)
 
         kwargs = {
             "model": normalized_model,
             "messages": messages,
-            "max_tokens": self.max_tokens + (self.max_thinking_tokens if self.enable_thinking else 0),
+            "max_tokens": self.max_tokens
+            + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
         self._apply_thinking_settings(kwargs)
 
@@ -1207,7 +1275,7 @@ class GameMasterLLM:
             elif self.provider == "minimax":
                 kwargs["custom_llm_provider"] = "openai"
                 kwargs["api_base"] = self.minimax_api_base
-        
+
         # Auto-detect OpenRouter keys (only when no other OpenAI-compatible provider is explicitly set)
         openai_compatible_providers = ("kimi", "minimax", "deepseek")
         if (
@@ -1218,7 +1286,7 @@ class GameMasterLLM:
             kwargs["api_base"] = "https://openrouter.ai/api/v1"
 
         self._apply_openrouter_provider_routing(kwargs)
-        
+
         log_structured_event(
             "gm.turn.request",
             model=normalized_model,
@@ -1231,11 +1299,11 @@ class GameMasterLLM:
         )
 
         response = await self._acompletion_with_openrouter_fallback(kwargs)
-        
+
         result = response.choices[0].message.content or ""
         result = self.clean_thinking_tags(result)
         result = self.normalize_voice_tags(result)
-        
+
         log_llm_interaction(
             model=model,
             provider=self.provider,
@@ -1250,7 +1318,7 @@ class GameMasterLLM:
             phase=phase,
             metadata=metadata,
         )
-        
+
         return result
 
     async def stream_simple_task(
@@ -1272,15 +1340,16 @@ class GameMasterLLM:
         if messages is None:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ]
-        
+
         normalized_model = self._normalize_model(model)
 
         kwargs = {
             "model": normalized_model,
             "messages": messages,
-            "max_tokens": self.max_tokens + (self.max_thinking_tokens if self.enable_thinking else 0),
+            "max_tokens": self.max_tokens
+            + (self.max_thinking_tokens if self.enable_thinking else 0),
             "stream": True,
         }
         self._apply_thinking_settings(kwargs)
@@ -1307,7 +1376,7 @@ class GameMasterLLM:
             elif self.provider == "minimax":
                 kwargs["custom_llm_provider"] = "openai"
                 kwargs["api_base"] = self.minimax_api_base
-        
+
         # Auto-detect OpenRouter keys (only when no other OpenAI-compatible provider is explicitly set)
         openai_compatible_providers = ("kimi", "minimax", "deepseek")
         if (
@@ -1318,7 +1387,7 @@ class GameMasterLLM:
             kwargs["api_base"] = "https://openrouter.ai/api/v1"
 
         self._apply_openrouter_provider_routing(kwargs)
-        
+
         log_structured_event(
             "gm.turn.stream.request",
             model=normalized_model,
@@ -1357,9 +1426,9 @@ class GameMasterLLM:
         """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         normalized_model = self._normalize_model(model)
         # Gemini and Anthropic often fail with complex Pydantic schemas in strict tool-use mode
         # Anthropic has a 24-optional-parameter limit in their grammar compiler.
@@ -1367,17 +1436,23 @@ class GameMasterLLM:
         is_gemini = "gemini" in normalized_model.lower() or self.provider == "google"
         is_anthropic = "claude" in normalized_model.lower() or self.provider == "anthropic"
         is_deepseek = "deepseek" in normalized_model.lower() or self.provider == "deepseek"
-        is_kimi = "kimi" in normalized_model.lower() or "moonshot" in normalized_model.lower() or self.provider == "kimi"
+        is_kimi = (
+            "kimi" in normalized_model.lower()
+            or "moonshot" in normalized_model.lower()
+            or self.provider == "kimi"
+        )
         is_minimax = "minimax" in normalized_model.lower() or self.provider == "minimax"
         # Only treat as OpenRouter when the provider is explicitly openrouter; key-prefix
         # detection would falsely match MiniMax/kimi/deepseek keys that also start with "sk-or-v1".
         is_openrouter = self.provider == "openrouter"
 
-        # Many non-OpenAI providers (including DeepSeek on some platforms) do not support 
+        # Many non-OpenAI providers (including DeepSeek on some platforms) do not support
         # complex Pydantic models in response_format (structured outputs).
         # We fall back to standard JSON mode with prompt-injected schemas for these.
         # Direct Gemini (not via OpenRouter) supports response_schema perfectly and does not need fallback.
-        use_json_mode_fallback = is_anthropic or is_deepseek or is_kimi or is_minimax or is_openrouter
+        use_json_mode_fallback = (
+            is_anthropic or is_deepseek or is_kimi or is_minimax or is_openrouter
+        )
 
         if use_json_mode_fallback:
             # Inject schema into prompt since we are bypassing strict tool enforcement
@@ -1396,8 +1471,13 @@ class GameMasterLLM:
         kwargs = {
             "model": normalized_model,
             "messages": messages,
-            "response_format": ({"type": "json_object"} if use_json_mode_fallback and not is_minimax else (None if is_minimax else response_model)),
-            "max_tokens": self.max_tokens + (self.max_thinking_tokens if self.enable_thinking and allow_thinking else 0),
+            "response_format": (
+                {"type": "json_object"}
+                if use_json_mode_fallback and not is_minimax
+                else (None if is_minimax else response_model)
+            ),
+            "max_tokens": self.max_tokens
+            + (self.max_thinking_tokens if self.enable_thinking and allow_thinking else 0),
         }
         if kwargs.get("response_format") is None:
             kwargs.pop("response_format", None)
@@ -1452,18 +1532,18 @@ class GameMasterLLM:
         )
 
         response = await self._acompletion_with_openrouter_fallback(kwargs)
-        
+
         content = response.choices[0].message.content
         if use_json_mode_fallback and (content is None or not str(content).strip()):
             response = await self._retry_blank_json_content_async(kwargs, response)
             content = response.choices[0].message.content
-        
+
         # Log thinking/reasoning if present
         if adventure_id:
             thinking_text = self.extract_thinking(content or "", response.choices[0].message)
             if thinking_text:
                 await self._append_generation_log_async(adventure_id, "thinking", thinking_text)
-        
+
         log_llm_interaction(
             model=model,
             provider=self.provider,
@@ -1481,22 +1561,29 @@ class GameMasterLLM:
                 "response_model": response_model.__name__,
             },
         )
-        
+
         finish_reason = response.choices[0].finish_reason
 
         if not content:
             logger.error(f"LLM returned empty content. Raw response: {response.model_dump()}")
             if finish_reason == "length":
-                raise ValueError("LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings.")
+                raise ValueError(
+                    "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
+                )
             raise ValueError("No content returned from LLM for complex task.")
-            
+
         try:
             content = self.clean_thinking_tags(content)
             content = self._clean_json_string(content)
             if not content:
-                logger.error("LLM returned content that was empty after JSON cleanup. Raw response: %s", response.model_dump())
+                logger.error(
+                    "LLM returned content that was empty after JSON cleanup. Raw response: %s",
+                    response.model_dump(),
+                )
                 if finish_reason == "length":
-                    raise ValueError("LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings.")
+                    raise ValueError(
+                        "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
+                    )
                 raise ValueError("No content returned from LLM for complex task.")
             content = self._repair_json(content)
             try:
@@ -1505,7 +1592,9 @@ class GameMasterLLM:
                 if finish_reason == "length" or self._is_truncated_json(content):
                     logger.error(
                         "LLM response appears truncated. Length: %d, finish_reason: %s. Full content: %s",
-                        len(content), finish_reason, content,
+                        len(content),
+                        finish_reason,
+                        content,
                     )
                     raise ValueError(
                         "LLM response was truncated (token limit). "
@@ -1527,18 +1616,24 @@ class GameMasterLLM:
                 if data is None:
                     logger.error(
                         "LLM response was not valid JSON. Length: %d, finish_reason: %s. Full content: %s",
-                        len(content), finish_reason, content,
+                        len(content),
+                        finish_reason,
+                        content,
                     )
                     preview = content[:280].replace("\n", " ").strip()
                     raise ValueError(
                         f"Failed to parse LLM response as JSON. Preview: {preview}"
                     ) from exc
             if isinstance(data, list) and len(data) > 0:
-                logger.warning(f"LLM returned a list for {response_model.__name__}. Taking first element.")
+                logger.warning(
+                    f"LLM returned a list for {response_model.__name__}. Taking first element."
+                )
                 data = data[0]
 
             if not isinstance(data, dict):
-                raise ValueError(f"LLM returned {type(data).__name__} but a mapping was expected for {response_model.__name__}.")
+                raise ValueError(
+                    f"LLM returned {type(data).__name__} but a mapping was expected for {response_model.__name__}."
+                )
 
             return response_model(**data)
         except json.JSONDecodeError as exc:
@@ -1576,28 +1671,34 @@ class GameMasterLLM:
     ) -> T:
         """
         Strict mechanics task (Strict Mode).
-        Uses 'response_format' to force the LLM to return standard JSON 
+        Uses 'response_format' to force the LLM to return standard JSON
         that matches the given Pydantic model.
         """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
-        # litellm will translate the Pydantic model into a JSON schema 
+
+        # litellm will translate the Pydantic model into a JSON schema
         # for providers that support structured outputs (e.g. OpenAI).
         normalized_model = self._normalize_model(model)
         is_gemini = "gemini" in normalized_model.lower() or self.provider == "google"
         is_anthropic = "claude" in normalized_model.lower() or self.provider == "anthropic"
         is_deepseek = "deepseek" in normalized_model.lower() or self.provider == "deepseek"
-        is_kimi = "kimi" in normalized_model.lower() or "moonshot" in normalized_model.lower() or self.provider == "kimi"
+        is_kimi = (
+            "kimi" in normalized_model.lower()
+            or "moonshot" in normalized_model.lower()
+            or self.provider == "kimi"
+        )
         is_minimax = "minimax" in normalized_model.lower() or self.provider == "minimax"
         # Only treat as OpenRouter when the provider is explicitly openrouter; key-prefix
         # detection would falsely match MiniMax/kimi/deepseek keys that also start with "sk-or-v1".
         is_openrouter = self.provider == "openrouter"
 
         # Direct Gemini (not via OpenRouter) supports response_schema perfectly and does not need fallback.
-        use_json_mode_fallback = is_anthropic or is_deepseek or is_kimi or is_minimax or is_openrouter
+        use_json_mode_fallback = (
+            is_anthropic or is_deepseek or is_kimi or is_minimax or is_openrouter
+        )
 
         if use_json_mode_fallback:
             # Inject schema into prompt since we are bypassing strict enforcement
@@ -1616,8 +1717,13 @@ class GameMasterLLM:
         kwargs = {
             "model": normalized_model,
             "messages": messages,
-            "response_format": ({"type": "json_object"} if use_json_mode_fallback and not is_minimax else (None if is_minimax else response_model)),
-            "max_tokens": self.max_tokens + (self.max_thinking_tokens if self.enable_thinking and allow_thinking else 0),
+            "response_format": (
+                {"type": "json_object"}
+                if use_json_mode_fallback and not is_minimax
+                else (None if is_minimax else response_model)
+            ),
+            "max_tokens": self.max_tokens
+            + (self.max_thinking_tokens if self.enable_thinking and allow_thinking else 0),
         }
         if kwargs.get("response_format") is None:
             kwargs.pop("response_format", None)
@@ -1675,12 +1781,12 @@ class GameMasterLLM:
         )
 
         response = self._completion_with_openrouter_fallback(kwargs)
-        
+
         content = response.choices[0].message.content
         if use_json_mode_fallback and (content is None or not str(content).strip()):
             response = self._retry_blank_json_content(kwargs, response)
             content = response.choices[0].message.content
-        
+
         log_llm_interaction(
             model=model,
             provider=self.provider,
@@ -1698,22 +1804,29 @@ class GameMasterLLM:
                 "response_model": response_model.__name__,
             },
         )
-        
+
         finish_reason = response.choices[0].finish_reason
 
         if not content:
             logger.error(f"LLM returned empty content. Raw response: {response.model_dump()}")
             if finish_reason == "length":
-                raise ValueError("LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings.")
+                raise ValueError(
+                    "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
+                )
             raise ValueError("No content returned from LLM for complex task.")
-            
+
         try:
             content = self.clean_thinking_tags(content)
             content = self._clean_json_string(content)
             if not content:
-                logger.error("LLM returned content that was empty after JSON cleanup. Raw response: %s", response.model_dump())
+                logger.error(
+                    "LLM returned content that was empty after JSON cleanup. Raw response: %s",
+                    response.model_dump(),
+                )
                 if finish_reason == "length":
-                    raise ValueError("LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings.")
+                    raise ValueError(
+                        "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
+                    )
                 raise ValueError("No content returned from LLM for complex task.")
             content = self._repair_json(content)
             try:
@@ -1722,7 +1835,9 @@ class GameMasterLLM:
                 if finish_reason == "length" or self._is_truncated_json(content):
                     logger.error(
                         "LLM response appears truncated. Length: %d, finish_reason: %s. Full content: %s",
-                        len(content), finish_reason, content,
+                        len(content),
+                        finish_reason,
+                        content,
                     )
                     raise ValueError(
                         "LLM response was truncated (token limit). "
@@ -1743,7 +1858,9 @@ class GameMasterLLM:
                 if data is None:
                     logger.error(
                         "LLM response was not valid JSON. Length: %d, finish_reason: %s. Full content: %s",
-                        len(content), finish_reason, content,
+                        len(content),
+                        finish_reason,
+                        content,
                     )
                     preview = content[:280].replace("\n", " ").strip()
                     raise ValueError(

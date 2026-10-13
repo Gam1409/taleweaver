@@ -88,6 +88,8 @@ Scripts declare a trigger event and an optional target entity or scene.
 | `on_turn_start` | Immediately when player submits an input, before LLM turn generation. | Global (`*` or empty). |
 | `on_enter_scene` | When the player enters a new scene. | Specific `scene_id` or empty for any scene. |
 | `on_interact` | When the player examines, attacks, talks to, or manipulates an entity. | Specific `entity_id` (NPC or object) or empty for all. |
+| `on_logic_pass_done` | After game mechanics and state mutations finish, before narration is generated. | Global (`*` or empty). |
+| `on_narration_done` | After narration generation completes, before final turn persistence. | Global (`*` or empty). |
 | `on_turn_end` | After LLM narration and state changes are computed, before client response. | Global (`*` or empty). |
 
 ### Inline Entity Triggers

@@ -156,6 +156,15 @@ function isDebugSystemMessage(msg: any): boolean {
   const c = String(msg.content || '').trim()
   return c.startsWith('[DEBUG') || c.startsWith('DEBUG:') || c.startsWith('--- DEBUG')
 }
+
+function getCleanSystemContent(msg: any): string {
+  const content = String(msg?.content || '')
+  if (isDebugSystemMessage(msg)) return content
+  return content
+    .replace(/\s*\[DEBUG:\s*Trigger fired\][^\n]*/gi, '')
+    .replace(/\s*\[DEBUG\][^\n]*/gi, '')
+    .trim()
+}
 </script>
 
 <template>
@@ -206,13 +215,13 @@ function isDebugSystemMessage(msg: any): boolean {
             <button
               v-if="configState.isTtsEnabled && !isDebugSystemMessage(sysMsg)"
               type="button"
-              @click.stop="speakBubble(sysMsg.content, 'System')"
+              @click.stop="speakBubble(getCleanSystemContent(sysMsg), 'System')"
               class="absolute -top-2.5 right-3 z-30 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-200 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-400/60 text-emerald-300 text-[10px] font-black uppercase tracking-wider shadow-lg cursor-pointer backdrop-blur-md"
-              :title="isSpeakingBubble(sysMsg.content, 'System') ? 'Stop Audio' : 'Play Audio'"
+              :title="isSpeakingBubble(getCleanSystemContent(sysMsg), 'System') ? 'Stop Audio' : 'Play Audio'"
             >
-              <VolumeX v-if="isSpeakingBubble(sysMsg.content, 'System')" class="w-3 h-3 text-red-400" />
+              <VolumeX v-if="isSpeakingBubble(getCleanSystemContent(sysMsg), 'System')" class="w-3 h-3 text-red-400" />
               <Volume2 v-else class="w-3 h-3" />
-              <span>{{ isSpeakingBubble(sysMsg.content, 'System') ? 'Stop' : 'Audio' }}</span>
+              <span>{{ isSpeakingBubble(getCleanSystemContent(sysMsg), 'System') ? 'Stop' : 'Audio' }}</span>
             </button>
 
             <!-- System Header & Content -->
@@ -239,7 +248,7 @@ function isDebugSystemMessage(msg: any): boolean {
                 {{ props.turnError && props.turnError.message && sysMsg.content.includes(props.turnError.message) ? 'Error' : isDebugSystemMessage(sysMsg) ? 'Debug' : 'System' }}
               </span>
               <pre v-if="isDebugSystemMessage(sysMsg) && (sysMsg.content.includes('\n') || sysMsg.content.length > 90)" class="mt-2 p-3 rounded-xl bg-black/60 border border-cyan-500/20 text-cyan-300/90 text-xs font-mono whitespace-pre-wrap break-all custom-scrollbar">{{ sysMsg.content }}</pre>
-              <span v-else class="italic font-medium" :class="{ 'font-mono text-xs text-cyan-200/90 not-italic': isDebugSystemMessage(sysMsg) }" v-html="renderFormattedHtml(sysMsg.content)"></span>
+              <span v-else class="italic font-medium" :class="{ 'font-mono text-xs text-cyan-200/90 not-italic': isDebugSystemMessage(sysMsg) }" v-html="renderFormattedHtml(getCleanSystemContent(sysMsg))"></span>
             </div>
 
             <!-- Inline Action Buttons (Retry & Cancel) -->
