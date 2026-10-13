@@ -94,6 +94,7 @@ logger = logging.getLogger(__name__)
 
 _SAFE_SCENE_ID_RE = re.compile(r"^[A-Z0-9_]+$")
 
+
 class EntityUpdateRequest(BaseModel):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist", "exit"]
     target_id: str
@@ -236,8 +237,10 @@ class AwardCreateRequest(BaseModel):
 
 EDITOR_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
+
 def _serialize_model(obj):
-    if not obj: return None
+    if not obj:
+        return None
     data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
 
     if isinstance(obj, WorldScene):
@@ -245,23 +248,25 @@ def _serialize_model(obj):
         if not isinstance(decor, list):
             decor = []
         data["decorative_objects"] = [str(d) for d in decor if isinstance(d, (str, int, float))]
-    
+
     # Group stats for easier frontend access
     if isinstance(obj, WorldEntity):
         if obj.entity_type == "NPC":
-            data["stats"] = {
-                "hp": obj.hp,
-                "mana": obj.mana,
-                "stamina": obj.stamina
-            }
+            data["stats"] = {"hp": obj.hp, "mana": obj.mana, "stamina": obj.stamina}
         elif obj.entity_type == "OBJECT":
             stats = {}
-            if obj.stat_modifier_strength: stats["STR"] = obj.stat_modifier_strength
-            if obj.stat_modifier_dexterity: stats["DEX"] = obj.stat_modifier_dexterity
-            if obj.stat_modifier_intelligence: stats["INT"] = obj.stat_modifier_intelligence
-            if obj.stat_modifier_wisdom: stats["WIS"] = obj.stat_modifier_wisdom
-            if obj.stat_modifier_charisma: stats["CHA"] = obj.stat_modifier_charisma
-            if obj.stat_modifier_armor_class: stats["AC"] = obj.stat_modifier_armor_class
+            if obj.stat_modifier_strength:
+                stats["STR"] = obj.stat_modifier_strength
+            if obj.stat_modifier_dexterity:
+                stats["DEX"] = obj.stat_modifier_dexterity
+            if obj.stat_modifier_intelligence:
+                stats["INT"] = obj.stat_modifier_intelligence
+            if obj.stat_modifier_wisdom:
+                stats["WIS"] = obj.stat_modifier_wisdom
+            if obj.stat_modifier_charisma:
+                stats["CHA"] = obj.stat_modifier_charisma
+            if obj.stat_modifier_armor_class:
+                stats["AC"] = obj.stat_modifier_armor_class
             data["stats"] = stats
             metadata_json = dict(obj.metadata_json or {})
             data["code_to_unlock"] = str(metadata_json.get("code_to_unlock") or "")
@@ -270,23 +275,38 @@ def _serialize_model(obj):
             if isinstance(metadata_json.get("locked"), bool):
                 data["locked"] = metadata_json.get("locked")
             else:
-                data["locked"] = bool(metadata_json.get("code_to_unlock") or metadata_json.get("item_to_unlock") or metadata_json.get("rule_to_unlock"))
-            
+                data["locked"] = bool(
+                    metadata_json.get("code_to_unlock")
+                    or metadata_json.get("item_to_unlock")
+                    or metadata_json.get("rule_to_unlock")
+                )
+
             # Serialize switch fields for the editor UI
             switch_config = metadata_json.get("switch") or {}
-            data["switch_states"] = metadata_json.get("switch_states") or switch_config.get("states") or []
-            data["switch_initial_state"] = metadata_json.get("switch_initial_state") or switch_config.get("initial_state") or ""
-            data["switch_transitions"] = metadata_json.get("switch_transitions") or switch_config.get("transitions") or []
+            data["switch_states"] = (
+                metadata_json.get("switch_states") or switch_config.get("states") or []
+            )
+            data["switch_initial_state"] = (
+                metadata_json.get("switch_initial_state")
+                or switch_config.get("initial_state")
+                or ""
+            )
+            data["switch_transitions"] = (
+                metadata_json.get("switch_transitions") or switch_config.get("transitions") or []
+            )
     return data
+
 
 def _is_npc_entity(ent):
     return ent.entity_type == "NPC"
+
 
 def _is_object_entity(ent):
     return ent.entity_type == "OBJECT"
 
 
 OBJECT_ID_PATTERN = re.compile(r"^[A-Z0-9_]{1,30}$")
+
 
 def _sanitize_object_id(raw_value: Optional[str], field_name: str) -> str:
     value = str(raw_value or "").strip()
@@ -312,7 +332,9 @@ def _sanitize_editor_id(raw_value: Optional[str], field_name: str) -> str:
     return value
 
 
-async def _get_owned_adventure_or_404(db: AsyncSession, template_id: str, user_id: str) -> AdventureTemplate:
+async def _get_owned_adventure_or_404(
+    db: AsyncSession, template_id: str, user_id: str
+) -> AdventureTemplate:
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != user_id:
         raise HTTPException(status_code=404, detail="AdventureTemplate not found")
@@ -328,7 +350,9 @@ async def _ensure_template_scene_exists(db: AsyncSession, template_id: str, scen
         )
     )
     if not res.scalars().first():
-        raise HTTPException(status_code=400, detail=f"scene_id '{scene_id}' does not exist in this adventure")
+        raise HTTPException(
+            status_code=400, detail=f"scene_id '{scene_id}' does not exist in this adventure"
+        )
 
 
 async def _clone_entity_image(
@@ -376,7 +400,9 @@ async def _clone_entity_image(
     # path-traversal linter: a user-controlled image URL could otherwise inject
     # an arbitrary suffix into the constructed file name.
     _, raw_ext = os.path.splitext(safe_source_path)
-    safe_ext = raw_ext.lower() if raw_ext.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"} else ".png"
+    safe_ext = (
+        raw_ext.lower() if raw_ext.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"} else ".png"
+    )
 
     safe_entity_token = sanitize_path_component(new_entity_id) or "entity"
     target_name = f"{safe_entity_token}_clone_{uuid.uuid4().hex[:8]}{safe_ext}"
@@ -384,12 +410,14 @@ async def _clone_entity_image(
         sanitize_relative_segment(target_name) or f"entity_clone_{uuid.uuid4().hex}{safe_ext}"
     )
 
-    candidate_path = os.path.abspath(os.path.realpath(
-        ensure_within_base_dir(
-            os.path.join(safe_target_dir, safe_filename),
-            safe_target_dir,
+    candidate_path = os.path.abspath(
+        os.path.realpath(
+            ensure_within_base_dir(
+                os.path.join(safe_target_dir, safe_filename),
+                safe_target_dir,
+            )
         )
-    ))
+    )
     if not candidate_path.startswith(safe_target_dir + os.sep):
         return None
     if not candidate_path.startswith(data_root + os.sep):
@@ -406,7 +434,10 @@ async def _clone_entity_image(
     # Re-validate before filesystem sink for taint-tracking static analysers
     safe_source_path = assert_within_data_dir(safe_source_path)
     candidate_path = assert_within_base_dir(candidate_path, safe_target_dir)
-    if not (safe_source_path.startswith(data_root + os.sep) and candidate_path.startswith(data_root + os.sep)):
+    if not (
+        safe_source_path.startswith(data_root + os.sep)
+        and candidate_path.startswith(data_root + os.sep)
+    ):
         return None
 
     try:
@@ -432,6 +463,7 @@ def _normalize_lock_fields(
         return code[:32], "", ""
     if item:
         from backend.utils.text_utils import slugify
+
         return "", slugify(item).upper().replace("-", "_")[:64], ""
     if rule:
         return "", "", rule[:500]
@@ -533,7 +565,10 @@ async def _restore_missing_template_avatar(
     await db.commit()
     return avatar
 
-async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> AdventureTemplateDebugResponse:
+
+async def _build_adventure_editor_assets(
+    template_id: str, db: AsyncSession
+) -> AdventureTemplateDebugResponse:
     """Builds full world/editor asset state for a specific adventure."""
     adv_res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == template_id))
     adventure = adv_res.scalars().first()
@@ -544,7 +579,7 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
         await MediaEngine.ensure_thumbnails(template_id)
     except Exception as exc:
         logger.warning("Thumbnail ensure failed for adventure %s: %s", template_id, exc)
-        
+
     scene_res = await db.execute(
         select(WorldScene).where(
             WorldScene.template_id == template_id,
@@ -552,7 +587,7 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
         )
     )
     scenes = scene_res.scalars().all()
-    
+
     exit_res = await db.execute(
         select(WorldExit).where(
             WorldExit.template_id == template_id,
@@ -560,7 +595,7 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
         )
     )
     exits = exit_res.scalars().all()
-    
+
     entity_res = await db.execute(
         select(WorldEntity).where(
             WorldEntity.template_id == template_id,
@@ -568,6 +603,58 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
         )
     )
     entities = entity_res.scalars().all()
+
+    # Self-heal: If world tables have no scenes yet but original_manifest has world data, restore them
+    if (
+        not scenes
+        and isinstance(adventure.original_manifest, dict)
+        and adventure.original_manifest.get("scenes")
+    ):
+        try:
+            from backend.engine.world_generator import WorldGenerator
+            from backend.models.user import User
+
+            user = None
+            if adventure.owner_id:
+                user_res = await db.execute(select(User).where(User.id == adventure.owner_id))
+                user = user_res.scalars().first()
+            await WorldGenerator.apply_manifest(
+                db=db,
+                template_id=template_id,
+                manifest_dict=adventure.original_manifest,
+                user=user,
+            )
+            adventure.is_ready = True
+            adventure.creation_status = "Ready"
+            await db.commit()
+
+            scene_res = await db.execute(
+                select(WorldScene).where(
+                    WorldScene.template_id == template_id,
+                    WorldScene.session_id.is_(None),
+                )
+            )
+            scenes = scene_res.scalars().all()
+            exit_res = await db.execute(
+                select(WorldExit).where(
+                    WorldExit.template_id == template_id,
+                    WorldExit.session_id.is_(None),
+                )
+            )
+            exits = exit_res.scalars().all()
+            entity_res = await db.execute(
+                select(WorldEntity).where(
+                    WorldEntity.template_id == template_id,
+                    WorldEntity.session_id.is_(None),
+                )
+            )
+            entities = entity_res.scalars().all()
+        except Exception as exc:
+            logger.warning(
+                "Failed to auto-restore template entities from manifest for %s: %s",
+                template_id,
+                exc,
+            )
 
     # Heal stale library image URLs (e.g. slug changed after import/reuse) without failing the editor UI.
     for scene in scenes:
@@ -581,7 +668,7 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
 
     # Backfill avatar inventory/equipment dicts from template entities so debug view shows full item data.
     if avatar:
-        entities_by_id = {ent.id: ent for ent in entities if getattr(ent, 'id', None)}
+        entities_by_id = {ent.id: ent for ent in entities if getattr(ent, "id", None)}
         if entities_by_id:
             _backfill_avatar_items_from_template_entities(avatar, entities_by_id)
 
@@ -591,7 +678,9 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
     db_exits = [_serialize_model(ex) for ex in exits]
 
     adventure_payload = _serialize_model(adventure) or {}
-    adventure_payload["start_scene_id"] = await AdventureLogic.resolve_initial_scene_id(db, template_id)
+    adventure_payload["start_scene_id"] = await AdventureLogic.resolve_initial_scene_id(
+        db, template_id
+    )
 
     return AdventureTemplateDebugResponse(
         adventure=adventure_payload,
@@ -600,8 +689,9 @@ async def _build_adventure_editor_assets(template_id: str, db: AsyncSession) -> 
         npcs=db_npcs,
         objects=db_objects,
         exits=db_exits,
-        entities_all=[_serialize_model(ent) for ent in entities]
+        entities_all=[_serialize_model(ent) for ent in entities],
     )
+
 
 @router.get("/{template_id}/editor/assets", response_model=AdventureTemplateDebugResponse)
 async def get_adventure_editor_assets(
@@ -612,6 +702,7 @@ async def get_adventure_editor_assets(
     """Returns full world/editor asset data for the AdventureTemplate Editor UI (owner only)."""
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     return await _build_adventure_editor_assets(template_id, db)
+
 
 @router.get("/{template_id}/debug", response_model=AdventureTemplateDebugResponse)
 async def get_adventure_debug(
@@ -754,7 +845,7 @@ async def run_editor_validation(
                     response_model=_AIValidationResponse,
                     model=model,
                 )
-                for f in (response.findings if response else []):
+                for f in response.findings if response else []:
                     ai_findings.append(
                         ValidationFinding(
                             severity="warn",  # AI may only emit warn-level findings
@@ -921,7 +1012,10 @@ async def delete_validation_findings(
                 targets_structural.add(key)
 
         def _matches(entry: Any, targets: set[tuple[str, str]]) -> bool:
-            return (str(entry.get("code") or "").strip(), str(entry.get("location") or "").strip()) in targets
+            return (
+                str(entry.get("code") or "").strip(),
+                str(entry.get("location") or "").strip(),
+            ) in targets
 
         new_structural = [e for e in before_structural if not _matches(e, targets_structural)]
         new_ai = [e for e in before_ai if not _matches(e, targets_ai)]
@@ -936,7 +1030,9 @@ async def delete_validation_findings(
         await db.commit()
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to persist validation deletion.") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to persist validation deletion."
+        ) from exc
 
     await db.refresh(run)
 
@@ -1046,9 +1142,18 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
     adventure = _adventure_dict()
     adventure_payload: dict[str, Any] = {}
     for key in (
-        "id", "title", "teaser", "plot", "rules", "intro_text",
-        "walkthrough", "tts_director_notes", "completed_condition",
-        "gameover_condition", "language", "selected_tone",
+        "id",
+        "title",
+        "teaser",
+        "plot",
+        "rules",
+        "intro_text",
+        "walkthrough",
+        "tts_director_notes",
+        "completed_condition",
+        "gameover_condition",
+        "language",
+        "selected_tone",
         "rule_enforcement_mode",
     ):
         value = adventure.get(key)
@@ -1069,11 +1174,13 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
     for q in raw_quests:
         if not isinstance(q, dict):
             continue
-        quests.append({
-            "id": q.get("id"),
-            "title": q.get("title"),
-            "description": _short_state(q.get("description"), limit=400),
-        })
+        quests.append(
+            {
+                "id": q.get("id"),
+                "title": q.get("title"),
+                "description": _short_state(q.get("description"), limit=400),
+            }
+        )
 
     return {
         "adventure": adventure_payload,
@@ -1100,45 +1207,80 @@ def _signing(finding_or_payload: AIFixSuggestionsRequest) -> str:
 
 _FIX_PROTAGONIST_FIELDS = frozenset(
     {
-        "name", "description", "goal", "character",
-        "hp", "mana", "stamina", "strength", "intelligence", "wisdom",
-        "dexterity", "charisma", "armor_class", "exp",
+        "name",
+        "description",
+        "goal",
+        "character",
+        "hp",
+        "mana",
+        "stamina",
+        "strength",
+        "intelligence",
+        "wisdom",
+        "dexterity",
+        "charisma",
+        "armor_class",
+        "exp",
     }
 )
 
 _FIX_ADVENTURE_FIELDS = frozenset(
     {
-        "title", "teaser", "plot", "rules", "intro_text",
-        "walkthrough", "tts_director_notes",
-        "completed_condition", "gameover_condition",
+        "title",
+        "teaser",
+        "plot",
+        "rules",
+        "intro_text",
+        "walkthrough",
+        "tts_director_notes",
+        "completed_condition",
+        "gameover_condition",
     }
 )
 
-_FIX_SCENE_FIELDS = frozenset(
-    {"label", "description", "decorative_objects"}
-)
+_FIX_SCENE_FIELDS = frozenset({"label", "description", "decorative_objects"})
 
 _FIX_EXIT_FIELDS = frozenset(
     {
-        "label", "lock_description", "exit_type", "locked",
-        "code_to_unlock", "item_to_unlock", "rule_to_unlock",
+        "label",
+        "lock_description",
+        "exit_type",
+        "locked",
+        "code_to_unlock",
+        "item_to_unlock",
+        "rule_to_unlock",
     }
 )
 
 _FIX_NPC_FIELDS = frozenset(
     {
-        "name", "description", "goal", "character",
-        "is_killable", "current_scene_id",
-        "is_hidden", "reveal_rule", "spatial_position",
+        "name",
+        "description",
+        "goal",
+        "character",
+        "is_killable",
+        "current_scene_id",
+        "is_hidden",
+        "reveal_rule",
+        "spatial_position",
     }
 )
 
 _FIX_OBJECT_FIELDS = frozenset(
     {
-        "name", "description", "is_portable", "current_scene_id",
-        "locked", "code_to_unlock", "item_to_unlock", "rule_to_unlock",
-        "text_log_content", "text_log_format",
-        "is_hidden", "reveal_rule", "spatial_position",
+        "name",
+        "description",
+        "is_portable",
+        "current_scene_id",
+        "locked",
+        "code_to_unlock",
+        "item_to_unlock",
+        "rule_to_unlock",
+        "text_log_content",
+        "text_log_format",
+        "is_hidden",
+        "reveal_rule",
+        "spatial_position",
     }
 )
 
@@ -1191,15 +1333,9 @@ async def _resolve_exit_target(
     if not raw:
         return None
 
-    base_filter = (
-        WorldExit.template_id == template_id,
-    )
+    base_filter = (WorldExit.template_id == template_id,)
 
-    res = await db.execute(
-        select(WorldExit)
-        .where(*base_filter, WorldExit.id == raw)
-        .limit(1)
-    )
+    res = await db.execute(select(WorldExit).where(*base_filter, WorldExit.id == raw).limit(1))
     match = res.scalars().first()
     if match is not None:
         return match
@@ -1222,11 +1358,7 @@ async def _resolve_exit_target(
             return match
 
     upper = raw.upper()
-    res = await db.execute(
-        select(WorldExit)
-        .where(*base_filter, WorldExit.id == upper)
-        .limit(1)
-    )
+    res = await db.execute(select(WorldExit).where(*base_filter, WorldExit.id == upper).limit(1))
     match = res.scalars().first()
     if match is not None:
         return match
@@ -1256,10 +1388,7 @@ async def _resolve_exit_target(
         return match
 
     label_ci = raw.strip().lower()
-    res = await db.execute(
-        select(WorldExit)
-        .where(*base_filter)
-    )
+    res = await db.execute(select(WorldExit).where(*base_filter))
     candidates = []
     for row in res.scalars().all():
         if (row.label or "").strip().lower() == label_ci:
@@ -1365,7 +1494,9 @@ async def _apply_proposal_patch(
 
     allowed = _allowed_fields_for(patch.target_type)
     if not allowed:
-        raise HTTPException(status_code=400, detail=f"Unsupported target_type '{patch.target_type}'")
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported target_type '{patch.target_type}'"
+        )
 
     updates: dict[str, Any] = {}
     for field, value in (patch.field_updates or {}).items():
@@ -1416,7 +1547,9 @@ async def _apply_proposal_patch(
 
     if patch.target_type == "scene":
         scene = await _resolve_scene_target(
-            db=db, template_id=template_id, raw_target_id=raw_target_id,
+            db=db,
+            template_id=template_id,
+            raw_target_id=raw_target_id,
         )
         if scene is None:
             raise HTTPException(
@@ -1438,7 +1571,9 @@ async def _apply_proposal_patch(
                 if not s:
                     continue
                 if len(s) > 100:
-                    raise HTTPException(status_code=400, detail="decorative_objects entries must be <= 100 chars")
+                    raise HTTPException(
+                        status_code=400, detail="decorative_objects entries must be <= 100 chars"
+                    )
                 decor.append(s)
             scene.decorative_objects = decor[:7] or None
             flag_modified(scene, "decorative_objects")
@@ -1446,7 +1581,9 @@ async def _apply_proposal_patch(
 
     if patch.target_type == "exit":
         world_exit = await _resolve_exit_target(
-            db=db, template_id=template_id, raw_target_id=raw_target_id,
+            db=db,
+            template_id=template_id,
+            raw_target_id=raw_target_id,
         )
         if world_exit is None:
             raise HTTPException(
@@ -1471,23 +1608,34 @@ async def _apply_proposal_patch(
         )
         if lock_keys_present:
             code = str(updates.get("code_to_unlock", world_exit.code_to_unlock or "")).strip()
-            item = str(updates.get("item_to_unlock", world_exit.item_to_unlock or "")).strip().upper()
+            item = (
+                str(updates.get("item_to_unlock", world_exit.item_to_unlock or "")).strip().upper()
+            )
             rule = str(updates.get("rule_to_unlock", world_exit.rule_to_unlock or "")).strip()
 
             if code:
-                code = code[:32]; item = ""; rule = ""
+                code = code[:32]
+                item = ""
+                rule = ""
             elif item:
                 from backend.utils.text_utils import slugify
-                item = slugify(item).upper().replace("-", "_")[:64]; code = ""; rule = ""
+
+                item = slugify(item).upper().replace("-", "_")[:64]
+                code = ""
+                rule = ""
             elif rule:
-                rule = rule[:500]; code = ""; item = ""
+                rule = rule[:500]
+                code = ""
+                item = ""
             else:
-                code = ""; item = ""; rule = ""
+                code = ""
+                item = ""
+                rule = ""
 
             if (code or item or rule) and not str(world_exit.lock_description or "").strip():
                 raise HTTPException(
                     status_code=400,
-                    detail="A lock description is required when a code, item, or rule gate is configured on an exit."
+                    detail="A lock description is required when a code, item, or rule gate is configured on an exit.",
                 )
 
             world_exit.code_to_unlock = code or None
@@ -1499,8 +1647,10 @@ async def _apply_proposal_patch(
 
     if patch.target_type in ("npc", "object"):
         ent = await _resolve_entity_target(
-            db=db, template_id=template_id,
-            entity_type=patch.target_type, raw_target_id=raw_target_id,
+            db=db,
+            template_id=template_id,
+            entity_type=patch.target_type,
+            raw_target_id=raw_target_id,
         )
         if ent is None:
             raise HTTPException(
@@ -1520,7 +1670,9 @@ async def _apply_proposal_patch(
             if ent.entity_type == "OBJECT":
                 item_type = str(ent.item_type or "").upper()
                 if item_type == "READABLE" and len(text) > 200:
-                    raise HTTPException(status_code=400, detail="READABLE descriptions must be <= 200 chars")
+                    raise HTTPException(
+                        status_code=400, detail="READABLE descriptions must be <= 200 chars"
+                    )
             ent.description = text
         if "is_portable" in updates and ent.entity_type == "OBJECT":
             ent.is_portable = bool(updates["is_portable"])
@@ -1551,21 +1703,39 @@ async def _apply_proposal_patch(
             is_readable = item_type == "READABLE"
             metadata_json = dict(ent.metadata_json or {})
             lock_keys_present = any(
-                k in updates for k in ("locked", "code_to_unlock", "item_to_unlock", "rule_to_unlock")
+                k in updates
+                for k in ("locked", "code_to_unlock", "item_to_unlock", "rule_to_unlock")
             )
             if lock_keys_present and is_container:
-                code = str(updates.get("code_to_unlock", metadata_json.get("code_to_unlock") or "")).strip()
-                item = str(updates.get("item_to_unlock", metadata_json.get("item_to_unlock") or "")).strip().upper()
-                rule = str(updates.get("rule_to_unlock", metadata_json.get("rule_to_unlock") or "")).strip()
+                code = str(
+                    updates.get("code_to_unlock", metadata_json.get("code_to_unlock") or "")
+                ).strip()
+                item = (
+                    str(updates.get("item_to_unlock", metadata_json.get("item_to_unlock") or ""))
+                    .strip()
+                    .upper()
+                )
+                rule = str(
+                    updates.get("rule_to_unlock", metadata_json.get("rule_to_unlock") or "")
+                ).strip()
                 if code:
-                    code = code[:32]; item = ""; rule = ""
+                    code = code[:32]
+                    item = ""
+                    rule = ""
                 elif item:
                     from backend.utils.text_utils import slugify
-                    item = slugify(item).upper().replace("-", "_")[:64]; code = ""; rule = ""
+
+                    item = slugify(item).upper().replace("-", "_")[:64]
+                    code = ""
+                    rule = ""
                 elif rule:
-                    rule = rule[:500]; code = ""; item = ""
+                    rule = rule[:500]
+                    code = ""
+                    item = ""
                 else:
-                    code = ""; item = ""; rule = ""
+                    code = ""
+                    item = ""
+                    rule = ""
                 metadata_json["code_to_unlock"] = code
                 metadata_json["item_to_unlock"] = item
                 metadata_json["rule_to_unlock"] = rule
@@ -1582,7 +1752,9 @@ async def _apply_proposal_patch(
             if "text_log_content" in updates and is_readable:
                 text = str(updates["text_log_content"]).strip()
                 if len(text) > 1000:
-                    raise HTTPException(status_code=400, detail="text_log_content must be <= 1000 chars")
+                    raise HTTPException(
+                        status_code=400, detail="text_log_content must be <= 1000 chars"
+                    )
                 metadata_json["text_log_content"] = text
             if "text_log_format" in updates and is_readable:
                 fmt = str(updates["text_log_format"]).strip().upper()
@@ -1725,7 +1897,11 @@ def _format_focused_world_block(
             scene_id = str(target_entity.get("current_scene_id") or "").upper()
             if scene_id:
                 scene = next(
-                    (s for s in (summary.get("scenes") or []) if str(s.get("id") or "").upper() == scene_id),
+                    (
+                        s
+                        for s in (summary.get("scenes") or [])
+                        if str(s.get("id") or "").upper() == scene_id
+                    ),
                     None,
                 )
                 if scene:
@@ -1737,8 +1913,7 @@ def _format_focused_world_block(
         )
         if ex:
             target_block = (
-                f"=== TARGET EXIT ({ex.get('id')}) ===\n"
-                f"{json.dumps(ex, ensure_ascii=False)}\n"
+                f"=== TARGET EXIT ({ex.get('id')}) ===\n{json.dumps(ex, ensure_ascii=False)}\n"
             )
             from_id = str(ex.get("from_scene_id") or "").upper()
             to_id = str(ex.get("to_scene_id") or "").upper()
@@ -1755,8 +1930,7 @@ def _format_focused_world_block(
         chunks: list[str] = []
         for kind, ents in grouped.items():
             chunks.append(
-                f"--- {kind.upper()} ({len(ents)}) ---\n"
-                f"{json.dumps(ents, ensure_ascii=False)}"
+                f"--- {kind.upper()} ({len(ents)}) ---\n{json.dumps(ents, ensure_ascii=False)}"
             )
         neighbor_block = "\n\n".join(chunks) + "\n"
 
@@ -1798,9 +1972,7 @@ class _AllProvidersFailed(Exception):
 
     def __init__(self, outcomes: list[_AIAttemptOutcome]) -> None:
         self.outcomes = outcomes
-        summary = ", ".join(
-            f"{o.provider}({o.reason})" for o in outcomes
-        )
+        summary = ", ".join(f"{o.provider}({o.reason})" for o in outcomes)
         super().__init__(f"All AI providers failed: {summary}")
 
 
@@ -1816,10 +1988,7 @@ def _summarize_outcomes(outcomes: list[_AIAttemptOutcome]) -> str:
             "or ask an admin to set the AI_FIX_FALLBACK_PROVIDER."
         )
     if reasons == {_AIAttemptOutcome.TIMEOUT}:
-        return (
-            "All AI providers are slow to respond right now. "
-            "Please retry in a moment."
-        )
+        return "All AI providers are slow to respond right now. Please retry in a moment."
     return "The AI service is currently unavailable. Please retry in a moment."
 
 
@@ -1887,9 +2056,7 @@ async def _generate_llm_proposals(
     last_error: Optional[BaseException] = None
     for idx, (provider, model) in enumerate(attempts):
         try:
-            gm = GameMasterLLM(
-                user=current_user, provider=provider, model_category="complex"
-            )
+            gm = GameMasterLLM(user=current_user, provider=provider, model_category="complex")
         except ValueError as exc:
             last_error = exc
             outcomes.append(
@@ -1901,7 +2068,9 @@ async def _generate_llm_proposals(
             )
             logger.info(
                 "Skipping AI provider '%s' (model '%s'): %s",
-                provider, model or "<default>", exc,
+                provider,
+                model or "<default>",
+                exc,
             )
             continue
         except Exception as exc:
@@ -1915,7 +2084,9 @@ async def _generate_llm_proposals(
             )
             logger.warning(
                 "Skipping AI provider '%s' (model '%s'): %s",
-                provider, model or "<default>", exc,
+                provider,
+                model or "<default>",
+                exc,
             )
             continue
 
@@ -1944,7 +2115,9 @@ async def _generate_llm_proposals(
             )
             logger.warning(
                 "AI call to '%s' (model '%s') timed out after %.0fs",
-                provider, model, timeout_seconds or 0,
+                provider,
+                model,
+                timeout_seconds or 0,
             )
             if idx < len(attempts) - 1:
                 continue
@@ -1960,7 +2133,9 @@ async def _generate_llm_proposals(
             )
             logger.warning(
                 "AI call to '%s' (model '%s') raised: %s",
-                provider, model, exc,
+                provider,
+                model,
+                exc,
             )
             if idx < len(attempts) - 1:
                 continue
@@ -2082,8 +2257,6 @@ async def _evict_cached_suggestions(
     "/{template_id}/editor/validate/findings/suggest-fix",
     response_model=AIFixSuggestionsResponse,
 )
-
-
 async def ai_suggest_fix_for_finding(
     template_id: str,
     payload: AIFixSuggestionsRequest,
@@ -2125,7 +2298,8 @@ async def ai_suggest_fix_for_finding(
 
     base_kwargs = {"system_prompt": AI_FIX_SUGGESTIONS_SYSTEM_PROMPT}
     world_block = _format_focused_world_block(
-        summary, location=payload.finding_location,
+        summary,
+        location=payload.finding_location,
     )
     context_block = _format_finding_context_block(payload)
     finding_block = (
@@ -2153,7 +2327,8 @@ async def ai_suggest_fix_for_finding(
     except _AllProvidersFailed as exc:
         logger.warning(
             "AI fix suggestion unavailable for %s: %s",
-            template_id, exc,
+            template_id,
+            exc,
         )
         return AIFixSuggestionsResponse(
             finding_signature=signature,
@@ -2164,7 +2339,9 @@ async def ai_suggest_fix_for_finding(
     except TimeoutError as exc:
         logger.warning(
             "AI fix suggestion timed out for %s after %.0fs: %s",
-            template_id, settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS, exc,
+            template_id,
+            settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS,
+            exc,
         )
         return AIFixSuggestionsResponse(
             finding_signature=signature,
@@ -2194,8 +2371,17 @@ async def ai_suggest_fix_for_finding(
                 return dumped if isinstance(dumped, dict) else None
             except Exception:
                 return None
-        fields = ("title", "summary", "rationale", "patches",
-                  "target_type", "target_id", "description", "field_updates", "note")
+        fields = (
+            "title",
+            "summary",
+            "rationale",
+            "patches",
+            "target_type",
+            "target_id",
+            "description",
+            "field_updates",
+            "note",
+        )
         collected = {}
         for f in fields:
             if hasattr(value, f):
@@ -2227,9 +2413,17 @@ async def ai_suggest_fix_for_finding(
             clean_patches.append(
                 FixProposalEntityPatch(
                     target_type=target_type,  # type: ignore[arg-type]
-                    target_id=(str(p_dict.get("target_id")).strip() if p_dict.get("target_id") is not None else None),
+                    target_id=(
+                        str(p_dict.get("target_id")).strip()
+                        if p_dict.get("target_id") is not None
+                        else None
+                    ),
                     description=str(p_dict.get("description") or "").strip()[:280],
-                    field_updates={str(k): v for k, v in field_updates.items() if k in _allowed_fields_for(target_type)},
+                    field_updates={
+                        str(k): v
+                        for k, v in field_updates.items()
+                        if k in _allowed_fields_for(target_type)
+                    },
                 )
             )
         if not clean_patches:
@@ -2260,7 +2454,9 @@ async def ai_suggest_fix_for_finding(
         except Exception as cache_exc:
             logger.warning(
                 "Failed to persist AI fix cache for %s/%s: %s",
-                template_id, signature, cache_exc,
+                template_id,
+                signature,
+                cache_exc,
             )
     return response
 
@@ -2371,6 +2567,7 @@ async def ai_apply_fix_proposal(
                 if len(parts) >= 3:
                     sig_code = parts[1].strip()
                     sig_loc = parts[2].strip()
+
                     def _matches_code_loc(entry: Any) -> bool:
                         if not isinstance(entry, dict):
                             return False
@@ -2378,6 +2575,7 @@ async def ai_apply_fix_proposal(
                             str(entry.get("code") or "").strip() == sig_code
                             and str(entry.get("location") or "").strip() == sig_loc
                         )
+
                     new_ai = [e for e in before_ai if not _matches_code_loc(e)]
                     new_structural = [e for e in before_structural if not _matches_code_loc(e)]
 
@@ -2430,10 +2628,7 @@ async def ai_apply_fix_proposal(
         else "No changes were applied."
     )
     if failed_resolution and not applied_tags:
-        message = (
-            "The cached AI reference is out of date. "
-            "Please click AI-Fix again to regenerate."
-        )
+        message = "The cached AI reference is out of date. Please click AI-Fix again to regenerate."
 
     return AIFixApplyResponse(
         status=status,
@@ -2441,7 +2636,6 @@ async def ai_apply_fix_proposal(
         message=message,
         validation_run=updated_run_dict,
     )
-
 
 
 @router.post("/{template_id}/editor/scene")
@@ -2468,7 +2662,9 @@ async def create_editor_scene(
             if not s:
                 continue
             if len(s) > 100:
-                raise HTTPException(status_code=400, detail="Each decorative object must be at most 100 characters.")
+                raise HTTPException(
+                    status_code=400, detail="Each decorative object must be at most 100 characters."
+                )
             clean_decor.append(s)
         clean_decor = clean_decor[:7]
 
@@ -2594,7 +2790,7 @@ async def create_editor_exit(
     if (code or item or rule) and not lock_description:
         raise HTTPException(
             status_code=400,
-            detail="A lock description is required when a code, item, or rule gate is configured on an exit."
+            detail="A lock description is required when a code, item, or rule gate is configured on an exit.",
         )
 
     world_exit = WorldExit(
@@ -2611,21 +2807,25 @@ async def create_editor_exit(
         rule_to_unlock=rule or None,
     )
     db.add(world_exit)
-    if isinstance(adv.original_manifest, dict) and isinstance(adv.original_manifest.get("exits"), list):
+    if isinstance(adv.original_manifest, dict) and isinstance(
+        adv.original_manifest.get("exits"), list
+    ):
         manifest = deepcopy(adv.original_manifest)
-        manifest["exits"].append({
-            "id": world_exit.id,
-            "from_scene_id": world_exit.from_scene_id,
-            "to_scene_id": world_exit.to_scene_id,
-            "label": world_exit.label,
-            "exit_type": world_exit.exit_type,
-            "is_bidirectional": (world_exit.exit_type == "bidirectional"),
-            "is_locked": world_exit.is_locked,
-            "lock_description": world_exit.lock_description,
-            "code_to_unlock": world_exit.code_to_unlock,
-            "item_to_unlock": world_exit.item_to_unlock,
-            "rule_to_unlock": world_exit.rule_to_unlock,
-        })
+        manifest["exits"].append(
+            {
+                "id": world_exit.id,
+                "from_scene_id": world_exit.from_scene_id,
+                "to_scene_id": world_exit.to_scene_id,
+                "label": world_exit.label,
+                "exit_type": world_exit.exit_type,
+                "is_bidirectional": (world_exit.exit_type == "bidirectional"),
+                "is_locked": world_exit.is_locked,
+                "lock_description": world_exit.lock_description,
+                "code_to_unlock": world_exit.code_to_unlock,
+                "item_to_unlock": world_exit.item_to_unlock,
+                "rule_to_unlock": world_exit.rule_to_unlock,
+            }
+        )
         adv.original_manifest = manifest
         flag_modified(adv, "original_manifest")
     await db.commit()
@@ -2653,11 +2853,12 @@ async def delete_editor_exit(
         raise HTTPException(status_code=404, detail="Exit not found")
 
     await db.delete(world_exit)
-    if isinstance(adv.original_manifest, dict) and isinstance(adv.original_manifest.get("exits"), list):
+    if isinstance(adv.original_manifest, dict) and isinstance(
+        adv.original_manifest.get("exits"), list
+    ):
         manifest = deepcopy(adv.original_manifest)
         manifest["exits"] = [
-            ex for ex in manifest["exits"]
-            if isinstance(ex, dict) and ex.get("id") != exit_id
+            ex for ex in manifest["exits"] if isinstance(ex, dict) and ex.get("id") != exit_id
         ]
         adv.original_manifest = manifest
         flag_modified(adv, "original_manifest")
@@ -2705,7 +2906,9 @@ async def create_editor_entity(
     if existing_scene.scalars().first():
         raise HTTPException(status_code=409, detail="ID already exists as a scene")
 
-    item_type = str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
+    item_type = (
+        str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
+    )
     metadata_json = dict(payload.metadata_json or {})
     if item_type == "SWITCH":
         switch_config = metadata_json.get("switch") or {}
@@ -2715,9 +2918,14 @@ async def create_editor_entity(
             raise HTTPException(status_code=400, detail="A switch must have at least 2 states.")
         initial_state = str(switch_config.get("initial_state") or "").strip().upper()
         if not initial_state:
-            raise HTTPException(status_code=400, detail="An initial state must be defined for the switch.")
+            raise HTTPException(
+                status_code=400, detail="An initial state must be defined for the switch."
+            )
         if initial_state not in states_list:
-            raise HTTPException(status_code=400, detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.",
+            )
         switch_config["states"] = states_list
         switch_config["initial_state"] = initial_state
         metadata_json["switch"] = switch_config
@@ -2732,7 +2940,9 @@ async def create_editor_entity(
         current_scene_id=scene_id,
         image_url=str(payload.image_url or "").strip() or None,
         item_type=item_type,
-        is_hidden=True if item_type == "CONSTRUCTABLE" else (bool(payload.is_hidden) if payload.is_hidden is not None else False),
+        is_hidden=True
+        if item_type == "CONSTRUCTABLE"
+        else (bool(payload.is_hidden) if payload.is_hidden is not None else False),
         reveal_rule=str(payload.reveal_rule or "").strip() or None,
         is_portable=bool(payload.is_portable) if payload.is_portable is not None else True,
         goal=str(payload.goal or "").strip() or None,
@@ -2845,7 +3055,9 @@ async def clone_editor_entity(
         reveal_rule=source.reveal_rule,
         unlock_rule=source.unlock_rule,
         is_portable=source.is_portable,
-        combination_ingredients=list(source.combination_ingredients) if source.combination_ingredients is not None else None,
+        combination_ingredients=list(source.combination_ingredients)
+        if source.combination_ingredients is not None
+        else None,
         reveals_item_id=None,
         is_final_state=source.is_final_state,
         state_comment=source.state_comment,
@@ -2871,12 +3083,19 @@ async def clone_editor_entity(
         moveable=source.moveable,
         allowed_scenes=list(source.allowed_scenes or []) if source.allowed_scenes else [],
         notes=source.notes,
-        inventory=[item if isinstance(item, str) else dict(item) for item in (source.inventory or [])],
+        inventory=[
+            item if isinstance(item, str) else dict(item) for item in (source.inventory or [])
+        ],
         metadata_json=dict(source.metadata_json or {}),
     )
     db.add(clone)
     await db.commit()
-    return {"status": "success", "entity": _serialize_model(clone), "source_id": entity_id, "new_id": new_id}
+    return {
+        "status": "success",
+        "entity": _serialize_model(clone),
+        "source_id": entity_id,
+        "new_id": new_id,
+    }
 
 
 @router.post("/{template_id}/editor/quest")
@@ -3045,7 +3264,9 @@ async def save_editor_script(
         "is_active": bool(payload.is_active),
     }
 
-    existing_idx = next((i for i, s in enumerate(scripts) if str(s.get("id") or "") == script_id), None)
+    existing_idx = next(
+        (i for i, s in enumerate(scripts) if str(s.get("id") or "") == script_id), None
+    )
     if existing_idx is not None:
         scripts[existing_idx] = script_data
     else:
@@ -3087,36 +3308,50 @@ async def update_editor_entity(
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="AdventureTemplate not found")
-        
+
     if payload.target_type == "cover":
-        if payload.name is not None: adv.title = payload.name
-        if payload.teaser is not None: adv.teaser = payload.teaser
-        if payload.description is not None: adv.original_prompt = payload.description
+        if payload.name is not None:
+            adv.title = payload.name
+        if payload.teaser is not None:
+            adv.teaser = payload.teaser
+        if payload.description is not None:
+            adv.original_prompt = payload.description
     elif payload.target_type == "protagonist":
         avatar = await _get_template_avatar(db, template_id)
         if not avatar:
             avatar = await _restore_missing_template_avatar(db, template_id, adv)
         if avatar:
-            if payload.name is not None: avatar.name = payload.name
-            if payload.description is not None: avatar.description = payload.description
-            if payload.goal is not None: avatar.goal = payload.goal
-            if payload.character is not None: avatar.character = payload.character
-            if payload.hp is not None: 
+            if payload.name is not None:
+                avatar.name = payload.name
+            if payload.description is not None:
+                avatar.description = payload.description
+            if payload.goal is not None:
+                avatar.goal = payload.goal
+            if payload.character is not None:
+                avatar.character = payload.character
+            if payload.hp is not None:
                 avatar.hp = payload.hp
                 avatar.max_hp = payload.hp
-            if payload.mana is not None: 
+            if payload.mana is not None:
                 avatar.mana = payload.mana
                 avatar.max_mana = payload.mana
-            if payload.stamina is not None: 
+            if payload.stamina is not None:
                 avatar.stamina = payload.stamina
                 avatar.max_stamina = payload.stamina
-            if payload.strength is not None: avatar.strength = payload.strength
-            if payload.intelligence is not None: avatar.intelligence = payload.intelligence
-            if payload.wisdom is not None: avatar.wisdom = payload.wisdom
-            if payload.dexterity is not None: avatar.dexterity = payload.dexterity
-            if payload.charisma is not None: avatar.charisma = payload.charisma
-            if payload.armor_class is not None: avatar.armor_class = payload.armor_class
-            if payload.exp is not None: avatar.exp = payload.exp
+            if payload.strength is not None:
+                avatar.strength = payload.strength
+            if payload.intelligence is not None:
+                avatar.intelligence = payload.intelligence
+            if payload.wisdom is not None:
+                avatar.wisdom = payload.wisdom
+            if payload.dexterity is not None:
+                avatar.dexterity = payload.dexterity
+            if payload.charisma is not None:
+                avatar.charisma = payload.charisma
+            if payload.armor_class is not None:
+                avatar.armor_class = payload.armor_class
+            if payload.exp is not None:
+                avatar.exp = payload.exp
             if payload.inventory is not None or payload.equipment is not None:
                 if payload.inventory is not None:
                     avatar.inventory = list(payload.inventory)
@@ -3160,8 +3395,13 @@ async def update_editor_entity(
                         obj_ent.current_scene_id = "INVENTORY"
                     elif obj_ent.is_in_inventory:
                         is_in_npc = any(
-                            obj_ent.id in {
-                                (ni if isinstance(ni, str) else (ni.get("id") if isinstance(ni, dict) else None))
+                            obj_ent.id
+                            in {
+                                (
+                                    ni
+                                    if isinstance(ni, str)
+                                    else (ni.get("id") if isinstance(ni, dict) else None)
+                                )
                                 for ni in (npc.inventory or [])
                             }
                             for npc in template_npcs
@@ -3170,7 +3410,9 @@ async def update_editor_entity(
                         if not is_in_npc:
                             obj_ent.is_in_inventory = False
                             if obj_ent.current_scene_id == "INVENTORY":
-                                start_sc = await AdventureLogic.resolve_initial_scene_id(db, template_id)
+                                start_sc = await AdventureLogic.resolve_initial_scene_id(
+                                    db, template_id
+                                )
                                 if start_sc:
                                     obj_ent.current_scene_id = start_sc
 
@@ -3182,7 +3424,13 @@ async def update_editor_entity(
                         adv.original_manifest = manifest
                         flag_modified(adv, "original_manifest")
     elif payload.target_type == "scene":
-        sc_res = await db.execute(select(WorldScene).where(WorldScene.template_id == template_id, WorldScene.session_id.is_(None), WorldScene.id == payload.target_id))
+        sc_res = await db.execute(
+            select(WorldScene).where(
+                WorldScene.template_id == template_id,
+                WorldScene.session_id.is_(None),
+                WorldScene.id == payload.target_id,
+            )
+        )
         scene = sc_res.scalars().first()
         if scene:
             old_id = scene.id
@@ -3191,46 +3439,77 @@ async def update_editor_entity(
                 if not new_id:
                     raise HTTPException(status_code=400, detail="Scene ID cannot be empty")
                 import re
+
                 if not re.match(r"^[A-Z0-9_]+$", new_id):
-                    raise HTTPException(status_code=400, detail="Scene ID must contain only uppercase letters, digits, and underscores.")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Scene ID must contain only uppercase letters, digits, and underscores.",
+                    )
                 if len(new_id) > 50:
-                    raise HTTPException(status_code=400, detail="Scene ID must be at most 50 characters.")
-                
+                    raise HTTPException(
+                        status_code=400, detail="Scene ID must be at most 50 characters."
+                    )
+
                 if new_id != old_id:
                     # check duplicate scene ID
-                    dup_scene_res = await db.execute(select(WorldScene).where(WorldScene.template_id == template_id, WorldScene.session_id.is_(None), WorldScene.id == new_id))
+                    dup_scene_res = await db.execute(
+                        select(WorldScene).where(
+                            WorldScene.template_id == template_id,
+                            WorldScene.session_id.is_(None),
+                            WorldScene.id == new_id,
+                        )
+                    )
                     if dup_scene_res.scalars().first():
-                        raise HTTPException(status_code=409, detail=f"Scene ID '{new_id}' already exists")
-                    
+                        raise HTTPException(
+                            status_code=409, detail=f"Scene ID '{new_id}' already exists"
+                        )
+
                     # check duplicate entity ID
-                    dup_ent_res = await db.execute(select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None), WorldEntity.id == new_id))
+                    dup_ent_res = await db.execute(
+                        select(WorldEntity).where(
+                            WorldEntity.template_id == template_id,
+                            WorldEntity.session_id.is_(None),
+                            WorldEntity.id == new_id,
+                        )
+                    )
                     if dup_ent_res.scalars().first():
-                        raise HTTPException(status_code=409, detail=f"ID '{new_id}' is already taken by an entity")
-                    
+                        raise HTTPException(
+                            status_code=409, detail=f"ID '{new_id}' is already taken by an entity"
+                        )
+
                     # Apply scene ID update
                     scene.id = new_id
-                    
+
                     # Cascade update exits
-                    exits_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id, WorldExit.session_id.is_(None)))
+                    exits_res = await db.execute(
+                        select(WorldExit).where(
+                            WorldExit.template_id == template_id, WorldExit.session_id.is_(None)
+                        )
+                    )
                     for world_exit in exits_res.scalars().all():
                         if world_exit.from_scene_id == old_id:
                             world_exit.from_scene_id = new_id
                         if world_exit.to_scene_id == old_id:
                             world_exit.to_scene_id = new_id
-                    
+
                     # Cascade update entities positions
-                    ents_res = await db.execute(select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)))
+                    ents_res = await db.execute(
+                        select(WorldEntity).where(
+                            WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)
+                        )
+                    )
                     for ent in ents_res.scalars().all():
                         if ent.current_scene_id == old_id:
                             ent.current_scene_id = new_id
-                    
+
                     # Cascade update start scene ID in manifest
                     manifest = deepcopy(adv.original_manifest or {})
                     if manifest.get("start_scene_id") == old_id:
                         manifest["start_scene_id"] = new_id
                         adv.original_manifest = manifest
 
-            if payload.name is not None: scene.label = payload.name
+            if payload.name is not None:
+                scene.label = payload.name
 
             if payload.description is not None:
                 scene.description = payload.description.strip()
@@ -3242,33 +3521,55 @@ async def update_editor_entity(
                     if not s:
                         continue
                     if len(s) > 100:
-                        raise HTTPException(status_code=400, detail="Each decorative object must be at most 100 characters.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Each decorative object must be at most 100 characters.",
+                        )
                     decor_list.append(s)
                 scene.decorative_objects = decor_list[:7] or None
                 flag_modified(scene, "decorative_objects")
 
             if payload.on_enter_scene_script is not None:
-                scene.on_enter_scene_script = payload.on_enter_scene_script.strip() if payload.on_enter_scene_script else None
+                scene.on_enter_scene_script = (
+                    payload.on_enter_scene_script.strip() if payload.on_enter_scene_script else None
+                )
             if payload.on_enter_scene_text is not None:
-                scene.on_enter_scene_text = payload.on_enter_scene_text.strip() if payload.on_enter_scene_text else None
+                scene.on_enter_scene_text = (
+                    payload.on_enter_scene_text.strip() if payload.on_enter_scene_text else None
+                )
 
     elif payload.target_type == "exit":
-        ex_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id, WorldExit.id == payload.target_id))
+        ex_res = await db.execute(
+            select(WorldExit).where(
+                WorldExit.template_id == template_id, WorldExit.id == payload.target_id
+            )
+        )
         world_exit = ex_res.scalars().first()
         if world_exit:
-            if payload.name is not None: world_exit.label = payload.name
-            if payload.locked is not None: world_exit.is_locked = bool(payload.locked)
-            if payload.description is not None: world_exit.lock_description = payload.description
-            if payload.exit_type is not None: world_exit.exit_type = payload.exit_type
+            if payload.name is not None:
+                world_exit.label = payload.name
+            if payload.locked is not None:
+                world_exit.is_locked = bool(payload.locked)
+            if payload.description is not None:
+                world_exit.lock_description = payload.description
+            if payload.exit_type is not None:
+                world_exit.exit_type = payload.exit_type
 
             if payload.on_open_exit_script is not None:
-                world_exit.on_open_exit_script = payload.on_open_exit_script.strip() if payload.on_open_exit_script else None
+                world_exit.on_open_exit_script = (
+                    payload.on_open_exit_script.strip() if payload.on_open_exit_script else None
+                )
             if payload.on_open_exit_text is not None:
-                world_exit.on_open_exit_text = payload.on_open_exit_text.strip() if payload.on_open_exit_text else None
+                world_exit.on_open_exit_text = (
+                    payload.on_open_exit_text.strip() if payload.on_open_exit_text else None
+                )
 
-            
             # Enforce mutual exclusivity and priority on exit lock attributes
-            if payload.code_to_unlock is not None or payload.item_to_unlock is not None or payload.rule_to_unlock is not None:
+            if (
+                payload.code_to_unlock is not None
+                or payload.item_to_unlock is not None
+                or payload.rule_to_unlock is not None
+            ):
                 code = world_exit.code_to_unlock or ""
                 item = world_exit.item_to_unlock or ""
                 rule = world_exit.rule_to_unlock or ""
@@ -3285,6 +3586,7 @@ async def update_editor_entity(
                     rule = ""
                 elif item:
                     from backend.utils.text_utils import slugify
+
                     item = slugify(item).upper().replace("-", "_")[:64]
                     code = ""
                     rule = ""
@@ -3300,14 +3602,16 @@ async def update_editor_entity(
                 if (code or item or rule) and not str(world_exit.lock_description or "").strip():
                     raise HTTPException(
                         status_code=400,
-                        detail="A lock description is required when a code, item, or rule gate is configured on an exit."
+                        detail="A lock description is required when a code, item, or rule gate is configured on an exit.",
                     )
 
                 world_exit.code_to_unlock = code
                 world_exit.item_to_unlock = item
                 world_exit.rule_to_unlock = rule
 
-            if isinstance(adv.original_manifest, dict) and isinstance(adv.original_manifest.get("exits"), list):
+            if isinstance(adv.original_manifest, dict) and isinstance(
+                adv.original_manifest.get("exits"), list
+            ):
                 manifest = deepcopy(adv.original_manifest)
                 for ex_item in manifest.get("exits", []):
                     if isinstance(ex_item, dict) and (
@@ -3319,7 +3623,7 @@ async def update_editor_entity(
                     ):
                         ex_item["label"] = world_exit.label
                         ex_item["exit_type"] = world_exit.exit_type
-                        ex_item["is_bidirectional"] = (world_exit.exit_type == "bidirectional")
+                        ex_item["is_bidirectional"] = world_exit.exit_type == "bidirectional"
                         ex_item["is_locked"] = world_exit.is_locked
                         ex_item["lock_description"] = world_exit.lock_description
                         ex_item["code_to_unlock"] = world_exit.code_to_unlock
@@ -3328,7 +3632,13 @@ async def update_editor_entity(
                 adv.original_manifest = manifest
                 flag_modified(adv, "original_manifest")
     else:
-        en_res = await db.execute(select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None), WorldEntity.id == payload.target_id))
+        en_res = await db.execute(
+            select(WorldEntity).where(
+                WorldEntity.template_id == template_id,
+                WorldEntity.session_id.is_(None),
+                WorldEntity.id == payload.target_id,
+            )
+        )
         ent = en_res.scalars().first()
         if ent:
             old_id = ent.id
@@ -3337,42 +3647,74 @@ async def update_editor_entity(
                 if not new_id:
                     raise HTTPException(status_code=400, detail="Entity ID cannot be empty")
                 import re
+
                 if not re.match(r"^[A-Z0-9_]+$", new_id):
-                    raise HTTPException(status_code=400, detail="Entity ID must contain only uppercase letters, digits, and underscores.")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Entity ID must contain only uppercase letters, digits, and underscores.",
+                    )
                 if len(new_id) > 30:
-                    raise HTTPException(status_code=400, detail="Entity ID must be at most 30 characters.")
-                
+                    raise HTTPException(
+                        status_code=400, detail="Entity ID must be at most 30 characters."
+                    )
+
                 if new_id != old_id:
                     # check duplicate entity ID
-                    dup_ent_res = await db.execute(select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None), WorldEntity.id == new_id))
+                    dup_ent_res = await db.execute(
+                        select(WorldEntity).where(
+                            WorldEntity.template_id == template_id,
+                            WorldEntity.session_id.is_(None),
+                            WorldEntity.id == new_id,
+                        )
+                    )
                     if dup_ent_res.scalars().first():
-                        raise HTTPException(status_code=409, detail=f"Entity ID '{new_id}' already exists")
-                    
+                        raise HTTPException(
+                            status_code=409, detail=f"Entity ID '{new_id}' already exists"
+                        )
+
                     # check duplicate scene ID
-                    dup_scene_res = await db.execute(select(WorldScene).where(WorldScene.template_id == template_id, WorldScene.session_id.is_(None), WorldScene.id == new_id))
+                    dup_scene_res = await db.execute(
+                        select(WorldScene).where(
+                            WorldScene.template_id == template_id,
+                            WorldScene.session_id.is_(None),
+                            WorldScene.id == new_id,
+                        )
+                    )
                     if dup_scene_res.scalars().first():
-                        raise HTTPException(status_code=409, detail=f"ID '{new_id}' is already taken by a scene")
-                    
+                        raise HTTPException(
+                            status_code=409, detail=f"ID '{new_id}' is already taken by a scene"
+                        )
+
                     # Apply entity ID update
                     ent.id = new_id
-                    
+
                     # Cascade update exits lock keys
-                    exits_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id, WorldExit.session_id.is_(None)))
+                    exits_res = await db.execute(
+                        select(WorldExit).where(
+                            WorldExit.template_id == template_id, WorldExit.session_id.is_(None)
+                        )
+                    )
                     for world_exit in exits_res.scalars().all():
                         if world_exit.item_to_unlock == old_id:
                             world_exit.item_to_unlock = new_id
-                    
+
                     # Cascade update all entities combination_ingredients, reveals_item_id, and inventory
-                    all_ents_res = await db.execute(select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)))
+                    all_ents_res = await db.execute(
+                        select(WorldEntity).where(
+                            WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)
+                        )
+                    )
                     for other_ent in all_ents_res.scalars().all():
                         if other_ent.combination_ingredients:
                             ingredients = list(other_ent.combination_ingredients)
                             if old_id in ingredients:
-                                other_ent.combination_ingredients = [new_id if x == old_id else x for x in ingredients]
-                        
+                                other_ent.combination_ingredients = [
+                                    new_id if x == old_id else x for x in ingredients
+                                ]
+
                         if other_ent.reveals_item_id == old_id:
                             other_ent.reveals_item_id = new_id
-                        
+
                         if other_ent.inventory:
                             inv = list(other_ent.inventory)
                             updated_inv = []
@@ -3393,7 +3735,7 @@ async def update_editor_entity(
                                     updated_inv.append(item)
                             if changed:
                                 other_ent.inventory = updated_inv
-                    
+
                     # Cascade update protagonist starting inventory and equipment
                     avatar = await _get_template_avatar(db, template_id)
                     if avatar:
@@ -3417,7 +3759,7 @@ async def update_editor_entity(
                                     updated_inv.append(item)
                             if changed:
                                 avatar.inventory = updated_inv
-                        
+
                         if avatar.equipment:
                             eq = dict(avatar.equipment)
                             changed = False
@@ -3433,28 +3775,37 @@ async def update_editor_entity(
                                     changed = True
                             if changed:
                                 avatar.equipment = eq
-            if payload.name is not None: ent.name = payload.name
-            if payload.description is not None: ent.description = payload.description
-            if payload.hp is not None: 
+            if payload.name is not None:
+                ent.name = payload.name
+            if payload.description is not None:
+                ent.description = payload.description
+            if payload.hp is not None:
                 ent.hp = payload.hp
                 ent.max_hp = payload.hp
-            if payload.mana is not None: 
+            if payload.mana is not None:
                 ent.mana = payload.mana
                 ent.max_mana = payload.mana
-            if payload.stamina is not None: 
+            if payload.stamina is not None:
                 ent.stamina = payload.stamina
                 ent.max_stamina = payload.stamina
             if ent.entity_type == "NPC":
-                if payload.goal is not None: ent.goal = payload.goal
-                if payload.character is not None: ent.character = payload.character
-                if payload.is_killable is not None: ent.is_killable = payload.is_killable
+                if payload.goal is not None:
+                    ent.goal = payload.goal
+                if payload.character is not None:
+                    ent.character = payload.character
+                if payload.is_killable is not None:
+                    ent.is_killable = payload.is_killable
                 if payload.inventory is not None:
                     ent.inventory = list(payload.inventory)
                     flag_modified(ent, "inventory")
                     npc_item_ids = {
                         (i if isinstance(i, str) else i.get("id"))
                         for i in ent.inventory
-                        if (i if isinstance(i, str) else (i.get("id") if isinstance(i, dict) else None))
+                        if (
+                            i
+                            if isinstance(i, str)
+                            else (i.get("id") if isinstance(i, dict) else None)
+                        )
                     }
                     for i_id in npc_item_ids:
                         sub_res = await db.execute(
@@ -3475,10 +3826,14 @@ async def update_editor_entity(
                 if payload.on_defeat_text is not None:
                     metadata_json["on_defeat_text"] = payload.on_defeat_text.strip()
                 if payload.on_protagonist_enters_scene_script is not None:
-                    metadata_json["on_protagonist_enters_scene_script"] = payload.on_protagonist_enters_scene_script.strip()
+                    metadata_json["on_protagonist_enters_scene_script"] = (
+                        payload.on_protagonist_enters_scene_script.strip()
+                    )
                 if payload.on_protagonist_enters_scene_text is not None:
-                    metadata_json["on_protagonist_enters_scene_text"] = payload.on_protagonist_enters_scene_text.strip()
-                
+                    metadata_json["on_protagonist_enters_scene_text"] = (
+                        payload.on_protagonist_enters_scene_text.strip()
+                    )
+
                 ent.metadata_json = metadata_json
                 flag_modified(ent, "metadata_json")
 
@@ -3493,22 +3848,38 @@ async def update_editor_entity(
                 if payload.current_scene_id is not None:
                     new_scene_id = str(payload.current_scene_id or "").strip().upper()
                     if not new_scene_id:
-                        raise HTTPException(status_code=400, detail="current_scene_id cannot be empty")
+                        raise HTTPException(
+                            status_code=400, detail="current_scene_id cannot be empty"
+                        )
                     if len(new_scene_id) > 50:
-                        raise HTTPException(status_code=400, detail="current_scene_id must be at most 50 characters.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="current_scene_id must be at most 50 characters.",
+                        )
                     if not _SAFE_SCENE_ID_RE.match(new_scene_id):
-                        raise HTTPException(status_code=400, detail="current_scene_id must contain only uppercase letters, digits, and underscores.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="current_scene_id must contain only uppercase letters, digits, and underscores.",
+                        )
                     await _ensure_template_scene_exists(db, template_id, new_scene_id)
                     ent.current_scene_id = new_scene_id
             if ent.entity_type == "OBJECT":
                 if payload.current_scene_id is not None:
                     new_scene_id = str(payload.current_scene_id or "").strip().upper()
                     if not new_scene_id:
-                        raise HTTPException(status_code=400, detail="current_scene_id cannot be empty")
+                        raise HTTPException(
+                            status_code=400, detail="current_scene_id cannot be empty"
+                        )
                     if len(new_scene_id) > 50:
-                        raise HTTPException(status_code=400, detail="current_scene_id must be at most 50 characters.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="current_scene_id must be at most 50 characters.",
+                        )
                     if not _SAFE_SCENE_ID_RE.match(new_scene_id):
-                        raise HTTPException(status_code=400, detail="current_scene_id must contain only uppercase letters, digits, and underscores.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="current_scene_id must contain only uppercase letters, digits, and underscores.",
+                        )
                     await _ensure_template_scene_exists(db, template_id, new_scene_id)
                     ent.current_scene_id = new_scene_id
                     if new_scene_id != "INVENTORY":
@@ -3519,8 +3890,14 @@ async def update_editor_entity(
                             if avatar.inventory:
                                 orig_len = len(avatar.inventory)
                                 avatar.inventory = [
-                                    i for i in avatar.inventory
-                                    if (i if isinstance(i, str) else (i.get("id") if isinstance(i, dict) else None)) != ent.id
+                                    i
+                                    for i in avatar.inventory
+                                    if (
+                                        i
+                                        if isinstance(i, str)
+                                        else (i.get("id") if isinstance(i, dict) else None)
+                                    )
+                                    != ent.id
                                 ]
                                 if len(avatar.inventory) != orig_len:
                                     flag_modified(avatar, "inventory")
@@ -3529,7 +3906,13 @@ async def update_editor_entity(
                                 eq = dict(avatar.equipment)
                                 eq_changed = False
                                 for slot, eq_val in list(eq.items()):
-                                    slot_id = eq_val if isinstance(eq_val, str) else (eq_val.get("id") if isinstance(eq_val, dict) else None)
+                                    slot_id = (
+                                        eq_val
+                                        if isinstance(eq_val, str)
+                                        else (
+                                            eq_val.get("id") if isinstance(eq_val, dict) else None
+                                        )
+                                    )
                                     if slot_id == ent.id:
                                         eq[slot] = None
                                         eq_changed = True
@@ -3539,12 +3922,24 @@ async def update_editor_entity(
                                     avatar_changed = True
                             if avatar_changed and isinstance(adv.original_manifest, dict):
                                 manifest = deepcopy(adv.original_manifest)
-                                if "protagonist" in manifest and isinstance(manifest["protagonist"], dict):
-                                    start_inv = manifest["protagonist"].get("starting_inventory") or manifest["protagonist"].get("inventory") or []
+                                if "protagonist" in manifest and isinstance(
+                                    manifest["protagonist"], dict
+                                ):
+                                    start_inv = (
+                                        manifest["protagonist"].get("starting_inventory")
+                                        or manifest["protagonist"].get("inventory")
+                                        or []
+                                    )
                                     if isinstance(start_inv, list):
                                         manifest["protagonist"]["starting_inventory"] = [
-                                            x for x in start_inv
-                                            if (x if isinstance(x, str) else (x.get("id") if isinstance(x, dict) else None)) != ent.id
+                                            x
+                                            for x in start_inv
+                                            if (
+                                                x
+                                                if isinstance(x, str)
+                                                else (x.get("id") if isinstance(x, dict) else None)
+                                            )
+                                            != ent.id
                                         ]
                                         adv.original_manifest = manifest
                                         flag_modified(adv, "original_manifest")
@@ -3557,7 +3952,10 @@ async def update_editor_entity(
                 new_item_type_value: Optional[str] = None
                 if payload.item_type is not None:
                     normalized_new_type = str(payload.item_type or "").strip().upper()
-                    if normalized_new_type and normalized_new_type != str(ent.item_type or "").upper():
+                    if (
+                        normalized_new_type
+                        and normalized_new_type != str(ent.item_type or "").upper()
+                    ):
                         if normalized_new_type not in {
                             "DEFAULT",
                             "CONSUMABLE",
@@ -3584,8 +3982,15 @@ async def update_editor_entity(
                 is_switch_object = item_type == "SWITCH"
                 is_consumable_object = item_type == "CONSUMABLE"
 
-                if payload.description is not None and is_readable_object and len(payload.description) > 200:
-                    raise HTTPException(status_code=400, detail="description must be at most 200 characters for READABLE objects.")
+                if (
+                    payload.description is not None
+                    and is_readable_object
+                    and len(payload.description) > 200
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="description must be at most 200 characters for READABLE objects.",
+                    )
                 if payload.is_portable is not None:
                     ent.is_portable = bool(payload.is_portable)
 
@@ -3593,11 +3998,16 @@ async def update_editor_entity(
 
                 # 1. Container locks (only for CONTAINER items)
                 if is_container_object:
-                    if payload.code_to_unlock is not None or payload.item_to_unlock is not None or payload.rule_to_unlock is not None or payload.locked is not None:
+                    if (
+                        payload.code_to_unlock is not None
+                        or payload.item_to_unlock is not None
+                        or payload.rule_to_unlock is not None
+                        or payload.locked is not None
+                    ):
                         code = metadata_json.get("code_to_unlock") or ""
                         item = metadata_json.get("item_to_unlock") or ""
                         rule = metadata_json.get("rule_to_unlock") or ""
-                        
+
                         if payload.code_to_unlock is not None:
                             code = str(payload.code_to_unlock or "").strip()
                         if payload.item_to_unlock is not None:
@@ -3611,6 +4021,7 @@ async def update_editor_entity(
                             rule = ""
                         elif item:
                             from backend.utils.text_utils import slugify
+
                             item = slugify(item).upper().replace("-", "_")[:64]
                             code = ""
                             rule = ""
@@ -3630,7 +4041,7 @@ async def update_editor_entity(
                             metadata_json["locked"] = bool(payload.locked)
                         else:
                             metadata_json["locked"] = bool(code or item or rule)
-                        
+
                         ent.unlock_rule = None
                 else:
                     # Clean up unlock fields if the item is not a CONTAINER anymore
@@ -3647,13 +4058,19 @@ async def update_editor_entity(
                 if is_readable_object:
                     if payload.text_log_content is not None:
                         if len(payload.text_log_content) > 1000:
-                            raise HTTPException(status_code=400, detail="text_log_content must be at most 1000 characters.")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="text_log_content must be at most 1000 characters.",
+                            )
                         metadata_json["text_log_content"] = payload.text_log_content.strip()
                     if payload.text_log_format is not None:
                         normalized_format = str(payload.text_log_format).strip().upper()
                         allowed_formats = {"DOCUMENT", "SCROLL", "BOOK", "SIGN"}
                         if normalized_format not in allowed_formats:
-                            raise HTTPException(status_code=400, detail="text_log_format must be one of DOCUMENT, SCROLL, BOOK, SIGN.")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="text_log_format must be one of DOCUMENT, SCROLL, BOOK, SIGN.",
+                            )
                         metadata_json["text_log_format"] = normalized_format
                 else:
                     # Clean up readable fields
@@ -3676,7 +4093,7 @@ async def update_editor_entity(
                 if payload.reveal_rule is not None:
                     normalized = str(payload.reveal_rule or "").strip()
                     ent.reveal_rule = normalized[:500] if normalized else None
-                
+
                 if payload.on_pickup_script is not None:
                     metadata_json["on_pickup_script"] = payload.on_pickup_script.strip()
                 if payload.on_pickup_text is not None:
@@ -3704,17 +4121,27 @@ async def update_editor_entity(
                     ent.reveals_item_id = normalized or None
 
                 # Pickup reaction: optional narration/turn pass after the player takes this item.
-                if payload.pickup_trigger_mode is not None or payload.pickup_trigger_cue is not None:
+                if (
+                    payload.pickup_trigger_mode is not None
+                    or payload.pickup_trigger_cue is not None
+                ):
                     existing_trigger = metadata_json.get("pickup_trigger")
                     if not isinstance(existing_trigger, dict):
                         existing_trigger = {}
-                    trigger_mode = str(
-                        payload.pickup_trigger_mode
-                        if payload.pickup_trigger_mode is not None
-                        else existing_trigger.get("mode") or "silent"
-                    ).strip().lower()
+                    trigger_mode = (
+                        str(
+                            payload.pickup_trigger_mode
+                            if payload.pickup_trigger_mode is not None
+                            else existing_trigger.get("mode") or "silent"
+                        )
+                        .strip()
+                        .lower()
+                    )
                     if trigger_mode not in {"silent", "narration", "turn"}:
-                        raise HTTPException(status_code=400, detail="pickup_trigger_mode must be one of silent, narration, turn.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="pickup_trigger_mode must be one of silent, narration, turn.",
+                        )
                     trigger_cue = str(
                         payload.pickup_trigger_cue
                         if payload.pickup_trigger_cue is not None
@@ -3724,10 +4151,14 @@ async def update_editor_entity(
                         metadata_json.pop("pickup_trigger", None)
                     else:
                         metadata_json["pickup_trigger"] = {"mode": trigger_mode, "cue": trigger_cue}
-                
+
                 # 3. Switch logic (only for SWITCH items)
                 if is_switch_object:
-                    if payload.switch_states is not None or payload.switch_initial_state is not None or payload.switch_transitions is not None:
+                    if (
+                        payload.switch_states is not None
+                        or payload.switch_initial_state is not None
+                        or payload.switch_transitions is not None
+                    ):
                         switch_config = metadata_json.get("switch")
                         if not isinstance(switch_config, dict):
                             switch_config = {}
@@ -3737,21 +4168,31 @@ async def update_editor_entity(
                             switch_config["initial_state"] = payload.switch_initial_state
                         if payload.switch_transitions is not None:
                             switch_config["transitions"] = payload.switch_transitions
-                        
+
                         states = switch_config.get("states") or []
                         states_list = [str(s).strip().upper() for s in states if str(s).strip()]
                         if len(states_list) < 2:
-                            raise HTTPException(status_code=400, detail="A switch must have at least 2 states.")
-                        initial_state = str(switch_config.get("initial_state") or "").strip().upper()
+                            raise HTTPException(
+                                status_code=400, detail="A switch must have at least 2 states."
+                            )
+                        initial_state = (
+                            str(switch_config.get("initial_state") or "").strip().upper()
+                        )
                         if not initial_state:
-                            raise HTTPException(status_code=400, detail="An initial state must be defined for the switch.")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="An initial state must be defined for the switch.",
+                            )
                         if initial_state not in states_list:
-                            raise HTTPException(status_code=400, detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.")
-                        
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.",
+                            )
+
                         switch_config["states"] = states_list
                         switch_config["initial_state"] = initial_state
                         metadata_json["switch"] = switch_config
-                    
+
                     # Clean up flat switch keys that were previously written as pollution
                     metadata_json.pop("switch_states", None)
                     metadata_json.pop("switch_initial_state", None)
@@ -3781,11 +4222,11 @@ async def update_editor_entity(
                         ent.is_hidden = bool(payload.is_hidden)
                     elif new_item_type_value is not None:
                         ent.is_hidden = False
-                    
+
                     if payload.reveal_rule is not None:
                         normalized = str(payload.reveal_rule or "").strip()
                         ent.reveal_rule = normalized[:500] if normalized else None
-            
+
     await db.commit()
     return {"status": "success"}
 
@@ -3823,6 +4264,7 @@ async def update_editor_start_scene(
     await db.commit()
     return {"status": "success", "start_scene_id": scene_id}
 
+
 @router.post("/{template_id}/editor/generate-traits", response_model=TraitGenerationResponse)
 async def generate_entity_traits(
     template_id: str,
@@ -3839,28 +4281,32 @@ async def generate_entity_traits(
     llm_settings = current_user.llm_settings or {}
     provider = llm_settings.get("small_model_provider") or "openai"
     model = llm_settings.get("small_model") or "gpt-4o-mini"
-    
+
     gm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
-    
+
     field_instruction = ""
     if payload.target_field == "goal":
-        field_instruction = "IMPORTANT: Focus specifically on generating a compelling Goal/Motivation."
+        field_instruction = (
+            "IMPORTANT: Focus specifically on generating a compelling Goal/Motivation."
+        )
     elif payload.target_field == "character":
-        field_instruction = "IMPORTANT: Focus specifically on generating evocative Personality/Traits."
+        field_instruction = (
+            "IMPORTANT: Focus specifically on generating evocative Personality/Traits."
+        )
 
     base_prompt = TRAIT_GENERATION_USER_PROMPT_TEMPLATE.format(
         name=payload.name,
         description=payload.description,
-        adventure_theme=payload.adventure_theme or adv.original_prompt or 'Fantasy Adventure'
+        adventure_theme=payload.adventure_theme or adv.original_prompt or "Fantasy Adventure",
     )
     user_prompt = f"{base_prompt}\n{field_instruction}"
-    
+
     try:
         result = await gm.aexecute_complex_task(
             system_prompt=TRAIT_GENERATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_model=TraitGenerationResponse,
-            model=model
+            model=model,
         )
         return result
     except Exception as e:
@@ -3868,7 +4314,10 @@ async def generate_entity_traits(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{template_id}/editor/generate-quest-description", response_model=QuestDescriptionGenerationResponse)
+@router.post(
+    "/{template_id}/editor/generate-quest-description",
+    response_model=QuestDescriptionGenerationResponse,
+)
 async def generate_quest_description(
     template_id: str,
     payload: QuestDescriptionGenerationRequest,
@@ -3884,9 +4333,9 @@ async def generate_quest_description(
     llm_settings = current_user.llm_settings or {}
     provider = llm_settings.get("small_model_provider") or "openai"
     model = llm_settings.get("small_model") or "gpt-4o-mini"
-    
+
     gm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
-    
+
     # Format other quests to prevent duplication
     other_quests_text = ""
     if payload.other_quests:
@@ -3908,13 +4357,13 @@ async def generate_quest_description(
         adventure_tone=adv.selected_tone or "Standard",
         other_quests_text=other_quests_text,
     )
-    
+
     try:
         result = await gm.aexecute_complex_task(
             system_prompt=QUEST_DESCRIPTION_GENERATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_model=QuestDescriptionGenerationResponse,
-            model=model
+            model=model,
         )
         return result
     except Exception as e:
@@ -3938,9 +4387,9 @@ async def generate_new_quest(
     llm_settings = current_user.llm_settings or {}
     provider = llm_settings.get("small_model_provider") or "openai"
     model = llm_settings.get("small_model") or "gpt-4o-mini"
-    
+
     gm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
-    
+
     # Format other quests to prevent duplication
     other_quests_text = ""
     if payload.other_quests:
@@ -3961,13 +4410,13 @@ async def generate_new_quest(
         adventure_tone=adv.selected_tone or "Standard",
         other_quests_text=other_quests_text,
     )
-    
+
     try:
         result = await gm.aexecute_complex_task(
             system_prompt=QUEST_GENERATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_model=QuestGenerationResponse,
-            model=model
+            model=model,
         )
         return result
     except Exception as e:
@@ -3995,7 +4444,7 @@ async def generate_entity_biography(
 
     system_prompt = BIOGRAPHY_GENERATION_SYSTEM_PROMPT
 
-    theme = payload.adventure_theme or adv.original_prompt or 'Fantasy Adventure'
+    theme = payload.adventure_theme or adv.original_prompt or "Fantasy Adventure"
     user_prompt = BIOGRAPHY_GENERATION_USER_PROMPT_TEMPLATE.format(
         name=payload.name,
         goal=payload.goal,
@@ -4005,9 +4454,7 @@ async def generate_entity_biography(
 
     try:
         generated_text = await gm.aexecute_simple_task(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=model
+            system_prompt=system_prompt, user_prompt=user_prompt, model=model
         )
         cleaned = generated_text.strip()
         if cleaned.startswith('"') and cleaned.endswith('"'):
@@ -4019,7 +4466,10 @@ async def generate_entity_biography(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{template_id}/editor/generate-scene-description", response_model=SceneDescriptionGenerationResponse)
+@router.post(
+    "/{template_id}/editor/generate-scene-description",
+    response_model=SceneDescriptionGenerationResponse,
+)
 async def generate_scene_description(
     template_id: str,
     payload: SceneDescriptionGenerationRequest,
@@ -4039,7 +4489,7 @@ async def generate_scene_description(
 
     system_prompt = SCENE_DESCRIPTION_GENERATION_SYSTEM_PROMPT
 
-    theme = payload.adventure_theme or adv.original_prompt or 'Fantasy Adventure'
+    theme = payload.adventure_theme or adv.original_prompt or "Fantasy Adventure"
     user_prompt = SCENE_DESCRIPTION_GENERATION_USER_PROMPT_TEMPLATE.format(
         name=payload.name,
         theme=theme,
@@ -4047,9 +4497,7 @@ async def generate_scene_description(
 
     try:
         generated_text = await gm.aexecute_simple_task(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=model
+            system_prompt=system_prompt, user_prompt=user_prompt, model=model
         )
         cleaned = generated_text.strip()
         if cleaned.startswith('"') and cleaned.endswith('"'):
@@ -4061,7 +4509,10 @@ async def generate_scene_description(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{template_id}/editor/generate-decorative-items", response_model=DecorativeItemsGenerationResponse)
+@router.post(
+    "/{template_id}/editor/generate-decorative-items",
+    response_model=DecorativeItemsGenerationResponse,
+)
 async def generate_decorative_items(
     template_id: str,
     payload: DecorativeItemsGenerationRequest,
@@ -4078,7 +4529,9 @@ async def generate_decorative_items(
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="AdventureTemplate not found")
 
-    existing = [str(item).strip() for item in (payload.existing_items or []) if str(item or "").strip()]
+    existing = [
+        str(item).strip() for item in (payload.existing_items or []) if str(item or "").strip()
+    ]
     existing_lower = {item.lower() for item in existing}
     max_new = max(0, 7 - len(existing))
 
@@ -4106,9 +4559,7 @@ async def generate_decorative_items(
 
     try:
         generated_text = await gm.aexecute_simple_task(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=model
+            system_prompt=system_prompt, user_prompt=user_prompt, model=model
         )
     except Exception as e:
         logger.error(f"Failed to generate decorative items: {e}")
@@ -4141,10 +4592,8 @@ async def generate_decorative_items(
                 break
     except Exception as e:
         logger.error(f"Failed to parse decorative items response: {e}; raw=%r", generated_text)
-        raise HTTPException(status_code=500, detail="LLM returned an invalid response for decorative items.")
+        raise HTTPException(
+            status_code=500, detail="LLM returned an invalid response for decorative items."
+        )
 
     return DecorativeItemsGenerationResponse(items=parsed_items)
-
-
-
-

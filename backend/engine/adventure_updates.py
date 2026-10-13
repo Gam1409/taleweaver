@@ -101,7 +101,11 @@ def scan_available_adventure_files(force_refresh: bool = False) -> list[dict[str
     global _SCANNED_FILES_CACHE, _SCANNED_FILES_TIMESTAMP
 
     now = time.time()
-    if not force_refresh and (now - _SCANNED_FILES_TIMESTAMP) < _CACHE_TTL_SECONDS and _SCANNED_FILES_CACHE:
+    if (
+        not force_refresh
+        and (now - _SCANNED_FILES_TIMESTAMP) < _CACHE_TTL_SECONDS
+        and _SCANNED_FILES_CACHE
+    ):
         return _SCANNED_FILES_CACHE
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -141,7 +145,11 @@ def scan_available_adventure_files(force_refresh: bool = False) -> list[dict[str
                             manifest = json.load(f)
 
                     is_session = manifest.get("type") == "SESSION_BUNDLE"
-                    adv_data = manifest.get("adventure", {}) if is_session else (manifest.get("adventure") or manifest)
+                    adv_data = (
+                        manifest.get("adventure", {})
+                        if is_session
+                        else (manifest.get("adventure") or manifest)
+                    )
 
                     title = adv_data.get("title") or manifest.get("title")
                     if not title or not isinstance(title, str):
@@ -153,17 +161,19 @@ def scan_available_adventure_files(force_refresh: bool = False) -> list[dict[str
                     sequences = adv_data.get("sequences") or manifest.get("sequences") or []
                     has_sequences = isinstance(sequences, list) and len(sequences) > 0
 
-                    scanned.append({
-                        "file_path": file_path,
-                        "filename": filename,
-                        "stem": os.path.splitext(filename)[0],
-                        "title": title.strip(),
-                        "origin_id": str(origin_id).strip() if origin_id else None,
-                        "version": str(version).strip() if version else None,
-                        "format_version": format_version,
-                        "sequences": sequences,
-                        "has_sequences": has_sequences,
-                    })
+                    scanned.append(
+                        {
+                            "file_path": file_path,
+                            "filename": filename,
+                            "stem": os.path.splitext(filename)[0],
+                            "title": title.strip(),
+                            "origin_id": str(origin_id).strip() if origin_id else None,
+                            "version": str(version).strip() if version else None,
+                            "format_version": format_version,
+                            "sequences": sequences,
+                            "has_sequences": has_sequences,
+                        }
+                    )
                 except Exception as exc:
                     logger.debug("Could not parse adventure candidate %s: %s", file_path, exc)
 
@@ -246,7 +256,9 @@ def is_legacy_template(template: AdventureTemplate) -> bool:
                 return True
 
     # If it was imported (has origin_id or manifest) and lacks sequences:
-    if (template.origin_id or template.original_manifest) and not (template.sequences and len(template.sequences) > 0):
+    if (template.origin_id or template.original_manifest) and not (
+        template.sequences and len(template.sequences) > 0
+    ):
         return True
 
     return False
@@ -281,8 +293,7 @@ def is_legacy_session(
 
         # Check if imported but lacks sequences
         is_imported = bool(
-            manifest
-            or (template and (template.origin_id or template.original_manifest))
+            manifest or (template and (template.origin_id or template.original_manifest))
         )
         has_sequences = bool(
             (manifest.get("sequences") and len(manifest["sequences"]) > 0)
@@ -347,7 +358,7 @@ async def update_single_adventure(
     user_id: str,
 ) -> dict[str, Any]:
     """Updates an individual adventure template from its matching file in /adventures.
-    
+
     NOTE: Existing game sessions are NOT updated. Their narrative snapshot and state
     remain preserved as-is.
     """
@@ -392,10 +403,12 @@ async def update_single_adventure(
 
     # Fetch newly created / updated template to confirm
     updated_res = await db.execute(
-        select(AdventureTemplate).where(
+        select(AdventureTemplate)
+        .where(
             AdventureTemplate.owner_id == user_id,
             AdventureTemplate.title == matching["title"],
-        ).order_by(AdventureTemplate.created_at.desc())
+        )
+        .order_by(AdventureTemplate.created_at.desc())
     )
     updated_template = updated_res.scalars().first()
 
@@ -487,10 +500,7 @@ async def migrate_single_adventure(
     adv_manifest = manifest.get("adventure") if isinstance(manifest.get("adventure"), dict) else {}
 
     walkthrough_text = (
-        template.walkthrough
-        or adv_manifest.get("walkthrough")
-        or manifest.get("walkthrough")
-        or ""
+        template.walkthrough or adv_manifest.get("walkthrough") or manifest.get("walkthrough") or ""
     )
 
     if not template.sequences or len(template.sequences) == 0:
@@ -498,9 +508,13 @@ async def migrate_single_adventure(
             "id": "SEQ_1_MAIN",
             "order": 1,
             "title": "Main Journey",
-            "description": template.plot or adv_manifest.get("plot") or "Follow the adventure storyline.",
+            "description": template.plot
+            or adv_manifest.get("plot")
+            or "Follow the adventure storyline.",
             "walkthrough": walkthrough_text or "Follow the main storyline.",
-            "end_condition": template.completed_condition or adv_manifest.get("completed_condition") or "Achieve the victory condition.",
+            "end_condition": template.completed_condition
+            or adv_manifest.get("completed_condition")
+            or "Achieve the victory condition.",
             "exp_reward": 500,
         }
         template.sequences = [sequence_1]
@@ -525,6 +539,37 @@ async def migrate_single_adventure(
         }
 
     template.version = CURRENT_VERSION
+
+    # If the template has no world entities in the database yet, populate them from original_manifest
+    from backend.models.world_entity import WorldScene
+
+    scene_check = await db.execute(
+        select(WorldScene.id)
+        .where(
+            WorldScene.template_id == template.id,
+            WorldScene.session_id.is_(None),
+        )
+        .limit(1)
+    )
+    if not scene_check.scalars().first() and template.original_manifest:
+        manifest_data = template.original_manifest
+        if isinstance(manifest_data, dict) and (
+            manifest_data.get("scenes") or manifest_data.get("npcs") or manifest_data.get("objects")
+        ):
+            from backend.engine.world_generator import WorldGenerator
+            from backend.models.user import User
+
+            user_res = await db.execute(select(User).where(User.id == user_id))
+            user = user_res.scalars().first()
+            await WorldGenerator.apply_manifest(
+                db=db,
+                template_id=template.id,
+                manifest_dict=manifest_data,
+                user=user,
+            )
+            template.is_ready = True
+            template.creation_status = "Ready"
+
     await db.commit()
     await db.refresh(template)
 
@@ -537,4 +582,3 @@ async def migrate_single_adventure(
         "is_legacy_format": False,
         "can_start": True,
     }
-

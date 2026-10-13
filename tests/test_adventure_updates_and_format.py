@@ -1,6 +1,7 @@
 """
 Tests for adventure format versioning, legacy format detection, and disk update mechanism.
 """
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
+
 
 def test_adventure_format_current_version():
     """Adventure format current version must be 1.3."""
@@ -256,7 +258,11 @@ async def test_sessions_and_chat_return_legacy_format(auth_client: AsyncClient, 
 @pytest.mark.asyncio
 async def test_migrate_legacy_template(auth_client: AsyncClient, db_session):
     """Migrating a legacy adventure converts its walkthrough into Sequence 1 and updates format."""
-    user = (await db_session.execute(select(User).where(User.username == "test_user"))).scalars().first()
+    user = (
+        (await db_session.execute(select(User).where(User.username == "test_user")))
+        .scalars()
+        .first()
+    )
 
     legacy_tpl = AdventureTemplate(
         id="legacy-migrate-test",
@@ -271,6 +277,25 @@ async def test_migrate_legacy_template(auth_client: AsyncClient, db_session):
             "format_version": "1.0",
             "title": "Forgotten Crypt",
             "walkthrough": "Find the silver chalice and place it on the altar.",
+            "scenes": [
+                {"id": "CRYPT_ENTRANCE", "name": "Crypt Entrance", "description": "Dark entryway"}
+            ],
+            "npcs": [
+                {
+                    "id": "SKELETON_GUARD",
+                    "name": "Skeleton Guard",
+                    "description": "Bony guard",
+                    "start_scene_id": "CRYPT_ENTRANCE",
+                }
+            ],
+            "objects": [
+                {
+                    "id": "SILVER_CHALICE",
+                    "name": "Silver Chalice",
+                    "description": "Shiny chalice",
+                    "start_scene_id": "CRYPT_ENTRANCE",
+                }
+            ],
             "sequences": [],
         },
         sequences=[],
@@ -295,9 +320,20 @@ async def test_migrate_legacy_template(auth_client: AsyncClient, db_session):
     await db_session.refresh(legacy_tpl)
     assert len(legacy_tpl.sequences) == 1
     assert legacy_tpl.sequences[0]["title"] == "Main Journey"
-    assert legacy_tpl.sequences[0]["walkthrough"] == "Find the silver chalice and place it on the altar."
+    assert (
+        legacy_tpl.sequences[0]["walkthrough"]
+        == "Find the silver chalice and place it on the altar."
+    )
     assert legacy_tpl.sequences[0]["end_condition"] == "Chalice on altar."
     assert is_legacy_template(legacy_tpl) is False
 
-
-
+    # Verify editor assets rehydrate scenes, npcs, and objects
+    editor_resp = await auth_client.get(f"/api/adventures/{legacy_tpl.id}/editor/assets")
+    assert editor_resp.status_code == 200
+    editor_data = editor_resp.json()
+    assert len(editor_data["scenes"]) >= 1
+    assert any(s["id"] == "CRYPT_ENTRANCE" for s in editor_data["scenes"])
+    assert len(editor_data["npcs"]) >= 1
+    assert any(n["id"] == "SKELETON_GUARD" for n in editor_data["npcs"])
+    assert len(editor_data["objects"]) >= 1
+    assert any(o["id"] == "SILVER_CHALICE" for o in editor_data["objects"])
