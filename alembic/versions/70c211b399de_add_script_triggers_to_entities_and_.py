@@ -5,11 +5,12 @@ Revises: 469bc262d980
 Create Date: 2026-10-10 12:58:40.789008
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "70c211b399de"
@@ -29,17 +30,33 @@ def upgrade() -> None:
     if "adventures" in table_names:
         op.drop_table("adventures")
 
-    with op.batch_alter_table("adventure_templates", schema=None) as batch_op:
-        batch_op.alter_column(
-            "sequences", existing_type=sa.TEXT(), type_=sa.JSON(), existing_nullable=True
-        )
-        batch_op.alter_column(
-            "generation_strictness",
-            existing_type=sa.TEXT(),
-            type_=sa.String(length=20),
-            existing_nullable=False,
-            existing_server_default=sa.text("'creative'"),
-        )
+    if "adventure_templates" in table_names:
+        template_cols = {c["name"] for c in insp.get_columns("adventure_templates")}
+        with op.batch_alter_table("adventure_templates", schema=None) as batch_op:
+            if "sequences" in template_cols:
+                batch_op.alter_column(
+                    "sequences", existing_type=sa.TEXT(), type_=sa.JSON(), existing_nullable=True
+                )
+            else:
+                batch_op.add_column(sa.Column("sequences", sa.JSON(), nullable=True))
+
+            if "generation_strictness" in template_cols:
+                batch_op.alter_column(
+                    "generation_strictness",
+                    existing_type=sa.TEXT(),
+                    type_=sa.String(length=20),
+                    existing_nullable=False,
+                    existing_server_default=sa.text("'creative'"),
+                )
+            else:
+                batch_op.add_column(
+                    sa.Column(
+                        "generation_strictness",
+                        sa.String(length=20),
+                        nullable=False,
+                        server_default=sa.text("'creative'"),
+                    )
+                )
 
     if "ai_fix_cache" in table_names:
         ai_indexes = {ix["name"] for ix in insp.get_indexes("ai_fix_cache")}
@@ -60,18 +77,63 @@ def upgrade() -> None:
     if "session_states" in table_names:
         session_cols = {c["name"] for c in insp.get_columns("session_states")}
         with op.batch_alter_table("session_states", schema=None) as batch_op:
-            batch_op.alter_column(
-                "walkthrough",
-                existing_type=sa.VARCHAR(length=10000),
-                type_=sa.String(length=20000),
-                existing_nullable=True,
-            )
-            batch_op.alter_column(
-                "active_sequence_id",
-                existing_type=sa.TEXT(),
-                type_=sa.String(length=100),
-                existing_nullable=True,
-            )
+            if "walkthrough" in session_cols:
+                batch_op.alter_column(
+                    "walkthrough",
+                    existing_type=sa.VARCHAR(length=10000),
+                    type_=sa.String(length=20000),
+                    existing_nullable=True,
+                )
+            else:
+                batch_op.add_column(
+                    sa.Column("walkthrough", sa.String(length=20000), nullable=True)
+                )
+
+            if "active_sequence_id" in session_cols:
+                batch_op.alter_column(
+                    "active_sequence_id",
+                    existing_type=sa.TEXT(),
+                    type_=sa.String(length=100),
+                    existing_nullable=True,
+                )
+            else:
+                batch_op.add_column(
+                    sa.Column("active_sequence_id", sa.String(length=100), nullable=True)
+                )
+
+            if "active_sequence_order" not in session_cols:
+                batch_op.add_column(
+                    sa.Column(
+                        "active_sequence_order",
+                        sa.Integer(),
+                        nullable=False,
+                        server_default=sa.text("1"),
+                    )
+                )
+
+            if "enable_history_compression" not in session_cols:
+                batch_op.add_column(
+                    sa.Column(
+                        "enable_history_compression",
+                        sa.Boolean(),
+                        nullable=False,
+                        server_default=sa.text("1"),
+                    )
+                )
+
+            if "compressed_history" not in session_cols:
+                batch_op.add_column(sa.Column("compressed_history", sa.JSON(), nullable=True))
+
+            if "allow_dynamic_items" not in session_cols:
+                batch_op.add_column(
+                    sa.Column(
+                        "allow_dynamic_items",
+                        sa.Boolean(),
+                        nullable=False,
+                        server_default=sa.text("0"),
+                    )
+                )
+
             for col_name in [
                 "save_on_scene_change",
                 "save_on_combat",
@@ -165,19 +227,22 @@ def downgrade() -> None:
                 batch_op.create_index("ix_validation_runs_template", ["template_id"], unique=False)
 
     if "session_states" in table_names:
+        session_cols = {c["name"] for c in insp.get_columns("session_states")}
         with op.batch_alter_table("session_states", schema=None) as batch_op:
-            batch_op.alter_column(
-                "active_sequence_id",
-                existing_type=sa.String(length=100),
-                type_=sa.TEXT(),
-                existing_nullable=True,
-            )
-            batch_op.alter_column(
-                "walkthrough",
-                existing_type=sa.String(length=20000),
-                type_=sa.VARCHAR(length=10000),
-                existing_nullable=True,
-            )
+            if "active_sequence_id" in session_cols:
+                batch_op.alter_column(
+                    "active_sequence_id",
+                    existing_type=sa.String(length=100),
+                    type_=sa.TEXT(),
+                    existing_nullable=True,
+                )
+            if "walkthrough" in session_cols:
+                batch_op.alter_column(
+                    "walkthrough",
+                    existing_type=sa.String(length=20000),
+                    type_=sa.VARCHAR(length=10000),
+                    existing_nullable=True,
+                )
 
     if "ai_fix_cache" in table_names:
         ai_indexes = {ix["name"] for ix in insp.get_indexes("ai_fix_cache")}
@@ -192,17 +257,20 @@ def downgrade() -> None:
                 )
 
     if "adventure_templates" in table_names:
+        template_cols = {c["name"] for c in insp.get_columns("adventure_templates")}
         with op.batch_alter_table("adventure_templates", schema=None) as batch_op:
-            batch_op.alter_column(
-                "generation_strictness",
-                existing_type=sa.String(length=20),
-                type_=sa.TEXT(),
-                existing_nullable=False,
-                existing_server_default=sa.text("'creative'"),
-            )
-            batch_op.alter_column(
-                "sequences", existing_type=sa.JSON(), type_=sa.TEXT(), existing_nullable=True
-            )
+            if "generation_strictness" in template_cols:
+                batch_op.alter_column(
+                    "generation_strictness",
+                    existing_type=sa.String(length=20),
+                    type_=sa.TEXT(),
+                    existing_nullable=False,
+                    existing_server_default=sa.text("'creative'"),
+                )
+            if "sequences" in template_cols:
+                batch_op.alter_column(
+                    "sequences", existing_type=sa.JSON(), type_=sa.TEXT(), existing_nullable=True
+                )
 
     op.create_table(
         "adventures",
