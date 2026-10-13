@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { Brain } from 'lucide-vue-next'
 import { getItemIcon } from '@/utils/game_icons'
+import { hasAnyScript } from '@/utils/editor_utils'
 
 const props = defineProps<{
   form: any
@@ -12,7 +14,11 @@ const props = defineProps<{
   ruleEnforcementMode: string
   visualsCacheVersion: number
   editorScenes?: any[]
+  adventureScripts?: any[]
 }>()
+
+const hasScript = (npc: any): boolean =>
+  hasAnyScript(npc, props.adventureScripts || props.adventure?.scripts || props.debugData?.adventure?.scripts)
 
 const emit = defineEmits<{
   (e: 'quick-regen', kind: string, id: string): void
@@ -74,7 +80,16 @@ function getSceneLabel(sceneId?: string | null): string {
             <div v-if="isQuickGenerating['npc_' + npc.id]" class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-20">
               <i class="ra ra-cycle animate-spin text-xl text-emerald-500"></i>
             </div>
-            <div v-if="npc.is_hidden" class="absolute top-2 left-2 px-1.5 py-0.5 rounded-full text-[8px] font-black tracking-wide border border-violet-500/50 bg-violet-500/30 text-violet-200 z-10">HIDDEN</div>
+            <div class="absolute top-2 left-2 flex items-center gap-1 z-10">
+              <div v-if="npc.is_hidden" class="px-1.5 py-0.5 rounded-full text-[8px] font-black tracking-wide border border-violet-500/50 bg-violet-500/30 text-violet-200">HIDDEN</div>
+              <div
+                v-if="hasScript(npc)"
+                class="p-1 rounded-full border border-purple-500/50 bg-purple-950/80 text-purple-300 shadow-md flex items-center justify-center backdrop-blur-sm"
+                title="Contains custom event script(s)"
+              >
+                <Brain class="w-3.5 h-3.5 text-purple-400" />
+              </div>
+            </div>
             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-80"></div>
             <div class="absolute bottom-0 left-0 right-0 p-3">
               <div class="text-xs font-black text-white uppercase tracking-wider truncate drop-shadow-md">{{ npc.name }}</div>
