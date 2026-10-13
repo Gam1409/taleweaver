@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   takeAll: []
+  takeItem: [item: any]
   dropToScene: []
   itemHover: [item: any, event: MouseEvent]
   itemLeave: []
@@ -67,7 +68,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
               <div
                 v-for="item in items"
                 :key="item.id || item.name"
-                class="bg-slate-950/50 border border-slate-800 rounded-2xl p-2 flex flex-col items-center gap-2"
+                class="bg-slate-950/50 border border-slate-800 rounded-2xl p-2 flex flex-col items-center gap-2 transition-colors"
+                :class="busy ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:border-emerald-500/60 hover:bg-emerald-500/10'"
+                role="button"
+                :title="`Take ${item.name || item.id}`"
+                @click="!busy && emit('takeItem', item)"
                 @mouseenter="emit('itemHover', { ...item, entity_type: 'ITEM' }, $event)"
                 @mouseleave="emit('itemLeave')"
               >

@@ -1120,6 +1120,10 @@ class TurnInteractionsManager:
                             )
                             response = f"You take all {len(normalized_items)} item(s) from {container_name}."
 
+        if response.startswith("[TRIGGER_CONTAINER_TAKE_ITEM]"):
+            take_args = response.replace("[TRIGGER_CONTAINER_TAKE_ITEM]", "").strip()
+            response = await self._take_single_container_item(take_args)
+
         if response.startswith("[TRIGGER_CONTAINER_DROP_SCENE]"):
             container_hint = response.replace("[TRIGGER_CONTAINER_DROP_SCENE]", "").strip()
             if not container_hint:
@@ -1413,14 +1417,64 @@ class TurnInteractionsManager:
         inventory_container: dict[str, Any] | None,
         inventory_idx: int | None,
     ) -> None:
+        await self._set_container_inventory(scene_container, inventory_container, inventory_idx, [])
+
+    async def _take_single_container_item(self, args: str) -> str:
+        """Handle `/container_take_item <container> | <item id or name>`."""
+        container_hint, _, item_hint = (part.strip() for part in args.partition("|"))
+        if not container_hint or not item_hint:
+            return "Usage: /container_take_item <container> | <item>"
+
+        scene_container, inventory_container, inventory_idx = await self._resolve_container_target(
+            container_hint
+        )
+        source = scene_container or inventory_container
+        if not source:
+            return f"No container named '{container_hint}' was found."
+        container_name = (
+            scene_container.name if scene_container else inventory_container.get("name")
+        )
+        if self._is_container_locked(scene_container, inventory_container):
+            return f"{container_name} is locked."
+
+        raw_items = await self._get_container_inventory(scene_container, inventory_container)
+        wanted = item_hint.lower()
+        match_idx = None
+        match_item: dict[str, Any] | None = None
+        for idx, raw in enumerate(raw_items):
+            normalized = await self._normalize_container_item_ref(raw)
+            if not normalized:
+                continue
+            candidates = {str(normalized.get(k) or "").lower() for k in ("id", "name")}
+            if wanted in candidates:
+                match_idx, match_item = idx, normalized
+                break
+        if match_idx is None or match_item is None:
+            return f"{container_name} does not contain '{item_hint}'."
+
+        await self._move_container_item_to_inventory(match_item)
+        self.avatar.inventory = [*(self.avatar.inventory or []), match_item]
+        remaining = [raw for idx, raw in enumerate(raw_items) if idx != match_idx]
+        await self._set_container_inventory(
+            scene_container, inventory_container, inventory_idx, remaining
+        )
+        return f"You take {match_item.get('name') or item_hint} from {container_name}."
+
+    async def _set_container_inventory(
+        self,
+        scene_container: WorldEntity | None,
+        inventory_container: dict[str, Any] | None,
+        inventory_idx: int | None,
+        items: list[Any],
+    ) -> None:
         if scene_container:
-            scene_container.inventory = []
+            scene_container.inventory = list(items)
             self.db.add(scene_container)
 
             states = dict(self.state.entity_states or {})
             if scene_container.id not in states:
                 states[scene_container.id] = {}
-            states[scene_container.id]["inventory"] = []
+            states[scene_container.id]["inventory"] = list(items)
             self.state.entity_states = states
             flag_modified(self.state, "entity_states")
 
@@ -1430,6 +1484,6 @@ class TurnInteractionsManager:
                 updated_inventory[inventory_idx], dict
             ):
                 updated_container = dict(updated_inventory[inventory_idx])
-                updated_container["inventory"] = []
+                updated_container["inventory"] = list(items)
                 updated_inventory[inventory_idx] = updated_container
                 self.avatar.inventory = updated_inventory

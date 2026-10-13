@@ -712,9 +712,11 @@ class GameMasterLLM:
                                 buffer = buffer[keep_len:]
                                 partial_match = True
                                 break
-                        if not partial_match:
-                            cleaned_delta += buffer
-                            buffer = ""
+                        if partial_match:
+                            # Hold the partial tag until the next chunk arrives.
+                            break
+                        cleaned_delta += buffer
+                        buffer = ""
                 else:
                     end_idx = buffer.find("</think>")
                     if end_idx != -1:
@@ -728,8 +730,10 @@ class GameMasterLLM:
                                 buffer = buffer[-i:]
                                 partial_match = True
                                 break
-                        if not partial_match:
-                            buffer = ""
+                        if partial_match:
+                            # Hold the partial closing tag until the next chunk arrives.
+                            break
+                        buffer = ""
 
             try:
                 chunk.choices[0].delta.content = cleaned_delta

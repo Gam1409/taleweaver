@@ -1063,6 +1063,12 @@ const handleContainerTakeAll = async () => {
   await runContainerAction((id) => `/container_take_all ${id}`)
 }
 
+const handleContainerTakeItem = async (item: any) => {
+  const itemRef = String(item?.id || item?.name || '').trim()
+  if (!itemRef) return
+  await runContainerAction((id) => `/container_take_item ${id} | ${itemRef}`)
+}
+
 const handleContainerDropToScene = async () => {
   await runContainerAction((id) => `/container_drop_scene ${id}`)
 }
@@ -1745,6 +1751,7 @@ watch(
       :busy="containerBusy"
       @close="closeContainerModal"
       @take-all="handleContainerTakeAll"
+      @take-item="handleContainerTakeItem"
       @drop-to-scene="handleContainerDropToScene"
       @item-hover="(item, event) => handleHover(item, event)"
       @item-leave="hoveredEntity = null"
