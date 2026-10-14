@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
-import { Lock, Code2, Sparkles, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Lock, Sparkles, ChevronDown, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps<{
   show: boolean
@@ -278,16 +278,13 @@ function submit() {
               </button>
 
               <div v-if="showExitGuard" class="p-4 border-t border-white/5 space-y-2">
-                <div class="flex justify-between items-center">
-                  <span class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                    <Code2 class="w-3.5 h-3.5 text-emerald-400" /> Deterministic Script Guard Expression
-                  </span>
-                  <span class="text-[9px] text-emerald-400/80 font-mono">Optional</span>
-                </div>
-                <input
+                <ScriptEditor
                   v-model="form.unlock_expression"
+                  label="Deterministic Script Guard Expression"
+                  help-text="Deterministic Python boolean expression evaluated when attempting to unlock. If false, unlocking fails."
+                  context="guard_expression"
                   placeholder="e.g. tw.switches.get('DRAWBRIDGE') == 'LOWERED' or tw.vars.get('guard_bribed') == True"
-                  class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-emerald-500/50 outline-none"
+                  min-height="90px"
                 />
                 <p class="text-[10px] text-slate-400">
                   Deterministic Python boolean expression evaluated when attempting to unlock. If false, unlocking fails.

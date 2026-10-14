@@ -156,6 +156,31 @@ const availableSnippets = computed(() => {
     ]
   }
 
+  if (props.context === 'guard_expression') {
+    return [
+      {
+        label: 'Check quest / script flag',
+        code: "tw.vars.get('puzzle_solved', False) == True",
+      },
+      {
+        label: 'Check switch state',
+        code: "tw.switches.get('SWITCH_ID') == 'ON'",
+      },
+      {
+        label: 'Check player inventory item',
+        code: "tw.player.has_item('KEY_ID')",
+      },
+      {
+        label: 'Combined guard (AND / OR)',
+        code: "tw.vars.get('flag_a', False) and tw.switches.get('LEVER') == 'ACTIVE'",
+      },
+      {
+        label: 'Check player stat threshold',
+        code: "tw.player.get_stat('hp', 100) > 50",
+      },
+    ]
+  }
+
   return common
 })
 
@@ -655,7 +680,11 @@ onBeforeUnmount(() => {
     <!-- Main Editor Canvas -->
     <div
       class="relative flex-1 min-h-0 bg-slate-950 font-mono text-xs overflow-hidden"
-      :style="{ minHeight: isFullscreen ? '400px' : minHeight, maxHeight: isFullscreen ? 'none' : maxHeight }"
+      :style="{
+        '--cm-min-height': isFullscreen ? '400px' : minHeight,
+        minHeight: isFullscreen ? '400px' : minHeight,
+        maxHeight: isFullscreen ? 'none' : maxHeight,
+      }"
     >
       <!-- Loading CDN Spinner / Notice -->
       <div
@@ -761,7 +790,7 @@ onBeforeUnmount(() => {
 /* CodeMirror overrides to integrate with TaleWeaver dark theme */
 .codemirror-wrapper .CodeMirror {
   height: 100% !important;
-  min-height: 120px;
+  min-height: var(--cm-min-height, 120px);
   background-color: transparent !important;
   color: #e2e8f0 !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
@@ -772,8 +801,7 @@ onBeforeUnmount(() => {
 
 .codemirror-wrapper .CodeMirror-scroll {
   height: 100% !important;
-  overflow-x: auto !important;
-  overflow-y: auto !important;
+  min-height: var(--cm-min-height, 120px);
 }
 
 .codemirror-wrapper .CodeMirror-gutters {

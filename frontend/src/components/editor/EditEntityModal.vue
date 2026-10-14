@@ -1358,16 +1358,13 @@ const textLogPreviewClass = computed(() => {
                     </button>
 
                     <div v-if="showConstructableGuard" class="p-4 border-t border-white/5 space-y-2">
-                      <div class="flex justify-between items-center">
-                        <span class="text-[9px] font-bold text-orange-400 uppercase tracking-widest flex items-center gap-1">
-                          <Code2 class="w-3.5 h-3.5 text-orange-400" /> Deterministic Script Guard Expression
-                        </span>
-                        <span class="text-[9px] text-orange-400/80 font-mono">Optional</span>
-                      </div>
-                      <input
+                      <ScriptEditor
                         v-model="localForm.craft_guard_expression"
+                        label="Deterministic Script Guard Expression"
+                        help-text="Optional Python boolean expression evaluated in addition to required items. If false, crafting fails."
+                        context="guard_expression"
                         placeholder="e.g. tw.vars.get('has_hammer') == True or tw.switches.get('FORGE') == 'ON'"
-                        class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-orange-500/50 outline-none"
+                        min-height="90px"
                       />
                       <p class="text-[10px] text-slate-400">
                         Optional Python boolean expression evaluated in addition to required items. If false, crafting fails.
@@ -1790,17 +1787,14 @@ const textLogPreviewClass = computed(() => {
                           </div>
 
                           <!-- Deterministic Script Guard (Python Boolean Expression) -->
-                          <div class="space-y-1.5 bg-black/40 p-3 rounded-xl border border-cyan-500/20">
-                            <div class="flex justify-between items-center">
-                              <span class="text-[9px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1">
-                                <Code2 class="w-3.5 h-3.5 text-cyan-400" /> Deterministic Script Guard (Python Boolean Expression)
-                              </span>
-                              <span class="text-[8px] text-slate-500 font-mono">tw.*</span>
-                            </div>
-                            <input
+                          <div class="space-y-2">
+                            <ScriptEditor
                               v-model="switchTransitions[editingTransitionIndex].gates.expression"
+                              label="Deterministic Script Guard (Python Boolean Expression)"
+                              help-text="Evaluated via sandboxed Python engine. Allows transition only when expression evaluates to True."
+                              context="guard_expression"
                               placeholder="e.g. tw.vars.get('microwave_safe') and tw.vars.get('sink_fixed')"
-                              class="w-full bg-slate-900 border border-cyan-500/30 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-mono focus:border-cyan-400 outline-none transition-all"
+                              min-height="90px"
                             />
                             <p class="text-[9px] text-slate-400">
                               Evaluated via sandboxed Python engine. Allows transition only when expression evaluates to True. Examples: <code class="text-cyan-300">tw.vars.get('flag') == True</code>, <code class="text-cyan-300">tw.player.hp > 50</code>.
@@ -1953,16 +1947,13 @@ const textLogPreviewClass = computed(() => {
                     </button>
 
                     <div v-if="showContainerGuard" class="p-4 border-t border-white/5 space-y-2">
-                      <div class="flex justify-between items-center">
-                        <span class="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                          <Code2 class="w-3.5 h-3.5 text-amber-400" /> Deterministic Script Guard Expression
-                        </span>
-                        <span class="text-[9px] text-amber-400/80 font-mono">Optional</span>
-                      </div>
-                      <input
+                      <ScriptEditor
                         v-model="localForm.unlock_expression"
+                        label="Deterministic Script Guard Expression"
+                        help-text="Deterministic Python boolean expression evaluated when attempting to unlock. If evaluated to false, unlocking fails."
+                        context="guard_expression"
                         placeholder="e.g. tw.vars.get('has_badge') == True or tw.switches.get('CHEST_LOCK') == 'OPEN'"
-                        class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500/50 outline-none"
+                        min-height="90px"
                       />
                       <p class="text-[10px] text-slate-400">
                         Deterministic Python boolean expression evaluated when attempting to unlock. If evaluated to false, unlocking fails.
