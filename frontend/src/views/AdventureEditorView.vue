@@ -97,6 +97,8 @@ const exitModalForm = ref({
   rule_to_unlock: '',
   on_open_exit_script: '',
   on_open_exit_text: '',
+  on_exit_used_script: '',
+  on_exit_used_text: '',
   unlock_expression: '',
   on_unlock_success_script: '',
   on_unlock_success_text: '',
@@ -1058,6 +1060,8 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     on_enter_scene_text: selectedScene?.on_enter_scene_text || selectedObject?.on_enter_scene_text || metadata?.on_enter_scene_text || '',
     on_open_exit_script: selectedObject?.on_open_exit_script || metadata?.on_open_exit_script || '',
     on_open_exit_text: selectedObject?.on_open_exit_text || metadata?.on_open_exit_text || '',
+    on_exit_used_script: selectedObject?.on_exit_used_script || metadata?.on_exit_used_script || '',
+    on_exit_used_text: selectedObject?.on_exit_used_text || metadata?.on_exit_used_text || '',
     on_defeat_script: selectedNpc?.on_defeat_script || metadata?.on_defeat_script || '',
     on_defeat_text: selectedNpc?.on_defeat_text || metadata?.on_defeat_text || '',
     on_protagonist_enters_scene_script: selectedNpc?.on_protagonist_enters_scene_script || metadata?.on_protagonist_enters_scene_script || '',
@@ -2070,6 +2074,8 @@ function openCreateExitModal() {
     rule_to_unlock: '',
     on_open_exit_script: '',
     on_open_exit_text: '',
+    on_exit_used_script: '',
+    on_exit_used_text: '',
     unlock_expression: '',
     on_unlock_success_script: '',
     on_unlock_success_text: '',
@@ -2261,6 +2267,8 @@ function openEditExitModal(exitId: string) {
     rule_to_unlock: String(exit.rule_to_unlock || ''),
     on_open_exit_script: String(exit.on_open_exit_script || ''),
     on_open_exit_text: String(exit.on_open_exit_text || ''),
+    on_exit_used_script: String(exit.on_exit_used_script || ''),
+    on_exit_used_text: String(exit.on_exit_used_text || ''),
     unlock_expression: String(exit.unlock_expression || ''),
     on_unlock_success_script: String(exit.on_unlock_success_script || ''),
     on_unlock_success_text: String(exit.on_unlock_success_text || ''),
@@ -2308,6 +2316,8 @@ async function saveExitModal(formData: any) {
         rule_to_unlock: formData.rule_to_unlock || undefined,
         on_open_exit_script: formData.on_open_exit_script || undefined,
         on_open_exit_text: formData.on_open_exit_text || undefined,
+        on_exit_used_script: formData.on_exit_used_script || undefined,
+        on_exit_used_text: formData.on_exit_used_text || undefined,
         unlock_expression: formData.unlock_expression || undefined,
         on_unlock_success_script: formData.on_unlock_success_script || undefined,
         on_unlock_success_text: formData.on_unlock_success_text || undefined,
@@ -2332,6 +2342,8 @@ async function saveExitModal(formData: any) {
         rule_to_unlock: formData.rule_to_unlock,
         on_open_exit_script: formData.on_open_exit_script,
         on_open_exit_text: formData.on_open_exit_text,
+        on_exit_used_script: formData.on_exit_used_script,
+        on_exit_used_text: formData.on_exit_used_text,
         unlock_expression: formData.unlock_expression,
         on_unlock_success_script: formData.on_unlock_success_script,
         on_unlock_success_text: formData.on_unlock_success_text,
@@ -2756,6 +2768,9 @@ watch(
               v-if="activeTab === 'quest'"
               :adventure="adventure"
               :reference-options="referenceOptions"
+              :editor-scenes="editorScenes"
+              :editor-objects="editorAllItems"
+              :editor-npcs="editorNpcs"
               @update-quests="handleUpdateQuests"
               @notify="addNotification"
             />
@@ -2764,6 +2779,9 @@ watch(
               v-if="activeTab === 'awards'"
               :adventure="adventure"
               :reference-options="referenceOptions"
+              :editor-scenes="editorScenes"
+              :editor-objects="editorAllItems"
+              :editor-npcs="editorNpcs"
               @update-awards="handleUpdateAwards"
               @notify="addNotification"
             />

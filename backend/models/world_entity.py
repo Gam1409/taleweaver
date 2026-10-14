@@ -62,6 +62,8 @@ class WorldExit(Base, TimestampMixin):
     unlock_expression = Column(String(500), nullable=True)
     on_open_exit_script = Column(String(5000), nullable=True)
     on_open_exit_text = Column(String(5000), nullable=True)
+    on_exit_used_script = Column(String(5000), nullable=True)
+    on_exit_used_text = Column(String(5000), nullable=True)
     on_unlock_success_script = Column(String(5000), nullable=True)
     on_unlock_success_text = Column(String(5000), nullable=True)
     on_unlock_failure_script = Column(String(5000), nullable=True)

@@ -666,6 +666,8 @@ def _persist_exits(
             unlock_expression=e.get("unlock_expression") or None,
             on_open_exit_script=e.get("on_open_exit_script") or None,
             on_open_exit_text=e.get("on_open_exit_text") or None,
+            on_exit_used_script=e.get("on_exit_used_script") or None,
+            on_exit_used_text=e.get("on_exit_used_text") or None,
             on_unlock_success_script=e.get("on_unlock_success_script") or None,
             on_unlock_success_text=e.get("on_unlock_success_text") or None,
             on_unlock_failure_script=e.get("on_unlock_failure_script") or None,

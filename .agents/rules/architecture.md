@@ -67,10 +67,11 @@ graph TD
 ### Pass 1.5: Rule Validation & Reversion (Critical Guardrail)
 * **Design Rule**: Never parse freeform text to identify which entity or container the player is interacting with.
 * Instead, systematically inspect any state updates requested by the LLM in Pass 1:
-  * **Containers**: Validate if `item_to_unlock` is in the player's inventory, or if `unlock_code` matches. Enforce that key items are actively referenced.
-  * **Exits & Movement**: Validate exit locks, destination scene graph connectivity, and prevent accidental teleports from hypothetical chat.
+  * **Containers & Exits (Deterministic Unlock Guard)**: Validate if `item_to_unlock` is in inventory, `unlock_code` matches, or if deterministic guard `unlock_expression` evaluates to truthy. Execute `on_unlock_success` or `on_unlock_failure` scripts accordingly.
+  * **Exits & Movement**: Validate exit locks, destination scene graph connectivity, and fire transition hooks (`on_leave_scene`, `on_open_exit`, `on_exit_used`, `on_enter_scene`) while preventing accidental teleports from hypothetical chat.
   * **Switches**: Verify state transitions match allowed `switch_states`.
-  * **Constructables**: Validate that all `combination_ingredients` are present in player inventory.
+  * **Constructables**: Validate that all `combination_ingredients` are present in player inventory and verify `craft_guard_expression`.
+  * **Quests & Awards (Deterministic Hard Rules & Scripting Guards)**: Validate LLM-proposed quest completions and award grants against defined hard rules (`required_item_id`, `required_scene_id`, `required_defeated_npc_id`, `guard_expression`). If any configured hard rule is unmet, the completion/grant is reverted and recorded as a rule violation, forcing Pass 2 to narrate the unmet condition.
   * **Hidden Entities**: Require explicit search/inspection actions before revealing hidden NPCs or items.
 * **Reversion Mechanism**: Any invalid state change is immediately **reverted** back to its pre-turn database state.
 * Violations are recorded into the `rule_violations` list.

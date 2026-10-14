@@ -1939,12 +1939,31 @@ class TurnGuardrailsManager:
 
         # Validate completed quests
         if event.completed_quest_ids:
+            from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
             validated_quest_ids = []
             for qid in event.completed_quest_ids:
                 quest = next((q for q in (self.state.quests or []) if q.get("id") == qid), None)
                 if not quest:
                     validated_quest_ids.append(qid)
                     continue
+
+                if HardRuleEvaluator.has_hard_rules(quest):
+                    is_met, reason = HardRuleEvaluator.evaluate_hard_rules(
+                        quest,
+                        self.avatar,
+                        self.state,
+                        new_inventory_items=event.new_inventory_items,
+                        new_scene_id=event.new_scene_id,
+                        updated_entities=event.updated_entities,
+                    )
+                    if not is_met:
+                        logger.info(
+                            "[Quest Guardrail] Blocked completion of quest '%s' due to unmet hard rule: %s",
+                            qid,
+                            reason,
+                        )
+                        continue
 
                 goal = quest.get("goal")
                 desc = quest.get("description")
@@ -1961,6 +1980,8 @@ class TurnGuardrailsManager:
 
         # Validate earned awards
         if event.earned_award_keys:
+            from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
             validated_award_keys = []
             for key in event.earned_award_keys:
                 award = next(
@@ -1969,6 +1990,23 @@ class TurnGuardrailsManager:
                 if not award:
                     validated_award_keys.append(key)
                     continue
+
+                if HardRuleEvaluator.has_hard_rules(award):
+                    is_met, reason = HardRuleEvaluator.evaluate_hard_rules(
+                        award,
+                        self.avatar,
+                        self.state,
+                        new_inventory_items=event.new_inventory_items,
+                        new_scene_id=event.new_scene_id,
+                        updated_entities=event.updated_entities,
+                    )
+                    if not is_met:
+                        logger.info(
+                            "[Award Guardrail] Blocked award '%s' due to unmet hard rule: %s",
+                            key,
+                            reason,
+                        )
+                        continue
 
                 req = award.get("requirement")
                 desc = award.get("description")

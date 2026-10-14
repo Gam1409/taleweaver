@@ -433,6 +433,20 @@ export const api = {
     })
   },
 
+  /** Unlocks an exit directly (evaluating deterministic unlock_expression if configured). */
+  unlockExit(gameId: string, exitId: string): Promise<{ status: string; exit_id: string; is_locked: boolean }> {
+    return request(`/adventures/${gameId}/exits/${encodeURIComponent(exitId)}/unlock`, {
+      method: 'POST',
+    })
+  },
+
+  /** Unlocks a container directly (evaluating deterministic unlock_expression if configured). */
+  unlockContainer(gameId: string, entityId: string): Promise<{ status: string; entity_id: string; locked: boolean }> {
+    return request(`/adventures/${gameId}/containers/${encodeURIComponent(entityId)}/unlock`, {
+      method: 'POST',
+    })
+  },
+
   /** Moves the player through an unlocked exit to the target scene. */
   traverseExit(gameId: string, exitId: string): Promise<{ status: string; exit_id: string; scene_id: string }> {
     return request(`/adventures/${gameId}/exits/${encodeURIComponent(exitId)}/traverse`, {

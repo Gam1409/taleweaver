@@ -163,6 +163,74 @@ class TurnStateApplier:
             session_id=session_id,
         )
 
+    async def _evaluate_deterministic_awards(
+        self, event: GameEvent, script_context: Any = None
+    ) -> list[str]:
+        """Evaluates awards configured with deterministic hard rules and grants them if conditions are met."""
+        from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
+        if not self.adventure or not self.adventure.awards or not self.user:
+            return []
+
+        messages: list[str] = []
+        user_awards = list(self.user.earned_awards or [])
+        now = datetime.utcnow().isoformat()
+        modified = False
+
+        for aw in self.adventure.awards:
+            if not isinstance(aw, dict) or not aw.get("key"):
+                continue
+            key = aw["key"]
+            already_earned = any(
+                ea.get("key") == key
+                and (
+                    ea.get("template_id") == self.adventure.id
+                    or ea.get("adventure_id") == self.adventure.id
+                )
+                for ea in user_awards
+            )
+            if already_earned or not HardRuleEvaluator.has_hard_rules(aw):
+                continue
+
+            is_met, _ = HardRuleEvaluator.evaluate_hard_rules(
+                aw,
+                self.avatar,
+                self.state,
+                new_inventory_items=event.new_inventory_items,
+                new_scene_id=event.new_scene_id,
+                updated_entities=event.updated_entities,
+                script_context=script_context,
+            )
+            if not is_met:
+                continue
+
+            user_awards.append(
+                {
+                    "key": key,
+                    "title": aw.get("title") or key,
+                    "description": aw.get("description"),
+                    "tier": aw.get("tier"),
+                    "template_id": self.adventure.id,
+                    "adventure_id": self.adventure.id,
+                    "adventure_title": self.adventure.title,
+                    "session_id": self.state.session_id,
+                    "earned_at": now,
+                }
+            )
+            award_title = aw.get("title") or key
+            msg = f"Award Achievement: {award_title}"
+            await self._save_chat_message("system", msg)
+            messages.append(msg)
+            modified = True
+            logger.info("[Turn %s] Deterministic Award Granted: %s", self.game_id, key)
+
+        if modified:
+            self.user.earned_awards = user_awards
+            flag_modified(self.user, "earned_awards")
+            self._queue_checkpoint(CHECKPOINT_REASON_AWARD_GRANTED)
+
+        return messages
+
     async def _apply_game_event(self, event: GameEvent) -> list[str]:
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         system_messages: list[str] = []
@@ -426,7 +494,7 @@ class TurnStateApplier:
                     system_messages.append(msg)
                     self._queue_checkpoint(CHECKPOINT_REASON_SCENE_CHANGE, scene_label=scene_name)
 
-                    # Trigger on_open_exit if applicable
+                    # Trigger on_open_exit and on_exit_used if applicable
                     if valid_exit:
                         if valid_exit.on_open_exit_script:
                             msgs = await self.manager._execute_inline_script(valid_exit.on_open_exit_script, "on_open_exit", valid_exit.id)
@@ -434,6 +502,12 @@ class TurnStateApplier:
                         if valid_exit.on_open_exit_text:
                             await self._save_chat_message("system", valid_exit.on_open_exit_text)
                             system_messages.append(valid_exit.on_open_exit_text)
+                        if getattr(valid_exit, "on_exit_used_script", None):
+                            msgs = await self.manager._execute_inline_script(valid_exit.on_exit_used_script, "on_exit_used", valid_exit.id)
+                            system_messages.extend(msgs)
+                        if getattr(valid_exit, "on_exit_used_text", None):
+                            await self._save_chat_message("system", valid_exit.on_exit_used_text)
+                            system_messages.append(valid_exit.on_exit_used_text)
                     
                     if new_scene_db and new_scene_db.on_enter_scene_script:
                         msgs = await self.manager._execute_inline_script(new_scene_db.on_enter_scene_script, "on_enter_scene", new_scene_db.id)
@@ -821,8 +895,26 @@ class TurnStateApplier:
                 flag_modified(self.user, "earned_awards")
                 self._queue_checkpoint(CHECKPOINT_REASON_AWARD_GRANTED)
 
+        script_context = None
+        if hasattr(self, "manager") and hasattr(self.manager, "_build_script_context"):
+            try:
+                script_context = await self.manager._build_script_context()
+            except Exception as exc:
+                logger.warning("Could not build script context for progression evaluation: %s", exc)
+
+        # Deterministic Award Evaluation for awards configured with hard rules
+        det_award_msgs = await self._evaluate_deterministic_awards(event, script_context)
+        system_messages.extend(det_award_msgs)
+
         # Deterministic Quest Sync (Post-LLM check)
-        det_completed = QuestManager.evaluate_quests(self.avatar, self.state)
+        det_completed = QuestManager.evaluate_quests(
+            self.avatar,
+            self.state,
+            new_inventory_items=event.new_inventory_items,
+            new_scene_id=event.new_scene_id,
+            updated_entities=event.updated_entities,
+            script_context=script_context,
+        )
         if det_completed:
             new_quests = deepcopy(self.state.quests or [])
             modified = False
@@ -860,12 +952,6 @@ class TurnStateApplier:
 
         # Sequence Completion Logic
         old_seq_id = self.state.active_sequence_id
-        script_context = None
-        if hasattr(self, "manager") and hasattr(self.manager, "_build_script_context"):
-            try:
-                script_context = await self.manager._build_script_context()
-            except Exception as exc:
-                logger.warning("Could not build script context for sequence evaluation: %s", exc)
         seq_messages = AdventureLogic.evaluate_sequence_progress(
             adventure=self.adventure,
             state=self.state,

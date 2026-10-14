@@ -618,134 +618,19 @@ class AdventureLogic:
             return []
 
         current_seq = sequences[current_seq_idx]
-        req_item = str(current_seq.get("required_item_id") or "").strip()
-        req_scene = str(current_seq.get("required_scene_id") or "").strip()
-        req_npc = str(current_seq.get("required_defeated_npc_id") or "").strip()
-        req_guard = str(
-            current_seq.get("guard_expression")
-            or current_seq.get("completion_guard_expression")
-            or ""
-        ).strip()
-        has_hard_rules = bool(req_item or req_scene or req_npc or req_guard)
+        from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 
-        sequence_completed = False
-        if has_hard_rules:
-            # 1. Evaluate Item requirement (protagonist receives item X)
-            item_met = True
-            if req_item:
-                req_item_norm = req_item.upper()
-                inv_ids: set[str] = set()
-                inv_names: set[str] = set()
-                for item in (getattr(avatar, "inventory", None) or []):
-                    if isinstance(item, dict):
-                        if item.get("id"):
-                            inv_ids.add(str(item["id"]).strip().upper())
-                        if item.get("name"):
-                            inv_names.add(str(item["name"]).strip().upper())
-                    elif isinstance(item, str) and item.strip():
-                        inv_ids.add(item.strip().upper())
-                    elif getattr(item, "id", None):
-                        inv_ids.add(str(item.id).strip().upper())
-                    elif getattr(item, "name", None):
-                        inv_names.add(str(item.name).strip().upper())
-
-                for item in (new_inventory_items or []):
-                    if isinstance(item, dict):
-                        if item.get("id"):
-                            inv_ids.add(str(item["id"]).strip().upper())
-                        if item.get("name"):
-                            inv_names.add(str(item["name"]).strip().upper())
-                    elif isinstance(item, str) and item.strip():
-                        inv_ids.add(item.strip().upper())
-                    elif getattr(item, "id", None):
-                        inv_ids.add(str(item.id).strip().upper())
-                    elif getattr(item, "name", None):
-                        inv_names.add(str(item.name).strip().upper())
-
-                states = getattr(state, "entity_states", None) or {}
-                in_inv_states = {
-                    str(eid).strip().upper()
-                    for eid, st in states.items()
-                    if isinstance(st, dict) and st.get("is_in_inventory")
-                }
-                item_met = (
-                    req_item_norm in inv_ids
-                    or req_item_norm in inv_names
-                    or req_item_norm in in_inv_states
-                )
-
-            # 2. Evaluate Scene requirement (protagonist enters scene X)
-            scene_met = True
-            if req_scene:
-                req_scene_norm = req_scene.upper()
-                curr_scene = str(getattr(state, "current_scene_id", "") or "").strip().upper()
-                new_scene = str(new_scene_id or "").strip().upper()
-                scene_met = (curr_scene == req_scene_norm or new_scene == req_scene_norm)
-
-            # 3. Evaluate Defeated NPC requirement (protagonist defeats NPC X)
-            npc_met = True
-            if req_npc:
-                req_npc_norm = req_npc.upper()
-                states = getattr(state, "entity_states", None) or {}
-                npc_st = states.get(req_npc) or {}
-                if not npc_st:
-                    for k, v in states.items():
-                        if str(k).strip().upper() == req_npc_norm and isinstance(v, dict):
-                            npc_st = v
-                            break
-                is_def = False
-                if isinstance(npc_st, dict):
-                    if npc_st.get("is_defeated") is True:
-                        is_def = True
-                    elif npc_st.get("hp") is not None and npc_st.get("hp") <= 0:
-                        is_def = True
-                if not is_def:
-                    for upd in (updated_entities or []):
-                        ent_id = getattr(upd, "entity_id", None) if not isinstance(upd, dict) else upd.get("entity_id")
-                        if str(ent_id or "").strip().upper() == req_npc_norm:
-                            upd_def = getattr(upd, "is_defeated", None) if not isinstance(upd, dict) else upd.get("is_defeated")
-                            upd_hp = getattr(upd, "hp", None) if not isinstance(upd, dict) else upd.get("hp")
-                            if upd_def is True:
-                                is_def = True
-                            elif upd_hp is not None and upd_hp <= 0:
-                                is_def = True
-                npc_met = is_def
-
-            # 4. Evaluate Deterministic Guard Rule expression
-            guard_met = True
-            if req_guard:
-                from backend.engine.switch_service import SwitchService
-
-                if script_context is not None:
-                    passed, _ = SwitchService.evaluate_gate_expression(req_guard, script_context)
-                    guard_met = bool(passed)
-                else:
-                    from backend.engine.scripting import GameContext
-
-                    avatar_dict = {
-                        "name": getattr(avatar, "name", "Protagonist") or "Protagonist",
-                        "hp": getattr(avatar, "hp", 100) or 100,
-                        "mana": getattr(avatar, "mana", 100) or 100,
-                        "stamina": getattr(avatar, "stamina", 100) or 100,
-                        "inventory": list(getattr(avatar, "inventory", None) or []),
-                    }
-                    session_overrides = dict(getattr(state, "entity_states", None) or {})
-                    script_vars = dict(session_overrides.get("__script_vars__", {}))
-                    story_flags = dict(session_overrides.get("__switch_story_flags__", {}))
-                    ctx = GameContext(
-                        avatar_data=avatar_dict,
-                        current_scene_id=str(getattr(state, "current_scene_id", "") or ""),
-                        entities={},
-                        exit_states=dict(getattr(state, "exit_states", None) or {}),
-                        quests=list(getattr(state, "quests", None) or []),
-                        script_vars=script_vars,
-                        story_flags=story_flags,
-                    )
-                    passed, _ = SwitchService.evaluate_gate_expression(req_guard, ctx)
-                    guard_met = bool(passed)
-
-            if item_met and scene_met and npc_met and guard_met:
-                sequence_completed = True
+        if HardRuleEvaluator.has_hard_rules(current_seq):
+            is_met, _ = HardRuleEvaluator.evaluate_hard_rules(
+                current_seq,
+                avatar,
+                state,
+                new_inventory_items=new_inventory_items,
+                new_scene_id=new_scene_id,
+                updated_entities=updated_entities,
+                script_context=script_context,
+            )
+            sequence_completed = is_met
         else:
             sequence_completed = force_complete
 

@@ -114,6 +114,7 @@ In addition to standalone script assets, TaleWeaver allows configuring short inl
 | **Scenes** | `on_enter_scene_script`, `..._text` | Executes when the player enters this specific scene. |
 | | `on_leave_scene_script`, `..._text` | Executes immediately when the player leaves this specific scene. |
 | **Exits** | `on_open_exit_script`, `..._text` | Executes when the player opens or traverses this exit. |
+| | `on_exit_used_script`, `..._text` | Transition Trigger: Executes specifically when the player successfully traverses this exit to enter the destination scene. |
 | | `unlock_expression` *(Guard)* | Deterministic Python boolean expression evaluated when unlocking. If false, unlocking fails. |
 | | `on_unlock_success_script`, `..._text` | Executes immediately when this exit is successfully unlocked. |
 | | `on_unlock_failure_script`, `..._text` | Executes when unlocking this exit fails or is blocked by guard. |
@@ -124,6 +125,10 @@ In addition to standalone script assets, TaleWeaver allows configuring short inl
 | | `on_status_change_script`, `..._text` | Executes when protagonist status effects or conditions change. |
 | **Sequences** | `on_start_sequence_script`, `..._text` | Executes immediately when a sequence chapter becomes active. |
 | | `on_end_sequence_script`, `..._text` | Executes immediately when a sequence chapter is completed. |
+| **Quests (Sidequests)** | `required_item_id`, `required_scene_id`, `required_defeated_npc_id` *(Hard Rules)* | Deterministic entity conditions required to complete quest. |
+| | `guard_expression` *(Guard)* | Deterministic Python boolean expression required for completion. Evaluated in Pass 1.5. |
+| **Awards (Achievements)** | `required_item_id`, `required_scene_id`, `required_defeated_npc_id` *(Hard Rules)* | Deterministic entity conditions required to grant award. |
+| | `guard_expression` *(Guard)* | Deterministic Python boolean expression required for granting. Evaluated in Pass 1.5. |
 
 ### In-Game Debug Notifications
 
@@ -143,12 +148,13 @@ This provides instant, transparent feedback during playtesting and debugging wit
 
 ### Deterministic Guard Expressions
 
-Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches) evaluate safe Python expressions against the `tw` context:
+Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches, and `guard_expression` on sequences, sidequests, and awards) evaluate safe Python expressions against the `tw` context:
 - `tw.switches.get('POWER') == 'ON'`
 - `tw.vars.get('has_badge', False) == True and tw.player.hp > 20`
 - `tw.player.has_item('KEYCARD_RED') or tw.switches.is_state('OVERRIDE', 'ACTIVE')`
+- `tw.vars.get('quest_done') == True`
 
-If the expression evaluates to truthy, the guard passes; otherwise, the action is blocked and failure transition scripts are triggered.
+If the expression evaluates to truthy, the guard passes; otherwise, the action or completion is blocked deterministically.
 
 ### Priority Execution
 Scripts carry an integer `priority` (default: `100`). Scripts with **lower** priority numbers execute before scripts with higher numbers.

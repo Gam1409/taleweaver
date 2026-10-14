@@ -162,6 +162,8 @@ class EntityUpdateRequest(BaseModel):
     on_leave_scene_text: Optional[str] = None
     on_open_exit_script: Optional[str] = None
     on_open_exit_text: Optional[str] = None
+    on_exit_used_script: Optional[str] = None
+    on_exit_used_text: Optional[str] = None
     unlock_expression: Optional[str] = None
     on_unlock_success_script: Optional[str] = None
     on_unlock_success_text: Optional[str] = None
@@ -281,6 +283,8 @@ def _serialize_model(obj):
         data["on_unlock_failure_text"] = str(getattr(obj, "on_unlock_failure_text", "") or "")
         data["on_open_exit_script"] = str(getattr(obj, "on_open_exit_script", "") or "")
         data["on_open_exit_text"] = str(getattr(obj, "on_open_exit_text", "") or "")
+        data["on_exit_used_script"] = str(getattr(obj, "on_exit_used_script", "") or "")
+        data["on_exit_used_text"] = str(getattr(obj, "on_exit_used_text", "") or "")
 
     if isinstance(obj, Avatar):
         stats = dict(obj.stats or {})
@@ -1329,6 +1333,8 @@ _FIX_EXIT_FIELDS = frozenset(
         "unlock_expression",
         "on_open_exit_script",
         "on_open_exit_text",
+        "on_exit_used_script",
+        "on_exit_used_text",
         "on_unlock_success_script",
         "on_unlock_success_text",
         "on_unlock_failure_script",
@@ -3717,6 +3723,14 @@ async def update_editor_entity(
                 world_exit.on_open_exit_text = (
                     payload.on_open_exit_text.strip() if payload.on_open_exit_text else None
                 )
+            if payload.on_exit_used_script is not None:
+                world_exit.on_exit_used_script = (
+                    payload.on_exit_used_script.strip() if payload.on_exit_used_script else None
+                )
+            if payload.on_exit_used_text is not None:
+                world_exit.on_exit_used_text = (
+                    payload.on_exit_used_text.strip() if payload.on_exit_used_text else None
+                )
             if payload.on_unlock_success_script is not None:
                 world_exit.on_unlock_success_script = (
                     payload.on_unlock_success_script.strip() if payload.on_unlock_success_script else None
@@ -3802,6 +3816,8 @@ async def update_editor_entity(
                         ex_item["unlock_expression"] = world_exit.unlock_expression
                         ex_item["on_open_exit_script"] = world_exit.on_open_exit_script
                         ex_item["on_open_exit_text"] = world_exit.on_open_exit_text
+                        ex_item["on_exit_used_script"] = world_exit.on_exit_used_script
+                        ex_item["on_exit_used_text"] = world_exit.on_exit_used_text
                         ex_item["on_unlock_success_script"] = world_exit.on_unlock_success_script
                         ex_item["on_unlock_success_text"] = world_exit.on_unlock_success_text
                         ex_item["on_unlock_failure_script"] = world_exit.on_unlock_failure_script

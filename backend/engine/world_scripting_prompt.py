@@ -54,6 +54,7 @@ INLINE_TRIGGERS: dict[str, tuple[tuple[str, str], ...]] = {
         ("on_leave_scene", "the protagonist leaves this scene"),
     ),
     "EXITS": (
+        ("on_exit_used", "the protagonist traverses or uses this exit"),
         ("on_open_exit", "this exit is opened/traversed"),
         ("on_unlock_success", "this exit is successfully unlocked"),
         ("on_unlock_failure", "this exit unlock fails or is blocked by guard"),
@@ -124,6 +125,14 @@ _EXAMPLES = (
     "8. Container unlock guard (inline on CONTAINER object: unlock_expression & on_unlock_success_script):\n"
     "   unlock_expression = \"tw.switches.get('POWER_CORE') == 'ACTIVE'\"\n"
     "   on_unlock_success_script = \"tw.story.show_message('The cryo-chamber decompresses with a hiss.')\"\n"
+    "9. Exit unlock guard and traversal (inline on exit: unlock_expression, on_unlock_success_script, on_exit_used_script):\n"
+    "   unlock_expression = \"tw.switches.get('DRAWBRIDGE_LEVER') == 'LOWERED'\"\n"
+    "   on_unlock_success_script = \"tw.story.show_message('The heavy portcullis raises.')\"\n"
+    "   on_exit_used_script = \"tw.vars.set('entered_keep', True)\"\n"
+    "10. Quest deterministic guard (inline on quest: guard_expression):\n"
+    "   guard_expression = \"tw.player.has_item('ANCIENT_RELIC') and tw.vars.get('relic_cleansed') == True\"\n"
+    "11. Award deterministic guard (inline on award: guard_expression):\n"
+    "   guard_expression = \"tw.vars.get('pacifist_boss_spared') == True\"\n"
 )
 
 

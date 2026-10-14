@@ -8,9 +8,13 @@ class QuestSchema(BaseModel):
     title: str
     description: str
     goal: str
-    impact: str
+    impact: str = ""
     exp_reward: int
-    status: Literal["open", "completed"] = "open"
+    status: Literal["open", "completed", "failed"] = "open"
+    required_item_id: Optional[str] = ""
+    required_scene_id: Optional[str] = ""
+    required_defeated_npc_id: Optional[str] = ""
+    guard_expression: Optional[str] = ""
 
 
 class SequenceSchema(BaseModel):
@@ -39,6 +43,10 @@ class AwardSchema(BaseModel):
     tier: Literal["bronze", "silver", "gold", "negative"]
     requirement: str
     is_earned: bool = False
+    required_item_id: Optional[str] = ""
+    required_scene_id: Optional[str] = ""
+    required_defeated_npc_id: Optional[str] = ""
+    guard_expression: Optional[str] = ""
 
 
 class AdventureTemplateBase(BaseModel):

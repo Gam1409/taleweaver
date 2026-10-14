@@ -26,6 +26,8 @@ const props = defineProps<{
     on_unlock_failure_text?: string
     on_open_exit_script?: string
     on_open_exit_text?: string
+    on_exit_used_script?: string
+    on_exit_used_text?: string
   }
   sceneReferenceOptions: any[]
   referenceOptions: any[]
@@ -50,6 +52,8 @@ const emit = defineEmits<{
     on_unlock_failure_text?: string
     on_open_exit_script?: string
     on_open_exit_text?: string
+    on_exit_used_script?: string
+    on_exit_used_text?: string
   }): void
 }>()
 
@@ -69,6 +73,8 @@ const EMPTY_FORM = {
   on_unlock_failure_text: '',
   on_open_exit_script: '',
   on_open_exit_text: '',
+  on_exit_used_script: '',
+  on_exit_used_text: '',
 }
 
 const showExitGuard = ref(false)
@@ -255,6 +261,21 @@ function submit() {
               <div class="space-y-1">
                 <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Open Exit Text</label>
                 <textarea v-model="form.on_open_exit_text" rows="2" placeholder="e.g. The rusty heavy iron door slowly creaks open." class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
+              </div>
+            </div>
+
+            <!-- On Exit Used Transition Trigger -->
+            <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">
+              <ScriptEditor
+                v-model="form.on_exit_used_script"
+                label="On Exit Used Script (Transition Trigger)"
+                help-text="Executed immediately when the player traverses this exit."
+                context="exit_used"
+                min-height="100px"
+              />
+              <div class="space-y-1">
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">On Exit Used Text</label>
+                <textarea v-model="form.on_exit_used_text" rows="2" placeholder="e.g. You step through the threshold into the dark corridor." class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-300 focus:border-cyan-500 outline-none transition-all resize-y"></textarea>
               </div>
             </div>
 

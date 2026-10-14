@@ -23,6 +23,7 @@ from backend.core.awards import SPOILER_SEEKER_AWARD
 from backend.core.config import settings
 from backend.engine.debug_engine import DebugEngine
 from backend.engine.switch_service import SwitchService
+from backend.engine.trigger_service import TriggerService
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -134,18 +135,10 @@ class TurnInteractionsManager:
     async def _spawn_scene_item(self, *args, **kwargs):
         return await self.manager._spawn_scene_item(*args, **kwargs)
 
-    async def _handle_traverse_exit(
-        self, exit_ref: str, language: str | None = None
-    ) -> AsyncGenerator[str, None]:
-        """Performs scene exit traversal and triggers an LLM narration pass for the new scene."""
-        import json
-        from sqlalchemy import or_, and_, func
+    async def _resolve_traversal_exit(self, exit_ref: str) -> WorldExit | None:
+        """Resolves an exit by DB id or 'FROM::TO' scene composite key."""
+        from sqlalchemy import and_, func, or_
 
-        current_scene_id = str(self.state.current_scene_id or "").strip()
-        world_exit = None
-
-        # Support both a direct exit DB-ID and a 'FROM::TO' scene composite key
-        # (map edges expose from/to but have no id field)
         if "::" in exit_ref:
             parts = exit_ref.split("::", 1)
             from_id, to_id = parts[0].strip(), parts[1].strip()
@@ -171,26 +164,91 @@ class TurnInteractionsManager:
                     ),
                 )
             )
-            world_exit = exit_res.scalars().first()
-        else:
-            # Lookup by exit DB primary key (case-insensitive for UUIDs and custom string keys)
-            clean_ref = exit_ref.strip()
-            exit_res = await self.db.execute(
-                select(WorldExit).where(
-                    or_(
-                        WorldExit.session_id == self.state.session_id,
-                        and_(
-                            WorldExit.template_id == self.state.template_id,
-                            WorldExit.session_id.is_(None),
-                        ),
+            return exit_res.scalars().first()
+
+        clean_ref = exit_ref.strip()
+        exit_res = await self.db.execute(
+            select(WorldExit).where(
+                or_(
+                    WorldExit.session_id == self.state.session_id,
+                    and_(
+                        WorldExit.template_id == self.state.template_id,
+                        WorldExit.session_id.is_(None),
                     ),
-                    or_(
-                        WorldExit.id == clean_ref,
-                        func.lower(WorldExit.id) == clean_ref.lower(),
-                    ),
-                )
+                ),
+                or_(
+                    WorldExit.id == clean_ref,
+                    func.lower(WorldExit.id) == clean_ref.lower(),
+                ),
             )
-            world_exit = exit_res.scalars().first()
+        )
+        return exit_res.scalars().first()
+
+    async def _fire_traversal_triggers(
+        self,
+        current_scene_id: str,
+        world_exit: WorldExit,
+    ) -> list[str]:
+        """Fires on_leave_scene, on_open_exit, and on_exit_used triggers."""
+        from sqlalchemy import and_, or_
+
+        messages: list[str] = []
+        old_sc_res = await self.db.execute(
+            select(WorldScene).where(
+                or_(
+                    WorldScene.session_id == self.state.session_id,
+                    and_(WorldScene.template_id == self.state.template_id, WorldScene.session_id.is_(None)),
+                ),
+                WorldScene.id == current_scene_id,
+            )
+        )
+        old_scene = old_sc_res.scalars().first()
+        if old_scene and (old_scene.on_leave_scene_script or old_scene.on_leave_scene_text):
+            msgs = await TriggerService.execute_trigger(
+                self.db,
+                self.state,
+                "on_leave_scene",
+                old_scene.id,
+                script_code=old_scene.on_leave_scene_script,
+                narrative_text=old_scene.on_leave_scene_text,
+            )
+            messages.extend(msgs)
+
+        if world_exit.on_open_exit_script or world_exit.on_open_exit_text:
+            msgs = await TriggerService.execute_trigger(
+                self.db,
+                self.state,
+                "on_open_exit",
+                world_exit.id,
+                script_code=world_exit.on_open_exit_script,
+                narrative_text=world_exit.on_open_exit_text,
+            )
+            messages.extend(msgs)
+
+        if getattr(world_exit, "on_exit_used_script", None) or getattr(
+            world_exit, "on_exit_used_text", None
+        ):
+            msgs = await TriggerService.execute_trigger(
+                self.db,
+                self.state,
+                "on_exit_used",
+                world_exit.id,
+                script_code=world_exit.on_exit_used_script,
+                narrative_text=world_exit.on_exit_used_text,
+            )
+            messages.extend(msgs)
+
+        return messages
+
+    async def _handle_traverse_exit(
+        self, exit_ref: str, language: str | None = None
+    ) -> AsyncGenerator[str, None]:
+        """Performs scene exit traversal and triggers an LLM narration pass for the new scene."""
+        import json
+        from sqlalchemy import and_, func, or_
+
+        current_scene_id = str(self.state.current_scene_id or "").strip()
+        world_exit = await self._resolve_traversal_exit(exit_ref)
 
         if not world_exit:
             err = f"Exit '{exit_ref}' not found."
@@ -214,7 +272,6 @@ class TurnInteractionsManager:
             yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': err})}\n\n"
             return
 
-        # Resolve target scene label
         scene_res = await self.db.execute(
             select(WorldScene).where(
                 or_(
@@ -236,9 +293,23 @@ class TurnInteractionsManager:
             yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': err})}\n\n"
             return
 
-        # Commit the scene change with canonical scene ID
+        for m in await self._fire_traversal_triggers(current_scene_id, world_exit):
+            yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': m})}\n\n"
+
         self.state.current_scene_id = scene.id
         await self.db.commit()
+
+        if scene.on_enter_scene_script or scene.on_enter_scene_text:
+            msgs = await TriggerService.execute_trigger(
+                self.db,
+                self.state,
+                "on_enter_scene",
+                scene.id,
+                script_code=scene.on_enter_scene_script,
+                narrative_text=scene.on_enter_scene_text,
+            )
+            for m in msgs:
+                yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': m})}\n\n"
 
         # Signal frontend to clear old chat bubbles
         yield f"event: scene_transition\ndata: {json.dumps({'scene_id': scene.id, 'scene_label': scene.label})}\n\n"

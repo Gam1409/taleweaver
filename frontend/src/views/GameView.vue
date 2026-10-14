@@ -732,6 +732,37 @@ const handleUnlockItemSubmit = async (itemId: string) => {
   }
 }
 
+const handleUnlockDirectSubmit = async () => {
+  if (!unlockModalContainer.value || unlockModalBusy.value) return
+  const containerId = String(unlockModalContainer.value.id || '').trim()
+  if (!containerId) return
+
+  unlockModalBusy.value = true
+  unlockModalError.value = ''
+  try {
+    await api.unlockContainer(props.id, containerId)
+    markContainerUnlockedLocally(containerId)
+    addNotification(`${unlockModalContainer.value.name || 'Container'} unlocked.`, 'success')
+
+    const source = activeCodeContainer.value?.source
+    showUnlockModal.value = false
+    unlockModalContainer.value = null
+    clearContainerCodeState()
+
+    if (source === 'scene') {
+      const container = (items.value || []).find((entry: any) => String(entry.id || '').trim().toLowerCase() === containerId.toLowerCase())
+      if (container) openContainerFromEntity(container)
+    } else {
+      const container = (inventoryItems.value || []).find((entry: any) => String(entry.id || '').trim().toLowerCase() === containerId.toLowerCase())
+      if (container) openContainerFromInventoryItem(container)
+    }
+  } catch (error: any) {
+    unlockModalError.value = error?.message || "Guard condition not met. The container remains locked."
+  } finally {
+    unlockModalBusy.value = false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Exit interactions
 // ---------------------------------------------------------------------------
@@ -872,6 +903,28 @@ const handleExitUnlockItemSubmit = async (itemId: string) => {
   }
 }
 
+const handleExitUnlockDirectSubmit = async () => {
+  if (!exitUnlockModalTarget.value || exitUnlockBusy.value) return
+  const exitId = String(exitUnlockModalTarget.value.id || '').trim()
+  if (!exitId) return
+
+  exitUnlockBusy.value = true
+  exitUnlockError.value = ''
+  try {
+    await api.unlockExit(props.id, exitId)
+    markExitUnlockedLocally(exitId)
+    const target = exitUnlockModalTarget.value
+    addNotification(`${target?.name || target?.label || 'Exit'} unlocked.`, 'success')
+    showExitUnlockModal.value = false
+    exitUnlockModalTarget.value = null
+    await traverseSceneExit({ ...(target || {}), is_locked: false }, exitId)
+  } catch (error: any) {
+    exitUnlockError.value = error?.message || 'Guard condition not met. The exit remains locked.'
+  } finally {
+    exitUnlockBusy.value = false
+  }
+}
+
 const markExitUnlockedLocally = (exitId: string) => {
   const normalized = String(exitId || '').trim()
   if (!normalized || !mapData.value) return
@@ -882,6 +935,7 @@ const markExitUnlockedLocally = (exitId: string) => {
     edge.code_to_unlock = ''
     edge.item_to_unlock = ''
     edge.rule_to_unlock = ''
+    edge.unlock_expression = ''
   }
 }
 
@@ -1152,10 +1206,6 @@ const sceneExits = computed<any[]>(() => {
 
 const isExitLocked = (exit: any): boolean => {
   if (!exit) return false
-  const code = String(exit.code_to_unlock || '').trim()
-  const item = String(exit.item_to_unlock || '').trim()
-  const rule = String(exit.rule_to_unlock || '').trim()
-  if (!code && !item && !rule) return Boolean(exit.is_locked)
   return Boolean(exit.is_locked)
 }
 
@@ -1178,6 +1228,7 @@ const exitLockBadge = (exit: any): ExitLockBadge | null => {
   if (!exit || !isExitLocked(exit)) return null
   const code = String(exit.code_to_unlock || '').trim()
   const item = String(exit.item_to_unlock || '').trim()
+  const expr = String(exit.unlock_expression || '').trim()
   const rule = String(exit.rule_to_unlock || '').trim()
   const description = String(exit.lock_description || '').trim()
 
@@ -1186,6 +1237,9 @@ const exitLockBadge = (exit: any): ExitLockBadge | null => {
   }
   if (item) {
     return { label: `Requires ${item}`, icon: 'ra ra-key', detail: description || `Requires the ${item}` }
+  }
+  if (expr) {
+    return { label: 'Guarded Exit', icon: 'ra ra-lock', detail: description || 'Protected by scripted condition' }
   }
   if (rule) {
     return { label: `Rule: ${rule}`, icon: 'ra ra-scroll-unfurled', detail: description || `Requires: ${rule}` }
@@ -1766,6 +1820,7 @@ watch(
       @close="showUnlockModal = false"
       @submit-code="handleUnlockCodeSubmit"
       @use-key-item="handleUnlockItemSubmit"
+      @unlock-direct="handleUnlockDirectSubmit"
     />
 
     <ContainerUnlockModal
@@ -1780,6 +1835,7 @@ watch(
       @close="showExitUnlockModal = false"
       @submit-code="handleExitUnlockCodeSubmit"
       @use-key-item="handleExitUnlockItemSubmit"
+      @unlock-direct="handleExitUnlockDirectSubmit"
     />
 
     <SwitchStateModal

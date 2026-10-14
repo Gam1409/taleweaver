@@ -62,6 +62,8 @@ export interface EntityEditData {
   on_enter_scene_text?: string | null
   on_open_exit_script?: string | null
   on_open_exit_text?: string | null
+  on_exit_used_script?: string | null
+  on_exit_used_text?: string | null
   on_defeat_script?: string | null
   on_defeat_text?: string | null
   on_protagonist_enters_scene_script?: string | null

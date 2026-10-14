@@ -84,6 +84,14 @@ class WorldExitSchema(BaseModel):
         "",
         description="Optional text output when this exit is opened/traversed. Use empty string for none.",
     )
+    on_exit_used_script: str = Field(
+        "",
+        description="Optional script executed when this exit is used/traversed. Use empty string for none.",
+    )
+    on_exit_used_text: str = Field(
+        "",
+        description="Optional text output when this exit is used/traversed. Use empty string for none.",
+    )
     unlock_expression: str = Field(
         "",
         description="Deterministic script guard expression evaluated to allow unlocking the exit (e.g. tw.vars.get('puzzle_solved') == True). Keep empty if none.",
@@ -579,8 +587,24 @@ class QuestSchema(BaseModel):
     )
     exp_reward: int = Field(..., description="EXP awarded for completion (e.g., 50, 100, 250)")
     status: str = Field(..., description="Current state: open, completed, failed")
+    required_item_id: str = Field(
+        "",
+        description="Hard rule: Quest only completes once protagonist has this item ID in inventory. Use empty string for none.",
+    )
+    required_scene_id: str = Field(
+        "",
+        description="Hard rule: Quest only completes once protagonist enters this scene ID. Use empty string for none.",
+    )
+    required_defeated_npc_id: str = Field(
+        "",
+        description="Hard rule: Quest only completes once this NPC ID is defeated. Use empty string for none.",
+    )
+    guard_expression: str = Field(
+        "",
+        description="Deterministic Python boolean expression evaluated against tw context. Quest only completes when True.",
+    )
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
 
 class AwardTemplateSchema(BaseModel):
@@ -593,8 +617,24 @@ class AwardTemplateSchema(BaseModel):
     requirement: str = Field(
         ..., description="The specific rule/condition when the GM should grant this award"
     )
+    required_item_id: str = Field(
+        "",
+        description="Hard rule: Award is granted once protagonist has this item ID in inventory. Use empty string for none.",
+    )
+    required_scene_id: str = Field(
+        "",
+        description="Hard rule: Award is granted once protagonist enters this scene ID. Use empty string for none.",
+    )
+    required_defeated_npc_id: str = Field(
+        "",
+        description="Hard rule: Award is granted once this NPC ID is defeated. Use empty string for none.",
+    )
+    guard_expression: str = Field(
+        "",
+        description="Deterministic Python boolean expression evaluated against tw context. Award is granted when True.",
+    )
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
 
 class EquipmentSchema(BaseModel):
