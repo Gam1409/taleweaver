@@ -708,6 +708,7 @@ class WorldScriptSchema(BaseModel):
     id: str = Field(..., description="Unique slug for the script, e.g. SCRIPT_LEVER_PUZZLE")
     name: str = Field(..., description="Human-readable title for the script")
     trigger: Literal[
+        "on_init",
         "on_enter_scene",
         "on_interact",
         "on_turn_start",
@@ -716,7 +717,7 @@ class WorldScriptSchema(BaseModel):
         "on_narration_done",
     ] = Field(
         ...,
-        description="The game event trigger: on_enter_scene, on_interact, on_turn_start, on_turn_end, on_logic_pass_done, on_narration_done",
+        description="The game event trigger: on_init, on_enter_scene, on_interact, on_turn_start, on_turn_end, on_logic_pass_done, on_narration_done",
     )
     target_id: Optional[str] = Field(
         None,
@@ -790,6 +791,10 @@ class WorldManifesto(BaseModel):
     scripts: list[WorldScriptSchema] = Field(
         default_factory=list,
         description="List of 1-3 game logic event scripts when scripting is enabled (e.g. traps, puzzles, quest updates). Use [] ONLY if scripting is explicitly disabled.",
+    )
+    init_script: Optional[str] = Field(
+        default=None,
+        description="Optional initialization Python script executed at session creation and loaded into scope before event triggers.",
     )
     cover_source_adventure_id: Optional[str] = None
     cover_source_adventure_name: Optional[str] = None

@@ -4,28 +4,39 @@ TaleWeaver Sandboxed Scripting Engine.
 Provides secure AST-level execution of adventure scripts without access
 to CPython bytecode, private object internals, or host system sinks.
 """
+
 from __future__ import annotations
 
 import ast
 import logging
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class ScriptSecurityError(Exception):
     """Raised when a script attempts an unauthorized or unsafe operation."""
+
     pass
 
 
 class ScriptExecutionError(Exception):
     """Raised when a runtime error occurs during script evaluation."""
+
     pass
 
 
 class ScriptTimeoutError(ScriptExecutionError):
     """Raised when a script exceeds its maximum execution instruction budget."""
+
     pass
+
+
+class _ReturnSignalError(Exception):
+    """Internal control-flow signal raised by return statements inside functions."""
+
+    def __init__(self, value: Any = None):
+        self.value = value
 
 
 # Whitelist of allowed AST statement and expression nodes
@@ -42,6 +53,10 @@ ALLOWED_AST_NODES: set[type[ast.AST]] = {
     ast.For,
     ast.Break,
     ast.Continue,
+    ast.FunctionDef,
+    ast.Return,
+    ast.arguments,
+    ast.arg,
     # Expressions & Values
     ast.Name,
     ast.Load,
@@ -84,7 +99,15 @@ ALLOWED_AST_NODES: set[type[ast.AST]] = {
     ast.Dict,
     ast.FormattedValue,
     ast.JoinedStr,
+    ast.Lambda,
 }
+
+
+def _safe_print(*args: Any, sep: str = " ", **_kwargs: Any) -> None:
+    """Safe print implementation for sandbox scripts routing to server console logger."""
+    msg = sep.join(str(a) for a in args)
+    logger.info(f"[Script Print] {msg}")
+
 
 # Safe built-in functions accessible to scripts
 SAFE_BUILTINS: dict[str, Any] = {
@@ -99,12 +122,30 @@ SAFE_BUILTINS: dict[str, Any] = {
     "list": list,
     "max": max,
     "min": min,
+    "print": _safe_print,
     "range": range,
     "round": round,
     "str": str,
     "sum": sum,
     "tuple": tuple,
 }
+
+
+def _inspect_ast_node(node: ast.AST) -> str | None:
+    """Returns a security error string if the node violates sandbox rules, else None."""
+    if type(node) not in ALLOWED_AST_NODES:
+        return f"Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
+    if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
+        return f"Access to private/dunder attribute '{node.attr}' is forbidden."
+    if isinstance(node, ast.Name) and node.id.startswith("__"):
+        return f"Use of dunder variable '{node.id}' is forbidden."
+    if isinstance(node, ast.FunctionDef):
+        if node.name.startswith("_"):
+            return f"Cannot define private function '{node.name}'."
+        for a in node.args.args:
+            if a.arg.startswith("__"):
+                return f"Use of dunder parameter name '{a.arg}' is forbidden."
+    return None
 
 
 class SafeAstInterpreter:
@@ -130,24 +171,9 @@ class SafeAstInterpreter:
         Statically inspects the AST tree to ensure no forbidden nodes or attributes exist.
         """
         for node in ast.walk(tree):
-            if type(node) not in ALLOWED_AST_NODES:
-                raise ScriptSecurityError(
-                    f"Forbidden syntax in script: '{type(node).__name__}' is not allowed."
-                )
-
-            # Prevent private/dunder attribute access (e.g. __class__, __subclasses__)
-            if isinstance(node, ast.Attribute):
-                if node.attr.startswith("_"):
-                    raise ScriptSecurityError(
-                        f"Access to private/internal attribute '{node.attr}' is forbidden."
-                    )
-
-            # Prevent private variable binding
-            if isinstance(node, ast.Name):
-                if node.id.startswith("__"):
-                    raise ScriptSecurityError(
-                        f"Use of dunder variable name '{node.id}' is forbidden."
-                    )
+            err = _inspect_ast_node(node)
+            if err:
+                raise ScriptSecurityError(err)
 
     @classmethod
     def check_syntax(cls, code: str) -> list[str]:
@@ -171,21 +197,10 @@ class SafeAstInterpreter:
             return [f"Parser error: {exc}"]
 
         for node in ast.walk(tree):
-            if type(node) not in ALLOWED_AST_NODES:
+            err = _inspect_ast_node(node)
+            if err:
                 lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
-                )
-            elif isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-                lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Access to private/dunder attribute '{node.attr}' is forbidden."
-                )
-            elif isinstance(node, ast.Name) and node.id.startswith("__"):
-                lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Use of dunder variable '{node.id}' is forbidden."
-                )
+                errors.append(f"Line {lineno}: {err}")
 
         return errors
 
@@ -208,21 +223,10 @@ class SafeAstInterpreter:
             return [f"Parser error: {exc}"]
 
         for node in ast.walk(tree):
-            if type(node) not in ALLOWED_AST_NODES:
+            err = _inspect_ast_node(node)
+            if err:
                 lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
-                )
-            elif isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-                lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Access to private/dunder attribute '{node.attr}' is forbidden."
-                )
-            elif isinstance(node, ast.Name) and node.id.startswith("__"):
-                lineno = getattr(node, "lineno", "?")
-                errors.append(
-                    f"Line {lineno}: Use of dunder variable '{node.id}' is forbidden."
-                )
+                errors.append(f"Line {lineno}: {err}")
 
         return errors
 
@@ -241,8 +245,11 @@ class SafeAstInterpreter:
         # Build initial environment
         self.env = {**SAFE_BUILTINS, **context}
 
-        for stmt in tree.body:
-            self._eval_stmt(stmt)
+        try:
+            for stmt in tree.body:
+                self._eval_stmt(stmt)
+        except _ReturnSignalError:
+            raise ScriptExecutionError("SyntaxError: 'return' outside function") from None
 
         # Sync back created/modified variables to caller context
         for k, v in self.env.items():
@@ -335,6 +342,83 @@ class SafeAstInterpreter:
     def _eval_Continue(self, stmt: ast.Continue) -> str:
         return "continue"
 
+    def _eval_Return(self, stmt: ast.Return) -> None:
+        self._tick()
+        val = self._eval_expr(stmt.value) if stmt.value is not None else None
+        raise _ReturnSignalError(val)
+
+    @staticmethod
+    def _bind_call_args(
+        param_names: list[str],
+        defaults_map: dict[str, Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        func_name: str,
+    ) -> dict[str, Any]:
+        bound: dict[str, Any] = {}
+        for i, pname in enumerate(param_names):
+            if i < len(args):
+                bound[pname] = args[i]
+                continue
+            if pname in kwargs:
+                bound[pname] = kwargs[pname]
+                continue
+            if pname in defaults_map:
+                bound[pname] = defaults_map[pname]
+                continue
+            raise ScriptExecutionError(
+                f"Missing required argument '{pname}' in function '{func_name}'"
+            )
+        return bound
+
+    def _eval_FunctionDef(self, stmt: ast.FunctionDef) -> None:
+        self._tick()
+        func_name = stmt.name
+        if func_name.startswith("_"):
+            raise ScriptSecurityError(f"Cannot define private function '{func_name}'")
+
+        param_names = [a.arg for a in stmt.args.args]
+        for pname in param_names:
+            if pname.startswith("__"):
+                raise ScriptSecurityError(f"Use of dunder parameter '{pname}' is forbidden")
+
+        default_values = [self._eval_expr(d) for d in stmt.args.defaults]
+        defaults_map: dict[str, Any] = {}
+        if default_values:
+            for pname, def_val in zip(
+                param_names[-len(default_values) :], default_values, strict=False
+            ):
+                defaults_map[pname] = def_val
+
+        closure_env = dict(self.env)
+        body = stmt.body
+
+        def sandbox_function(*args: Any, **kwargs: Any) -> Any:
+            self._tick()
+            call_env = dict(closure_env)
+            for k, v in self.env.items():
+                if k not in call_env or k in ("tw", "game"):
+                    call_env[k] = v
+
+            bound = self._bind_call_args(param_names, defaults_map, args, kwargs, func_name)
+            call_env.update(bound)
+
+            old_env = self.env
+            self.env = call_env
+            try:
+                for s in body:
+                    self._eval_stmt(s)
+                return None
+            except _ReturnSignalError as ret:
+                return ret.value
+            finally:
+                for k in ("tw", "game"):
+                    if k in self.env:
+                        old_env[k] = self.env[k]
+                self.env = old_env
+
+        self.env[func_name] = sandbox_function
+
     # -------------------------------------------------------------------------
     # Target Assignment
     # -------------------------------------------------------------------------
@@ -357,12 +441,14 @@ class SafeAstInterpreter:
             try:
                 items = list(val)
             except TypeError as exc:
-                raise ScriptExecutionError(f"Cannot unpack non-iterable '{type(val).__name__}'") from exc
+                raise ScriptExecutionError(
+                    f"Cannot unpack non-iterable '{type(val).__name__}'"
+                ) from exc
             if len(items) != len(target.elts):
                 raise ScriptExecutionError(
                     f"ValueError: too many/few values to unpack (expected {len(target.elts)}, got {len(items)})"
                 )
-            for sub_target, sub_val in zip(target.elts, items):
+            for sub_target, sub_val in zip(target.elts, items, strict=True):
                 self._assign_target(sub_target, sub_val)
         else:
             raise ScriptSecurityError(f"Unsupported assignment target: {type(target).__name__}")
@@ -416,9 +502,12 @@ class SafeAstInterpreter:
             return left - right
         if isinstance(op, ast.Mult):
             # Guard against huge string/list memory multiplication
-            if isinstance(left, (str, list, tuple)) and isinstance(right, int):
-                if right * len(left) > 100000:
-                    raise ScriptSecurityError("String/Sequence repetition exceeds safe memory limit.")
+            if (
+                isinstance(left, (str, list, tuple))
+                and isinstance(right, int)
+                and right * len(left) > 100000
+            ):
+                raise ScriptSecurityError("String/Sequence repetition exceeds safe memory limit.")
             return left * right
         if isinstance(op, ast.Div):
             return left / right
@@ -429,7 +518,7 @@ class SafeAstInterpreter:
         if isinstance(op, ast.Pow):
             if isinstance(right, (int, float)) and right > 1000:
                 raise ScriptSecurityError("Exponentiation exceeds safe limits.")
-            return left ** right
+            return left**right
         raise ScriptExecutionError(f"Unsupported binary operator: {type(op).__name__}")
 
     def _eval_BoolOp(self, expr: ast.BoolOp) -> Any:
@@ -451,7 +540,7 @@ class SafeAstInterpreter:
 
     def _eval_Compare(self, expr: ast.Compare) -> bool:
         left = self._eval_expr(expr.left)
-        for op, comparator in zip(expr.ops, expr.comparators):
+        for op, comparator in zip(expr.ops, expr.comparators, strict=True):
             right = self._eval_expr(comparator)
             res = self._apply_compare(op, left, right)
             if not res:
@@ -526,6 +615,42 @@ class SafeAstInterpreter:
             if k is not None
         }
 
+    def _eval_Lambda(self, expr: ast.Lambda) -> Any:
+        self._tick()
+        param_names = [a.arg for a in expr.args.args]
+        default_values = [self._eval_expr(d) for d in expr.args.defaults]
+        defaults_map: dict[str, Any] = {}
+        if default_values:
+            for pname, def_val in zip(
+                param_names[-len(default_values) :], default_values, strict=False
+            ):
+                defaults_map[pname] = def_val
+
+        closure_env = dict(self.env)
+        body = expr.body
+
+        def sandbox_lambda(*args: Any, **kwargs: Any) -> Any:
+            self._tick()
+            call_env = dict(closure_env)
+            for k, v in self.env.items():
+                if k not in call_env or k in ("tw", "game"):
+                    call_env[k] = v
+
+            bound = self._bind_call_args(param_names, defaults_map, args, kwargs, "<lambda>")
+            call_env.update(bound)
+
+            old_env = self.env
+            self.env = call_env
+            try:
+                return self._eval_expr(body)
+            finally:
+                for k in ("tw", "game"):
+                    if k in self.env:
+                        old_env[k] = self.env[k]
+                self.env = old_env
+
+        return sandbox_lambda
+
     def _eval_joined_str(self, expr: ast.JoinedStr) -> str:
         parts = []
         for val in expr.values:
@@ -535,3 +660,7 @@ class SafeAstInterpreter:
     def _eval_formatted_value(self, expr: ast.FormattedValue) -> str:
         val = self._eval_expr(expr.value)
         return str(val)
+
+    # Aliases matching ast class names for dispatch
+    _eval_JoinedStr = _eval_joined_str
+    _eval_FormattedValue = _eval_formatted_value

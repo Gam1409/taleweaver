@@ -7,12 +7,15 @@ within a declarative ScriptChangeset.
 
 from __future__ import annotations
 
+import logging
 import random
 import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.engine.scripting.switch_proxy import SwitchesProxy, SwitchProxy
+
+logger = logging.getLogger(__name__)
 
 
 class ScriptMessage(str):
@@ -874,8 +877,9 @@ class VarsProxy:
 class StoryProxy:
     """Safe proxy for narrative messages and action rejections."""
 
-    def __init__(self, changeset: ScriptChangeset):
+    def __init__(self, changeset: ScriptChangeset, is_debug_enabled: bool = False):
         self._changeset = changeset
+        self._is_debug_enabled = is_debug_enabled
 
     def narrate(self, message: str) -> None:
         """Emits GM narration as if told by the Game Master."""
@@ -897,8 +901,73 @@ class StoryProxy:
         """Alias for system_message()."""
         self.system_message(message)
 
+    def debug(self, *args: Any, sep: str = " ") -> None:
+        """Emits an in-game debug notification if debug mode is active."""
+        if not self._is_debug_enabled:
+            return
+        msg = sep.join(str(a) for a in args).strip()
+        formatted = f"[DEBUG: Script] {msg}" if not msg.startswith("[DEBUG") else msg
+        self._changeset.system_messages.append(formatted)
+
     def reject_action(self, reason: str) -> None:
         self._changeset.rejected_actions.append(str(reason).strip())
+
+
+class LogProxy:
+    """Safe proxy for server console logging and in-game debug notifications."""
+
+    def __init__(self, changeset: ScriptChangeset, is_debug_enabled: bool = False):
+        self._changeset = changeset
+        self._is_debug_enabled = is_debug_enabled
+
+    def __call__(self, *args: Any, sep: str = " ") -> None:
+        """Shortcut: tw.log(...) logs directly to server console."""
+        self.info(*args, sep=sep)
+
+    def log(self, *args: Any, sep: str = " ") -> None:
+        """Alias for info(), matching console.log semantics."""
+        self.info(*args, sep=sep)
+
+    def info(self, *args: Any, sep: str = " ") -> None:
+        """Outputs an informational log message to the server console."""
+        msg = sep.join(str(a) for a in args)
+        logger.info(f"[Script Log] {msg}")
+
+    def warn(self, *args: Any, sep: str = " ") -> None:
+        """Outputs a warning log message to the server console."""
+        msg = sep.join(str(a) for a in args)
+        logger.warning(f"[Script Warning] {msg}")
+
+    def warning(self, *args: Any, sep: str = " ") -> None:
+        """Alias for warn()."""
+        self.warn(*args, sep=sep)
+
+    def error(self, *args: Any, sep: str = " ") -> None:
+        """Outputs an error log message to the server console."""
+        msg = sep.join(str(a) for a in args)
+        logger.error(f"[Script Error] {msg}")
+
+    def debug(self, *args: Any, sep: str = " ", in_game: bool = False) -> None:
+        """
+        Outputs a debug log message to the server console.
+        If in_game=True (or called via tw.debug), also emits an in-game notification
+        when debug mode is active.
+        """
+        msg = sep.join(str(a) for a in args)
+        logger.debug(f"[Script Debug] {msg}")
+        if in_game:
+            self.in_game(*args, sep=sep)
+
+    def in_game(self, *args: Any, sep: str = " ") -> None:
+        """
+        Emits an in-game debug notification ([DEBUG: Script] ...).
+        Only added to in-game chat when debug mode is enabled for the session.
+        """
+        if not self._is_debug_enabled:
+            return
+        msg = sep.join(str(a) for a in args).strip()
+        formatted = f"[DEBUG: Script] {msg}" if not msg.startswith("[DEBUG") else msg
+        self._changeset.system_messages.append(formatted)
 
 
 class MemoriesProxy:
@@ -1066,7 +1135,9 @@ class GameContext:
         self.exits = ExitProxy(exit_states or {}, self.changeset)
         self.vars = VarsProxy(raw_vars, self.changeset, story_flags=story_flags)
         self.flags = StoryFlagsProxy(story_flags or {}, self.changeset)
-        self.story = StoryProxy(self.changeset)
+        self.story = StoryProxy(self.changeset, is_debug_enabled=self.is_debug_enabled)
+        self.log = LogProxy(self.changeset, is_debug_enabled=self.is_debug_enabled)
+        self.console = self.log
         self.memories = MemoriesProxy(self.changeset)
         self.game = GameProxy(self.changeset, in_game_time)
         self.quests = QuestsProxy(quests or [], self.changeset)
@@ -1089,3 +1160,11 @@ class GameContext:
     def system(self, message: str) -> None:
         """Shortcut for tw.story.system_message(). Emits system notification."""
         self.story.system_message(message)
+
+    def debug(self, *args: Any, sep: str = " ") -> None:
+        """Emits an in-game debug notification if debug mode is active and logs to console."""
+        self.log.debug(*args, sep=sep, in_game=True)
+
+    def debug_message(self, *args: Any, sep: str = " ") -> None:
+        """Alias for tw.debug()."""
+        self.debug(*args, sep=sep)

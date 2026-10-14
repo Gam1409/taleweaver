@@ -3044,10 +3044,11 @@ class GameTurnManager:
         )
 
     def _get_script_runner(self) -> ScriptRunner:
-        """Instantiates ScriptRunner with scripts from original_manifest."""
+        """Instantiates ScriptRunner with scripts and init_script from original_manifest."""
         manifest = getattr(self.adventure, "original_manifest", None) or {}
         scripts = manifest.get("scripts", [])
-        return ScriptRunner(scripts)
+        init_script = manifest.get("init_script") or getattr(self.adventure, "init_script", None)
+        return ScriptRunner(scripts, init_script=init_script)
 
     async def _execute_inline_script(
         self, code: str, trigger_name: str, target_id: str

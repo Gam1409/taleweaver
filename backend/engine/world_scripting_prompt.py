@@ -13,6 +13,7 @@ Keep this catalogue in sync with ``docs/scripting_engine.md``.
 
 # (trigger, when it fires, target_id meaning)
 TOP_LEVEL_TRIGGERS: tuple[tuple[str, str, str], ...] = (
+    ("on_init", "once when the adventure session is first created", "None (global)"),
     ("on_turn_start", "before every turn is processed", "None (global)"),
     ("on_enter_scene", "when the protagonist enters a scene", "scene ID (or None for any scene)"),
     (
@@ -94,6 +95,8 @@ TW_API_REFERENCE = (
     "- tw.quests: complete(quest_id), fail(quest_id), is_completed(quest_id)\n"
     "- tw.awards.grant(award_key) | tw.sequences.advance() | tw.dice.d20()\n"
     "- tw.game: time | win(reason), game_over(reason)\n"
+    "- tw.log / tw.debug: tw.log(msg), tw.log.info/warn/error(msg) or print(msg) (outputs to server console); "
+    "tw.debug(msg) (emits in-game [DEBUG: Script] notification when debug mode is ON)\n"
 )
 
 _EXAMPLES = (

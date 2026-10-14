@@ -122,4 +122,22 @@ class AdventureTemplate(Base, TimestampMixin):
         self.original_manifest = manifest
         flag_modified(self, "original_manifest")
 
+    @property
+    def init_script(self) -> Optional[str]:
+        """Returns init_script from original_manifest if present."""
+        if not self.original_manifest or not isinstance(self.original_manifest, dict):
+            return None
+        return self.original_manifest.get("init_script")
+
+    @init_script.setter
+    def init_script(self, value: Optional[str]) -> None:
+        """Sets init_script inside original_manifest and marks original_manifest modified."""
+        from sqlalchemy.orm.attributes import flag_modified
+        manifest = dict(self.original_manifest or {})
+        cleaned = str(value).strip() if value is not None else ""
+        manifest["init_script"] = cleaned if cleaned else None
+        self.original_manifest = manifest
+        flag_modified(self, "original_manifest")
+
+
     

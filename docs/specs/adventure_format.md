@@ -66,6 +66,7 @@ General configuration, narrative constraints, and gameplay settings.
 | `creator` | `string` | Optional author / creator identifier (max 100 chars). |
 | `copyright` | `string` | Optional copyright notice (max 100 chars). |
 | `license` | `string` | Optional license string or identifier (max 100 chars). |
+| `init_script` | `string \| null` | Optional global Python initialization script executed when a new game session starts. Sets up starting variables, narrative messages, and shared helper functions. |
 
 ---
 
@@ -194,15 +195,15 @@ Achievements players can unlock through specific actions.
 
 ---
 
-### 2.9 Scripts (`scripts`)
+### 2.9 Scripts (`scripts` & `init_script`)
 
-Custom sandboxed event scripts reacting to game hooks. For full syntax, API references, and examples, see the [Scripting Engine Guide](../guides/scripting_engine.md).
+Custom sandboxed event scripts reacting to game hooks and global initialization logic. For full syntax, API references, and examples, see the [Scripting Engine Guide](../scripting_engine.md).
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | `string` | Unique uppercase slug (e.g., `"SCRIPT_LEVER_PUZZLE"`). |
 | `name` | `string` | Human-readable title for the script. |
-| `trigger` | `string` | Event hook: `"on_turn_start"`, `"on_enter_scene"`, `"on_interact"`, `"on_logic_pass_done"`, `"on_narration_done"`, or `"on_turn_end"`. |
+| `trigger` | `string` | Event hook: `"on_init"`, `"on_turn_start"`, `"on_enter_scene"`, `"on_interact"`, `"on_logic_pass_done"`, `"on_narration_done"`, or `"on_turn_end"`. |
 | `target_id` | `string \| null` | Optional target scene ID or entity ID that filters when this script fires. |
 | `code` | `string` | Safe Python script utilizing the sandboxed `tw` GameContext API. |
 | `description` | `string \| null` | Optional narrative/technical description of the script logic. |

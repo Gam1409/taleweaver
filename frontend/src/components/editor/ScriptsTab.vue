@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Code,
   Plus,
@@ -14,6 +14,7 @@ import {
   Sparkles,
   X,
   Play,
+  Terminal,
 } from 'lucide-vue-next'
 import { adventureService } from '@/services/adventureService'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
@@ -25,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update-scripts', scripts: any[]): void
+  (e: 'update-init-script', initScript: string): void
   (e: 'notify', message: string, type?: 'error' | 'success' | 'info'): void
 }>()
 
@@ -71,6 +73,7 @@ const filteredScripts = computed(() => {
 // ---------------------------------------------------------------------------
 
 const TRIGGER_OPTIONS = [
+  { value: 'on_init', label: 'On Session Init', desc: 'Runs once at adventure start to configure state and variables' },
   { value: 'on_turn_start', label: 'On Turn Start', desc: 'Runs before player prompt and GM logic' },
   { value: 'on_enter_scene', label: 'On Enter Scene', desc: 'Runs when player enters target scene' },
   { value: 'on_interact', label: 'On Interact', desc: 'Runs when interacting with target entity/item' },
@@ -81,6 +84,8 @@ const TRIGGER_OPTIONS = [
 
 function getTriggerBadgeClass(trigger: string): string {
   switch (trigger) {
+    case 'on_init':
+      return 'bg-teal-500/15 text-teal-300 border-teal-500/30'
     case 'on_turn_start':
       return 'bg-sky-500/15 text-sky-300 border-sky-500/30'
     case 'on_enter_scene':
@@ -335,6 +340,14 @@ const SNIPPET_TEMPLATES = [
     label: 'Switch Mechanism State',
     code: '# Inspect or toggle switch mechanism\ncurrent = tw.switches.get_state("LEVER_01")\nif current == "OFF":\n    tw.switches.set_state("LEVER_01", "ON")\n    tw.story.show_message("You pull the lever. Heavy gears churn inside the wall!")\n',
   },
+  {
+    label: 'Console Log',
+    code: '# Output diagnostic messages to server terminal console\ntw.log("Inspecting player state: HP=" + str(tw.player.hp))\n# print("Or use standard print for quick inspection")\n',
+  },
+  {
+    label: 'In-Game Debug Message',
+    code: '# Emits an in-game notification (only visible when Debug Mode is ON)\ntw.debug("Door trap triggered for scene: " + str(tw.scene.id))\n',
+  },
 ]
 
 function insertSnippet(code: string) {
@@ -354,6 +367,107 @@ function handleTabKey(e: KeyboardEvent) {
       target.selectionStart = target.selectionEnd = start + 4
     }, 0)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Initialization Script State & Methods
+// ---------------------------------------------------------------------------
+
+const isInitScriptExpanded = ref(false)
+const initScriptCode = ref('')
+const isSavingInitScript = ref(false)
+const isCheckingInitSyntax = ref(false)
+const initSyntaxResult = ref<{
+  checked: boolean
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+} | null>(null)
+
+watch(
+  () => props.adventure?.init_script ?? props.adventure?.original_manifest?.init_script,
+  (newVal) => {
+    initScriptCode.value = newVal || ''
+    if (newVal && !isInitScriptExpanded.value) {
+      isInitScriptExpanded.value = true
+    }
+  },
+  { immediate: true }
+)
+
+const hasInitScript = computed(() => Boolean((initScriptCode.value || '').trim()))
+
+async function checkInitScriptSyntax() {
+  if (!props.adventure?.id) return
+  isCheckingInitSyntax.value = true
+  initSyntaxResult.value = null
+
+  try {
+    const res = await adventureService.validateScript(props.adventure.id, {
+      code: initScriptCode.value,
+      trigger: 'on_init',
+    })
+    initSyntaxResult.value = {
+      checked: true,
+      valid: res.valid,
+      errors: res.errors || [],
+      warnings: res.warnings || [],
+    }
+    if (res.valid) {
+      emit('notify', 'Initialization script syntax verification passed!', 'success')
+    } else {
+      emit('notify', `Found ${res.errors.length} syntax/safety issue(s).`, 'error')
+    }
+  } catch (err: any) {
+    initSyntaxResult.value = {
+      checked: true,
+      valid: false,
+      errors: [err.message || 'Validation request failed.'],
+      warnings: [],
+    }
+    emit('notify', err.message || 'Validation failed.', 'error')
+  } finally {
+    isCheckingInitSyntax.value = false
+  }
+}
+
+async function saveInitScript() {
+  isSavingInitScript.value = true
+  try {
+    emit('update-init-script', initScriptCode.value)
+    initSyntaxResult.value = null
+  } finally {
+    isSavingInitScript.value = false
+  }
+}
+
+function clearInitScript() {
+  initScriptCode.value = ''
+  initSyntaxResult.value = null
+  emit('update-init-script', '')
+  emit('notify', 'Initialization script cleared.', 'info')
+}
+
+const INIT_SNIPPETS = [
+  {
+    label: 'State Variables',
+    code: '# Initialize starting variables\ntw.vars.set("gold", 50)\ntw.vars.set("reputation", 0)\ntw.vars.set("investigation_stage", 1)\n',
+  },
+  {
+    label: 'Custom Method',
+    code: '# Define reusable helper method available to all scripts\ndef add_gold(amount):\n    cur = tw.vars.get("gold", 0)\n    tw.vars.set("gold", cur + amount)\n    tw.story.show_message("Received " + str(amount) + " gold!")\n    return cur + amount\n',
+  },
+  {
+    label: 'Dice Check Utility',
+    code: '# Define reusable dice roll check\ndef roll_check(dc=10, bonus=0):\n    roll = tw.dice.d20() + bonus\n    return roll >= dc\n',
+  },
+]
+
+function insertInitSnippet(snippetCode: string) {
+  initScriptCode.value = (initScriptCode.value || '').trimEnd()
+    ? (initScriptCode.value || '').trimEnd() + '\n\n' + snippetCode
+    : snippetCode
+  initSyntaxResult.value = null
 }
 </script>
 
@@ -388,6 +502,137 @@ function handleTabKey(e: KeyboardEvent) {
           <Plus class="w-4 h-4" />
           New Script
         </button>
+      </div>
+    </div>
+
+    <!-- Initialization Script Panel -->
+    <div class="border border-white/10 rounded-2xl bg-slate-900/50 backdrop-blur-md overflow-hidden transition-all shadow-xl">
+      <!-- Panel Header Bar (Collapsible Toggle) -->
+      <div
+        @click="isInitScriptExpanded = !isInitScriptExpanded"
+        class="p-5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors select-none"
+      >
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+            <Terminal class="w-4 h-4" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h3 class="text-sm font-bold text-white tracking-wide">
+                Global Initialization Script
+              </h3>
+              <span
+                :class="[
+                  'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                  hasInitScript
+                    ? 'bg-teal-500/15 text-teal-300 border-teal-500/30'
+                    : 'bg-slate-800 text-slate-400 border-white/5'
+                ]"
+              >
+                {{ hasInitScript ? 'Configured' : 'Optional / Empty' }}
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-0.5">
+              Executed at session creation to initialize state/variables, and loaded into scope before event triggers to define reusable methods.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+            :title="isInitScriptExpanded ? 'Collapse' : 'Expand'"
+          >
+            <ChevronUp v-if="isInitScriptExpanded" class="w-5 h-5" />
+            <ChevronDown v-else class="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel Body (Visible when expanded) -->
+      <div v-if="isInitScriptExpanded" class="px-5 pb-5 pt-2 border-t border-white/5 space-y-4">
+        <!-- Quick Snippet Templates -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Quick Insert:
+          </span>
+          <button
+            v-for="snip in INIT_SNIPPETS"
+            :key="snip.label"
+            type="button"
+            @click="insertInitSnippet(snip.code)"
+            class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 text-[11px] font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-1.5"
+          >
+            <Sparkles class="w-3 h-3 text-teal-400" />
+            + {{ snip.label }}
+          </button>
+        </div>
+
+        <!-- Script Editor -->
+        <ScriptEditor
+          v-model="initScriptCode"
+          label="Initialization Python Code"
+          help-text="Define initial variables (tw.vars.set) and helper functions/methods. All functions defined here are automatically in scope for turn and event scripts."
+          context="general"
+          min-height="180px"
+        />
+
+        <!-- Syntax Validation Banner -->
+        <div
+          v-if="initSyntaxResult"
+          :class="[
+            'rounded-xl p-4 text-xs border flex items-start gap-3',
+            initSyntaxResult.valid
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+              : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+          ]"
+        >
+          <CheckCircle2 v-if="initSyntaxResult.valid" class="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+          <AlertCircle v-else class="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+          <div class="space-y-1">
+            <p class="font-bold">
+              {{ initSyntaxResult.valid ? 'Initialization script syntax is valid!' : 'Syntax or Security Validation Issues:' }}
+            </p>
+            <ul v-if="!initSyntaxResult.valid" class="list-disc list-inside space-y-0.5 font-mono text-[11px]">
+              <li v-for="(err, idx) in initSyntaxResult.errors" :key="idx">{{ err }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between pt-2">
+          <button
+            type="button"
+            @click="clearInitScript"
+            :disabled="!initScriptCode"
+            class="px-3.5 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          >
+            Clear Script
+          </button>
+
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              @click="checkInitScriptSyntax"
+              :disabled="isCheckingInitSyntax || !initScriptCode.trim()"
+              class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider border border-white/10 transition-colors disabled:opacity-40"
+            >
+              <Play class="w-3.5 h-3.5" />
+              {{ isCheckingInitSyntax ? 'Checking...' : 'Check Syntax' }}
+            </button>
+
+            <button
+              type="button"
+              @click="saveInitScript"
+              :disabled="isSavingInitScript"
+              class="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-teal-950/40 transition-all disabled:opacity-50"
+            >
+              <CheckCircle2 class="w-3.5 h-3.5" />
+              {{ isSavingInitScript ? 'Saving...' : 'Save Init Script' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -787,6 +1032,13 @@ function handleTabKey(e: KeyboardEvent) {
                   <span class="font-bold text-emerald-400">tw.story & tw.game</span>
                   <p class="text-[11px] text-slate-400 font-sans mt-0.5">
                     <code>tw.story.show_message(text)</code>, <code>tw.game.set_victory(msg)</code>, <code>tw.game.set_game_over(msg)</code>
+                  </p>
+                </div>
+
+                <div class="bg-slate-900/60 p-2.5 rounded-lg border border-white/5">
+                  <span class="font-bold text-emerald-400">tw.log & tw.debug</span>
+                  <p class="text-[11px] text-slate-400 font-sans mt-0.5">
+                    <code>tw.log("msg")</code>, <code>print("msg")</code> (server console), <code>tw.debug("msg")</code> (in-game when Debug ON)
                   </p>
                 </div>
               </div>

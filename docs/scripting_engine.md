@@ -8,7 +8,8 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
 1. [Overview & Architecture](#overview--architecture)
 2. [Sandbox Security & Limits](#sandbox-security--limits)
 3. [Event Triggers & Lifecycle](#event-triggers--lifecycle)
-4. [The `tw` Scripting API](#the-tw-scripting-api)
+4. [Global Initialization Script & Helper Methods](#global-initialization-script--helper-methods)
+5. [The `tw` Scripting API](#the-tw-scripting-api)
    - [tw.player](#twplayer)
    - [tw.scene](#twscene)
    - [tw.exits](#twexits)
@@ -22,14 +23,16 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
    - [tw.quests](#twquests)
    - [tw.awards](#twawards)
    - [tw.dice](#twdice)
-5. [Practical Examples](#practical-examples)
+   - [tw.log & tw.debug (Logging & Diagnostics)](#twlog--twdebug-logging--diagnostics)
+6. [Practical Examples](#practical-examples)
    - [Example 1: Trapped Ancient Chest](#example-1-trapped-ancient-chest)
    - [Example 2: Gatekeeper Guard Blocking Passage](#example-2-gatekeeper-guard-blocking-passage)
    - [Example 3: Three-Lever Puzzle with Persistent State](#example-3-three-lever-puzzle-with-persistent-state)
    - [Example 4: Boss Encounter & Victory Condition](#example-4-boss-encounter--victory-condition)
    - [Example 5: Turn-Based Survival Countdown](#example-5-turn-based-survival-countdown)
    - [Example 8: Switch Mechanism State & Guard Expression](#example-8-switch-mechanism-state--guard-expression)
-6. [Authoring in the World-Editor](#authoring-in-the-world-editor)
+   - [Example 9: Global Init Script with Helper Functions](#example-9-global-init-script-with-helper-functions)
+7. [Authoring in the World-Editor](#authoring-in-the-world-editor)
 
 ---
 
@@ -38,6 +41,15 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
 While TaleWeaver's generative LLM master creates rich, adaptive prose and roleplay, certain game mechanics (such as combination locks, physical traps, locked gates, and badge criteria) require **deterministic, tamper-proof execution**.
 
 ```
+                           +------------------------+
+                           |   Session Start / New  |
+                           +-----------+------------+
+                                       |
+                                       v
+                           [Global Init Script]
+                           [on_init scripts]
+                                       |
+                                       v
                            +------------------------+
                            |     Player Action      |
                            +-----------+------------+
@@ -71,8 +83,9 @@ Every script executes inside an isolated AST interpreter (`SafeAstInterpreter`),
 To ensure player safety and server reliability:
 
 - **Pure AST Interpretation**: Scripts are evaluated node-by-node against a strict AST whitelist without calling unrestricted `eval()`, `exec()`, or invoking CPython bytecode.
+- **Custom Functions & Lambdas**: Scripts can declare custom helper functions (`def func_name(arg1, arg2=default): ...`) and lambda expressions (`lambda x: ...`). Return values are safely handled via internal signal exceptions.
 - **No System Calls or Imports**: Statements like `import`, `from ... import`, `open()`, `eval()`, or `exec()` are rejected at parse time.
-- **No Private or Dunder Attributes**: Accessing attributes starting with an underscore (such as `__class__`, `__subclasses__`, `__globals__`, or `__dict__`) is strictly forbidden.
+- **No Private or Dunder Identifiers**: Accessing attributes or defining functions starting with an underscore (e.g. `_internal`, `__class__`, `__subclasses__`, `__globals__`, or `__dict__`) is strictly forbidden.
 - **Instruction Budget**: Each script execution is capped at **10,000 steps** (`ScriptTimeoutError`), preventing infinite loops and CPU exhaustion.
 - **Memory Multiplication Protections**: Multiplying lists or strings by large factors (e.g. `[0] * 1_000_000`) is guarded against to prevent denial-of-service memory allocations.
 - **Safe Builtins**: Available built-ins are restricted to `abs`, `all`, `any`, `bool`, `dict`, `float`, `int`, `len`, `list`, `max`, `min`, `range`, `round`, `str`, `sum`, `tuple`.
@@ -85,6 +98,7 @@ Scripts declare a trigger event and an optional target entity or scene.
 
 | Trigger | When it Executes | Target Field Usage |
 | :--- | :--- | :--- |
+| `on_init` | When a new game session starts, immediately after initial world manifest and entity state setup. | Global (`*` or empty). |
 | `on_turn_start` | Immediately when player submits an input, before LLM turn generation. | Global (`*` or empty). |
 | `on_enter_scene` | When the player enters a new scene. | Specific `scene_id` or empty for any scene. |
 | `on_interact` | When the player examines, attacks, talks to, or manipulates an entity. | Specific `entity_id` (NPC or object) or empty for all. |
@@ -158,6 +172,79 @@ If the expression evaluates to truthy, the guard passes; otherwise, the action o
 
 ### Priority Execution
 Scripts carry an integer `priority` (default: `100`). Scripts with **lower** priority numbers execute before scripts with higher numbers.
+
+---
+
+## Global Initialization Script (`init_script`) & Helper Methods
+
+In complex adventures, multiple scripts often need to share common utility logic, mathematical calculations, custom state machines, or common inventory transactions. Furthermore, adventures often require initializing starting variables, reputation meters, or world flags before the player's first turn.
+
+The **Global Initialization Script** solves this by providing a single centralized script stored at the top level of the adventure manifest (`init_script`).
+
+### Lifecycle & Execution Model
+
+The initialization script runs under a dual lifecycle model:
+
+1. **Session Creation (Run Once)**:
+   When a player begins a new game session (`/sessions/start`), the initialization script is evaluated with the full `GameContext` before any player actions occur.
+   - Any state mutations performed via `tw.vars.set(...)`, `tw.switches.set_state(...)`, or `tw.story.show_message(...)` are committed directly into the initial session state (`__script_vars__`).
+   - The engine automatically records `__init_script_executed__ = True` so setup logic does not re-run on subsequent turns.
+   - Any standalone scripts marked with the `on_init` trigger also fire during this phase.
+
+2. **Every Turn Scope Injection (Reusable Methods & Constants)**:
+   Whenever an event script fires during gameplay (`on_turn_start`, `on_interact`, `on_enter_scene`, `on_turn_end`, etc.), the engine loads function definitions (`def ...`) and top-level constants from the initialization script and injects them directly into the script's global execution scope.
+   - You can call your helper functions directly from any event script without repeating code!
+   - State mutation statements in the initialization script are **not** re-evaluated during this step, ensuring deterministic performance and avoiding unwanted side-effects.
+
+### Defining Reusable Helper Functions
+
+You can declare custom functions using standard Python `def` syntax, including parameters, default values, and `return` statements:
+
+```python
+# --- Global Variables & Constants ---
+DEFAULT_GOLD = 50
+MAX_REPUTATION = 100
+
+tw.vars.set("gold", DEFAULT_GOLD)
+tw.vars.set("reputation", 10)
+tw.vars.set("solved_puzzles", [])
+
+# --- Reusable Helper Functions ---
+def add_gold(amount):
+    current = tw.vars.get("gold", 0)
+    tw.vars.set("gold", current + amount)
+    tw.story.show_message("You gained " + str(amount) + " gold! Total: " + str(current + amount))
+
+def spend_gold(amount):
+    current = tw.vars.get("gold", 0)
+    if current < amount:
+        tw.story.show_message("Not enough gold! Needed: " + str(amount) + ", Have: " + str(current))
+        return False
+    tw.vars.set("gold", current - amount)
+    tw.story.show_message("You spent " + str(amount) + " gold. Remaining: " + str(current - amount))
+    return True
+
+def can_access_sanctum():
+    rep = tw.vars.get("reputation", 0)
+    return rep >= 25 and tw.player.has_item("AMULET_OF_PASSAGE")
+```
+
+### Calling Helpers in Event Scripts
+
+Inside an `on_interact` script attached to `NPC_MERCHANT`:
+```python
+# The merchant offers a health potion for 20 gold
+if spend_gold(20):
+    tw.player.heal(30)
+    tw.story.show_message("The merchant smiles and hands you a steaming vial of healing draught.")
+```
+
+Inside an `on_enter_scene` script attached to `SCENE_INNER_SANCTUM`:
+```python
+if not can_access_sanctum():
+    tw.story.show_message("A divine barrier repels you! Your reputation is insufficient.")
+    tw.player.damage(10)
+```
 
 ---
 
@@ -280,6 +367,38 @@ Provides deterministic, seeded random number generation:
 - `tw.dice.d6() -> int`: Convenience for a 6-sided die roll (1 to 6).
 - `tw.dice.d20() -> int`: Convenience for a 20-sided die roll (1 to 20).
 - `tw.dice.random() -> float`: Returns a pseudo-random float between `0.0` and `1.0`.
+
+### `tw.log` & `tw.debug` (Logging & Diagnostics)
+Provides simple, clean logging methods to inspect state during development and playtesting:
+
+#### 1. Server Console Logging
+Outputs diagnostics directly to the server terminal/process logs without showing anything to the player in-game:
+- `tw.log(*args, sep=" ")`: Outputs an informational log entry (`[Script Log] ...`) to the server console.
+- `tw.log.info(*args, sep=" ")`: Outputs an informational message to the server console.
+- `tw.log.warn(*args, sep=" ")` / `tw.log.warning(*args, sep=" ")`: Outputs a warning message to the server console.
+- `tw.log.error(*args, sep=" ")`: Outputs an error message to the server console.
+- `tw.console.log(*args, sep=" ")`: JavaScript-style alias for `tw.log()`.
+- `print(*args, sep=" ")`: Safe built-in Python `print()` routing directly to the server console logger.
+
+```python
+# Inspect variable state in server console
+tw.log("Player entered chamber with key:", tw.player.has_item("KEY_GOLD"))
+tw.log.warn("Low player HP detected:", tw.player.hp)
+print("Standard print also routes safely to the server console!")
+```
+
+#### 2. In-Game Debug Notifications
+Emits interactive diagnostic messages inside the game's message feed. **Only displayed when Debug Mode is ON** (`debug_mode` enabled in game settings or session):
+- `tw.debug(*args, sep=" ")` / `tw.debug_message(*args, sep=" ")`: Emits an in-game system notification (`[DEBUG: Script] ...`) visible in the in-game chat when Debug Mode is active. Also logs to the server console at DEBUG level.
+- `tw.story.debug(*args, sep=" ")`: Alias via the story proxy.
+- `tw.log.in_game(*args, sep=" ")`: Explicit helper to emit an in-game debug notification.
+
+```python
+# Only visible to developers/playtesters when Debug Mode is ON
+tw.debug("Door lock status:", tw.exits.is_locked("SCENE_A", "SCENE_B"))
+if tw.switches.is_state("LEVER_01", "ON"):
+    tw.debug("Switch mechanism active, calculating door bypass...")
+```
 
 ---
 
@@ -440,17 +559,62 @@ If this condition evaluates to `False`, the transition is blocked and the transi
 
 ---
 
+### Example 9: Global Init Script with Helper Functions
+Configured in: **Global Initialization Script** (`init_script`)
+
+```python
+# Initialize starting adventure variables
+tw.vars.set("investigation_stage", 1)
+tw.vars.set("clues_found", 0)
+tw.vars.set("bribe_accepted", False)
+
+# Reusable method available across all scene and turn scripts
+def discover_clue(clue_name):
+    count = tw.vars.get("clues_found", 0) + 1
+    tw.vars.set("clues_found", count)
+    tw.story.show_message("Discovered clue: " + str(clue_name) + " (" + str(count) + "/3)")
+    if count >= 3:
+        tw.quests.complete("QUEST_FIND_EVIDENCE")
+        tw.story.show_message("All clues uncovered! The conspiracy is exposed.")
+
+def advance_investigation():
+    stage = tw.vars.get("investigation_stage", 1) + 1
+    tw.vars.set("investigation_stage", stage)
+    return stage
+```
+
+Event Script using `discover_clue` (Trigger: `on_interact`, Target: `ITEM_SECRET_JOURNAL`):
+```python
+discover_clue("Conspirator Journal")
+tw.player.remove_item("ITEM_SECRET_JOURNAL")
+```
+
+---
+
 ## Authoring in the World-Editor
 
 You can manage all scripts visually inside TaleWeaver:
 
 1. Navigate to the **Adventure Editor** for your adventure.
 2. Select the **Scripts** tab from the navigation sidebar.
-3. Click **New Script** to open the script authoring modal:
-   - Enter a human-readable **Name** and unique **Script ID**.
-   - Select the desired **Trigger** (`on_turn_start`, `on_enter_scene`, `on_interact`, `on_turn_end`).
-   - Optionally pick a **Target** scene or entity using the autocomplete selector.
-   - Adjust **Priority** (lower numbers execute first).
-   - Use the **Insert Snippet** dropdown to paste starter code.
-4. Click **Check Syntax** to verify Python syntax, AST safety, and trigger parameters before saving.
-5. Click **Create Script** or **Save Changes** to commit the script into the adventure manifest.
+
+### Global Initialization Script Panel
+Located at the top of the Scripts tab:
+- **Expand / Collapse**: Click the header to open the editor for the global initialization script.
+- **Quick Snippet Templates**: Insert pre-configured templates with one click:
+  - `Global Variables`: Boilerplate for `tw.vars.set(...)` with strings, counters, flags, and lists.
+  - `Helper Functions`: Reusable `def` methods callable across all event scripts.
+  - `Setup Quest & Items`: Starting items, quest seeding, and initial story flags.
+- **Check Syntax**: Click to immediately validate Python syntax and AST compliance using the backend validator.
+- **Save / Clear**: Save the initialization script directly to the adventure manifest or clear it.
+
+### Event Scripts & Triggers
+Below the initialization script panel:
+- Click **New Script** to open the script authoring modal:
+  - Enter a human-readable **Name** and unique **Script ID**.
+  - Select the desired **Trigger** (`on_init`, `on_turn_start`, `on_enter_scene`, `on_interact`, `on_logic_pass_done`, `on_narration_done`, `on_turn_end`).
+  - Optionally pick a **Target** scene or entity using the autocomplete selector.
+  - Adjust **Priority** (lower numbers execute first).
+  - Use the **Insert Snippet** dropdown to paste starter code.
+- Click **Check Syntax** to verify Python syntax, AST safety, and trigger parameters before saving.
+- Click **Create Script** or **Save Changes** to commit the script into the adventure manifest.

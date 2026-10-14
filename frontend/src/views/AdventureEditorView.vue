@@ -1808,6 +1808,19 @@ async function handleUpdateScripts(newScripts: any[]) {
   }
 }
 
+async function handleUpdateInitScript(initScript: string) {
+  isSaving.value = true
+  try {
+    await adventureService.updateAdventure(props.adventureId, { init_script: initScript } as any)
+    await fetchAdventure()
+    addNotification('Initialization script updated.', 'success')
+  } catch (error: any) {
+    addNotification(error instanceof Error ? error.message : 'Failed to update initialization script', 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
 const goBack = () => {
   const from = route.query.from as string
   if (from) {
@@ -2791,6 +2804,7 @@ watch(
               :adventure="adventure"
               :reference-options="referenceOptions"
               @update-scripts="handleUpdateScripts"
+              @update-init-script="handleUpdateInitScript"
               @notify="addNotification"
             />
 

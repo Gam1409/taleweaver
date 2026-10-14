@@ -32,6 +32,7 @@ export interface Adventure {
   max_text_logs?: number | null
   awards?: any[]
   scripts?: any[]
+  init_script?: string | null
   allow_dynamic_items: boolean
   can_damage_npcs: boolean
   npcs_can_damage_protagonist: boolean
@@ -84,6 +85,7 @@ export interface AdventureFormData {
   max_text_logs: number | null
   awards: any[]
   scripts?: any[]
+  init_script?: string | null
   allow_dynamic_items: boolean
   can_damage_npcs: boolean
   npcs_can_damage_protagonist: boolean

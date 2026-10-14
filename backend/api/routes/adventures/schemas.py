@@ -619,6 +619,7 @@ class AdventureTemplateUpdate(BaseModel):
     container_generation_enabled: Optional[bool] = None
     scripts_generation_enabled: Optional[bool] = None
     scripts: Optional[list[dict[str, Any]]] = None
+    init_script: Optional[str] = None
     max_containers: Optional[int] = None
     award_generation_enabled: Optional[bool] = None
     min_awards: Optional[int] = None

@@ -3327,6 +3327,7 @@ async def validate_editor_script(
     warnings: list[str] = []
 
     valid_triggers = {
+        "on_init",
         "on_turn_start",
         "on_enter_scene",
         "on_interact",

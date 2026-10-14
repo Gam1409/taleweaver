@@ -4,11 +4,13 @@ Script runner for dispatching and executing adventure event triggers.
 
 from __future__ import annotations
 
+import ast
 import logging
 from typing import Any, Optional
 
 from backend.engine.scripting.context import GameContext, ScriptChangeset
 from backend.engine.scripting.sandbox import (
+    SAFE_BUILTINS,
     SafeAstInterpreter,
     ScriptExecutionError,
     ScriptSecurityError,
@@ -21,8 +23,13 @@ logger = logging.getLogger(__name__)
 class ScriptRunner:
     """Dispatches and evaluates scripts attached to an adventure."""
 
-    def __init__(self, scripts: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        scripts: list[dict[str, Any]] | None = None,
+        init_script: Optional[str] = None,
+    ):
         self.scripts = scripts or []
+        self.init_script = str(init_script or "").strip()
         self.interpreter = SafeAstInterpreter()
 
     @staticmethod
@@ -38,6 +45,71 @@ class ScriptRunner:
             return False
         return bool(script.get("code", "").strip())
 
+    def load_init_definitions(self, scope: dict[str, Any]) -> None:
+        """
+        Loads function definitions and constant assignments from init_script into the target scope.
+        Top-level expressions and mutable API calls are skipped to prevent state resets.
+        """
+        if not self.init_script:
+            return
+
+        try:
+            tree = ast.parse(self.init_script, mode="exec")
+        except Exception as exc:
+            logger.error(f"[ScriptRunner] Failed to parse init_script definitions: {exc}")
+            return
+
+        def_body: list[ast.stmt] = []
+        for stmt in tree.body:
+            is_valid_assign = isinstance(stmt, ast.Assign) and isinstance(
+                stmt.value, (ast.Constant, ast.List, ast.Tuple, ast.Dict)
+            )
+            if isinstance(stmt, ast.FunctionDef) or is_valid_assign:
+                def_body.append(stmt)
+
+        if not def_body:
+            return
+
+        filtered_module = ast.Module(body=def_body, type_ignores=[])
+        try:
+            self.interpreter.validate_ast(filtered_module)
+            temp_env = {**SAFE_BUILTINS, **scope}
+            prev_env = self.interpreter.env
+            self.interpreter.env = temp_env
+            try:
+                for s in def_body:
+                    self.interpreter._eval_stmt(s)
+                for k, v in self.interpreter.env.items():
+                    if k not in SAFE_BUILTINS and k not in ("tw", "game"):
+                        scope[k] = v
+            finally:
+                self.interpreter.env = prev_env
+        except Exception as exc:
+            logger.error(
+                f"[ScriptRunner] Error executing init_script definitions into scope: {exc}"
+            )
+
+    def run_init_script(self, context: GameContext) -> ScriptChangeset:
+        """
+        Executes the entire init_script once (including variables and state mutations).
+        Also dispatches any modular scripts with trigger == 'on_init'.
+        """
+        scope = {"tw": context, "game": context}
+        if self.init_script:
+            logger.info("[ScriptRunner] Executing adventure init_script...")
+            try:
+                self.interpreter.execute(self.init_script, scope)
+            except Exception as exc:
+                logger.exception(f"[ScriptRunner] Error executing init_script: {exc}")
+                if hasattr(context, "changeset") and hasattr(
+                    context.changeset, "narrative_messages"
+                ):
+                    context.changeset.narrative_messages.append(f"[Init Script Error]: {exc}")
+
+        # Also dispatch any modular scripts configured with 'on_init'
+        self.run_trigger("on_init", context)
+        return context.changeset
+
     def _run_single_script(
         self,
         script: dict[str, Any],
@@ -51,6 +123,7 @@ class ScriptRunner:
             f"[ScriptRunner] Executing script '{script_id}' on trigger '{trigger}' (target={target_id})"
         )
         scope = {"tw": context, "game": context}
+        self.load_init_definitions(scope)
         try:
             self.interpreter.execute(code, scope)
         except ScriptSecurityError as sse:
@@ -85,6 +158,7 @@ class ScriptRunner:
 
     def execute_code(self, code: str, scope: dict[str, Any], script_id: str = "INLINE") -> None:
         """Executes a single inline code block directly."""
+        self.load_init_definitions(scope)
         try:
             self.interpreter.execute(code, scope)
         except Exception as exc:
