@@ -9,9 +9,11 @@ from the data structure. Speculative or narrative judgments belong in the AI pas
 
 import logging
 from collections import deque
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any, Optional
 
 from backend.core.config import settings
+from backend.core.script_validator import check_scripts_and_guards
 from backend.schemas.validation import ValidationFinding
 
 logger = logging.getLogger(__name__)
@@ -59,9 +61,7 @@ def _exit_is_bidirectional(exit_: dict[str, Any]) -> bool:
     'bidirectional' or with no explicit one_way flag is bidirectional.
     """
     exit_type = (exit_.get("exit_type") or "").lower()
-    if exit_type == "one_way":
-        return False
-    return True
+    return exit_type != "one_way"
 
 
 def _entity_id(entity: dict[str, Any]) -> Optional[str]:
@@ -268,7 +268,11 @@ def _check_item_references(
         rule = e.get("rule_to_unlock") or (e.get("metadata_json") or {}).get("rule_to_unlock")
         if isinstance(rule, str) and "defeats" in rule.lower():
             # very rough heuristic; skip false positives
-            tokens = [t for t in rule.replace(",", " ").split() if t.startswith("NPC_") or t.startswith("ENEMY_")]
+            tokens = [
+                t
+                for t in rule.replace(",", " ").split()
+                if t.startswith("NPC_") or t.startswith("ENEMY_")
+            ]
             for tok in tokens:
                 if tok not in known_ids:
                     findings.append(
@@ -428,7 +432,11 @@ def _check_npc_stats(entities: list[dict[str, Any]]) -> list[ValidationFinding]:
                     context={"entity_id": eid, "hp": hp, "stamina": stamina, "mana": mana},
                 )
             )
-        if hp > _NPC_OVERPOWERED_HP or strength > _NPC_OVERPOWERED_STRENGTH or ac > _NPC_OVERPOWERED_AC:
+        if (
+            hp > _NPC_OVERPOWERED_HP
+            or strength > _NPC_OVERPOWERED_STRENGTH
+            or ac > _NPC_OVERPOWERED_AC
+        ):
             findings.append(
                 _f(
                     "warn",
@@ -511,9 +519,7 @@ def _check_rpg_mode_with_combatants(
     mode = (adventure.get("rule_enforcement_mode") or "rpg").lower()
     if mode == "rpg":
         return findings
-    has_attackable_npc = any(
-        _entity_kind(e) == "NPC" and e.get("is_attackable") for e in entities
-    )
+    has_attackable_npc = any(_entity_kind(e) == "NPC" and e.get("is_attackable") for e in entities)
     has_weapon = any(
         _entity_kind(e) == "OBJECT" and (e.get("item_type") or "").upper() == "WEAPON"
         for e in entities
@@ -530,7 +536,11 @@ def _check_rpg_mode_with_combatants(
                 "rpg_mode_required_for_combat",
                 f"Adventure is in '{mode}' mode but contains {' + '.join(kind_bits)}. "
                 "Consider switching to rule_enforcement_mode='rpg'.",
-                context={"mode": mode, "has_attackable_npc": has_attackable_npc, "has_weapon": has_weapon},
+                context={
+                    "mode": mode,
+                    "has_attackable_npc": has_attackable_npc,
+                    "has_weapon": has_weapon,
+                },
             )
         )
     return findings
@@ -549,9 +559,15 @@ def _check_empty_story_fields(adventure: dict[str, Any]) -> list[ValidationFindi
     for f in fields:
         val = (adventure.get(f) or "").strip()
         if not val:
-            if f == "completed_condition" and (adventure.get("completed_guard_expression") or "").strip():
+            if (
+                f == "completed_condition"
+                and (adventure.get("completed_guard_expression") or "").strip()
+            ):
                 continue
-            if f == "gameover_condition" and (adventure.get("gameover_guard_expression") or "").strip():
+            if (
+                f == "gameover_condition"
+                and (adventure.get("gameover_guard_expression") or "").strip()
+            ):
                 continue
             findings.append(
                 _f(
@@ -693,7 +709,7 @@ def _check_sequence_references(
     for i, seq in enumerate(sequences):
         if not isinstance(seq, dict):
             continue
-        sid = seq.get("id") or f"sequence_{i+1}"
+        sid = seq.get("id") or f"sequence_{i + 1}"
         title = seq.get("title") or sid
 
         req_item = seq.get("required_item_id")
@@ -774,6 +790,7 @@ def validate_adventure(payload: dict[str, Any]) -> list[ValidationFinding]:
     findings.extend(_check_switch_state_consistency(entities))
     findings.extend(_check_quest_references(adventure, entities))
     findings.extend(_check_sequence_references(adventure, scenes, entities))
+    findings.extend(check_scripts_and_guards(payload, adventure, scenes, entities, exits))
 
     # Sort: errors first, then by code (stable order for UI).
     severity_order = {"error": 0, "warn": 1}
@@ -781,4 +798,4 @@ def validate_adventure(payload: dict[str, Any]) -> list[ValidationFinding]:
     return findings
 
 
-__all__ = ["validate_adventure", "ValidationFinding", "settings"]
+__all__ = ["check_scripts_and_guards", "validate_adventure", "ValidationFinding", "settings"]
