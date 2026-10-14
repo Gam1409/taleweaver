@@ -63,6 +63,8 @@ class ScriptChangeset:
     status_note: Optional[str] = None
     completed_condition_override: Optional[str] = None
     gameover_condition_override: Optional[str] = None
+    completed_guard_expression_override: Optional[str] = None
+    gameover_guard_expression_override: Optional[str] = None
 
     @property
     def has_changes(self) -> bool:
@@ -93,6 +95,8 @@ class ScriptChangeset:
             or self.game_over
             or self.completed_condition_override
             or self.gameover_condition_override
+            or self.completed_guard_expression_override
+            or self.gameover_guard_expression_override
         )
 
 
@@ -1010,6 +1014,12 @@ class GameProxy:
 
     def set_gameover_condition(self, condition: str) -> None:
         self._changeset.gameover_condition_override = str(condition).strip()
+
+    def set_completed_guard_expression(self, expression: str) -> None:
+        self._changeset.completed_guard_expression_override = str(expression).strip()
+
+    def set_gameover_guard_expression(self, expression: str) -> None:
+        self._changeset.gameover_guard_expression_override = str(expression).strip()
 
 
 class QuestsProxy:

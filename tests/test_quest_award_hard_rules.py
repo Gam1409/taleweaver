@@ -16,6 +16,8 @@ from backend.engine.quest_manager import QuestManager
 from backend.engine.rule_engine import GameEvent
 from backend.engine.world_schemas import (
     AwardTemplateSchema,
+)
+from backend.engine.world_schemas import (
     QuestSchema as ManifestQuestSchema,
 )
 from backend.schemas.adventure import AwardSchema, QuestSchema
@@ -65,6 +67,7 @@ def test_quest_and_award_schema_hard_rules():
         title="Find the Relic",
         description="Search the catacombs",
         goal="Soft narrative goal",
+        exp_reward=100,
         required_item_id="ANCIENT_RELIC",
         required_scene_id="CATACOMBS_DEEP",
         required_defeated_npc_id="LICH_LORD",
@@ -79,6 +82,7 @@ def test_quest_and_award_schema_hard_rules():
         key="AWARD_1",
         title="Dungeon Delver",
         description="Explore every secret room",
+        tier="bronze",
         requirement="Soft narrative requirement",
         required_item_id="SECRET_KEY",
         required_scene_id="HIDDEN_VAULT",
@@ -91,13 +95,17 @@ def test_quest_and_award_schema_hard_rules():
     assert award.guard_expression == "tw.vars.get('secrets_found', 0) >= 3"
 
     # Verify defaults
-    manifest_quest = ManifestQuestSchema(id="Q2", title="Q2", description="Desc")
+    manifest_quest = ManifestQuestSchema(
+        id="Q2", title="Q2", description="Desc", goal="Goal", exp_reward=50, status="open"
+    )
     assert manifest_quest.required_item_id == ""
     assert manifest_quest.required_scene_id == ""
     assert manifest_quest.required_defeated_npc_id == ""
     assert manifest_quest.guard_expression == ""
 
-    manifest_award = AwardTemplateSchema(key="A2", title="A2", description="Desc")
+    manifest_award = AwardTemplateSchema(
+        key="A2", title="A2", description="Desc", tier="bronze", requirement="Req"
+    )
     assert manifest_award.required_item_id == ""
     assert manifest_award.required_scene_id == ""
     assert manifest_award.required_defeated_npc_id == ""
@@ -143,8 +151,10 @@ def test_hard_rule_evaluator_direct():
 
 def test_quest_manager_hard_rule_completion():
     """Verify QuestManager completes open quests when hard rules are satisfied."""
-    qm = QuestManager()
-    quests = [
+    avatar = MagicMock()
+    avatar.inventory = [{"id": "SACRED_AMULET"}]
+    state = MagicMock()
+    state.quests = [
         {
             "id": "Q_FIND_AMULET",
             "title": "Find the Lost Amulet",
@@ -161,64 +171,60 @@ def test_quest_manager_hard_rule_completion():
         },
     ]
 
-    event = GameEvent(
-        narrative_description="The hero walks down the tunnel.",
-        acquired_items=["SACRED_AMULET"],
-    )
-
-    completed = qm.evaluate_quests(
-        current_quests=quests,
-        narrative="The hero walks down the tunnel.",
-        event=event,
-        inventory_items=["SACRED_AMULET"],
-        current_scene_id="TUNNEL",
-        defeated_npc_ids=[],
+    completed = QuestManager.evaluate_quests(
+        avatar=avatar,
+        state=state,
+        new_inventory_items=[],
+        new_scene_id="TUNNEL",
+        updated_entities=[],
     )
 
     assert "Q_FIND_AMULET" in completed
     assert "Q_DEFEAT_BEAST" not in completed
-    assert quests[0]["status"] == "completed"
-    assert quests[1]["status"] == "open"
 
 
 @pytest.mark.asyncio
 async def test_turn_state_applier_evaluates_deterministic_awards():
     """Verify TurnStateApplier evaluates unearned awards with hard rules."""
     manager = _setup_mock_manager()
+    manager.user = MagicMock()
+    manager.user.earned_awards = []
     manager.avatar.inventory = [{"id": "DRAGON_TOOTH"}]
     manager.adventure.awards = [
         {
             "key": "DRAGON_HUNTER",
             "title": "Dragon Hunter",
             "description": "Acquire a dragon tooth.",
+            "tier": "bronze",
             "required_item_id": "DRAGON_TOOTH",
         },
         {
             "key": "MASTER_EXPLORER",
             "title": "Master Explorer",
             "description": "Enter the sanctum.",
+            "tier": "bronze",
             "required_scene_id": "HIDDEN_SANCTUM",
         },
     ]
 
     applier = TurnStateApplier(manager)
-    earned_user_awards = set()
     event = GameEvent(
         narrative_description="You pick up the dragon tooth.",
-        acquired_items=["DRAGON_TOOTH"],
     )
 
-    await applier._evaluate_deterministic_awards(event, earned_user_awards)
+    messages = await applier._evaluate_deterministic_awards(event)
 
-    assert "DRAGON_HUNTER" in event.awards
-    assert "MASTER_EXPLORER" not in event.awards
+    assert any("DRAGON_HUNTER" in msg or "Dragon Hunter" in msg for msg in messages)
+    earned_keys = {ea.get("key") for ea in manager.user.earned_awards}
+    assert "DRAGON_HUNTER" in earned_keys
+    assert "MASTER_EXPLORER" not in earned_keys
 
 
-def test_turn_guardrails_blocks_unmet_quest_hard_rules():
+@pytest.mark.asyncio
+async def test_turn_guardrails_blocks_unmet_quest_hard_rules():
     """Verify TurnGuardrailEnforcer reverts quest completion if hard rules are unsatisfied."""
-    enforcer = TurnGuardrailEnforcer()
-    session_state = MagicMock()
-    session_state.quests = [
+    manager = _setup_mock_manager()
+    manager.state.quests = [
         {
             "id": "Q_BOSS",
             "title": "Defeat Overlord",
@@ -226,45 +232,34 @@ def test_turn_guardrails_blocks_unmet_quest_hard_rules():
             "required_defeated_npc_id": "OVERLORD",
         }
     ]
-    session_state.entity_states = {}
-    session_state.current_scene_id = "THRONE_ROOM"
-    session_state.custom_variables = {}
+    manager.state.entity_states = {}
+    manager.state.current_scene_id = "THRONE_ROOM"
+    manager.state.custom_variables = {}
+    manager.avatar.inventory = []
 
-    avatar = MagicMock()
-    avatar.inventory = []
+    enforcer = TurnGuardrailEnforcer(manager)
 
     # LLM hallucinates quest completion without defeating OVERLORD
     game_event = GameEvent(
         narrative_description="The overlord runs away scared.",
-        completed_quests=["Q_BOSS"],
+        completed_quest_ids=["Q_BOSS"],
     )
 
-    violations = enforcer._enforce_quest_and_award_guardrails(
-        game_event=game_event,
-        session_state=session_state,
-        avatar=avatar,
-        adventure=MagicMock(awards=[]),
-    )
+    await enforcer._enforce_quest_and_award_guardrails(game_event)
 
-    assert len(violations) == 1
-    assert "Q_BOSS" in violations[0]
-    assert "Q_BOSS" not in game_event.completed_quests
+    assert "Q_BOSS" not in (game_event.completed_quest_ids or [])
 
 
-def test_turn_guardrails_blocks_unmet_award_hard_rules():
+@pytest.mark.asyncio
+async def test_turn_guardrails_blocks_unmet_award_hard_rules():
     """Verify TurnGuardrailEnforcer reverts award grant if hard rules are unsatisfied."""
-    enforcer = TurnGuardrailEnforcer()
-    session_state = MagicMock()
-    session_state.quests = []
-    session_state.entity_states = {}
-    session_state.current_scene_id = "GARDEN"
-    session_state.custom_variables = {"opened_treasure": False}
-
-    avatar = MagicMock()
-    avatar.inventory = []
-
-    adventure = MagicMock()
-    adventure.awards = [
+    manager = _setup_mock_manager()
+    manager.state.quests = []
+    manager.state.entity_states = {}
+    manager.state.current_scene_id = "GARDEN"
+    manager.state.custom_variables = {"opened_treasure": False}
+    manager.avatar.inventory = []
+    manager.adventure.awards = [
         {
             "key": "TREASURE_MASTER",
             "title": "Treasure Master",
@@ -273,19 +268,14 @@ def test_turn_guardrails_blocks_unmet_award_hard_rules():
         }
     ]
 
+    enforcer = TurnGuardrailEnforcer(manager)
+
     # LLM hallucinates award grant without meeting hard rules
     game_event = GameEvent(
         narrative_description="You feel like a treasure master.",
-        awards=["TREASURE_MASTER"],
+        earned_award_keys=["TREASURE_MASTER"],
     )
 
-    violations = enforcer._enforce_quest_and_award_guardrails(
-        game_event=game_event,
-        session_state=session_state,
-        avatar=avatar,
-        adventure=adventure,
-    )
+    await enforcer._enforce_quest_and_award_guardrails(game_event)
 
-    assert len(violations) == 1
-    assert "TREASURE_MASTER" in violations[0]
-    assert "TREASURE_MASTER" not in game_event.awards
+    assert "TREASURE_MASTER" not in (game_event.earned_award_keys or [])

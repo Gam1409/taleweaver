@@ -369,6 +369,8 @@ class AdventureTemplateResponse(BaseModel):
     walkthrough: Optional[str] = None
     completed_condition: Optional[str] = None
     gameover_condition: Optional[str] = None
+    completed_guard_expression: Optional[str] = None
+    gameover_guard_expression: Optional[str] = None
     tts_director_notes: Optional[str] = None
 
     model_config = {"from_attributes": True}
@@ -635,6 +637,8 @@ class AdventureTemplateUpdate(BaseModel):
     walkthrough: Optional[str] = None
     completed_condition: Optional[str] = None
     gameover_condition: Optional[str] = None
+    completed_guard_expression: Optional[str] = None
+    gameover_guard_expression: Optional[str] = None
     tts_director_notes: Optional[str] = None
     creation_error: Optional[str] = None
     strict_rules: Optional[bool] = None
@@ -725,7 +729,12 @@ class AdventureTemplateUpdate(BaseModel):
             raise ValueError("length must be at most 20000 characters")
         return value
 
-    @field_validator("completed_condition", "gameover_condition")
+    @field_validator(
+        "completed_condition",
+        "gameover_condition",
+        "completed_guard_expression",
+        "gameover_guard_expression",
+    )
     @classmethod
     def validate_2k_fields(cls, value: Optional[str]) -> Optional[str]:
         if value is None:

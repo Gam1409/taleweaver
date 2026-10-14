@@ -1219,6 +1219,8 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
         "tts_director_notes",
         "completed_condition",
         "gameover_condition",
+        "completed_guard_expression",
+        "gameover_guard_expression",
         "language",
         "selected_tone",
         "rule_enforcement_mode",

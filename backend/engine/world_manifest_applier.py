@@ -1260,6 +1260,8 @@ async def apply_manifest(
         adventure.walkthrough = _adv_field("walkthrough") or adventure.walkthrough  # type: ignore[assignment]
         adventure.completed_condition = _adv_field("completed_condition") or adventure.completed_condition  # type: ignore[assignment]
         adventure.gameover_condition = _adv_field("gameover_condition") or adventure.gameover_condition  # type: ignore[assignment]
+        adventure.completed_guard_expression = _adv_field("completed_guard_expression") or adventure.completed_guard_expression  # type: ignore[assignment]
+        adventure.gameover_guard_expression = _adv_field("gameover_guard_expression") or adventure.gameover_guard_expression  # type: ignore[assignment]
         adventure.tts_director_notes = _adv_field("tts_director_notes") or adventure.tts_director_notes  # type: ignore[assignment]
         adventure.creator = _adv_field("creator") or adventure.creator  # type: ignore[assignment]
         adventure.copyright = _adv_field("copyright") or adventure.copyright  # type: ignore[assignment]
@@ -1336,6 +1338,8 @@ async def apply_manifest(
             state.walkthrough = adventure.walkthrough
             state.completed_condition = adventure.completed_condition
             state.gameover_condition = adventure.gameover_condition
+            state.completed_guard_expression = adventure.completed_guard_expression
+            state.gameover_guard_expression = adventure.gameover_guard_expression
             state.tts_director_notes = adventure.tts_director_notes
             state.time_system = adventure.time_system
             state.time_config = adventure.time_config

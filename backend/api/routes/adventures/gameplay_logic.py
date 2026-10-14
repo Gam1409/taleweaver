@@ -1573,6 +1573,8 @@ class GameTurnManager:
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
 
                 await self._enforce_quest_and_award_guardrails(game_event)
+                win_loss_violations = await self._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
+                rule_violations.extend(win_loss_violations)
                 system_msgs = await self._apply_game_event(game_event)
                 for sm in system_msgs:
                     role = getattr(sm, "role", "system")
@@ -1864,6 +1866,8 @@ class GameTurnManager:
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
 
                 await self._enforce_quest_and_award_guardrails(game_event)
+                win_loss_violations = await self._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
+                rule_violations.extend(win_loss_violations)
                 system_msgs = await self._apply_game_event(game_event)
                 for sm in system_msgs:
                     role = getattr(sm, "role", "system")
@@ -2864,6 +2868,9 @@ class GameTurnManager:
     async def _enforce_quest_and_award_guardrails(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_quest_and_award_guardrails(*args, **kwargs)
 
+    async def _enforce_win_and_loss_guardrails(self, *args, **kwargs) -> list[str]:
+        return await self.guardrails._enforce_win_and_loss_guardrails(*args, **kwargs)
+
     async def _handle_read_action_unlock(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._handle_read_action_unlock(*args, **kwargs)
 
@@ -3274,6 +3281,10 @@ class GameTurnManager:
             self.state.completed_condition = changeset.completed_condition_override
         if changeset.gameover_condition_override:
             self.state.gameover_condition = changeset.gameover_condition_override
+        if changeset.completed_guard_expression_override:
+            self.state.completed_guard_expression = changeset.completed_guard_expression_override
+        if changeset.gameover_guard_expression_override:
+            self.state.gameover_guard_expression = changeset.gameover_guard_expression_override
 
         if changeset.game_completed:
             await self._finalize_session("completed", changeset.status_note)

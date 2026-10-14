@@ -111,6 +111,8 @@ class AdventureTemplateBase(BaseModel):
     intro_text: Optional[str] = None
     completed_condition: Optional[str] = None
     gameover_condition: Optional[str] = None
+    completed_guard_expression: Optional[str] = None
+    gameover_guard_expression: Optional[str] = None
     tts_director_notes: Optional[str] = None
 
     # GM Capabilities
@@ -174,6 +176,8 @@ class AdventureTemplateUpdate(BaseModel):
     intro_text: Optional[str] = None
     completed_condition: Optional[str] = None
     gameover_condition: Optional[str] = None
+    completed_guard_expression: Optional[str] = None
+    gameover_guard_expression: Optional[str] = None
     tts_director_notes: Optional[str] = None
 
     # GM Capabilities

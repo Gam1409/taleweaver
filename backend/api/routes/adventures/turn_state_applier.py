@@ -994,6 +994,24 @@ class TurnStateApplier:
                 if not event.status_note:
                     event.status_note = "Congratulations! You have completed the final sequence."
 
+        raw_win_guard = getattr(self.state, "completed_guard_expression", None) or getattr(
+            self.adventure, "completed_guard_expression", None
+        )
+        win_guard = raw_win_guard.strip() if isinstance(raw_win_guard, str) else ""
+
+        if win_guard:
+            from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
+            is_win_met, _ = HardRuleEvaluator.check_guard_expression(
+                win_guard, self.avatar, self.state, script_context=script_context
+            )
+            if is_win_met:
+                event.game_completed = True
+                if not event.status_note:
+                    event.status_note = "Congratulations! You have achieved victory."
+            elif event.game_completed:
+                event.game_completed = False
+
         # Process Explicit Map Updates (Exits)
         if event.updated_exits:
             try:

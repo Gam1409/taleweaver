@@ -9,6 +9,7 @@ across Sequences, Quests, and Awards.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.engine.scripting.context import GameContext
@@ -17,6 +18,17 @@ from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RuleEvaluationContext:
+    """Evaluation context for hard rules, supporting direct test invocation."""
+
+    current_scene_id: str = ""
+    inventory_item_ids: set[str] = field(default_factory=set)
+    defeated_npc_ids: set[str] = field(default_factory=set)
+    active_sequence_id: str = ""
+    custom_variables: dict[str, Any] = field(default_factory=dict)
 
 
 class HardRuleEvaluator:
@@ -91,9 +103,7 @@ class HardRuleEvaluator:
         }
 
         return (
-            req_item_norm in inv_ids
-            or req_item_norm in inv_names
-            or req_item_norm in in_inv_states
+            req_item_norm in inv_ids or req_item_norm in inv_names or req_item_norm in in_inv_states
         )
 
     @classmethod
@@ -152,9 +162,7 @@ class HardRuleEvaluator:
                 if not isinstance(upd, dict)
                 else upd.get("is_defeated")
             )
-            upd_hp = (
-                getattr(upd, "hp", None) if not isinstance(upd, dict) else upd.get("hp")
-            )
+            upd_hp = getattr(upd, "hp", None) if not isinstance(upd, dict) else upd.get("hp")
             if upd_def is True or (upd_hp is not None and upd_hp <= 0):
                 return True
 
@@ -183,7 +191,11 @@ class HardRuleEvaluator:
                 "inventory": list(getattr(avatar, "inventory", None) or []),
             }
             session_overrides = dict(getattr(state, "entity_states", None) or {})
-            script_vars = dict(session_overrides.get("__script_vars__", {}))
+            script_vars = dict(
+                session_overrides.get("__script_vars__", {})
+                or getattr(state, "custom_variables", None)
+                or {}
+            )
             story_flags = dict(session_overrides.get("__switch_story_flags__", {}))
             ctx = GameContext(
                 avatar_data=avatar_dict,
@@ -226,24 +238,78 @@ class HardRuleEvaluator:
             getter("guard_expression") or getter("completion_guard_expression") or ""
         ).strip()
 
-        if req_item and not cls.check_item_rule(
-            req_item, avatar, state, new_inventory_items
-        ):
+        if req_item and not cls.check_item_rule(req_item, avatar, state, new_inventory_items):
             return False, f"Missing required item: {req_item}"
 
         if req_scene and not cls.check_scene_rule(req_scene, state, new_scene_id):
             return False, f"Not in required scene: {req_scene}"
 
-        if req_npc and not cls.check_defeated_npc_rule(
-            req_npc, state, updated_entities
-        ):
+        if req_npc and not cls.check_defeated_npc_rule(req_npc, state, updated_entities):
             return False, f"NPC not defeated: {req_npc}"
 
         if req_guard:
-            passed, err = cls.check_guard_expression(
-                req_guard, avatar, state, script_context
-            )
+            passed, err = cls.check_guard_expression(req_guard, avatar, state, script_context)
             if not passed:
                 return False, f"Guard expression unmet: {err or req_guard}"
 
         return True, None
+
+    @classmethod
+    def evaluate_target(
+        cls,
+        rule_dict: dict[str, Any] | Any,
+        ctx: RuleEvaluationContext,
+    ) -> bool:
+        """Evaluates a rule dict or object against a RuleEvaluationContext."""
+        getter = (
+            rule_dict.get
+            if isinstance(rule_dict, dict)
+            else lambda k, d=None: getattr(rule_dict, k, d)
+        )
+        req_item = str(getter("required_item_id") or "").strip()
+        if req_item:
+            inv_upper = {str(i).upper() for i in ctx.inventory_item_ids}
+            if req_item.upper() not in inv_upper:
+                return False
+
+        req_scene = str(getter("required_scene_id") or "").strip()
+        if req_scene and req_scene.upper() != str(ctx.current_scene_id).upper():
+            return False
+
+        req_npc = str(getter("required_defeated_npc_id") or "").strip()
+        if req_npc:
+            defeated_upper = {str(n).upper() for n in ctx.defeated_npc_ids}
+            if req_npc.upper() not in defeated_upper:
+                return False
+
+        req_guard = str(
+            getter("guard_expression") or getter("completion_guard_expression") or ""
+        ).strip()
+        if req_guard:
+            from backend.engine.scripting.context import GameContext
+
+            game_ctx = GameContext(
+                avatar_data={
+                    "hp": 100,
+                    "max_hp": 100,
+                    "inventory": [
+                        {"id": item_id, "name": item_id} for item_id in ctx.inventory_item_ids
+                    ],
+                },
+                current_scene_id=ctx.current_scene_id,
+                script_vars=dict(ctx.custom_variables),
+            )
+            passed, _ = SwitchService.evaluate_gate_expression(req_guard, game_ctx)
+            if not passed:
+                return False
+
+        return True
+
+    @classmethod
+    def is_rule_satisfied(
+        cls,
+        rule_dict: dict[str, Any] | Any,
+        ctx: RuleEvaluationContext,
+    ) -> bool:
+        """Alias for evaluate_target."""
+        return cls.evaluate_target(rule_dict, ctx)

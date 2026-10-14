@@ -549,6 +549,10 @@ def _check_empty_story_fields(adventure: dict[str, Any]) -> list[ValidationFindi
     for f in fields:
         val = (adventure.get(f) or "").strip()
         if not val:
+            if f == "completed_condition" and (adventure.get("completed_guard_expression") or "").strip():
+                continue
+            if f == "gameover_condition" and (adventure.get("gameover_guard_expression") or "").strip():
+                continue
             findings.append(
                 _f(
                     "warn",

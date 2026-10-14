@@ -136,6 +136,10 @@ _EXAMPLES = (
     "   guard_expression = \"tw.player.has_item('ANCIENT_RELIC') and tw.vars.get('relic_cleansed') == True\"\n"
     "11. Award deterministic guard (inline on award: guard_expression):\n"
     "   guard_expression = \"tw.vars.get('pacifist_boss_spared') == True\"\n"
+    "12. Adventure Win deterministic guard (top-level completed_guard_expression):\n"
+    "   completed_guard_expression = \"tw.vars.get('boss_defeated') == True and tw.player.has_item('ITEM_CRYSTAL')\"\n"
+    "13. Adventure Loss deterministic guard (top-level gameover_guard_expression):\n"
+    "   gameover_guard_expression = \"tw.vars.get('countdown', 10) <= 0 or tw.vars.get('alarm_tripped') == True\"\n"
 )
 
 
@@ -180,6 +184,7 @@ def build_scripts_requirement(scripts_generation_enabled: bool) -> str:
         "a boss that drops loot):\n"
         f"{_inline_trigger_lines()}\n"
         "RULES:\n"
+        "- SOFT RULES VS. HARD RULES (MUTUAL EXCLUSIVITY): Use EITHER a soft narrative rule OR deterministic hard rules / scripted guards on any given asset, but NOT both. If you set a guard_expression or hard rule on a sequence, quest, award, container, exit, or win/loss condition, leave its soft rule empty (or strictly decorative).\n"
         "- Only reference scene/exit/NPC/object/quest IDs that exist in this manifest.\n"
         "- Prefer `..._text` for pure flavour, `..._script` for mechanics (damage, items, locks, flags).\n"
         "- Keep inline scripts short (max ~10 lines); never use imports, file/network access or loops over huge ranges.\n"

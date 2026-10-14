@@ -2021,6 +2021,76 @@ class TurnGuardrailsManager:
                 validated_award_keys.append(key)
             event.earned_award_keys = validated_award_keys
 
+    async def _enforce_win_and_loss_guardrails(
+        self, event: GameEvent, script_context: Optional[Any] = None
+    ) -> list[str]:
+        """Validates and enforces deterministic win and loss guard expressions.
+
+        - If gameover_guard_expression is defined and met, triggers game_over deterministically.
+        - If gameover_guard_expression is defined and NOT met, blocks LLM-hallucinated game_over (unless HP <= 0).
+        - If completed_guard_expression is defined and met, triggers game_completed deterministically.
+        - If completed_guard_expression is defined and NOT met, blocks LLM-hallucinated game_completed.
+        """
+        violations: list[str] = []
+        adventure = getattr(self.manager, "adventure", None) if hasattr(self, "manager") and self.manager else None
+
+        raw_loss_guard = (
+            getattr(self.state, "gameover_guard_expression", None)
+            or (getattr(adventure, "gameover_guard_expression", None) if adventure else None)
+        )
+        loss_guard = raw_loss_guard.strip() if isinstance(raw_loss_guard, str) else ""
+
+        if loss_guard:
+            from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
+            is_loss_met, loss_reason = HardRuleEvaluator.check_guard_expression(
+                loss_guard, self.avatar, self.state, script_context=script_context
+            )
+            if is_loss_met:
+                event.game_over = True
+                if not event.status_note:
+                    loss_cond = getattr(self.state, "gameover_condition", None) or "Defeat condition triggered."
+                    event.status_note = f"Defeat condition met: {loss_cond}"
+            elif event.game_over and (getattr(self.avatar, "hp", 100) or 100) > 0:
+                logger.info(
+                    "[Loss Guardrail] Blocked game_over: guard expression '%s' not satisfied (%s)",
+                    loss_guard,
+                    loss_reason,
+                )
+                event.game_over = False
+                event.status_note = None
+                violations.append(f"Blocked game over: guard expression '{loss_guard}' not met.")
+
+        raw_win_guard = (
+            getattr(self.state, "completed_guard_expression", None)
+            or (getattr(adventure, "completed_guard_expression", None) if adventure else None)
+        )
+        win_guard = raw_win_guard.strip() if isinstance(raw_win_guard, str) else ""
+
+
+        if win_guard:
+            from backend.engine.hard_rule_evaluator import HardRuleEvaluator
+
+            is_win_met, win_reason = HardRuleEvaluator.check_guard_expression(
+                win_guard, self.avatar, self.state, script_context=script_context
+            )
+            if is_win_met:
+                event.game_completed = True
+                if not event.status_note:
+                    win_cond = getattr(self.state, "completed_condition", None) or "Victory achieved!"
+                    event.status_note = f"Victory condition met: {win_cond}"
+            elif event.game_completed:
+                logger.info(
+                    "[Win Guardrail] Blocked game_completed: guard expression '%s' not satisfied (%s)",
+                    win_guard,
+                    win_reason,
+                )
+                event.game_completed = False
+                event.status_note = None
+                violations.append(f"Blocked game completion: guard expression '{win_guard}' not met.")
+
+        return violations
+
     async def _handle_read_action_unlock(self, read_target: str) -> None:
         """Finds the read item and checks if it unlocks any special actions."""
         target_lower = read_target.strip().lower()
@@ -2098,3 +2168,7 @@ class TurnGuardrailsManager:
             self.avatar.stats = stats
             flag_modified(self.avatar, "stats")
             await self.db.commit()
+
+
+TurnGuardrailEnforcer = TurnGuardrailsManager
+

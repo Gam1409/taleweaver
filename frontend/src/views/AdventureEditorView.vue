@@ -655,6 +655,8 @@ const form = ref({
   walkthrough: '',
   completed_condition: '',
   gameover_condition: '',
+  completed_guard_expression: '',
+  gameover_guard_expression: '',
   tts_director_notes: '',
   selected_style_id: '',
   selected_tone_id: '',
@@ -688,6 +690,8 @@ async function handleGenerateField(field: string) {
       walkthrough: form.value.walkthrough,
       completed_condition: form.value.completed_condition,
       gameover_condition: form.value.gameover_condition,
+      completed_guard_expression: form.value.completed_guard_expression,
+      gameover_guard_expression: form.value.gameover_guard_expression,
       tts_director_notes: form.value.tts_director_notes
     })
     tempValue.value = fixNewlines(result.generated_text)
@@ -717,6 +721,8 @@ async function saveField() {
     walkthrough: 20000,
     completed_condition: 2000,
     gameover_condition: 2000,
+    completed_guard_expression: 2000,
+    gameover_guard_expression: 2000,
     tts_director_notes: 5000
   }
 
@@ -901,6 +907,8 @@ async function fetchAdventure() {
     form.value.walkthrough = data.walkthrough || ''
     form.value.completed_condition = data.completed_condition || ''
     form.value.gameover_condition = data.gameover_condition || ''
+    form.value.completed_guard_expression = data.completed_guard_expression || ''
+    form.value.gameover_guard_expression = data.gameover_guard_expression || ''
     form.value.tts_director_notes = data.tts_director_notes || ''
 
     form.value.selected_style_id = Array.isArray(data.selected_image_styles) && data.selected_image_styles.length > 0 

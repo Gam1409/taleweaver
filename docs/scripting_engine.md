@@ -143,30 +143,25 @@ In addition to standalone script assets, TaleWeaver allows configuring short inl
 | | `guard_expression` *(Guard)* | Deterministic Python boolean expression required for completion. Evaluated in Pass 1.5. |
 | **Awards (Achievements)** | `required_item_id`, `required_scene_id`, `required_defeated_npc_id` *(Hard Rules)* | Deterministic entity conditions required to grant award. |
 | | `guard_expression` *(Guard)* | Deterministic Python boolean expression required for granting. Evaluated in Pass 1.5. |
+| **Adventure (Victory)** | `completed_guard_expression` *(Guard)* | Deterministic Python boolean expression required for game victory. Triggers victory deterministically and blocks hallucinated win intents. |
+| **Adventure (Defeat)** | `gameover_guard_expression` *(Guard)* | Deterministic Python boolean expression triggering game over. Evaluated in Pass 1.5; blocks hallucinated game-over intents. |
 
-### In-Game Debug Notifications
+### Cardinal Rule: Soft Rules vs. Hard Rules (Mutual Exclusivity)
 
-When **Debug Mode** is active (configured via `TALEWEAVER_DEBUG_ENABLED` or toggled in the runtime session), the engine emits an immediate in-game system message whenever any trigger is fired:
-
-```
-[DEBUG: Trigger fired] <trigger_name> on <target_id>
-```
-
-For example:
-- `[DEBUG: Trigger fired] on_read on ANCIENT_PARCHMENT`
-- `[DEBUG: Trigger fired] on_unlock_success on VAULT_CHEST`
-- `[DEBUG: Trigger fired] on_leave_scene on SCENE_CELL`
-- `[DEBUG: Trigger fired] on_hp_change on protagonist`
-
-This provides instant, transparent feedback during playtesting and debugging without opening server terminal logs.
+For **all assets** in TaleWeaver (Win/Loss conditions, Sequences, Quests, Awards, Exits, Containers, and Switches):
+> [!IMPORTANT]
+> **Use EITHER a soft narrative rule OR deterministic hard rules / scripted guards, but NOT both on the same asset.**
+> 
+> Mixing a narrative soft rule and a scripted guard expression on the same asset causes ambiguous triggers and LLM hallucination conflicts. If an asset has hard rules or guard expressions, leave its soft narrative rule empty or purely decorative. If an asset relies on narrative GM judgment, leave its hard rules and guard expressions empty.
 
 ### Deterministic Guard Expressions
 
-Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches, and `guard_expression` on sequences, sidequests, and awards) evaluate safe Python expressions against the `tw` context:
+Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches, `completed_guard_expression` / `gameover_guard_expression` on the adventure, and `guard_expression` on sequences, sidequests, and awards) evaluate safe Python expressions against the `tw` context:
 - `tw.switches.get('POWER') == 'ON'`
 - `tw.vars.get('has_badge', False) == True and tw.player.hp > 20`
 - `tw.player.has_item('KEYCARD_RED') or tw.switches.is_state('OVERRIDE', 'ACTIVE')`
-- `tw.vars.get('quest_done') == True`
+- `tw.vars.get('boss_defeated') == True and tw.player.has_item('MOB_LEDGER')`
+- `tw.vars.get('countdown') <= 0 or tw.vars.get('cover_blown') == True`
 
 If the expression evaluates to truthy, the guard passes; otherwise, the action or completion is blocked deterministically.
 

@@ -761,10 +761,18 @@ class WorldManifesto(BaseModel):
         description="Optional intro text shown once when a new session starts. Use empty string if none.",
     )
     completed_condition: str = Field(
-        ..., description="Technical or narrative condition for winning the adventure."
+        default="", description="Technical or narrative soft rule condition for winning the adventure."
     )
     gameover_condition: str = Field(
-        ..., description="Technical or narrative condition for losing the adventure."
+        default="", description="Technical or narrative soft rule condition for losing the adventure."
+    )
+    completed_guard_expression: Optional[str] = Field(
+        default="",
+        description="Deterministic Python boolean guard expression evaluated with tw for winning the adventure.",
+    )
+    gameover_guard_expression: Optional[str] = Field(
+        default="",
+        description="Deterministic Python boolean guard expression evaluated with tw for losing the adventure.",
     )
     can_damage_npcs: bool = Field(
         True, description="Global flag: whether the protagonist can damage NPCs."

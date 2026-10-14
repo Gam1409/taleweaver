@@ -739,6 +739,12 @@ async def generate_template_field(
         "gameover_condition": payload.gameover_condition
         or adv.gameover_condition
         or "",
+        "completed_guard_expression": getattr(payload, "completed_guard_expression", None)
+        or getattr(adv, "completed_guard_expression", None)
+        or "",
+        "gameover_guard_expression": getattr(payload, "gameover_guard_expression", None)
+        or getattr(adv, "gameover_guard_expression", None)
+        or "",
         "tts_director_notes": payload.tts_director_notes
         or adv.tts_director_notes
         or "",
@@ -1215,6 +1221,8 @@ async def create_adventure(
         walkthrough=adv.walkthrough,
         completed_condition=adv.completed_condition,
         gameover_condition=adv.gameover_condition,
+        completed_guard_expression=adv.completed_guard_expression,
+        gameover_guard_expression=adv.gameover_guard_expression,
         tts_director_notes=adv.tts_director_notes,
         selected_image_styles=deepcopy(adv.selected_image_styles),
         selected_tone=deepcopy(adv.selected_tone),
@@ -1682,6 +1690,8 @@ async def update_adventure(
         "walkthrough",
         "completed_condition",
         "gameover_condition",
+        "completed_guard_expression",
+        "gameover_guard_expression",
         "tts_director_notes",
     }
     time_fields = {"time_system", "time_config", "clock_enabled", "pacing_minutes", "time_per_turn", "max_time_per_turn"}
