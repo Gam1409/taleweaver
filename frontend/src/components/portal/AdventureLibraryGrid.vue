@@ -31,6 +31,7 @@ const emit = defineEmits<{
   (e: 'migrate', template: any): void
   (e: 'cover', templateId: string): void
   (e: 'edit', templateId: string): void
+  (e: 'duplicate', templateId: string): void
   (e: 'export-adz', templateId: string, title: string): void
   (e: 'export-adv', templateId: string, title: string): void
   (e: 'delete', templateId: string, title: string): void
@@ -119,6 +120,7 @@ onUnmounted(() => {
         @migrate="(tpl) => $emit('migrate', tpl)"
         @cover="(id) => $emit('cover', id)"
         @edit="(id) => $emit('edit', id)"
+        @duplicate="(id) => $emit('duplicate', id)"
         @export-adz="(id, title) => $emit('export-adz', id, title)"
         @export-adv="(id, title) => $emit('export-adv', id, title)"
         @delete="(id, title) => $emit('delete', id, title)"

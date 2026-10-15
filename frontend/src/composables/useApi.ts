@@ -506,6 +506,14 @@ export const api = {
     return request('/adventures/import', { method: 'POST', body: JSON.stringify(payload) })
   },
 
+  /** Duplicates an existing adventure template and its world blueprint. */
+  duplicateAdventure(templateId: string, payload?: { title?: string }): Promise<any> {
+    return request(`/adventures/${templateId}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    })
+  },
+
   /** Deletes an adventure by its ID. */
   deleteAdventure(adventureId: string): Promise<void> {
     return request(`/adventures/${adventureId}`, { method: 'DELETE' })

@@ -92,6 +92,7 @@ const {
   executeDeleteSession,
   executeDeleteAllSessions,
   copySession,
+  duplicateAdventure,
   confirmDeleteTemplate,
   executeDeleteTemplate,
   executeDeleteAllTemplates,
@@ -433,6 +434,7 @@ onUnmounted(() => {
               @migrate="openMigrateModal"
               @cover="openCoverCreate"
               @edit="editAdventure"
+              @duplicate="duplicateAdventure"
               @export-adz="exportAdventureAdz"
               @export-adv="exportAdventureAdv"
               @delete="confirmDeleteTemplate"
@@ -462,6 +464,7 @@ onUnmounted(() => {
               @migrate="openMigrateModal"
               @cover="openCoverCreate"
               @edit="editAdventure"
+              @duplicate="duplicateAdventure"
               @export-adz="exportAdventureAdz"
               @export-adv="exportAdventureAdv"
               @delete="confirmDeleteTemplate"
@@ -608,6 +611,7 @@ onUnmounted(() => {
         :progress="cloneProgressState.progress"
         :stage="cloneProgressState.stage"
         :error-msg="cloneProgressState.errorMsg"
+        :item-type="cloneProgressState.itemType"
         @close="cloneProgressState.isOpen = false"
       />
 

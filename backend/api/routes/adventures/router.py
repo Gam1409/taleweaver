@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.api.routes.adventures.assets import router as assets_router
+from backend.api.routes.adventures.cloning import router as cloning_router
 from backend.api.routes.adventures.editor import router as editor_router
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.imports import router as imports_router
@@ -22,9 +23,11 @@ router.include_router(sessions_router)
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)
 
-# 5. Templates (parameterized paths like /{template_id})
+# 5. Cloning (specific paths like /{template_id}/duplicate and /{template_id}/copy)
+router.include_router(cloning_router)
+
+# 6. Templates (parameterized paths like /{template_id})
 router.include_router(templates_router)
 
-# 6. Gameplay (parameterized paths like /{game_id}/chat)
+# 7. Gameplay (parameterized paths like /{game_id}/chat)
 router.include_router(gameplay_router)
-
