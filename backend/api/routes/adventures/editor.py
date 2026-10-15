@@ -293,6 +293,11 @@ def _serialize_model(obj):
         data["on_status_change_script"] = str(stats.get("on_status_change_script") or "")
         data["on_status_change_text"] = str(stats.get("on_status_change_text") or "")
 
+    if isinstance(obj, AdventureTemplate):
+        data["scripts"] = list(getattr(obj, "scripts", []) or [])
+        data["init_script"] = getattr(obj, "init_script", None)
+
+
     # Group stats for easier frontend access
     if isinstance(obj, WorldEntity):
         if obj.entity_type == "NPC":
@@ -881,6 +886,8 @@ async def run_editor_validation(
 
                 summary = _summarize_for_ai(debug_payload)
                 adventure = summary.get("adventure") or {}
+                sequences_list = adventure.get("sequences") or []
+                scripts_list = adventure.get("scripts") or []
                 user_prompt = AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
                     title=adventure.get("title", ""),
                     language=adventure.get("language", ""),
@@ -890,6 +897,8 @@ async def run_editor_validation(
                     rules=adventure.get("rules", "") or "",
                     intro_text=adventure.get("intro_text", "") or "",
                     walkthrough=adventure.get("walkthrough", "") or "",
+                    sequence_count=len(sequences_list),
+                    sequences_json=json.dumps(sequences_list, ensure_ascii=False),
                     scene_count=len(summary.get("scenes") or []),
                     scenes_json=json.dumps(summary.get("scenes") or [], ensure_ascii=False),
                     exit_count=len(summary.get("exits") or []),
@@ -900,6 +909,8 @@ async def run_editor_validation(
                     objects_json=json.dumps(summary.get("objects") or [], ensure_ascii=False),
                     quest_count=len(adventure.get("quests") or []),
                     quests_json=json.dumps(adventure.get("quests") or [], ensure_ascii=False),
+                    script_count=len(scripts_list),
+                    scripts_json=json.dumps(scripts_list, ensure_ascii=False),
                 )
 
                 from backend.api.routes.adventures.schemas import (
