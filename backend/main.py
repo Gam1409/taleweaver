@@ -243,7 +243,17 @@ class SafeStaticFiles(StaticFiles):
                     except Exception as e:
                         logger.warning("Dynamic thumbnail generation failed for %s: %s", source_full, e)
 
-        return await super().get_response(path, scope)
+        resp = await super().get_response(path, scope)
+        if resp.status_code == 200:
+            check_path = full_path if (full_path and os.path.isfile(full_path)) else self.lookup_path(path)[0]
+            if check_path and os.path.isfile(check_path):
+                try:
+                    with open(check_path, "rb") as f:
+                        if b"<svg" in f.read(512).lower():
+                            resp.headers["Content-Type"] = "image/svg+xml"
+                except OSError:
+                    pass
+        return resp
 
 # Mount the entire DATA_DIR under /data for robustness, with security filters
 app.mount("/data", SafeStaticFiles(directory=os.path.abspath(settings.DATA_DIR)), name="data")

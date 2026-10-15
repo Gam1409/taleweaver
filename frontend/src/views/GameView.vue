@@ -87,12 +87,14 @@ const unlockModalError = ref('')
 const containerBusy = ref(false)
 const containerCodeBusy = ref(false)
 const showTextLogModal = ref(false)
+const isTakingTextLog = ref(false)
 const activeTextLog = ref<{
   id: string
   title: string
   format: string
   content: string
   imageUrl?: string | null
+  rawEntity?: any
 } | null>(null)
 const activeContainer = ref<{
   id: string
@@ -575,6 +577,7 @@ const extractTextLogPayload = (entity: any) => {
     format: ['DOCUMENT', 'SCROLL', 'BOOK', 'SIGN'].includes(format) ? format : 'DOCUMENT',
     content,
     imageUrl: entity?.image_url || null,
+    rawEntity: entity,
   }
 }
 
@@ -1310,6 +1313,39 @@ const handleTakeDirect = async (entity: any) => {
   if (isActionInputBlocked.value) return
   await sendMessage(`/take_direct ${entity.id || entity.name}`)
 }
+
+const isItemInInventory = (entityOrId: any): boolean => {
+  if (!entityOrId) return false
+  if (typeof entityOrId === 'object') {
+    if (entityOrId.is_in_inventory === true || entityOrId.current_scene_id === 'INVENTORY') {
+      return true
+    }
+  }
+  const rawId = typeof entityOrId === 'string' ? entityOrId : entityOrId.id
+  const normId = String(rawId || '').trim().toLowerCase()
+  if (!normId) return false
+  return (inventoryItems.value || []).some((item: any) => {
+    const itemId = String(typeof item === 'string' ? item : item?.id || '').trim().toLowerCase()
+    return itemId === normId
+  })
+}
+
+const canTakeTextLog = computed(() => {
+  const entity = activeTextLog.value?.rawEntity
+  if (!entity) return false
+  if (entity.is_portable === false) return false
+  return !isItemInInventory(entity)
+})
+
+const handleTextLogTake = async () => {
+  if (!activeTextLog.value?.rawEntity || isTakingTextLog.value) return
+  isTakingTextLog.value = true
+  try {
+    await handleTakeDirect(activeTextLog.value.rawEntity)
+  } finally {
+    isTakingTextLog.value = false
+  }
+}
 const currentSceneDescription = computed(() => nodes.value[sheet.value?.scene_id || '']?.description || 'The current location of your adventure.')
 
 const {
@@ -1866,6 +1902,9 @@ watch(
       :format="activeTextLog?.format || 'DOCUMENT'"
       :content="activeTextLog?.content || ''"
       :image-url="activeTextLog?.imageUrl || null"
+      :can-take="canTakeTextLog"
+      :is-taking="isTakingTextLog"
+      @take="handleTextLogTake"
       @close="closeTextLogModal"
     />
 

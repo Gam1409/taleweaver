@@ -63,7 +63,20 @@ ITEM_INTEGRITY_FIELDS = [
 ]
 
 _SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-_SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+_SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
+
+
+def _is_svg_file(file_path: str, ext: str = "") -> bool:
+    """Check if file is an SVG by extension or header sniffing."""
+    if ext.lower() == ".svg" or file_path.lower().endswith(".svg"):
+        return True
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        with open(file_path, "rb") as f:
+            return b"<svg" in f.read(512).lower()
+    except OSError:
+        return False
 
 
 def _normalize_data_asset_url(source_url: Optional[str]) -> Optional[str]:
@@ -222,6 +235,11 @@ def _copy_data_asset_to_session(
             shutil.copy2(source_thumb_path, target_thumb_path)
         except OSError:
             logger.warning("Failed copying asset thumbnail to session folder: %s -> %s", source_thumb_path, target_thumb_path)
+    elif _is_svg_file(target_path, ext):
+        try:
+            shutil.copy2(target_path, target_thumb_path)
+        except OSError:
+            logger.warning("Failed copying SVG asset thumbnail to session folder: %s -> %s", target_path, target_thumb_path)
     else:
         try:
             from PIL import Image

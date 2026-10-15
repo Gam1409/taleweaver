@@ -58,7 +58,7 @@ router = APIRouter(tags=["Adventures"])
 logger = logging.getLogger(__name__)
 
 _SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-_SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+_SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 
 
 def _normalize_data_asset_url(source_url: Optional[str]) -> Optional[str]:
