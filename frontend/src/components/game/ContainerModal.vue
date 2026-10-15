@@ -49,7 +49,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+        class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
         @click.self="emit('close')"
       >
         <div class="w-full max-w-4xl bg-slate-900 border border-slate-700/60 rounded-3xl shadow-2xl overflow-hidden">

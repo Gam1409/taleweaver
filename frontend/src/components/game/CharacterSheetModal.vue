@@ -92,26 +92,43 @@ const showImage = (path?: string | null) => {
   return !!path && !brokenImages.value[path]
 }
 
+const isReadableItem = (item: any): boolean => {
+  if (!item) return false
+  const itemType = String(item.item_type || item.metadata_json?.item_type || '').toUpperCase()
+  if (itemType === 'READABLE') return true
+  const metadata = (item.metadata_json && typeof item.metadata_json === 'object') ? item.metadata_json : {}
+  return Boolean(item.text_log_content || metadata.text_log_content)
+}
+
 const isInteractable = (item: any) => {
   if (!item) return false
+  if (isReadableItem(item)) return true
+  const itemType = String(item.item_type || '').toUpperCase()
+  if (itemType === 'CONTAINER' || itemType === 'CONSUMABLE') return true
   const isEquippable = !!item.slot || (item.wearable_slots && item.wearable_slots.length > 0)
-  return isEquippable || item.item_type === 'CONSUMABLE' || String(item.item_type || '').toUpperCase() === 'CONTAINER' || String(item.item_type || '').toUpperCase() === 'READABLE'
+  return isEquippable
 }
 
 const handleInventoryClick = (item: any) => {
   if (!item) return
+  if (isReadableItem(item)) {
+    emit('readItem', item)
+    return
+  }
+  const itemType = String(item.item_type || '').toUpperCase()
+  if (itemType === 'CONTAINER') {
+    emit('openContainer', item)
+    return
+  }
+  if (itemType === 'CONSUMABLE') {
+    stateChanged.value = true
+    emit('consume', item.name)
+    return
+  }
   const isEquippable = !!item.slot || (item.wearable_slots && item.wearable_slots.length > 0)
-  
   if (isEquippable) {
     stateChanged.value = true
     emit('equip', item.name)
-  } else if (item.item_type === 'CONSUMABLE') {
-    stateChanged.value = true
-    emit('consume', item.name)
-  } else if (String(item.item_type || '').toUpperCase() === 'CONTAINER') {
-    emit('openContainer', item)
-  } else if (String(item.item_type || '').toUpperCase() === 'READABLE') {
-    emit('readItem', item)
   }
 }
 
@@ -371,7 +388,7 @@ const onClose = () => {
                   <template v-if="inventoryList[idx-1]">
                     <!-- READ/NOTE tag -->
                     <div 
-                      v-if="String(inventoryList[idx-1].item_type || '').toUpperCase() === 'READABLE'" 
+                      v-if="isReadableItem(inventoryList[idx-1])" 
                       class="absolute top-1 left-1 z-20 px-1 py-0.2 rounded text-[7px] sm:text-[8px] font-black tracking-wide border leading-none"
                       :class="Boolean(inventoryList[idx-1].is_read) ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-amber-500/20 text-amber-200 border-amber-500/40'"
                     >
@@ -407,7 +424,7 @@ const onClose = () => {
 
               <!-- Quick Instruction Hint -->
               <div class="mt-4 pt-3 border-t border-slate-800/40 flex items-center justify-between text-xxs text-slate-500 flex-wrap gap-2">
-                <span>💡 Click item to equip or consume.</span>
+                <span>💡 Click item to equip, consume, open, or read.</span>
                 <span>Right-click or hold for actions.</span>
               </div>
             </div>

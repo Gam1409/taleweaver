@@ -2091,26 +2091,36 @@ class TurnGuardrailsManager:
 
         return violations
 
+    async def _execute_read_payload(self, item_id: str, script: str | None, text: str | None) -> None:
+        if script:
+            await self.manager._execute_inline_script(script, "on_read", item_id)
+        if text:
+            await self._save_chat_message("system", text)
+        await self._check_special_action_unlocks("READ_ITEM", item_id)
+
     async def _handle_read_action_unlock(self, read_target: str) -> None:
         """Finds the read item and checks if it unlocks any special actions."""
         target_lower = read_target.strip().lower()
 
         # 1. Search player inventory
         for item in self.avatar.inventory or []:
-            if isinstance(item, dict):
-                if (
-                    item.get("name", "").lower() == target_lower
-                    or item.get("id", "").lower() == target_lower
-                ):
-                    if str(item.get("item_type") or "").upper() == "READABLE":
-                        if item.get("on_read_script"):
-                            await self.manager._execute_inline_script(
-                                item["on_read_script"], "on_read", item.get("id")
-                            )
-                        if item.get("on_read_text"):
-                            await self._save_chat_message("system", item["on_read_text"])
-                        await self._check_special_action_unlocks("READ_ITEM", item.get("id"))
-                        return
+            if not isinstance(item, dict):
+                continue
+            name_match = (item.get("name") or "").lower() == target_lower
+            id_match = (item.get("id") or "").lower() == target_lower
+            if not (name_match or id_match):
+                continue
+
+            meta = item.get("metadata_json") if isinstance(item.get("metadata_json"), dict) else {}
+            is_readable = (
+                str(item.get("item_type") or meta.get("item_type") or "").upper() == "READABLE"
+                or bool(item.get("text_log_content") or meta.get("text_log_content"))
+            )
+            if is_readable:
+                script = item.get("on_read_script") or meta.get("on_read_script")
+                text = item.get("on_read_text") or meta.get("on_read_text")
+                await self._execute_read_payload(item.get("id"), script, text)
+                return
 
         # 2. Search scene objects
         ent_res = await self.db.execute(
@@ -2122,20 +2132,12 @@ class TurnGuardrailsManager:
                 WorldEntity.item_type == "READABLE",
             )
         )
-        candidates = ent_res.scalars().all()
-        for candidate in candidates:
-            if candidate.id and (
-                candidate.id.lower() == target_lower
-                or (candidate.name and candidate.name.lower() == target_lower)
-            ):
+        for candidate in ent_res.scalars().all():
+            cand_id = (candidate.id or "").lower()
+            cand_name = (candidate.name or "").lower()
+            if target_lower in (cand_id, cand_name):
                 meta = dict(candidate.metadata_json or {})
-                if meta.get("on_read_script"):
-                    await self.manager._execute_inline_script(
-                        meta["on_read_script"], "on_read", candidate.id
-                    )
-                if meta.get("on_read_text"):
-                    await self._save_chat_message("system", meta["on_read_text"])
-                await self._check_special_action_unlocks("READ_ITEM", candidate.id)
+                await self._execute_read_payload(candidate.id, meta.get("on_read_script"), meta.get("on_read_text"))
                 return
 
     async def _check_special_action_unlocks(self, condition_type: str, target_id: str) -> None:
