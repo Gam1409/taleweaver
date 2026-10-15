@@ -119,9 +119,6 @@ Intro Text: {intro_text}
 === GAME SCRIPTS & HOOKS ({script_count}) ===
 {scripts_json}
 
-=== WALKTHROUGH ===
-{walkthrough}
-
 Identify any of the issues listed in your system instructions. Return ONLY the JSON object with a top-level "findings" key.
 """
 
