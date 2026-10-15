@@ -4,11 +4,11 @@ import os
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -107,6 +107,24 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=getattr(exc, "headers", None),
+        )
+    logger.exception(
+        "Unhandled server error processing %s %s: %s", request.method, request.url.path, exc
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error occurred.", "error": str(exc)},
+    )
+
 
 # Security: Allowed hosts
 # Configured via ALLOWED_HOSTS in .env (default: "*" = allow all).

@@ -138,6 +138,7 @@ class SwitchProxy:
             if key:
                 self._changeset.var_updates[f"__flag_{key}"] = True
                 self._changeset.var_updates[key] = True
+                self._changeset.story_flag_updates[key] = True
             return
 
         if eff_type == "unlock_exit" and self._context:

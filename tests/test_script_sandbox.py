@@ -571,3 +571,22 @@ tw.story.debug("Story debug should also NOT appear")
 
     # Verify no system debug messages were produced when debug is off
     assert len(ctx_no_debug.changeset.system_messages) == 0
+
+
+def test_script_changeset_story_flag_updates():
+    """Verifies that story flags set in scripts update story_flag_updates on ScriptChangeset."""
+    ctx = GameContext()
+    runner = ScriptRunner([])
+
+    code = """
+tw.flags.set("alien_ejected", True)
+tw.vars.set("reactor_timer", 10)
+"""
+    runner.execute_code(code, {"tw": ctx, "game": ctx})
+
+    assert ctx.changeset.story_flag_updates["alien_ejected"] is True
+    assert ctx.changeset.var_updates["alien_ejected"] is True
+    assert ctx.changeset.var_updates["__flag_alien_ejected"] is True
+    assert ctx.changeset.var_updates["reactor_timer"] == 10
+    assert ctx.changeset.has_changes is True
+

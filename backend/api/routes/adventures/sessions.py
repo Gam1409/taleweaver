@@ -731,7 +731,7 @@ async def start_session_for_template(
         script_vars["__init_script_executed__"] = True
         initial_entity_states["__script_vars__"] = script_vars
 
-        if cs.story_flag_updates:
+        if getattr(cs, "story_flag_updates", None):
             initial_entity_states["__switch_story_flags__"] = dict(cs.story_flag_updates)
 
         if cs.player_hp_change:

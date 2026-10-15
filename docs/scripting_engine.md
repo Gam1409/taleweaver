@@ -593,18 +593,10 @@ You can manage all scripts visually inside TaleWeaver:
 1. Navigate to the **Adventure Editor** for your adventure.
 2. Select the **Scripts** tab from the navigation sidebar.
 
-### Global Initialization Script Panel
-Located at the top of the Scripts tab:
-- **Expand / Collapse**: Click the header to open the editor for the global initialization script.
-- **Quick Snippet Templates**: Insert pre-configured templates with one click:
-  - `Global Variables`: Boilerplate for `tw.vars.set(...)` with strings, counters, flags, and lists.
-  - `Helper Functions`: Reusable `def` methods callable across all event scripts.
-  - `Setup Quest & Items`: Starting items, quest seeding, and initial story flags.
-- **Check Syntax**: Click to immediately validate Python syntax and AST compliance using the backend validator.
-- **Save / Clear**: Save the initialization script directly to the adventure manifest or clear it.
-
 ### Event Scripts & Triggers
-Below the initialization script panel:
+All scripts are managed directly in the **Scripts** tab:
+- **Session Initialization**: To execute logic when a new game session starts (initializing variables, quest flags, starting state), create an event script with the **`on_init`** ("On Session Init") trigger.
+
 - Click **New Script** to open the script authoring modal:
   - Enter a human-readable **Name** and unique **Script ID**.
   - Select the desired **Trigger** (`on_init`, `on_turn_start`, `on_enter_scene`, `on_interact`, `on_logic_pass_done`, `on_narration_done`, `on_turn_end`).

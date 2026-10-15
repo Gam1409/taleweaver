@@ -3197,6 +3197,11 @@ class GameTurnManager:
             script_vars.update(changeset.var_updates)
             entity_states["__script_vars__"] = script_vars
 
+        if changeset.story_flag_updates:
+            story_flags = dict(entity_states.get("__switch_story_flags__", {}))
+            story_flags.update(changeset.story_flag_updates)
+            entity_states["__switch_story_flags__"] = story_flags
+
         self.state.entity_states = entity_states
         flag_modified(self.state, "entity_states")
 

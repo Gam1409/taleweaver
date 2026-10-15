@@ -58,6 +58,7 @@ class ScriptChangeset:
     sequence_completed: bool = False
 
     var_updates: dict[str, Any] = field(default_factory=dict)
+    story_flag_updates: dict[str, Any] = field(default_factory=dict)
     game_completed: bool = False
     game_over: bool = False
     status_note: Optional[str] = None
@@ -91,6 +92,7 @@ class ScriptChangeset:
             or self.granted_award_keys
             or self.sequence_completed
             or self.var_updates
+            or self.story_flag_updates
             or self.game_completed
             or self.game_over
             or self.completed_condition_override
@@ -829,6 +831,8 @@ class StoryFlagsProxy:
 
     def get(self, key: str, default: Any = False) -> Any:
         flag_key = f"__flag_{key}"
+        if key in self._changeset.story_flag_updates:
+            return self._changeset.story_flag_updates[key]
         if flag_key in self._changeset.var_updates:
             return self._changeset.var_updates[flag_key]
         if key in self._changeset.var_updates:
@@ -838,6 +842,7 @@ class StoryFlagsProxy:
     def set(self, key: str, val: Any = True) -> None:
         self._changeset.var_updates[f"__flag_{key}"] = val
         self._changeset.var_updates[key] = val
+        self._changeset.story_flag_updates[key] = val
 
     def __getitem__(self, key: str) -> Any:
         return self.get(key)
