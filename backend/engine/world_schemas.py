@@ -11,7 +11,27 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
 
-class WorldSceneSchema(BaseModel):
+class WorldBaseSchema(BaseModel):
+    """Base schema for world generation models that normalizes null LLM outputs."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_null_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        for field_name, field_info in cls.model_fields.items():
+            key = field_info.alias if field_info.alias and field_info.alias in data else field_name
+            if key not in data or data[key] is not None:
+                continue
+            if field_info.default == "":
+                data[key] = ""
+                continue
+            if field_info.default_factory is list or field_info.default == []:
+                data[key] = []
+        return data
+
+
+class WorldSceneSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the scene, e.g., CASTLE_GATES")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(
@@ -24,27 +44,27 @@ class WorldSceneSchema(BaseModel):
         default=[],
         description="A list of up to 7 simple, non-interactable decorative objects, furniture, or background features present in the scene (e.g. ['metal table', 'faint light fixture']). These are not interactable entities and won't have images/stats, but describe the room better.",
     )
-    on_enter_scene_script: str = Field(
-        "",
+    on_enter_scene_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the protagonist enters the scene. Use empty string for none.",
     )
-    on_enter_scene_text: str = Field(
-        "",
+    on_enter_scene_text: Optional[str] = Field(
+        default="",
         description="Optional text output when the protagonist enters the scene. Use empty string for none.",
     )
-    on_leave_scene_script: str = Field(
-        "",
+    on_leave_scene_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the protagonist leaves the scene. Use empty string for none.",
     )
-    on_leave_scene_text: str = Field(
-        "",
+    on_leave_scene_text: Optional[str] = Field(
+        default="",
         description="Optional text output when the protagonist leaves the scene. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
 
 
-class WorldExitSchema(BaseModel):
+class WorldExitSchema(WorldBaseSchema):
     from_scene_id: str = Field(..., description="The ID of the source scene.")
     to_scene_id: str = Field(..., description="The ID of the destination scene.")
     label: str = Field(
@@ -60,63 +80,63 @@ class WorldExitSchema(BaseModel):
         ),
     )
     is_locked: bool = Field(..., description="Whether the path is initially blocked.")
-    lock_description: str = Field(
-        "",
+    lock_description: Optional[str] = Field(
+        default="",
         description="If locked, why? e.g. 'a heavy iron padlock'. Use empty string if not locked.",
     )
-    code_to_unlock: str = Field(
-        "",
+    code_to_unlock: Optional[str] = Field(
+        default="",
         description="Deterministic access code for the lock, e.g. 4711. Keep empty if no code is required.",
     )
-    item_to_unlock: str = Field(
-        "",
+    item_to_unlock: Optional[str] = Field(
+        default="",
         description="The ID of the item needed to unlock this path, e.g. IRON_KEY. Keep empty if no item is required.",
     )
-    rule_to_unlock: str = Field(
-        "",
+    rule_to_unlock: Optional[str] = Field(
+        default="",
         description="A soft narrative rule for unlocking, e.g. 'Protagonist overpersuades NPC_1 to open the door'. Keep empty if no soft rule is required.",
     )
-    on_open_exit_script: str = Field(
-        "",
+    on_open_exit_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when this exit is opened/traversed. Use empty string for none.",
     )
-    on_open_exit_text: str = Field(
-        "",
+    on_open_exit_text: Optional[str] = Field(
+        default="",
         description="Optional text output when this exit is opened/traversed. Use empty string for none.",
     )
-    on_exit_used_script: str = Field(
-        "",
+    on_exit_used_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when this exit is used/traversed. Use empty string for none.",
     )
-    on_exit_used_text: str = Field(
-        "",
+    on_exit_used_text: Optional[str] = Field(
+        default="",
         description="Optional text output when this exit is used/traversed. Use empty string for none.",
     )
-    unlock_expression: str = Field(
-        "",
+    unlock_expression: Optional[str] = Field(
+        default="",
         description="Deterministic script guard expression evaluated to allow unlocking the exit (e.g. tw.vars.get('puzzle_solved') == True). Keep empty if none.",
     )
-    on_unlock_success_script: str = Field(
-        "",
+    on_unlock_success_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when unlocking this exit succeeds. Use empty string for none.",
     )
-    on_unlock_success_text: str = Field(
-        "",
+    on_unlock_success_text: Optional[str] = Field(
+        default="",
         description="Optional text output when unlocking this exit succeeds. Use empty string for none.",
     )
-    on_unlock_failure_script: str = Field(
-        "",
+    on_unlock_failure_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when unlocking this exit fails. Use empty string for none.",
     )
-    on_unlock_failure_text: str = Field(
-        "",
+    on_unlock_failure_text: Optional[str] = Field(
+        default="",
         description="Optional text output when unlocking this exit fails. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
 
 
-class SpecialActionSchema(BaseModel):
+class SpecialActionSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the special action, e.g., HEAL_SPELL")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Short explanation of the action")
@@ -130,7 +150,7 @@ class SpecialActionSchema(BaseModel):
     damage_value: Optional[str] = Field(
         None, description="Damage or healing value, e.g. '15' (fixed) or '2d8+3' (rolled)"
     )
-    outcome_description: str = Field(
+    outcome_description: Optional[str] = Field(
         default="",
         description="Narrative description of what happens, especially for UTILITY actions.",
     )
@@ -147,7 +167,7 @@ class SpecialActionSchema(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class WorldNPCSchema(BaseModel):
+class WorldNPCSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the NPC, e.g., MAD_ALCHEMIST")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(
@@ -190,8 +210,8 @@ class WorldNPCSchema(BaseModel):
     source_asset_id: Optional[str] = Field(
         None, description="Optional source NPC ID to reuse an old portrait image."
     )
-    reveal_rule: str = Field(
-        "",
+    reveal_rule: Optional[str] = Field(
+        default="",
         description=(
             "If is_hidden=True: the condition that reveals this NPC. "
             "E.g. 'If the prot searches under the table', 'If the prot picks up BRASS_KEY', or 'If the NPC speaks'. "
@@ -217,26 +237,27 @@ class WorldNPCSchema(BaseModel):
         "PASSIVE",
         description="If ATTACK_ON_SIGHT, the NPC attacks as soon as the protagonist enters the scene.",
     )
-    on_defeat_script: str = Field(
-        "",
+    on_defeat_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the NPC is defeated. Use empty string for none.",
     )
-    on_defeat_text: str = Field(
-        "", description="Optional text the NPC says when defeated. Use empty string for none."
+    on_defeat_text: Optional[str] = Field(
+        default="",
+        description="Optional text the NPC says when defeated. Use empty string for none.",
     )
-    on_protagonist_enters_scene_script: str = Field(
-        "",
+    on_protagonist_enters_scene_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the protagonist enters the NPC's scene. Use empty string for none.",
     )
-    on_protagonist_enters_scene_text: str = Field(
-        "",
+    on_protagonist_enters_scene_text: Optional[str] = Field(
+        default="",
         description="Optional text the NPC says when the protagonist enters the scene. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
 
 
-class SwitchGatesSchema(BaseModel):
+class SwitchGatesSchema(WorldBaseSchema):
     item: Optional[str] = Field(
         default="", description="The item ID needed to pass this transition."
     )
@@ -269,7 +290,7 @@ class SwitchGatesSchema(BaseModel):
     model_config = {"populate_by_name": True, "extra": "forbid"}
 
 
-class SwitchTransitionSchema(BaseModel):
+class SwitchTransitionSchema(WorldBaseSchema):
     from_state: Optional[str] = Field(
         default="",
         alias="from",
@@ -312,7 +333,7 @@ class SwitchTransitionSchema(BaseModel):
     model_config = {"populate_by_name": True, "extra": "forbid"}
 
 
-class SwitchEffectSchema(BaseModel):
+class SwitchEffectSchema(WorldBaseSchema):
     type: str = Field(
         ..., description="The effect type: unlock_exit, unlock_container, or story_flag."
     )
@@ -326,7 +347,7 @@ class SwitchEffectSchema(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class SwitchOutcomeSchema(BaseModel):
+class SwitchOutcomeSchema(WorldBaseSchema):
     on_state: str = Field(..., description="The state trigger for these effects.")
     effects: list[SwitchEffectSchema] = Field(
         ..., description="List of effects triggered when the state is entered."
@@ -334,7 +355,7 @@ class SwitchOutcomeSchema(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class WorldObjectSchema(BaseModel):
+class WorldObjectSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the object, e.g., GOLDEN_KEY")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Physical characteristics and details.")
@@ -349,13 +370,14 @@ class WorldObjectSchema(BaseModel):
         description="One of: CONSUMABLE, WEARABLE, STATIC, COMBINABLE (deprecated), CONSTRUCTABLE, PICKABLE, WEAPON, TOOL, KEY, READABLE, CONTAINER, SWITCH",
     )
     wearable_slots: list[str] = Field(
-        ..., description="If WEARABLE, which slots? e.g. ['Head'], ['MainHand']. Use [] if none."
+        default_factory=list,
+        description="If WEARABLE, which slots? e.g. ['Head'], ['MainHand']. Use [] if none.",
     )
     is_hidden: bool = Field(
         ..., description="If True, the player must SEARCH or trigger an event to see this."
     )
-    reveal_rule: str = Field(
-        "",
+    reveal_rule: Optional[str] = Field(
+        default="",
         description=(
             "If is_hidden=True: the condition that reveals this object. "
             "E.g. 'If the prot searches the desk', 'If the prot picks up IRON_KEY'. "
@@ -365,24 +387,24 @@ class WorldObjectSchema(BaseModel):
     is_portable: bool = Field(
         ..., description="Whether the item can be picked up. False for STATIC objects."
     )
-    code_to_unlock: str = Field(
-        "",
+    code_to_unlock: Optional[str] = Field(
+        default="",
         description="Deterministic access code for locked containers, e.g. ALPHA or 4711. May be empty for open containers.",
     )
-    item_to_unlock: str = Field(
-        "",
+    item_to_unlock: Optional[str] = Field(
+        default="",
         description="Deterministic item ID required to unlock this container. May be empty for open containers.",
     )
-    rule_to_unlock: str = Field(
-        "",
+    rule_to_unlock: Optional[str] = Field(
+        default="",
         description="A soft narrative rule for unlocking locked containers, e.g. 'Protagonist defeats NPC_2'. May be empty for open containers.",
     )
     combination_ingredients: list[str] = Field(
         default_factory=list,
         description="Item IDs required to trigger a combination. For CONSTRUCTABLE, list ALL ingredient ids (minimum 2) that must be combined to materialize this item; the item must start is_hidden=True and is auto-revealed once every ingredient is combined. Use [] if none.",
     )
-    reveals_item_id: str = Field(
-        "",
+    reveals_item_id: Optional[str] = Field(
+        default="",
         description="Item slug revealed when combination occurs. Ignored for CONSTRUCTABLE (reveal is automatic). Use empty string if none.",
     )
 
@@ -401,20 +423,20 @@ class WorldObjectSchema(BaseModel):
         default_factory=list,
         description="List of object IDs inside this container object. Use [] if empty.",
     )
-    text_log_content: str = Field(
-        "",
+    text_log_content: Optional[str] = Field(
+        default="",
         description="Only for READABLE objects: visible text content, max 500 characters. Must be non-empty for READABLE objects. Paragraphs are allowed (use blank lines). Use empty string for non-readable items.",
     )
-    text_log_format: str = Field(
-        "",
+    text_log_format: Optional[str] = Field(
+        default="",
         description="Only for READABLE objects: one of DOCUMENT, SCROLL, BOOK, SIGN. Use empty string for non-readable items.",
     )
     switch_states: list[str] = Field(
         default_factory=list,
         description="Only for SWITCH objects: ordered states, e.g. ['OFF','ON'].",
     )
-    switch_initial_state: str = Field(
-        "", description="Only for SWITCH objects: initial state value."
+    switch_initial_state: Optional[str] = Field(
+        default="", description="Only for SWITCH objects: initial state value."
     )
     switch_transitions: list[SwitchTransitionSchema] = Field(
         default_factory=list,
@@ -424,12 +446,12 @@ class WorldObjectSchema(BaseModel):
         default_factory=list,
         description="Only for SWITCH objects: state-based effects (unlock_exit, unlock_container, story_flag).",
     )
-    on_success_script: str = Field(
-        "",
+    on_success_script: Optional[str] = Field(
+        default="",
         description="Only for SWITCH objects: optional script executed when a transition succeeds. Use empty string for none.",
     )
-    on_failure_script: str = Field(
-        "",
+    on_failure_script: Optional[str] = Field(
+        default="",
         description="Only for SWITCH objects: optional script executed when a transition fails. Use empty string for none.",
     )
     source_asset_id: Optional[str] = Field(
@@ -444,170 +466,176 @@ class WorldObjectSchema(BaseModel):
     weapon_cost_value: Optional[int] = Field(
         20, description="Only for WEAPON items: amount of resource consumed on attack."
     )
-    on_pickup_script: str = Field(
-        "",
+    on_pickup_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the item is picked up. Use empty string for none.",
     )
-    on_pickup_text: str = Field(
-        "",
+    on_pickup_text: Optional[str] = Field(
+        default="",
         description="Optional text output when the item is picked up. Use empty string for none.",
     )
-    on_drop_script: str = Field(
-        "",
+    on_drop_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the item is dropped. Use empty string for none.",
     )
-    on_drop_text: str = Field(
-        "", description="Optional text output when the item is dropped. Use empty string for none."
+    on_drop_text: Optional[str] = Field(
+        default="",
+        description="Optional text output when the item is dropped. Use empty string for none.",
     )
-    on_equip_script: str = Field(
-        "",
+    on_equip_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the item is equipped (only for equippables). Use empty string for none.",
     )
-    on_equip_text: str = Field(
-        "", description="Optional text output when the item is equipped. Use empty string for none."
+    on_equip_text: Optional[str] = Field(
+        default="",
+        description="Optional text output when the item is equipped. Use empty string for none.",
     )
-    on_unequip_script: str = Field(
-        "",
+    on_unequip_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when the item is unequipped. Use empty string for none.",
     )
-    on_unequip_text: str = Field(
-        "",
+    on_unequip_text: Optional[str] = Field(
+        default="",
         description="Optional text output when the item is unequipped. Use empty string for none.",
     )
-    unlock_expression: str = Field(
-        "",
+    unlock_expression: Optional[str] = Field(
+        default="",
         description="Deterministic script guard expression evaluated when unlocking this container. Keep empty if none.",
     )
-    on_unlock_success_script: str = Field(
-        "",
+    on_unlock_success_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when container unlocking succeeds. Use empty string for none.",
     )
-    on_unlock_success_text: str = Field(
-        "",
+    on_unlock_success_text: Optional[str] = Field(
+        default="",
         description="Optional text output when container unlocking succeeds. Use empty string for none.",
     )
-    on_unlock_failure_script: str = Field(
-        "",
+    on_unlock_failure_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when container unlocking fails. Use empty string for none.",
     )
-    on_unlock_failure_text: str = Field(
-        "",
+    on_unlock_failure_text: Optional[str] = Field(
+        default="",
         description="Optional text output when container unlocking fails. Use empty string for none.",
     )
-    on_read_script: str = Field(
-        "",
+    on_read_script: Optional[str] = Field(
+        default="",
         description="Only for READABLE objects: optional script executed when read. Use empty string for none.",
     )
-    on_read_text: str = Field(
-        "",
+    on_read_text: Optional[str] = Field(
+        default="",
         description="Only for READABLE objects: optional text output when read. Use empty string for none.",
     )
-    craft_guard_expression: str = Field(
-        "",
+    craft_guard_expression: Optional[str] = Field(
+        default="",
         description="Only for CONSTRUCTABLE objects: optional script guard expression evaluated during crafting. Keep empty if none.",
     )
-    on_craft_success_script: str = Field(
-        "",
+    on_craft_success_script: Optional[str] = Field(
+        default="",
         description="Only for CONSTRUCTABLE objects: optional script executed when crafting succeeds. Use empty string for none.",
     )
-    on_craft_success_text: str = Field(
-        "",
+    on_craft_success_text: Optional[str] = Field(
+        default="",
         description="Only for CONSTRUCTABLE objects: optional text output when crafting succeeds. Use empty string for none.",
     )
-    on_craft_failure_script: str = Field(
-        "",
+    on_craft_failure_script: Optional[str] = Field(
+        default="",
         description="Only for CONSTRUCTABLE objects: optional script executed when crafting fails. Use empty string for none.",
     )
-    on_craft_failure_text: str = Field(
-        "",
+    on_craft_failure_text: Optional[str] = Field(
+        default="",
         description="Only for CONSTRUCTABLE objects: optional text output when crafting fails. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
 
 
-class SequenceSchema(BaseModel):
+class SequenceSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the sequence, e.g., SEQ_1_DRAGON")
     order: int = Field(..., description="The sequence order (1, 2, 3...)")
     title: str = Field(..., description="Title of the section")
-    description: str = Field("", description="Narrative description for the AI Gamemaster")
-    walkthrough: str = Field("", description="The dedicated walkthrough/solution for this sequence")
-    end_condition: str = Field(
-        "", description="Condition that must be met to proceed to the next sequence"
+    description: Optional[str] = Field(
+        default="", description="Narrative description for the AI Gamemaster"
+    )
+    walkthrough: Optional[str] = Field(
+        default="", description="The dedicated walkthrough/solution for this sequence"
+    )
+    end_condition: Optional[str] = Field(
+        default="", description="Condition that must be met to proceed to the next sequence"
     )
     required_item_id: Optional[str] = Field(
-        "",
+        default="",
         description="Optional hard rule: ID of the item the protagonist must obtain to complete the sequence",
     )
     required_scene_id: Optional[str] = Field(
-        "",
+        default="",
         description="Optional hard rule: ID of the scene the protagonist must enter to complete the sequence",
     )
     required_defeated_npc_id: Optional[str] = Field(
-        "",
+        default="",
         description="Optional hard rule: ID of the NPC the protagonist must defeat to complete the sequence",
     )
     guard_expression: Optional[str] = Field(
-        "",
+        default="",
         description="Optional deterministic script guard expression evaluated to complete the sequence (e.g. tw.vars.get('puzzle_solved') == True). Keep empty if none.",
     )
     completion_guard_expression: Optional[str] = Field(
-        "",
+        default="",
         description="Alias for guard_expression.",
     )
     exp_reward: int = Field(default=100, description="XP reward for completion")
-    on_start_sequence_script: str = Field(
-        "",
+    on_start_sequence_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when this sequence begins. Use empty string for none.",
     )
-    on_start_sequence_text: str = Field(
-        "",
+    on_start_sequence_text: Optional[str] = Field(
+        default="",
         description="Optional text output when this sequence begins. Use empty string for none.",
     )
-    on_end_sequence_script: str = Field(
-        "",
+    on_end_sequence_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when this sequence ends/completes. Use empty string for none.",
     )
-    on_end_sequence_text: str = Field(
-        "",
+    on_end_sequence_text: Optional[str] = Field(
+        default="",
         description="Optional text output when this sequence ends/completes. Use empty string for none.",
     )
 
     model_config = {"extra": "ignore"}
 
 
-class QuestSchema(BaseModel):
+class QuestSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the quest, e.g., FIND_GOLDEN_KEY")
     title: str = Field(..., description="Short, descriptive title")
     description: str = Field(..., description="Narrative description of what needs to be done")
     goal: str = Field(..., description="Technical condition for completion (for GM reference)")
-    impact: str = Field(
-        "",
+    impact: Optional[str] = Field(
+        default="",
         description="How this affects the world when completed. Use empty string for standard quests.",
     )
     exp_reward: int = Field(..., description="EXP awarded for completion (e.g., 50, 100, 250)")
     status: str = Field(..., description="Current state: open, completed, failed")
-    required_item_id: str = Field(
-        "",
+    required_item_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Quest only completes once protagonist has this item ID in inventory. Use empty string for none.",
     )
-    required_scene_id: str = Field(
-        "",
+    required_scene_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Quest only completes once protagonist enters this scene ID. Use empty string for none.",
     )
-    required_defeated_npc_id: str = Field(
-        "",
+    required_defeated_npc_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Quest only completes once this NPC ID is defeated. Use empty string for none.",
     )
-    guard_expression: str = Field(
-        "",
+    guard_expression: Optional[str] = Field(
+        default="",
         description="Deterministic Python boolean expression evaluated against tw context. Quest only completes when True.",
     )
 
     model_config = {"extra": "ignore"}
 
 
-class AwardTemplateSchema(BaseModel):
+class AwardTemplateSchema(WorldBaseSchema):
     key: str = Field(..., description="Unique identifier for the award, e.g., SLAYER_OF_RATS")
     title: str = Field(..., description="Visual name of the award")
     description: str = Field(..., description="Short description shown to the player")
@@ -617,42 +645,46 @@ class AwardTemplateSchema(BaseModel):
     requirement: str = Field(
         ..., description="The specific rule/condition when the GM should grant this award"
     )
-    required_item_id: str = Field(
-        "",
+    required_item_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Award is granted once protagonist has this item ID in inventory. Use empty string for none.",
     )
-    required_scene_id: str = Field(
-        "",
+    required_scene_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Award is granted once protagonist enters this scene ID. Use empty string for none.",
     )
-    required_defeated_npc_id: str = Field(
-        "",
+    required_defeated_npc_id: Optional[str] = Field(
+        default="",
         description="Hard rule: Award is granted once this NPC ID is defeated. Use empty string for none.",
     )
-    guard_expression: str = Field(
-        "",
+    guard_expression: Optional[str] = Field(
+        default="",
         description="Deterministic Python boolean expression evaluated against tw context. Award is granted when True.",
     )
 
     model_config = {"extra": "ignore"}
 
 
-class EquipmentSchema(BaseModel):
-    Head: str = Field(..., description="Item ID for head slot or empty string")
-    Chest: str = Field(..., description="Item ID for chest slot or empty string")
-    Hands: str = Field(..., description="Item ID for hands slot or empty string")
-    Legs: str = Field(..., description="Item ID for legs slot or empty string")
-    Feet: str = Field(..., description="Item ID for feet slot or empty string")
-    Neck: str = Field(..., description="Item ID for neck slot or empty string")
-    Ring_1: str = Field(..., description="Item ID for ring 1 slot or empty string")
-    Ring_2: str = Field(..., description="Item ID for ring 2 slot or empty string")
-    MainHand: str = Field(..., description="Item ID for main hand slot or empty string")
-    OffHand: str = Field(..., description="Item ID for off hand slot or empty string")
+class EquipmentSchema(WorldBaseSchema):
+    Head: Optional[str] = Field(default="", description="Item ID for head slot or empty string")
+    Chest: Optional[str] = Field(default="", description="Item ID for chest slot or empty string")
+    Hands: Optional[str] = Field(default="", description="Item ID for hands slot or empty string")
+    Legs: Optional[str] = Field(default="", description="Item ID for legs slot or empty string")
+    Feet: Optional[str] = Field(default="", description="Item ID for feet slot or empty string")
+    Neck: Optional[str] = Field(default="", description="Item ID for neck slot or empty string")
+    Ring_1: Optional[str] = Field(default="", description="Item ID for ring 1 slot or empty string")
+    Ring_2: Optional[str] = Field(default="", description="Item ID for ring 2 slot or empty string")
+    MainHand: Optional[str] = Field(
+        default="", description="Item ID for main hand slot or empty string"
+    )
+    OffHand: Optional[str] = Field(
+        default="", description="Item ID for off hand slot or empty string"
+    )
 
     model_config = {"extra": "forbid"}
 
 
-class ProtagonistSchema(BaseModel):
+class ProtagonistSchema(WorldBaseSchema):
     name: str = Field(..., description="The name of the player character.")
     role: str = Field(..., description="The professional or narrative role of the player.")
     description: str = Field(..., description="Narrative description of appearance and backstory.")
@@ -671,7 +703,7 @@ class ProtagonistSchema(BaseModel):
     charisma: int = Field(..., description="Base charisma stat (1-99)")
     armor_class: int = Field(..., description="Base armor class stat (1-99)")
     starting_inventory: list[str] = Field(
-        ..., description="List of object IDs in player's pocket. Use [] if none."
+        default_factory=list, description="List of object IDs in player's pocket. Use [] if none."
     )
     starting_equipment: EquipmentSchema = Field(..., description="Initial equipment setup.")
     hp: int = Field(..., description="Base health points (60-120)")
@@ -684,27 +716,27 @@ class ProtagonistSchema(BaseModel):
         default=[],
         description="List of up to 5 special actions the protagonist has at the start. Max 5.",
     )
-    on_hp_change_script: str = Field(
-        "",
+    on_hp_change_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when protagonist HP changes. Use empty string for none.",
     )
-    on_hp_change_text: str = Field(
-        "",
+    on_hp_change_text: Optional[str] = Field(
+        default="",
         description="Optional text output when protagonist HP changes. Use empty string for none.",
     )
-    on_status_change_script: str = Field(
-        "",
+    on_status_change_script: Optional[str] = Field(
+        default="",
         description="Optional script executed when protagonist status or stats change. Use empty string for none.",
     )
-    on_status_change_text: str = Field(
-        "",
+    on_status_change_text: Optional[str] = Field(
+        default="",
         description="Optional text output when protagonist status or stats change. Use empty string for none.",
     )
 
     model_config = {"extra": "forbid"}
 
 
-class WorldScriptSchema(BaseModel):
+class WorldScriptSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the script, e.g. SCRIPT_LEVER_PUZZLE")
     name: str = Field(..., description="Human-readable title for the script")
     trigger: Literal[
@@ -737,7 +769,7 @@ class WorldScriptSchema(BaseModel):
         return data
 
 
-class WorldManifesto(BaseModel):
+class WorldManifesto(WorldBaseSchema):
     """The complete blueprint of the generated world."""
 
     protagonist: ProtagonistSchema
@@ -756,15 +788,17 @@ class WorldManifesto(BaseModel):
     rules: str = Field(
         ..., description="Special rules or mechanics specific to this adventure world."
     )
-    intro_text: str = Field(
-        ...,
+    intro_text: Optional[str] = Field(
+        default="",
         description="Optional intro text shown once when a new session starts. Use empty string if none.",
     )
-    completed_condition: str = Field(
-        default="", description="Technical or narrative soft rule condition for winning the adventure."
+    completed_condition: Optional[str] = Field(
+        default="",
+        description="Technical or narrative soft rule condition for winning the adventure.",
     )
-    gameover_condition: str = Field(
-        default="", description="Technical or narrative soft rule condition for losing the adventure."
+    gameover_condition: Optional[str] = Field(
+        default="",
+        description="Technical or narrative soft rule condition for losing the adventure.",
     )
     completed_guard_expression: Optional[str] = Field(
         default="",
