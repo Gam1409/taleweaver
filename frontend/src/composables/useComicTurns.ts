@@ -1,35 +1,9 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import DOMPurify from 'dompurify'
 import type { ChatMessage } from '@/types'
+import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
 
-export interface DialogueSegment {
-  speaker: string
-  speakerEntity?: any
-  target?: string
-  targetEntity?: any
-  avatarUrl?: string | null
-  isPlayer?: boolean
-  text: string
-  isAction?: boolean
-  voiceTag?: string
-  isNarration?: boolean
-}
-
-export interface ComicTurn {
-  index: number
-  userMessage?: ChatMessage | null
-  userIsDialogue?: boolean
-  userTargetName?: string | null
-  userTargetEntity?: any
-  userSpeechText?: string
-  assistantMessage?: ChatMessage | null
-  systemMessages: ChatMessage[]
-  licenseMessage?: ChatMessage | null
-  narration: string
-  dialogues: DialogueSegment[]
-  revealedItemIds: string[]
-  timestamp?: string
-}
+export type { ComicExchange, ComicTurn, DialogueSegment } from './comicPages'
 
 export interface UseComicTurnsOptions {
   messages: Ref<ChatMessage[]>
@@ -388,99 +362,13 @@ export function useComicTurns(options: UseComicTurnsOptions) {
   const { messages, entities, npcMetadata, sheet } = options
   const viewingTurnIndex = ref<number | null>(null)
 
-  const gameTurns = computed<ComicTurn[]>(() => {
-    const msgs = messages.value || []
-    if (!msgs.length) return []
-
-    const newTurn = (index: number): ComicTurn => ({
-      index,
-      systemMessages: [],
-      licenseMessage: null,
-      narration: '',
-      dialogues: [],
-      revealedItemIds: [],
+  const gameTurns = computed<ComicTurn[]>(() =>
+    buildComicPages(messages.value || [], {
+      parseUser: (msg) => parseUserMessage(msg, entities.value, npcMetadata.value),
+      parseAssistant: (content) =>
+        parseAssistantContent(content, sheet.value, entities.value, npcMetadata.value),
     })
-
-    const turns: ComicTurn[] = []
-    let currentTurn: ComicTurn = newTurn(0)
-    // Index into currentTurn.systemMessages where events received after the narration start.
-    // They belong to the same page (e.g. "Added X to your inventory"), unless another
-    // narration follows without a player message, which then takes them along.
-    let trailingSystemStart: number | null = null
-
-    for (let i = 0; i < msgs.length; i++) {
-      const msg = msgs[i]
-      if (msg.role === 'license_info') {
-        currentTurn.licenseMessage = msg
-        continue
-      }
-
-      if (msg.role === 'user') {
-        if (
-          currentTurn.userMessage ||
-          currentTurn.assistantMessage ||
-          currentTurn.narration ||
-          currentTurn.systemMessages.length ||
-          currentTurn.licenseMessage
-        ) {
-          turns.push(currentTurn)
-          currentTurn = newTurn(turns.length)
-        }
-        trailingSystemStart = null
-        currentTurn.userMessage = msg
-        const userParsed = parseUserMessage(msg, entities.value, npcMetadata.value)
-        currentTurn.userIsDialogue = userParsed.isDialogue
-        currentTurn.userTargetName = userParsed.targetName
-        currentTurn.userTargetEntity = userParsed.targetEntity
-        currentTurn.userSpeechText = userParsed.speechText
-        currentTurn.timestamp = msg.timestamp
-      } else if (msg.role === 'assistant') {
-        if (
-          currentTurn.assistantMessage ||
-          currentTurn.narration ||
-          currentTurn.dialogues.length > 0
-        ) {
-          // A narration without a new player message (e.g. scene transition) opens a new page
-          // and takes the events that led up to it.
-          const carriedSystemMessages =
-            trailingSystemStart === null ? [] : currentTurn.systemMessages.splice(trailingSystemStart)
-          turns.push(currentTurn)
-          currentTurn = newTurn(turns.length)
-          currentTurn.systemMessages.push(...carriedSystemMessages)
-        }
-        trailingSystemStart = null
-        currentTurn.assistantMessage = msg
-        currentTurn.timestamp = msg.timestamp || currentTurn.timestamp
-        if (msg.itemIds && Array.isArray(msg.itemIds)) {
-          currentTurn.revealedItemIds.push(...msg.itemIds)
-        }
-        const parsed = parseAssistantContent(msg.content, sheet.value, entities.value, npcMetadata.value)
-        currentTurn.narration = parsed.narration
-        currentTurn.dialogues.push(...parsed.dialogues)
-      } else if (msg.role === 'system') {
-        // Events after the narration stay on this page instead of opening a system-only page.
-        const isAfterNarration =
-          Boolean(currentTurn.assistantMessage || currentTurn.narration) ||
-          currentTurn.dialogues.length > 0
-        if (isAfterNarration && trailingSystemStart === null) {
-          trailingSystemStart = currentTurn.systemMessages.length
-        }
-        currentTurn.systemMessages.push(msg)
-      }
-    }
-
-    if (
-      currentTurn.userMessage ||
-      currentTurn.assistantMessage ||
-      currentTurn.narration ||
-      currentTurn.systemMessages.length ||
-      currentTurn.licenseMessage
-    ) {
-      turns.push(currentTurn)
-    }
-
-    return turns
-  })
+  )
 
   const activeTurnIndex = computed(() => {
     if (viewingTurnIndex.value !== null && viewingTurnIndex.value >= 0 && viewingTurnIndex.value < gameTurns.value.length) {
@@ -513,8 +401,10 @@ export function useComicTurns(options: UseComicTurnsOptions) {
 
   const activeSpeakers = computed<Set<string>>(() => {
     const speakers = new Set<string>()
-    if (!activeTurn.value) return speakers
-    for (const d of activeTurn.value.dialogues) {
+    // Highlight the NPCs speaking in the latest exchange of the page.
+    const latestExchange = activeTurn.value?.exchanges[activeTurn.value.exchanges.length - 1]
+    if (!latestExchange) return speakers
+    for (const d of latestExchange.dialogues) {
       if (d.isPlayer) continue
       if (d.speaker) speakers.add(d.speaker.toLowerCase())
       if (d.speakerEntity?.id) speakers.add(String(d.speakerEntity.id).toLowerCase())

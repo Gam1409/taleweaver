@@ -544,6 +544,9 @@ class ChatResponse(BaseModel):
     quests: Optional[list[dict[str, Any]]] = None
     awards: Optional[list[dict[str, Any]]] = None
     active_sequence: Optional[dict[str, Any]] = None
+    # Current scene/sequence: the client groups the story into one page per scene/sequence.
+    scene_id: Optional[str] = None
+    sequence_id: Optional[str] = None
     is_completed: bool = False
     game_over: bool = False
     game_completed: bool = False

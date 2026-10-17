@@ -1,8 +1,12 @@
 export interface ChatMessage {
+  id?: string
   role: 'user' | 'assistant' | 'system' | 'thought' | 'license_info'
   content: string
   timestamp: Date
   itemIds?: string[]
+  /** Scene/sequence the message belongs to; the story feed shows one page per scene/sequence. */
+  scene_id?: string | null
+  sequence_id?: string | null
 }
 
 /** Character sheet snapshot pushed by the server after every action. */
