@@ -118,7 +118,12 @@ const exitUnlockModalTarget = ref<any>(null)
 const exitUnlockBusy = ref(false)
 const exitUnlockError = ref('')
 const exitTraversalBusy = ref<string>('')
-const sceneTransitionTarget = ref<{ label: string; targetSceneName: string; targetSceneId: string } | null>(null)
+const sceneTransitionTarget = ref<{
+  label: string
+  targetSceneName: string
+  targetSceneId: string
+  targetSceneImage?: string | null
+} | null>(null)
 
 const saveSessionNote = async (note: string) => {
   isSavingNote.value = true
@@ -837,6 +842,24 @@ const resolveSceneName = (sceneId?: string | null): string => {
   return formatSceneIdToTitle(raw)
 }
 
+const resolveSceneImage = (sceneId?: string | null): string | null => {
+  if (!sceneId) return null
+  const raw = String(sceneId).trim()
+  if (!raw) return null
+  const upper = raw.toUpperCase()
+  const safe = raw.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()
+
+  const node = nodes.value?.[safe] || nodes.value?.[upper] || nodes.value?.[raw]
+  if (node?.image_url) return String(node.image_url)
+
+  const mapNodes = Array.isArray(mapData.value?.nodes) ? mapData.value.nodes : []
+  const found = mapNodes.find((n: any) => {
+    const nid = String(n.id || n.key || '').trim().toUpperCase()
+    return nid === upper || nid === safe
+  })
+  return found?.image_url ? String(found.image_url) : null
+}
+
 const currentSceneName = computed(() => {
   const curId = sheet.value?.scene_id || sheet.value?.current_scene_id || sheet.value?.current_scene
   if (!curId) return 'Unknown Location'
@@ -851,6 +874,7 @@ const traverseSceneExit = async (exit: any, exitRef: string) => {
     label: exitDisplayName(exit),
     targetSceneName,
     targetSceneId: targetId,
+    targetSceneImage: exit?.target_scene_image || resolveSceneImage(targetId),
   }
   try {
     // Use the sendMessage pipeline so the scene transition triggers

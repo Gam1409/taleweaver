@@ -48,13 +48,13 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "  * If using hard rules / scripted guard: populate `gameover_guard_expression` (e.g. \"tw.vars.get('countdown') <= 0 or tw.vars.get('alarm_tripped') == True\") and leave `gameover_condition: \"\"`.\n"
     "- SEQUENCES (CHAPTERS):\n"
     "  * If using a soft narrative transition: populate `end_condition` and leave `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, and `guard_expression` empty.\n"
-    "  * If using deterministic hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `end_condition: \"\"`.\n"
+    '  * If using deterministic hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `end_condition: ""`.\n'
     "- SIDE QUESTS (`quests`):\n"
     "  * If using a soft rule: populate `goal` and leave `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, `guard_expression` empty.\n"
-    "  * If using hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `goal: \"\"`.\n"
+    '  * If using hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `goal: ""`.\n'
     "- AWARDS (`awards`):\n"
     "  * If using a soft rule: populate `requirement` and leave `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, `guard_expression` empty.\n"
-    "  * If using hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `requirement: \"\"`.\n"
+    '  * If using hard rules: populate at least one of `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, or `guard_expression`, and leave `requirement: ""`.\n'
     "- CONTAINERS & EXITS:\n"
     "  * Use EITHER a soft narrative `rule_to_unlock` OR deterministic unlock fields (`code_to_unlock`, `item_to_unlock`, `unlock_expression`). Never mix them on the same container or exit.\n\n"
     "SCENES & DECORATIVE OBJECTS:\n"
@@ -340,8 +340,10 @@ Variables: outcome_json.
 """
 
 GM_NARRATION_NEW_LOCATION_SUFFIX = (
-    "The player moved to a NEW location. Write a rich, atmospheric introduction (1-2 paragraphs). "
-    "Describe the architecture, smell, and general mood."
+    "The player moved to a NEW location. Write a compact, atmospheric introduction "
+    "(max 2 short paragraphs, about 120 words in total). "
+    "Pick the 2-3 most striking details (architecture, smell, mood) and the most important "
+    "interactive elements; leave the rest for the player to discover by examining."
 )
 """
 Instruction for the GM when the player enters a new scene.
@@ -368,6 +370,9 @@ Default instruction for standard interactions to keep the game moving.
 GM_NARRATION_MANDATORY_FORMATTING = (
     "Do not mention numbers, IDs, or system terms. "
     "1-2 short paragraphs max for standard actions. Up to 3 paragraphs ONLY for new scenes or major events.\n\n"
+    "COMPACT TEXT BLOCKS (CRITICAL): Every prose paragraph has at most 3 sentences (roughly 60 words). "
+    "Split longer passages into separate paragraphs with a blank line. "
+    "Never embed NPC speech inside a prose paragraph — it always goes on its own dialogue line.\n\n"
     "PACING & CONCISENESS (CRITICAL): Keep dialogue and narrative prose crisp, natural, and engaging. "
     "DO NOT produce rambling, endless walls of text or excessive exposition dumps. "
     "NPC dialogue must remain snappy and interactive (1-3 sentences per character per turn). "
