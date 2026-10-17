@@ -199,7 +199,8 @@ class TurnProgressionBuilder:
         )
 
     @staticmethod
-    def build_progression_event(intent: AdventureGeneratorToolIntent) -> GameEvent:
+    def build_progression_event(intent: AdventureGeneratorToolIntent | Any) -> GameEvent:
+        """Maps a chat-mode progression intent onto a GameEvent for the guardrail chain."""
         return GameEvent(
             narrative_description=intent.narrative_description or "",
             hp_change=intent.hp_change,
@@ -223,6 +224,8 @@ class TurnProgressionBuilder:
             exit_label=intent.exit_label,
             moved_entities=intent.moved_entities,
             updated_entities=intent.updated_entities,
+            updated_exits=getattr(intent, "updated_exits", None),
+            discovered_entity_ids=intent.discovered_entity_ids,
             deleted_entities=intent.deleted_entities,
             extra_time_minutes=intent.extra_time_minutes,
         )
@@ -373,10 +376,7 @@ class TurnSessionStateHelper:
         data = getattr(self.manager.state, "compressed_history", None)
         if not data:
             return ""
-        if isinstance(data, dict):
-            summary_text = data.get("summary") or ""
-        else:
-            summary_text = str(data)
+        summary_text = (data.get("summary") or "") if isinstance(data, dict) else str(data)
         summary_text = summary_text.strip()
         if not summary_text:
             return ""

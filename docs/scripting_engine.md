@@ -55,18 +55,20 @@ While TaleWeaver's generative LLM master creates rich, adaptive prose and rolepl
                            +-----------+------------+
                                        |
                                        v
-                           [on_turn_start scripts]
-                                       |
-                                       v
          +-----------------------------------------------------------+
-         |                     TaleWeaver Turn                       |
+         |                 Player Message Processing                 |
          |  - Scene transition  --> [on_enter_scene scripts]         |
          |  - Entity action     --> [on_interact scripts]            |
-         |  - Rule checks, combat, & LLM narration                  |
+         |  - Rule checks & combat --> [on_logic_pass_done scripts]  |
          +-----------------------------+-----------------------------+
                                        |
+                     scene or sequence changed this message?
+                                       |  yes
                                        v
-                            [on_turn_end scripts]
+               [on_turn_end] -> time + status ticks -> [on_turn_start]
+                                       |
+                                       v
+                      LLM narration --> [on_narration_done scripts]
                                        |
                                        v
                            +-----------+------------+
@@ -99,12 +101,14 @@ Scripts declare a trigger event and an optional target entity or scene.
 | Trigger | When it Executes | Target Field Usage |
 | :--- | :--- | :--- |
 | `on_init` | When a new game session starts, immediately after initial world manifest and entity state setup. | Global (`*` or empty). |
-| `on_turn_start` | Immediately when player submits an input, before LLM turn generation. | Global (`*` or empty). |
+| `on_turn_start` | When a new in-game turn begins, i.e. right after the player's scene or the active sequence changed (after `on_turn_end` of the previous turn, before narration). | Global (`*` or empty). |
 | `on_enter_scene` | When the player enters a new scene. | Specific `scene_id` or empty for any scene. |
 | `on_interact` | When the player examines, attacks, talks to, or manipulates an entity. | Specific `entity_id` (NPC or object) or empty for all. |
 | `on_logic_pass_done` | After game mechanics and state mutations finish, before narration is generated. | Global (`*` or empty). |
 | `on_narration_done` | After narration generation completes, before final turn persistence. | Global (`*` or empty). |
-| `on_turn_end` | After LLM narration and state changes are computed, before client response. | Global (`*` or empty). |
+| `on_turn_end` | When the current in-game turn ends, i.e. when the player's scene or the active sequence changed (before `on_turn_start` of the next turn). | Global (`*` or empty). |
+
+> **In-game turns vs. player messages:** An in-game turn spans all player messages within one scene and sequence. Base time (`time_per_turn`), status-effect ticks, and the `on_turn_end` / `on_turn_start` hooks only fire on a scene or sequence change. Use `on_logic_pass_done` or `on_narration_done` for logic that must run on every player message.
 
 ### Inline Entity Triggers
 
@@ -485,6 +489,8 @@ else:
 ### Example 5: Turn-Based Survival Countdown
 Trigger: `on_turn_end`  
 Target: `*`
+
+The countdown advances once per in-game turn (scene or sequence change). For a per-message countdown use `on_narration_done` instead.
 
 ```python
 # Increment turn counter

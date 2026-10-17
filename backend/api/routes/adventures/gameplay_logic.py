@@ -2,20 +2,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import random
 import re
 import time
-import uuid
 from types import SimpleNamespace
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
-from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from backend.api.routes.adventures.logic import AdventureLogic
@@ -25,42 +21,40 @@ from backend.api.routes.adventures.turn_helpers import (
     TurnSessionStateHelper,
 )
 from backend.api.routes.adventures.turn_llm_pipeline import TurnLlmContextBuilder
+from backend.api.routes.adventures.turn_pass_flow import (
+    advance_in_game_turn,
+    crossed_turn_boundary,
+    extract_usage_tokens,
+    run_guardrail_chain,
+    turn_anchor,
+)
+from backend.api.routes.adventures.turn_prompt_layout import (
+    build_exit_description_task,
+    build_narration_messages,
+    build_narration_turn_block,
+    build_outcome_json,
+    build_pass1_user_prompt,
+)
 from backend.core import prompts
 from backend.core.config import settings
 from backend.core.llm_logger import log_structured_event
 from backend.core.llm_router import GameMasterLLM
-from backend.core.prompts import (
-    COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT,
-    COMBAT_SPECIAL_EVENT_USER_PROMPT_TEMPLATE,
-    FINAL_REPORT_COMPLETED_FALLBACK,
-    FINAL_REPORT_COMPLETED_SYSTEM_PROMPT,
-    FINAL_REPORT_GAMEOVER_FALLBACK,
-    FINAL_REPORT_GAMEOVER_SYSTEM_PROMPT,
-    INSPECT_SEARCH_INTENT_GUARD_SYSTEM_PROMPT,
-)
 from backend.engine.command_parser import CommandParser
-from backend.engine.debug_engine import DebugEngine
 from backend.engine.map_engine import MapEngine
-from backend.engine.quest_manager import QuestManager
 from backend.engine.session_checkpoint_service import SessionCheckpointService
-from backend.engine.adventure_generator_service import AdventureGeneratorService
+from backend.engine.llm_intents import ChatProgressionIntent, MechanicsIntent, to_game_event
 from backend.engine.rule_engine import (
     RESOURCE_CAP,
     AdventureGenerationRequest,
     AdventureGeneratorToolIntent,
     AttackResult,
-    EntityMovement,
-    ExitUpdate,
     GameEvent,
     GameOverException,
-    RuleEngine,
     SkillCheckResult,
-    ToolResults,
     WorldEntityUpdate,
 )
 from backend.engine.scripting import GameContext, ScriptChangeset, ScriptRunner, ScriptMessage
 from backend.engine.skill_check import roll_attack, roll_skill_check
-from backend.engine.stat_aggregator import calculate_total_stats
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -71,6 +65,14 @@ from backend.utils.path_security import ensure_within_data_dir as _ensure_within
 from backend.utils.path_security import sanitize_path_component as _sanitize_path_component
 
 logger = logging.getLogger(__name__)
+
+# Public API. `random` is re-exported on purpose: turn_combat uses `gl.random` and tests
+# patch `gameplay_logic.random.*`.
+__all__ = [
+    "WALKTHROUGH_REVEAL_COST",
+    "GameTurnManager",
+    "random",
+]
 
 # Constants
 WALKTHROUGH_REVEAL_COST = 150
@@ -238,12 +240,14 @@ def _llm_error_type(exc: Exception) -> str | None:
     return None
 
 
-from backend.api.routes.adventures.turn_adventure_gen import TurnAdventureGenManager
-from backend.api.routes.adventures.turn_combat import TurnCombatManager
-from backend.api.routes.adventures.turn_guardrails import TurnGuardrailsManager
-from backend.api.routes.adventures.turn_interactions import TurnInteractionsManager
-from backend.api.routes.adventures.turn_state_applier import TurnStateApplier
-from backend.api.routes.adventures.turn_suggestions import TurnSuggestionsManager
+# Imported after the error helpers and constants above on purpose: these modules import
+# WALKTHROUGH_REVEAL_COST / _friendly_llm_* from this module at load time (circular import).
+from backend.api.routes.adventures.turn_adventure_gen import TurnAdventureGenManager  # noqa: E402
+from backend.api.routes.adventures.turn_combat import TurnCombatManager  # noqa: E402
+from backend.api.routes.adventures.turn_guardrails import TurnGuardrailsManager  # noqa: E402
+from backend.api.routes.adventures.turn_interactions import TurnInteractionsManager  # noqa: E402
+from backend.api.routes.adventures.turn_state_applier import TurnStateApplier  # noqa: E402
+from backend.api.routes.adventures.turn_suggestions import TurnSuggestionsManager  # noqa: E402
 
 
 class GameTurnManager:
@@ -270,7 +274,7 @@ class GameTurnManager:
             self,
             gm_notes_prompt_max_items=GM_NOTES_PROMPT_MAX_ITEMS,
             gm_chat_rule_pass_npcs_max_items=GM_CHAT_RULE_PASS_NPCS_MAX_ITEMS,
-            gm_chat_prompt_template=prompts.GM_CHAT_MINIMAL_RULE_PASS_PROMPT,
+            gm_chat_prompt_template=prompts.GM_CHAT_PROGRESSION_STATE_TEMPLATE,
         )
         self._session_helper = TurnSessionStateHelper(
             self,
@@ -288,6 +292,9 @@ class GameTurnManager:
         self.suggestions = TurnSuggestionsManager(self)
         self._pending_checkpoint_reasons: set[str] = set()
         self._checkpoint_scene_label: str | None = None
+        # (scene, sequence) at the start of the player's message; an in-game turn only
+        # advances when this changes (see turn_pass_flow.advance_in_game_turn).
+        self._turn_anchor: tuple[Any, Any] | None = None
 
     def _queue_checkpoint(self, reason: str, *, scene_label: str | None = None) -> None:
         self._pending_checkpoint_reasons.add(reason)
@@ -393,70 +400,15 @@ class GameTurnManager:
         return cm
 
     async def _build_narration_messages(
-        self, narration_prompt: str, user_msg: str
+        self, narration_prompt: str, user_msg: str, turn_context: str = ""
     ) -> tuple[list[dict[str, str]], int]:
-        """
-        Builds the multi-turn messages array for Pass 2 (narration).
-        Includes the system prompt, up to max_memory_turns previous turns of context,
-        and the current turn's player action with any intermediate system events.
-        Returns (messages, max_turns_configured).
-        """
-        max_turns = getattr(self.state, "max_memory_turns", None)
-        if max_turns is None and self.adventure:
-            max_turns = getattr(self.adventure, "max_memory_turns", 10)
-        if max_turns is None:
-            max_turns = 10
-        max_turns = max(0, int(max_turns))
+        """Builds the multi-turn messages array for Pass 2 (narration).
 
-        # Query all session messages in order
-        res = await self.db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == self.state.session_id)
-            .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        See turn_prompt_layout.build_narration_messages. Returns (messages, max_turns_configured).
+        """
+        return await build_narration_messages(
+            self.db, self.state, self.adventure, narration_prompt, user_msg, turn_context
         )
-        all_msgs = list(res.scalars().all())
-
-        # Identify turn boundaries (each player action starts with role == "user")
-        user_indices = [i for i, m in enumerate(all_msgs) if m.role == "user"]
-
-        if not user_indices:
-            return [
-                {"role": "system", "content": narration_prompt},
-                {"role": "user", "content": user_msg},
-            ], max_turns
-
-        # The last user message index corresponds to the current turn
-        curr_turn_idx = user_indices[-1]
-        prev_user_indices = user_indices[:-1]
-
-        if max_turns == 0 or not prev_user_indices:
-            start_msg_idx = curr_turn_idx
-        elif len(prev_user_indices) <= max_turns:
-            start_msg_idx = prev_user_indices[0]
-        else:
-            start_msg_idx = prev_user_indices[-max_turns]
-
-        selected_db_msgs = all_msgs[start_msg_idx:]
-
-        messages: list[dict[str, str]] = [{"role": "system", "content": narration_prompt}]
-        for m in selected_db_msgs:
-            if m.role == "user":
-                messages.append({"role": "user", "content": m.content})
-            elif m.role == "assistant":
-                messages.append({"role": "assistant", "content": m.content})
-            elif m.role == "system":
-                # Ensure compatibility with Anthropic Claude & Gemini:
-                # Merge or attach system messages into the user turn as game events
-                if messages and messages[-1]["role"] == "user":
-                    messages[-1]["content"] += f"\n\n[Game Event: {m.content}]"
-                else:
-                    messages.append({"role": "user", "content": f"[Game Event: {m.content}]"})
-
-        # Safety check: ensure last message is role="user" so the LLM responds as assistant
-        if not messages or messages[-1]["role"] != "user":
-            messages.append({"role": "user", "content": user_msg})
-
-        return messages, max_turns
 
     @staticmethod
     def _compact_json(payload: object) -> str:
@@ -644,25 +596,22 @@ class GameTurnManager:
         exits: list[dict],
         locked_containers: list[dict] | None = None,
     ) -> str:
-        prompt = self._progression.build_chat_rule_pass_prompt(quests, awards, npcs, scenes, exits)
+        """Builds the per-turn CURRENT STATE block for the chat-mode rule pass.
 
-        # Inject locked-container context so the LLM can handle natural-language unlocks
-        if locked_containers:
-            import json as _json
-
-            prompt += (
-                "\n\nLOCKED CONTAINERS IN THIS SESSION:\n"
-                "Use `updated_entities` with `locked=false` for the matching `entity_id` when the player "
-                "provides the correct code or possesses the required item.\n"
-                + _json.dumps(locked_containers, ensure_ascii=False, separators=(",", ":"))
-            )
-
-        # Dynamic items are permanently disabled
-        prompt += (
-            "\n\nDYNAMIC ITEMS IS DISABLED:\n"
-            "- CRITICAL: You are NOT allowed to create/generate brand new items on-the-fly. You must ONLY move/use pre-defined items that already exist in the world or in NPC inventories."
+        The static instructions (incl. the disabled dynamic items rule) live in
+        prompts.GM_CHAT_PROGRESSION_RULES_PROMPT, which is sent as system prompt.
+        """
+        state_block = self._progression.build_chat_rule_pass_prompt(
+            quests, awards, npcs, scenes, exits
         )
-        return prompt
+        if not locked_containers:
+            return state_block
+        return state_block + (
+            "LOCKED CONTAINERS (unlock via `updated_entities` with `locked=false` for the matching "
+            "`entity_id` when the player provides the correct code or carries the required item): "
+            + json.dumps(locked_containers, ensure_ascii=False, separators=(",", ":"))
+            + "\n"
+        )
 
     def _get_gm_notes(self) -> list[str]:
         return self._session_helper.get_gm_notes()
@@ -832,6 +781,7 @@ class GameTurnManager:
         self.avatar.inventory = jsonable_encoder(self.avatar.inventory)
         self.avatar.equipment = jsonable_encoder(self.avatar.equipment)
 
+        self._turn_anchor = turn_anchor(self.state)
         user_msg = message.strip()
         actual_user_input = user_msg
         if not user_msg:
@@ -1116,7 +1066,10 @@ class GameTurnManager:
                     yield f"event: status\ndata: {json.dumps({'content': 'The Game Master reacts...'})}\n\n"
                     try:
                         async for chunk in self._run_llm_cycle(
-                            reaction_prompt, False, language=language
+                            reaction_prompt,
+                            False,
+                            language=language,
+                            narration_only=pickup.get("mode") == "narration",
                         ):
                             yield chunk
                     except asyncio.CancelledError:
@@ -1162,14 +1115,10 @@ class GameTurnManager:
         if not is_rule_pass:
             yield f"event: status\ndata: {json.dumps({'content': 'Considering...'})}\n\n"
 
-        # 1. Advance Time & Apply Ticks (Only for normal turns, NOT for rule passes)
-        if not is_rule_pass:
-            self.state.in_game_time += self.adventure.time_per_turn
-            tick_msgs = RuleEngine.apply_ticks(self.avatar)
-            for tm in tick_msgs:
-                yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': tm})}\n\n"
+        # Base time and status ticks no longer advance per message: an in-game turn only
+        # advances on scene/sequence changes (handled inside _run_llm_cycle).
 
-        # 2. Record User Message
+        # Record User Message
         silent_commands = ["/take_direct", "/rule-pass", "/equip", "/unequip", "/consume"]
         is_silent = any(actual_user_input.lower().startswith(cmd) for cmd in silent_commands)
 
@@ -1220,19 +1169,27 @@ class GameTurnManager:
             yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': dbg_msg, 'is_debug': True, 'id': str(dbg_cm.id)})}\n\n"
 
     async def _run_llm_cycle(
-        self, user_msg: str, auto_visualize: bool, language: str | None = None
+        self,
+        user_msg: str,
+        auto_visualize: bool,
+        language: str | None = None,
+        narration_only: bool = False,
     ) -> AsyncGenerator[str, None]:
+        """Runs Pass 1 (mechanics/progression), Pass 1.5 (guardrails), and Pass 2 (narration).
+
+        `narration_only` skips Pass 1 for pure reaction narrations that must not change state.
+        """
         _ = auto_visualize
         cycle_start = time.perf_counter()
         scene_id_before_turn = self.state.current_scene_id
+        if self._turn_anchor is None:
+            self._turn_anchor = turn_anchor(self.state)
         ctx = await self._llm_context_builder.build_context(user_msg=user_msg, language=language)
         history = ctx.history
         entities = ctx.entities
         all_entities = ctx.all_entities
         exits = ctx.exits
         all_scenes = ctx.all_scenes
-        mechanics_system_prompt = ctx.mechanics_system_prompt
-        narration_system_prompt = ctx.narration_system_prompt
         mechanics_awards = ctx.mechanics_awards
         small_model_provider = ctx.small_model_provider
         complex_model_provider = ctx.complex_model_provider
@@ -1245,37 +1202,18 @@ class GameTurnManager:
         response_text = ""
         rule_violations = []
         pending_generator_proposal: dict[str, Any] | None = None
-
-        # Pre-turn scripts (on_turn_start)
         script_runner = self._get_script_runner()
-        if script_runner.scripts:
-            script_ctx = await self._build_script_context()
-            cs = script_runner.run_trigger("on_turn_start", script_ctx)
-            if (
-                cs.narrative_messages
-                or cs.player_hp_change
-                or cs.player_mana_change
-                or cs.player_stamina_change
-                or cs.var_updates
-                or cs.entity_updates
-                or cs.exit_updates
-                or cs.teleport_scene_id
-                or cs.game_completed
-                or cs.game_over
-            ):
-                sys_msgs = await self._apply_script_changeset(cs)
-                for sm in sys_msgs:
-                    role = getattr(sm, "role", "system")
-                    yield f"event: {role}\ndata: {json.dumps({'role': role, 'content': str(sm)})}\n\n"
+        script_ctx = None
 
         # Pass 1: Mechanics (strict adventures), chat progression intent (normal chat),
         # or adventure-generator tool-intent pass (generator chat mode).
-        run_mechanics_pass = self.adventure.strict_rules
-        run_chat_progression_pass = (
-            not self.adventure.strict_rules and not self.adventure.is_adventure_generator
-        )
+        is_chat_mode = not self.adventure.strict_rules and not self.adventure.is_adventure_generator
+        run_mechanics_pass = self.adventure.strict_rules and not narration_only
+        run_chat_progression_pass = is_chat_mode and not narration_only
         run_generator_tool_intent_pass = (
-            self.adventure.is_adventure_generator and not self.adventure.strict_rules
+            self.adventure.is_adventure_generator
+            and not self.adventure.strict_rules
+            and not narration_only
         )
         handled_generator_confirmation = False
 
@@ -1335,20 +1273,16 @@ class GameTurnManager:
             if self.adventure.rule_enforcement_mode == "story":
                 mechanics_suffix = prompts.GM_STORY_MECHANICS_SUFFIX
 
-            # Dynamic items are permanently disabled
-            dynamic_instr = (
-                "- To add an existing pre-defined item to the player, use `new_inventory_items`. CRITICAL: You are NOT allowed to create/generate new items on-the-fly. Only move/use existing items defined in the world or NPC inventories.\n"
-                "- To place an existing pre-defined item in the current scene, use `spawned_items`. CRITICAL: You are NOT allowed to create/generate new items on-the-fly. Only move/use existing items defined in the world or NPC inventories.\n"
-            )
-
-            mechanics_prompt = (
-                mechanics_system_prompt
-                + "\n\n"
-                + mechanics_suffix.format(
-                    quests_json=self._compact_json(self._build_mechanics_quests()),
-                    awards_json=self._compact_json(mechanics_awards),
-                    dynamic_items_instruction=dynamic_instr,
-                )
+            # Static system prompt (cacheable); quests, awards and live state go to the user message.
+            mechanics_prompt = ctx.mechanics_static_prompt + "\n\n" + mechanics_suffix
+            mechanics_user_prompt = build_pass1_user_prompt(
+                ctx.mechanics_state_block,
+                user_msg,
+                history,
+                extra_blocks=(
+                    f"OPEN QUESTS: {self._compact_json(self._build_mechanics_quests())}",
+                    f"AVAILABLE AWARDS: {self._compact_json(mechanics_awards)}",
+                ),
             )
 
             pass1_start = time.perf_counter()
@@ -1356,14 +1290,15 @@ class GameTurnManager:
                 f"[Turn {self.game_id}] [Pass 1] Calling small model: {small_model} via {small_model_provider}"
             )
             try:
-                game_event = await llm.aexecute_complex_task(
+                mechanics_intent = await llm.aexecute_complex_task(
                     mechanics_prompt,
-                    user_msg,
-                    response_model=GameEvent,
+                    mechanics_user_prompt,
+                    response_model=MechanicsIntent,
                     model=small_model,
                     operation="chat_turn",
                     phase="mechanics",
                 )
+                game_event = to_game_event(mechanics_intent)
             except Exception as e:
                 user_safe_error = _friendly_llm_error_message(e)
                 if user_safe_error:
@@ -1522,63 +1457,12 @@ class GameTurnManager:
                 if isinstance(item, dict) and item.get("id")
             }
             try:
-                constructable_messages = await self._enforce_constructable_combination(
-                    game_event, user_msg
-                )
-                rule_violations.extend(constructable_messages)
-                for gm in constructable_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                dynamic_item_messages = await self._enforce_no_dynamic_item_generation(game_event)
-                rule_violations.extend(dynamic_item_messages)
-                for gm in dynamic_item_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                guardrail_messages = await self._enforce_container_unlock_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(guardrail_messages)
-                for gm in guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                exit_guardrail_messages = await self._enforce_exit_unlock_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(exit_guardrail_messages)
-                for gm in exit_guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                switch_guardrail_messages = await self._enforce_switch_transition_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(switch_guardrail_messages)
-                for gm in switch_guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                movement_messages = await self._enforce_npc_movement_guardrails(game_event)
-                rule_violations.extend(movement_messages)
-                for gm in movement_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                reveal_messages = await self._enforce_hidden_entity_reveal(game_event, user_msg)
-                rule_violations.extend(reveal_messages)
-                for gm in reveal_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                await self._enforce_quest_and_award_guardrails(game_event)
-                win_loss_violations = await self._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
-                rule_violations.extend(win_loss_violations)
-                system_msgs = await self._apply_game_event(game_event)
-                for sm in system_msgs:
-                    role = getattr(sm, "role", "system")
-                    yield f"event: {role}\ndata: {json.dumps({'role': role, 'content': str(sm)})}\n\n"
+                if script_runner.scripts:
+                    script_ctx = await self._build_script_context()
+                async for guardrail_event in run_guardrail_chain(
+                    self, game_event, user_msg, rule_violations, script_ctx
+                ):
+                    yield guardrail_event
 
                 # Trigger scripts for scene entry and entity interactions
                 if script_runner.scripts:
@@ -1647,7 +1531,7 @@ class GameTurnManager:
                 )
 
             tool_intent_prompt = (
-                mechanics_system_prompt
+                ctx.mechanics_system_prompt
                 + "\n\n"
                 + prompts.GM_ADVENTURE_GENERATOR_TOOL_INTENT_SUFFIX
                 + tool_context_block
@@ -1735,7 +1619,7 @@ class GameTurnManager:
                 entities, self.state.entity_states or {}
             )
 
-            progression_prompt = self._build_chat_rule_pass_prompt(
+            progression_state = self._build_chat_rule_pass_prompt(
                 quests=reduced_quests,
                 awards=reduced_awards,
                 npcs=reduced_npcs,
@@ -1743,20 +1627,19 @@ class GameTurnManager:
                 exits=reduced_exits,
                 locked_containers=locked_containers or None,
             )
-            if global_unlock_rules_prompt_block:
-                progression_prompt += global_unlock_rules_prompt_block
-
-            if language:
-                progression_prompt += (
-                    f"\n\nLANGUAGE CONTEXT: Current player language is {language}."
-                )
+            progression_user_prompt = build_pass1_user_prompt(
+                progression_state,
+                user_msg,
+                history,
+                extra_blocks=(global_unlock_rules_prompt_block,),
+            )
 
             progression_start = time.perf_counter()
             try:
                 progression_intent = await llm.aexecute_complex_task(
-                    progression_prompt,
-                    user_msg,
-                    response_model=AdventureGeneratorToolIntent,
+                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT,
+                    progression_user_prompt,
+                    response_model=ChatProgressionIntent,
                     model=small_model,
                 )
             except Exception as e:
@@ -1775,24 +1658,23 @@ class GameTurnManager:
                         not bool(ex.get("is_locked"))
                         or any(
                             up.to_scene_id == ex.get("to_scene_id") and not up.is_locked
-                            for up in (progression_intent.updated_exits or [])
+                            for up in (getattr(progression_intent, "updated_exits", None) or [])
                         )
                     )
                     and str(ex.get("to_scene_id") or "").strip()
                 }
-                if progression_intent.new_scene_id not in allowed_open_destinations:
-                    progression_intent.new_scene_id = None
-                    progression_intent.exit_label = None
-                elif not await self._is_explicit_scene_transition_request(user_msg):
-                    progression_intent.new_scene_id = None
-                    progression_intent.exit_label = None
-                elif not self._message_mentions_transition_target(
-                    user_msg=user_msg,
-                    target_scene_id=progression_intent.new_scene_id,
-                    exit_label=progression_intent.exit_label,
-                    reduced_scenes=reduced_scenes,
-                    reduced_exits=reduced_exits,
-                ):
+                move_is_valid = (
+                    progression_intent.new_scene_id in allowed_open_destinations
+                    and await self._is_explicit_scene_transition_request(user_msg)
+                    and self._message_mentions_transition_target(
+                        user_msg=user_msg,
+                        target_scene_id=progression_intent.new_scene_id,
+                        exit_label=progression_intent.exit_label,
+                        reduced_scenes=reduced_scenes,
+                        reduced_exits=reduced_exits,
+                    )
+                )
+                if not move_is_valid:
                     progression_intent.new_scene_id = None
                     progression_intent.exit_label = None
 
@@ -1805,7 +1687,7 @@ class GameTurnManager:
                 duration_ms=round((time.perf_counter() - progression_start) * 1000, 2),
                 model=small_model,
                 provider=small_model_provider,
-                reduced_payload_chars=len(progression_prompt),
+                reduced_payload_chars=len(progression_user_prompt),
                 quest_count=len(reduced_quests),
                 award_count=len(reduced_awards),
                 npc_count=len(reduced_npcs),
@@ -1815,63 +1697,12 @@ class GameTurnManager:
             game_event = self._build_progression_event(progression_intent)
 
             try:
-                constructable_messages = await self._enforce_constructable_combination(
-                    game_event, user_msg
-                )
-                rule_violations.extend(constructable_messages)
-                for gm in constructable_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                dynamic_item_messages = await self._enforce_no_dynamic_item_generation(game_event)
-                rule_violations.extend(dynamic_item_messages)
-                for gm in dynamic_item_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                guardrail_messages = await self._enforce_container_unlock_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(guardrail_messages)
-                for gm in guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                exit_guardrail_messages = await self._enforce_exit_unlock_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(exit_guardrail_messages)
-                for gm in exit_guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                switch_guardrail_messages = await self._enforce_switch_transition_guardrails(
-                    game_event, user_msg
-                )
-                rule_violations.extend(switch_guardrail_messages)
-                for gm in switch_guardrail_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                movement_messages = await self._enforce_npc_movement_guardrails(game_event)
-                rule_violations.extend(movement_messages)
-                for gm in movement_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                reveal_messages = await self._enforce_hidden_entity_reveal(game_event, user_msg)
-                rule_violations.extend(reveal_messages)
-                for gm in reveal_messages:
-                    await self._save_chat_message("system", gm)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': gm})}\n\n"
-
-                await self._enforce_quest_and_award_guardrails(game_event)
-                win_loss_violations = await self._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
-                rule_violations.extend(win_loss_violations)
-                system_msgs = await self._apply_game_event(game_event)
-                for sm in system_msgs:
-                    role = getattr(sm, "role", "system")
-                    yield f"event: {role}\ndata: {json.dumps({'role': role, 'content': str(sm)})}\n\n"
+                if script_runner.scripts:
+                    script_ctx = await self._build_script_context()
+                async for guardrail_event in run_guardrail_chain(
+                    self, game_event, user_msg, rule_violations, script_ctx
+                ):
+                    yield guardrail_event
 
                 if game_event.game_completed:
                     await self._finalize_session("completed", game_event.status_note)
@@ -1900,6 +1731,17 @@ class GameTurnManager:
                 if isinstance(game_event, GameEvent):
                     game_event.game_over = True
                     game_event.status_note = str(goe)
+
+        # In-game turn: only a scene or sequence change advances time, ticks, and turn scripts.
+        turn_advanced = crossed_turn_boundary(self.state, self._turn_anchor)
+        if turn_advanced:
+            async for turn_event in advance_in_game_turn(self, script_runner, game_event):
+                yield turn_event
+            self._turn_anchor = turn_anchor(self.state)
+            # Narrate from the new location/sequence instead of the pre-turn snapshot.
+            ctx = await self._llm_context_builder.build_context(
+                user_msg=user_msg, language=language
+            )
 
         # Push a state snapshot before narration so scene/entity images can update immediately on scene changes.
         await self.db.flush()
@@ -1943,87 +1785,58 @@ class GameTurnManager:
         tts_settings = self.user.tts_settings or {}
         use_vocal_tags = tts_settings.get("use_vocal_tags", True)
 
-        violations_str = ""
-        if rule_violations:
-            violations_str = (
-                "\n\nCRITICAL RULE VIOLATIONS / REVERTS:\n"
-                "The following actions/state updates were REVERTED because they violated game rules or preconditions. "
-                "You MUST narrate that these actions FAILED in this turn and explain the reason to the player:\n"
-                + "\n".join(f"- {v}" for v in rule_violations)
+        if rule_violations and game_event:
+            game_event.narrative_description = (
+                "The attempted action failed and was reverted due to the following rule violations: "
+                + "; ".join(rule_violations)
             )
-            if game_event:
-                game_event.narrative_description = (
-                    "The attempted action failed and was reverted due to the following rule violations: "
-                    + "; ".join(rule_violations)
-                )
+        draft_narration, outcome_json = build_outcome_json(game_event)
 
-        if game_event:
-            outcome_dict = game_event.model_dump()
-            draft_narration = outcome_dict.pop("narrative_description", "")
-            pruned_outcome = {
-                k: v
-                for k, v in outcome_dict.items()
-                if v is not None and v is not False and v != 0 and v != "" and v != [] and v != {}
-            }
-            outcome_json = json.dumps(pruned_outcome, ensure_ascii=False, separators=(",", ":"))
-        else:
-            draft_narration = ""
-            outcome_json = "{}"
+        # Static system prompt (cacheable across turns); everything per-turn goes into the
+        # latest user message via the TURN RESOLUTION block.
+        tts_provider = tts_settings.get("provider", "google")
+        narration_prompt_parts = [
+            ctx.narration_static_prompt,
+            prompts.GM_NARRATION_TURN_CONTRACT,
+            prompts.GM_NARRATION_MANDATORY_FORMATTING,
+            prompts.get_vocal_direction_prompt(tts_provider) if use_vocal_tags else "",
+            prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode else "",
+        ]
+        narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
 
-        narration_prompt = (
-            narration_system_prompt
-            + "\n\n"
-            + f"DRAFT NARRATION (Narrative direction — keep focused and concise, do not bloat): {draft_narration}\n\n"
-            + prompts.GM_NARRATION_TECHNICAL_OUTCOME_PREFIX.format(outcome_json=outcome_json)
-            + violations_str
-            + "\n\n"
-            + prompts.GM_NARRATION_MANDATORY_FORMATTING
-        )
-
+        reminders: list[str] = []
         if use_vocal_tags:
-            tts_provider = tts_settings.get("provider", "google")
-            narration_prompt += "\n\n" + prompts.get_vocal_direction_prompt(tts_provider)
-            # Add a strong reminder at the end if enabled to ensure the LLM doesn't ignore it
-            narration_prompt += "\n\nREMINDER: Use tone tags like [excited] at the start of paragraphs, and inline vocal bursts like <sigh> or <laugh> in the middle of sentences where appropriate to give your narration life."
+            reminders.append(
+                "Use tone tags like [excited] at the start of paragraphs, and inline vocal bursts like <sigh> or <laugh> where appropriate."
+            )
+        if language:
+            reminders.append(
+                f"Respond in {language.upper()} only (except voice tags like [curious], which MUST always remain in English)."
+            )
 
+        exits_task = ""
         scene_changed_this_turn = self.state.current_scene_id != scene_id_before_turn
         if self._is_lookaround_request(user_msg) or scene_changed_this_turn:
-            exits_json = await self._build_scene_exits_context_json()
-            exit_count = 0
-            try:
-                parsed_exits = json.loads(exits_json)
-                if isinstance(parsed_exits, list):
-                    exit_count = len(parsed_exits)
-            except Exception:
-                exit_count = 0
+            exits_task = build_exit_description_task(await self._build_scene_exits_context_json())
 
-            sentence_instruction = (
-                "Use exactly 1 sentence for the exit paragraph, and do not use contrast/addition connectors like 'on the other side' or 'additionally'."
-                if exit_count == 1
-                else "Keep it short (max 2 sentences)."
-            )
-            narration_prompt += (
-                "\n\nEXIT DESCRIPTION TASK (MANDATORY): "
-                "If exits are available, add exactly one compact paragraph at the end that narratively describes visible exits and where they lead. "
-                f"Do not use headers, labels, lists, or bullet points. {sentence_instruction} "
-                "If an exit is locked, mention it naturally. Use the same language and tone as the rest of your narration."
-                f"\nCURRENT SCENE EXITS: {exits_json}"
-            )
-
-        if run_chat_progression_pass:
-            narration_prompt += "\n\n" + prompts.GM_CHAT_NARRATION_SUFFIX
-
-        if language:
-            narration_prompt += f"\n\nREMINDER: Respond in {language.upper()} only (except voice tags like [curious], which MUST always remain in English)."
+        turn_context = build_narration_turn_block(
+            ctx.narration_state_block,
+            draft_narration,
+            outcome_json,
+            rule_violations,
+            exits_task=exits_task,
+            reminders=tuple(reminders),
+        )
 
         pass2_start = time.perf_counter()
         narration_messages, memory_turns = await self._build_narration_messages(
-            narration_prompt, user_msg
+            narration_prompt, user_msg, turn_context=turn_context
         )
         logger.debug(
             f"[Turn {self.game_id}] [Pass 2] Calling complex model: {complex_model} via {complex_model_provider} "
             f"(memory_turns={memory_turns}, messages={len(narration_messages)})"
         )
+        stream_usage: Any = None
         try:
             stream = await llm.stream_simple_task(
                 narration_prompt,
@@ -2033,7 +1846,11 @@ class GameTurnManager:
             )
 
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content or ""
+                stream_usage = getattr(chunk, "usage", None) or stream_usage
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
+                delta = choices[0].delta.content or ""
                 if delta:
                     response_text += delta
                     yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
@@ -2053,20 +1870,23 @@ class GameTurnManager:
                     return
                 raise
 
-        try:
-            import litellm
-
-            prompt_tokens = litellm.token_counter(model=complex_model, messages=narration_messages)
-            completion_tokens = litellm.token_counter(model=complex_model, text=response_text)
-        except Exception:
-            prompt_tokens = int(sum(len(m.get("content", "")) for m in narration_messages) / 4)
-            completion_tokens = int(len(response_text) / 4)
-
-        print(
-            f"\n>>> [TOKEN USAGE] Phase: narration | Model: {complex_model} | "
-            f"Prompt: {prompt_tokens} | Completion: {completion_tokens} | Total: {prompt_tokens + completion_tokens} | "
-            f"Memory Turns: {memory_turns} (Messages: {len(narration_messages)})\n",
-            flush=True,
+        token_usage = extract_usage_tokens(stream_usage) or {
+            # Rough estimate when the provider reports no usage (avoids re-tokenizing the prompt).
+            "prompt_tokens": int(sum(len(m.get("content", "")) for m in narration_messages) / 4),
+            "completion_tokens": int(len(response_text) / 4),
+            "cached_prompt_tokens": 0,
+            "estimated": True,
+        }
+        log_structured_event(
+            "gm.turn.pipeline.tokens",
+            adventure_id=self.adventure.id,
+            game_id=self.game_id,
+            operation="chat_turn",
+            phase="narration",
+            model=complex_model,
+            memory_turns=memory_turns,
+            history_messages_count=len(narration_messages),
+            **token_usage,
         )
 
         pass2_duration = time.perf_counter() - pass2_start
@@ -2346,27 +2166,8 @@ class GameTurnManager:
                     await self._save_chat_message("system", msg_text)
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg_text})}\n\n"
 
-        # Post-turn scripts (on_turn_end)
-        if script_runner.scripts:
-            script_ctx = await self._build_script_context()
-            cs_end = script_runner.run_trigger("on_turn_end", script_ctx)
-            if (
-                cs_end.narrative_messages
-                or cs_end.player_hp_change
-                or cs_end.player_mana_change
-                or cs_end.player_stamina_change
-                or cs_end.var_updates
-                or cs_end.entity_updates
-                or cs_end.exit_updates
-                or cs_end.teleport_scene_id
-                or cs_end.game_completed
-                or cs_end.game_over
-                or cs_end.sequence_completed
-            ):
-                sys_msgs = await self._apply_script_changeset(cs_end)
-                for sm in sys_msgs:
-                    role = getattr(sm, "role", "system")
-                    yield f"event: {role}\ndata: {json.dumps({'role': role, 'content': str(sm)})}\n\n"
+        # on_turn_end / on_turn_start run at the in-game turn boundary (scene/sequence change),
+        # see advance_in_game_turn above.
 
         await self.db.commit()
 

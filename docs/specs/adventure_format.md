@@ -52,7 +52,7 @@ General configuration, narrative constraints, and gameplay settings.
 | `original_prompt` | `string` | The original prompt used during generation (for documentation purposes). |
 | `image_url` | `string` | Relative path (`assets/...`) or canonical URL (`/data/...`) to the cover visual. |
 | `rule_enforcement_mode` | `string` | `"rpg"` (strict mechanics & dice checks), `"story"` (streamlined mechanics), or `"chat"` (pure narrative). |
-| `time_per_turn` | `number` | In-game minutes elapsed per player turn (default: 5). |
+| `time_per_turn` | `number` | In-game minutes elapsed per in-game turn (default: 5). An in-game turn ends when the player changes scene or the active sequence changes; messages within one scene do not advance the base time. |
 | `pacing_minutes` | `number` | Frequency of world background heartbeats / scheduled events. |
 | `clock_enabled` | `boolean` | Whether to track and display in-game time / calendar. |
 | `ingame_timestamp` | `string` | Formatted starting in-game timestamp (e.g. `"Day 1, 08:00"`). |
