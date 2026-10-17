@@ -926,6 +926,11 @@ class GameTurnManager:
             # Keep combat-outcome debug shortcuts available for deterministic testing/workflows.
             is_combat_outcome_shortcut = cmd_args in {"win_fight", "loose_fight"}
 
+            if cmd_args == "win_fight":
+                async for chunk in self.combat.handle_debug_victory():
+                    yield chunk
+                return
+
             if (
                 settings.TALEWEAVER_DEBUG_ENABLED
                 or self.state.is_debug_enabled
@@ -2603,8 +2608,8 @@ class GameTurnManager:
     def _resolve_loot_command(self, *args, **kwargs) -> tuple[bool, list[str], bool]:
         return self.combat._resolve_loot_command(*args, **kwargs)
 
-    def _award_combat_victory_xp(self, *args, **kwargs) -> None:
-        self.combat._award_combat_victory_xp(*args, **kwargs)
+    def _award_combat_victory_xp(self, *args, **kwargs) -> int:
+        return self.combat._award_combat_victory_xp(*args, **kwargs)
 
     async def _handle_combat_turn(self, *args, **kwargs) -> AsyncGenerator[str, None]:
         async for item in self.combat._handle_combat_turn(*args, **kwargs):

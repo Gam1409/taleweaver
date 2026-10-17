@@ -136,12 +136,55 @@ class WorldExitSchema(WorldBaseSchema):
     model_config = {"extra": "forbid"}
 
 
+class SpecialEffectSchema(WorldBaseSchema):
+    target: Literal["target", "self"] = Field(
+        "target", description="'target' affects the attacked combatant, 'self' the caster."
+    )
+    stat: Literal[
+        "hp",
+        "mana",
+        "stamina",
+        "strength",
+        "dexterity",
+        "intelligence",
+        "wisdom",
+        "charisma",
+        "armor_class",
+    ] = Field(..., description="Stat changed by the effect. Attribute changes last for the fight.")
+    amount: str = Field(
+        ..., description="Signed amount, fixed or dice, e.g. '-2d6', '+5', '-3', '+1d4+1'."
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class SpecialActionSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the special action, e.g., HEAL_SPELL")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Short explanation of the action")
     action_type: Literal["ATTACK", "HEAL", "UTILITY"] = Field(
         ..., description="Type of special action"
+    )
+    category: Optional[Literal["MAGIC", "MELEE", "RANGED", "SOCIAL", "OTHER"]] = Field(
+        None,
+        description="Flavor of the attack: MAGIC spell, MELEE move, RANGED shot, SOCIAL (e.g. insult) or OTHER.",
+    )
+    cost_type: Optional[Literal["mana", "stamina"]] = Field(
+        None, description="Resource paid to use the action (default mana)."
+    )
+    cost: Optional[int] = Field(
+        None, description="Resource cost. Falls back to mana_cost when omitted."
+    )
+    success_stat: Optional[
+        Literal["strength", "dexterity", "intelligence", "wisdom", "charisma"]
+    ] = Field(None, description="Stat added to the d20 success roll (default by category).")
+    difficulty: Optional[int] = Field(
+        None,
+        description="Fixed difficulty class for the success roll. Omit to roll against the target's AC.",
+    )
+    effects: list[SpecialEffectSchema] = Field(
+        default=[],
+        description="Stat effects applied on success. Omit to derive them from damage_type/damage_value.",
     )
     mana_cost: int = Field(default=0, description="Mana cost to perform this action")
     damage_type: Optional[Literal["FIXED", "ROLLED"]] = Field(

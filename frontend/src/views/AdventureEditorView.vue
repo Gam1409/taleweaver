@@ -38,6 +38,7 @@ import CreateSceneForm from '@/components/editor/CreateSceneForm.vue'
 import SceneRoutePanel from '@/components/editor/SceneRoutePanel.vue'
 import ExitRoutePanel from '@/components/editor/ExitRoutePanel.vue'
 import EditExitModal from '@/components/editor/EditExitModal.vue'
+import SpecialAttacksModal from '@/components/editor/SpecialAttacksModal.vue'
 
 // Utilities
 import { 
@@ -1434,6 +1435,17 @@ async function saveChanges() {
   }
 }
 
+const specialAttacksNpc = ref<any | null>(null)
+
+async function onSpecialAttacksSaved() {
+  await fetchDebugInfo()
+  if (specialAttacksNpc.value) {
+    const refreshed = editorNpcs.value.find((npc: any) => npc.id === specialAttacksNpc.value?.id)
+    specialAttacksNpc.value = refreshed ?? null
+  }
+  addNotification('Special attacks saved.', 'success')
+}
+
 async function saveProtagonistField(field: string, newValue: any) {
   const p = debugData.value?.protagonist
   if (!p) return
@@ -2617,8 +2629,10 @@ watch(
               @open-upload-picker="openUploadPicker"
               @download-asset="downloadVisualAsset"
               @toggle-menu="toggleMenu"
+              :adventure-id="props.adventureId"
               @save-field="saveProtagonistField"
               @create-new-item="createNewItemForProtagonist"
+              @special-attacks-saved="onSpecialAttacksSaved"
             />
 
             <ItemsTab
@@ -2673,6 +2687,7 @@ watch(
               @clear-hover="clearHover"
               @request-move-npc-to-scene="requestMoveNpcToScene"
               @open-create-npc="() => openCreateNpc()"
+              @open-special-attacks="(npc: any) => (specialAttacksNpc = npc)"
             />
 
             <ScenesTab
@@ -2922,6 +2937,14 @@ watch(
       :is-saving="isMovingItem"
       @close="closeMoveItemModal"
       @confirm="confirmMoveEntityToScene"
+    />
+
+    <SpecialAttacksModal
+      :open="!!specialAttacksNpc"
+      :adventure-id="props.adventureId"
+      :npc="specialAttacksNpc"
+      @close="specialAttacksNpc = null"
+      @saved="onSpecialAttacksSaved"
     />
 
     <EditExitModal

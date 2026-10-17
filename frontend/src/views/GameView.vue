@@ -1518,8 +1518,9 @@ const handleSheetChanged = async () => {
   sheetDirty.value = false
 }
 
-const handleCombatAttack = async () => {
-  const dispatched = await gameActionService.runCombatCommand(combatActionInFlight, sendMessage, '/attack')
+const handleCombatAttack = async (targetId: string | null = null) => {
+  const command = targetId ? `/attack ${targetId}` : '/attack'
+  const dispatched = await gameActionService.runCombatCommand(combatActionInFlight, sendMessage, command)
   if (!dispatched) {
     const blockedMsg = 'Your move is still being resolved. Hold your stance for a moment.'
     addNotification(blockedMsg, 'info')
@@ -1554,8 +1555,9 @@ const handleCombatRest = async () => {
   }
 }
 
-const handleCombatSpecial = async (actionId: string) => {
-  const dispatched = await gameActionService.runCombatCommand(combatActionInFlight, sendMessage, `/special ${actionId}`)
+const handleCombatSpecial = async (actionId: string, targetId: string | null = null) => {
+  const command = targetId ? `/special ${actionId} ${targetId}` : `/special ${actionId}`
+  const dispatched = await gameActionService.runCombatCommand(combatActionInFlight, sendMessage, command)
   if (!dispatched) {
     const blockedMsg = 'Your move is still being resolved. Hold your stance for a moment.'
     addNotification(blockedMsg, 'info')

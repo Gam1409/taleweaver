@@ -5,6 +5,7 @@ import { formatObjectIds } from '@/utils/editor_utils'
 import InlineEditableField from '@/components/editor/InlineEditableField.vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
+import SpecialAttacksEditor from '@/components/editor/SpecialAttacksEditor.vue'
 
 const props = defineProps<{
   debugData: any
@@ -14,6 +15,7 @@ const props = defineProps<{
   ruleEnforcementMode: string
   isSavingText: boolean
   referenceOptions: any[]
+  adventureId?: string
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +26,7 @@ const emit = defineEmits<{
   (e: 'toggle-menu', id: string, event: MouseEvent): void
   (e: 'save-field', field: string, value: any): void
   (e: 'create-new-item', target: { type: 'equipment' | 'inventory'; key?: string; index?: number }): void
+  (e: 'special-attacks-saved'): void
 }>()
 
 const activeEditId = ref<string | null>(null)
@@ -668,6 +671,20 @@ function saveEquipmentSlot(slotKey: string, itemId: string) {
           </div>
         </div>
       </div>
+      </section>
+
+      <section
+        v-if="debugData?.protagonist && adventureId && ruleEnforcementMode !== 'chat'"
+        class="mt-6 bg-slate-900/40 p-6 rounded-[2rem] border border-white/5"
+      >
+        <SpecialAttacksEditor
+          :adventure-id="adventureId"
+          target-type="protagonist"
+          :target-id="debugData.protagonist.id"
+          :owner-name="debugData.protagonist.name"
+          :attacks="debugData.protagonist.stats?.special_actions ?? []"
+          @saved="emit('special-attacks-saved')"
+        />
       </section>
       </div> <!-- End general subtab -->
 
