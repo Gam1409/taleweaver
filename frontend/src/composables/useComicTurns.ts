@@ -392,15 +392,21 @@ export function useComicTurns(options: UseComicTurnsOptions) {
     const msgs = messages.value || []
     if (!msgs.length) return []
 
-    const turns: ComicTurn[] = []
-    let currentTurn: ComicTurn = {
-      index: 0,
+    const newTurn = (index: number): ComicTurn => ({
+      index,
       systemMessages: [],
       licenseMessage: null,
       narration: '',
       dialogues: [],
       revealedItemIds: [],
-    }
+    })
+
+    const turns: ComicTurn[] = []
+    let currentTurn: ComicTurn = newTurn(0)
+    // Index into currentTurn.systemMessages where events received after the narration start.
+    // They belong to the same page (e.g. "Added X to your inventory"), unless another
+    // narration follows without a player message, which then takes them along.
+    let trailingSystemStart: number | null = null
 
     for (let i = 0; i < msgs.length; i++) {
       const msg = msgs[i]
@@ -418,15 +424,9 @@ export function useComicTurns(options: UseComicTurnsOptions) {
           currentTurn.licenseMessage
         ) {
           turns.push(currentTurn)
-          currentTurn = {
-            index: turns.length,
-            systemMessages: [],
-            licenseMessage: null,
-            narration: '',
-            dialogues: [],
-            revealedItemIds: [],
-          }
+          currentTurn = newTurn(turns.length)
         }
+        trailingSystemStart = null
         currentTurn.userMessage = msg
         const userParsed = parseUserMessage(msg, entities.value, npcMetadata.value)
         currentTurn.userIsDialogue = userParsed.isDialogue
@@ -440,16 +440,15 @@ export function useComicTurns(options: UseComicTurnsOptions) {
           currentTurn.narration ||
           currentTurn.dialogues.length > 0
         ) {
+          // A narration without a new player message (e.g. scene transition) opens a new page
+          // and takes the events that led up to it.
+          const carriedSystemMessages =
+            trailingSystemStart === null ? [] : currentTurn.systemMessages.splice(trailingSystemStart)
           turns.push(currentTurn)
-          currentTurn = {
-            index: turns.length,
-            systemMessages: [],
-            licenseMessage: null,
-            narration: '',
-            dialogues: [],
-            revealedItemIds: [],
-          }
+          currentTurn = newTurn(turns.length)
+          currentTurn.systemMessages.push(...carriedSystemMessages)
         }
+        trailingSystemStart = null
         currentTurn.assistantMessage = msg
         currentTurn.timestamp = msg.timestamp || currentTurn.timestamp
         if (msg.itemIds && Array.isArray(msg.itemIds)) {
@@ -459,20 +458,12 @@ export function useComicTurns(options: UseComicTurnsOptions) {
         currentTurn.narration = parsed.narration
         currentTurn.dialogues.push(...parsed.dialogues)
       } else if (msg.role === 'system') {
-        if (
-          currentTurn.assistantMessage ||
-          currentTurn.narration ||
+        // Events after the narration stay on this page instead of opening a system-only page.
+        const isAfterNarration =
+          Boolean(currentTurn.assistantMessage || currentTurn.narration) ||
           currentTurn.dialogues.length > 0
-        ) {
-          turns.push(currentTurn)
-          currentTurn = {
-            index: turns.length,
-            systemMessages: [],
-            licenseMessage: null,
-            narration: '',
-            dialogues: [],
-            revealedItemIds: [],
-          }
+        if (isAfterNarration && trailingSystemStart === null) {
+          trailingSystemStart = currentTurn.systemMessages.length
         }
         currentTurn.systemMessages.push(msg)
       }
