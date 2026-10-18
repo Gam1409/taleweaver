@@ -158,6 +158,24 @@ class SpecialEffectSchema(WorldBaseSchema):
     model_config = {"extra": "forbid"}
 
 
+class NpcAttackTriggerSchema(WorldBaseSchema):
+    required_item_id: Optional[str] = Field(
+        None,
+        description="NPC attacks once the protagonist holds this object ID (e.g. a stolen idol).",
+    )
+    required_scene_id: Optional[str] = Field(
+        None, description="Only fire once the protagonist has reached this scene ID."
+    )
+    required_defeated_npc_id: Optional[str] = Field(
+        None, description="Only fire once this NPC ID has been defeated."
+    )
+    guard_expression: Optional[str] = Field(
+        None, description="Optional sandboxed Python boolean expression that must also be True."
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class SpecialActionSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the special action, e.g., HEAL_SPELL")
     name: str = Field(..., description="Human-readable name")
@@ -321,6 +339,17 @@ class WorldNPCSchema(WorldBaseSchema):
     attack_mode: Literal["PASSIVE", "ATTACK_ON_SIGHT"] = Field(
         "PASSIVE",
         description="If ATTACK_ON_SIGHT, the NPC attacks as soon as the protagonist enters the scene.",
+    )
+    attack_trigger: Optional[NpcAttackTriggerSchema] = Field(
+        None,
+        description=(
+            "Optional: the NPC attacks once when all configured conditions are met while the protagonist "
+            "is in its scene (e.g. required_item_id of a guarded treasure). Use null for none."
+        ),
+    )
+    special_chance: Optional[int] = Field(
+        None,
+        description="Percent chance (0-100) per combat turn that the NPC uses one of its special_actions. Default 40.",
     )
     on_defeat_script: Optional[str] = Field(
         default="",

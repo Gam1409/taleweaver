@@ -331,7 +331,9 @@ def _build_special_attack_requirement(
         "Only reference IDs that exist in this manifest.\n"
         "- Optional `on_success_text` / `on_failure_text` add flavour after the roll.\n"
         "Set `attack_mode: ATTACK_ON_SIGHT` only for NPCs that should attack the moment the protagonist "
-        "enters their scene."
+        "enters their scene. Use an NPC `attack_trigger` (e.g. {required_item_id: 'ITEM_IDOL'}) for guards "
+        "that turn hostile when the protagonist takes something, and `special_chance` (0-100, default 40) "
+        "for how often an NPC uses its specials."
     )
 
 
