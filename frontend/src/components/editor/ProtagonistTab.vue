@@ -27,6 +27,8 @@ const emit = defineEmits<{
   (e: 'save-field', field: string, value: any): void
   (e: 'create-new-item', target: { type: 'equipment' | 'inventory'; key?: string; index?: number }): void
   (e: 'special-attacks-saved'): void
+  (e: 'export-entity', kind: 'protagonist', id: null, label: string): void
+  (e: 'import-entity', kind: 'protagonist'): void
 }>()
 
 const activeEditId = ref<string | null>(null)
@@ -148,6 +150,14 @@ function saveEquipmentSlot(slotKey: string, itemId: string) {
       <section v-if="debugData?.protagonist" class="space-y-4 bg-slate-900/40 p-8 rounded-[2rem] border border-white/5 backdrop-blur-md shadow-xl">
         <div class="flex items-center justify-between">
           <h3 class="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">The Protagonist</h3>
+          <div class="flex items-center gap-4">
+            <button @click="emit('import-entity', 'protagonist')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Replace the protagonist with one from a .twe file">
+              <i class="ra ra-load"></i> Import
+            </button>
+            <button @click="emit('export-entity', 'protagonist', null, debugData.protagonist.name)" class="text-xs font-bold text-teal-500 hover:text-teal-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Export the protagonist incl. portrait as a .twe file">
+              <i class="ra ra-save"></i> Export
+            </button>
+          </div>
         </div>
 
         <div class="bg-black/20 border border-white/5 rounded-3xl p-6 flex flex-col md:flex-row gap-6 backdrop-blur-md shadow-inner">

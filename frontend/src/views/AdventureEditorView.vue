@@ -6,6 +6,7 @@ import { visualService } from '@/services/visualService'
 import type { VisualKind } from '@/services/visualService'
 import { entityService } from '@/services/entityService'
 import { notificationService } from '@/services/notificationService'
+import { useEntityTransfer } from '@/composables/useEntityTransfer'
 
 // Icons & Assets
 
@@ -935,6 +936,8 @@ async function fetchAdventure() {
     isLoading.value = false
   }
 }
+
+const { exportEntity, importEntity } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
 
 async function fetchDebugInfo() {
   if (!props.adventureId) return
@@ -2633,6 +2636,8 @@ watch(
               @save-field="saveProtagonistField"
               @create-new-item="createNewItemForProtagonist"
               @special-attacks-saved="onSpecialAttacksSaved"
+              @export-entity="exportEntity"
+              @import-entity="importEntity"
             />
 
             <ItemsTab
@@ -2661,6 +2666,8 @@ watch(
               @request-change-item-type="requestChangeItemType"
               @request-move-item-to-scene="requestMoveItemToScene"
               @request-delete-item="requestDeleteItem"
+              @export-entity="(kind, id, label) => { activeMenuId = null; exportEntity(kind, id, label) }"
+              @import-entity="importEntity"
             />
 
             <InhabitantsTab
@@ -2688,6 +2695,8 @@ watch(
               @request-move-npc-to-scene="requestMoveNpcToScene"
               @open-create-npc="() => openCreateNpc()"
               @open-special-attacks="(npc: any) => (specialAttacksNpc = npc)"
+              @export-entity="(kind, id, label) => { activeMenuId = null; exportEntity(kind, id, label) }"
+              @import-entity="importEntity"
             />
 
             <ScenesTab

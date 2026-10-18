@@ -40,6 +40,8 @@ const emit = defineEmits<{
   (e: 'request-change-item-type', itemId: string, name: string, currentItemType: string): void
   (e: 'request-move-item-to-scene', itemId: string, name: string, currentSceneId: string): void
   (e: 'request-delete-item', itemId: string, name: string): void
+  (e: 'export-entity', kind: 'item', id: string, label: string): void
+  (e: 'import-entity', kind: 'item'): void
 }>()
 
 const isContainerLocked = (obj: any): boolean => {
@@ -124,6 +126,12 @@ const activeFilterLabel = computed(() => {
 </script>
 
 <template>
+  <div class="space-y-6">
+  <div class="flex items-center justify-end">
+    <button @click="emit('import-entity', 'item')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Import an item from a .twe file">
+      <i class="ra ra-load"></i> Import Item
+    </button>
+  </div>
   <section v-if="unfilteredTotal > 0" class="space-y-8 animate-page-in">
     <!-- ==================================================================
          Filter bar — filter the four item sections by scene.
@@ -231,6 +239,7 @@ const activeFilterLabel = computed(() => {
               <div class="my-1 border-t border-white/5"></div>
               <button @click="emit('request-change-item-type', obj.id, obj.name, obj.item_type || 'DEFAULT')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Change Type…</button>
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
+              <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
             </div>
           </div>
@@ -302,6 +311,7 @@ const activeFilterLabel = computed(() => {
               <div class="my-1 border-t border-white/5"></div>
               <button @click="emit('request-change-item-type', obj.id, obj.name, obj.item_type || 'DEFAULT')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Change Type…</button>
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
+              <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
             </div>
           </div>
@@ -374,6 +384,7 @@ const activeFilterLabel = computed(() => {
               <div class="my-1 border-t border-white/5"></div>
               <button @click="emit('request-change-item-type', obj.id, obj.name, obj.item_type || 'DEFAULT')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Change Type…</button>
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
+              <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
             </div>
           </div>
@@ -449,6 +460,7 @@ const activeFilterLabel = computed(() => {
               <div class="my-1 border-t border-white/5"></div>
               <button @click="emit('request-change-item-type', obj.id, obj.name, obj.item_type || 'DEFAULT')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Change Type…</button>
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
+              <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
             </div>
           </div>
@@ -471,6 +483,7 @@ const activeFilterLabel = computed(() => {
       </button>
     </div>
   </section>
+  </div>
 </template>
 
 <style scoped>

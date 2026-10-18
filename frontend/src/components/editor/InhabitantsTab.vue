@@ -33,6 +33,8 @@ const emit = defineEmits<{
   (e: 'request-move-npc-to-scene', npcId: string, name: string, currentSceneId: string): void
   (e: 'open-create-npc'): void
   (e: 'open-special-attacks', npc: any): void
+  (e: 'export-entity', kind: 'npc', id: string, label: string): void
+  (e: 'import-entity', kind: 'npc'): void
 }>()
 
 function buildVisualImageUrl(imagePath?: string | null) {
@@ -59,6 +61,9 @@ function getSceneLabel(sceneId?: string | null): string {
           </button>
           <button @click="emit('regen-all', 'npc', false)" :disabled="isBatchGenerating['npc']" class="text-xs font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-2 uppercase tracking-widest transition-colors">
             <i class="ra ra-cycle" :class="{ 'animate-spin': isBatchGenerating['npc'] }"></i> Regenerate All
+          </button>
+          <button @click="emit('import-entity', 'npc')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Import an NPC from a .twe file">
+            <i class="ra ra-load"></i> Import NPC
           </button>
           <button @click="emit('open-create-npc')" class="text-xs font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors">
             <i class="ra ra-player"></i> + Create NPC
@@ -142,6 +147,7 @@ function getSceneLabel(sceneId?: string | null): string {
               <button @click="emit('request-move-npc-to-scene', npc.id, npc.name, npc.current_scene_id || '')" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('open-text-edit', 'npc', npc.id, npc.name, npc.description, '', npc.hp, npc.stamina, npc.mana, npc.goal, npc.character, npc.is_killable)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-blue-500 hover:text-white transition-all">Edit Details</button>
               <button v-if="ruleEnforcementMode !== 'chat'" @click="emit('open-special-attacks', npc)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-rose-500 hover:text-white transition-all">Combat & Specials…</button>
+              <button @click="emit('export-entity', 'npc', npc.id, npc.name)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
             </div>
           </div>
         </div>
@@ -158,6 +164,9 @@ function getSceneLabel(sceneId?: string | null): string {
       </div>
       <button @click="emit('open-create-npc')" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95">
         <i class="ra ra-player"></i> + Create First NPC
+      </button>
+      <button @click="emit('import-entity', 'npc')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors">
+        <i class="ra ra-load"></i> Import NPC (.twe)
       </button>
     </section>
   </div>
