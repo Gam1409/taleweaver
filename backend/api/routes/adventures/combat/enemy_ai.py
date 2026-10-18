@@ -30,7 +30,7 @@ from backend.models.world_entity import WorldEntity
 ENEMY_REST_AMOUNT = 40
 HEAL_THRESHOLD = 0.4
 HEAL_CHANCE = 0.8
-SPECIAL_CHANCE = 0.3
+DEFAULT_SPECIAL_CHANCE = 40  # percent per turn, configurable per NPC (metadata "special_chance")
 
 
 def _is_self_heal(action: dict[str, Any]) -> bool:
@@ -38,6 +38,19 @@ def _is_self_heal(action: dict[str, Any]) -> bool:
         e["target"] == "self" and e["stat"] == "hp" and not e["amount"].startswith("-")
         for e in action["effects"]
     )
+
+
+def npc_can_afford(action: dict[str, Any], enemy: dict[str, Any]) -> bool:
+    """NPCs without a pool for the cost resource (max 0) use the special for free."""
+    if int(enemy.get(f"max_{action['cost_type']}") or 0) <= 0:
+        return True
+    return can_afford(action, enemy)
+
+
+def special_chance(enemy: dict[str, Any]) -> float:
+    raw = enemy.get("special_chance")
+    percent = raw if isinstance(raw, (int, float)) else DEFAULT_SPECIAL_CHANCE
+    return max(0.0, min(100.0, float(percent))) / 100
 
 
 class CombatEnemyMixin:
@@ -48,7 +61,7 @@ class CombatEnemyMixin:
         specials = [
             a
             for a in enemy.get("special_actions") or []
-            if can_afford(a, enemy) and (damage_allowed or not a["targets_enemy"])
+            if npc_can_afford(a, enemy) and (damage_allowed or not a["targets_enemy"])
         ]
         if not specials:
             return None
@@ -58,8 +71,9 @@ class CombatEnemyMixin:
         if hp_ratio < HEAL_THRESHOLD and heals and gl.random.random() < HEAL_CHANCE:
             return gl.random.choice(heals)
 
+        # Offensive and utility specials are used at random with the NPC's special chance.
         others = [a for a in specials if a not in heals]
-        if others and gl.random.random() < SPECIAL_CHANCE:
+        if others and gl.random.random() < special_chance(enemy):
             return gl.random.choice(others)
         return None
 
@@ -194,6 +208,9 @@ class CombatEnemyMixin:
             text, data = await self._enemy_weapon_attack(combat, enemy, enemy_ent)
         self._append_combat_log(combat, text, "enemy_action", data)
         yield system_event(text)
+        if special:
+            async for chunk in self._special_script_events(combat, data):
+                yield chunk
 
         if self.avatar.hp <= 0:
             await self._handle_player_defeat(combat, "The protagonist falls. Game Over.")

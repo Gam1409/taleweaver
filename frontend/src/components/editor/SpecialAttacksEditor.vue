@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from 'lucide-vue-next'
-import type { SpecialAttack, SpecialEffect } from '@/types'
+import { ChevronDown, ChevronRight, Lock, Plus, Save, Trash2 } from 'lucide-vue-next'
+import type { SpecialAttack } from '@/types'
+import SpecialAttackForm, { type SpecialAttackDraft } from '@/components/editor/SpecialAttackForm.vue'
 import { specialAttackService, type SpecialAttackOwner } from '@/services/specialAttackService'
 import {
   AMOUNT_PATTERN,
   CATEGORY_META,
-  EFFECT_STATS,
-  SPECIAL_CATEGORIES,
-  STAT_SHORT,
-  SUCCESS_STATS,
   checkLabel,
   costLabel,
   describeEffects,
@@ -18,6 +15,14 @@ import {
 
 const MAX_ATTACKS = 8
 const ID_PATTERN = /^[A-Z0-9_-]{1,128}$/
+// Fields accepted by the backend schema (extra fields are rejected there).
+const SCHEMA_KEYS: Array<keyof SpecialAttack> = [
+  'id', 'name', 'description', 'action_type', 'category', 'cost_type', 'cost', 'mana_cost',
+  'success_stat', 'difficulty', 'effects', 'outcome_description', 'is_locked',
+  'unlock_condition_type', 'unlock_condition_target', 'unlock_required_item_id',
+  'unlock_required_scene_id', 'unlock_required_defeated_npc_id', 'unlock_guard_expression',
+  'unlock_text', 'on_success_script', 'on_success_text', 'on_failure_script', 'on_failure_text',
+]
 
 const props = defineProps<{
   adventureId: string
@@ -25,16 +30,15 @@ const props = defineProps<{
   targetId: string
   ownerName: string
   attacks: SpecialAttack[]
+  referenceOptions?: Array<{ id: string; name?: string; type?: string }>
 }>()
 
 const emit = defineEmits<{
   saved: [attacks: SpecialAttack[]]
 }>()
 
-type Draft = SpecialAttack & { effects: SpecialEffect[]; _key: number }
-
 let keyCounter = 0
-const drafts = ref<Draft[]>([])
+const drafts = ref<SpecialAttackDraft[]>([])
 const expanded = ref<number | null>(null)
 const saving = ref(false)
 const error = ref('')
@@ -66,9 +70,19 @@ const PRESETS: Record<string, Omit<SpecialAttack, 'id'>> = {
   },
 }
 
-function toDraft(attack: SpecialAttack): Draft {
-  const normalized = normalizeSpecialAttack(attack)
-  return { ...attack, ...normalized, effects: normalized.effects.map((e) => ({ ...e })), _key: ++keyCounter }
+function toDraft(attack: SpecialAttack): SpecialAttackDraft {
+  const n = normalizeSpecialAttack(attack)
+  return {
+    ...attack,
+    category: n.category,
+    cost_type: n.cost_type,
+    cost: n.cost,
+    success_stat: n.success_stat,
+    effects: n.effects.map((e) => ({ ...e })),
+    on_success_script: attack.on_success_script ?? '',
+    on_failure_script: attack.on_failure_script ?? '',
+    _key: ++keyCounter,
+  }
 }
 
 // Keyed by content so parents may pass freshly built arrays without wiping unsaved edits.
@@ -103,10 +117,6 @@ function removeAttack(key: number): void {
   drafts.value = drafts.value.filter((d) => d._key !== key)
 }
 
-function addEffect(draft: Draft): void {
-  draft.effects.push({ target: 'target', stat: 'hp', amount: '-1d4' })
-}
-
 const problems = computed(() => {
   const issues: string[] = []
   const ids = new Set<string>()
@@ -122,20 +132,22 @@ const problems = computed(() => {
   return issues
 })
 
-function serialize(d: Draft): SpecialAttack {
-  const rest: Partial<Draft> = { ...d }
-  delete rest._key
-  delete rest.damage_type
-  delete rest.damage_value
+function serialize(d: SpecialAttackDraft): SpecialAttack {
+  const out: Record<string, unknown> = {}
+  for (const key of SCHEMA_KEYS) {
+    const value = d[key]
+    if (value !== undefined && value !== null && value !== '') out[key] = value
+  }
   const cost = Math.max(0, Number(d.cost) || 0)
   return {
-    ...(rest as SpecialAttack),
+    ...(out as unknown as SpecialAttack),
     id: d.id.trim().toUpperCase(),
     name: d.name.trim(),
     description: d.description ?? '',
     cost,
     mana_cost: d.cost_type === 'mana' ? cost : 0,
     difficulty: d.difficulty ? Number(d.difficulty) : null,
+    is_locked: props.targetType === 'protagonist' && !!d.is_locked,
     effects: d.effects.map((e) => ({ ...e, amount: e.amount.replace(/\s/g, '') })),
   }
 }
@@ -154,6 +166,11 @@ async function save(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+function summary(d: SpecialAttackDraft): string {
+  const n = normalizeSpecialAttack(d)
+  return `${costLabel(n)} · ${checkLabel(n)} · ${describeEffects(d.effects) || 'no effects'}`
 }
 </script>
 
@@ -182,113 +199,23 @@ async function save(): Promise<void> {
 
     <p v-if="!drafts.length" class="text-xs text-slate-500 italic">No special attacks yet. Add a preset or start from scratch.</p>
 
-    <article v-for="d in drafts" :key="d._key" class="rounded-xl border border-white/10 bg-slate-950/40">
+    <article v-for="(d, idx) in drafts" :key="d._key" class="rounded-xl border border-white/10 bg-slate-950/40">
       <header class="flex items-center gap-2 px-3 py-2 cursor-pointer" @click="expanded = expanded === d._key ? null : d._key">
         <component :is="expanded === d._key ? ChevronDown : ChevronRight" class="w-4 h-4 text-slate-500" />
         <i :class="['ra text-base text-slate-300', CATEGORY_META[normalizeSpecialAttack(d).category].icon]"></i>
         <span class="font-bold text-sm text-white truncate">{{ d.name || 'Unnamed' }}</span>
-        <span class="text-[10px] font-mono text-slate-400 truncate">
-          {{ costLabel(normalizeSpecialAttack(d)) }} · {{ checkLabel(normalizeSpecialAttack(d)) }} · {{ describeEffects(d.effects) || 'no effects' }}
-        </span>
+        <Lock v-if="targetType === 'protagonist' && d.is_locked" class="w-3.5 h-3.5 text-amber-400" />
+        <span class="text-[10px] font-mono text-slate-400 truncate">{{ summary(d) }}</span>
         <button type="button" class="ml-auto p-1 text-slate-500 hover:text-rose-400" title="Remove attack" @click.stop="removeAttack(d._key)">
           <Trash2 class="w-4 h-4" />
         </button>
       </header>
-
-      <div v-if="expanded === d._key" class="grid grid-cols-1 md:grid-cols-2 gap-3 px-3 pb-3 text-xs">
-        <label class="space-y-1">
-          <span class="text-slate-400 font-bold">Name</span>
-          <input v-model="d.name" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white" />
-        </label>
-        <label class="space-y-1">
-          <span class="text-slate-400 font-bold">ID</span>
-          <input v-model="d.id" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white font-mono uppercase" />
-        </label>
-        <label class="space-y-1 md:col-span-2">
-          <span class="text-slate-400 font-bold">Description</span>
-          <input v-model="d.description" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white" />
-        </label>
-        <label class="space-y-1">
-          <span class="text-slate-400 font-bold">Category</span>
-          <select v-model="d.category" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white">
-            <option v-for="c in SPECIAL_CATEGORIES" :key="c" :value="c">{{ CATEGORY_META[c].label }}</option>
-          </select>
-        </label>
-        <label class="space-y-1">
-          <span class="text-slate-400 font-bold">Behaviour (NPC AI)</span>
-          <select v-model="d.action_type" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white">
-            <option value="ATTACK">Attack</option>
-            <option value="HEAL">Heal</option>
-            <option value="UTILITY">Utility</option>
-          </select>
-        </label>
-        <div class="flex gap-2">
-          <label class="space-y-1 flex-1">
-            <span class="text-slate-400 font-bold">Cost</span>
-            <input v-model.number="d.cost" type="number" min="0" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white" />
-          </label>
-          <label class="space-y-1 flex-1">
-            <span class="text-slate-400 font-bold">Paid with</span>
-            <select v-model="d.cost_type" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white">
-              <option value="mana">Mana</option>
-              <option value="stamina">Stamina</option>
-            </select>
-          </label>
-        </div>
-        <div class="flex gap-2">
-          <label class="space-y-1 flex-1">
-            <span class="text-slate-400 font-bold">Success roll stat</span>
-            <select v-model="d.success_stat" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white">
-              <option v-for="s in SUCCESS_STATS" :key="s" :value="s">{{ STAT_SHORT[s] }}</option>
-            </select>
-          </label>
-          <label class="space-y-1 flex-1">
-            <span class="text-slate-400 font-bold">Difficulty (DC)</span>
-            <input v-model.number="d.difficulty" type="number" min="0" placeholder="Target AC" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white" />
-          </label>
-        </div>
-
-        <div class="md:col-span-2 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="text-slate-400 font-bold">Effects on success</span>
-            <button type="button" class="text-emerald-400 font-bold flex items-center gap-1" @click="addEffect(d)"><Plus class="w-3 h-3" /> Effect</button>
-          </div>
-          <div v-for="(eff, idx) in d.effects" :key="idx" class="flex items-center gap-2">
-            <select v-model="eff.target" class="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-white">
-              <option value="target">Target</option>
-              <option value="self">Self</option>
-            </select>
-            <select v-model="eff.stat" class="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-white">
-              <option v-for="s in EFFECT_STATS" :key="s" :value="s">{{ STAT_SHORT[s] }}</option>
-            </select>
-            <input
-              v-model="eff.amount"
-              placeholder="-2d6"
-              class="w-28 bg-slate-900 border rounded-lg px-2 py-1 text-white font-mono"
-              :class="AMOUNT_PATTERN.test(eff.amount.replace(/\s/g, '')) ? 'border-white/10' : 'border-rose-500/70'"
-            />
-            <button type="button" class="p-1 text-slate-500 hover:text-rose-400" @click="d.effects.splice(idx, 1)"><Trash2 class="w-3.5 h-3.5" /></button>
-          </div>
-          <p class="text-[10px] text-slate-500">Negative amounts drain, positive amounts boost. HP/MP/STA change directly; attribute changes last until the fight ends.</p>
-        </div>
-
-        <label class="space-y-1 md:col-span-2">
-          <span class="text-slate-400 font-bold">Outcome narration (optional)</span>
-          <textarea v-model="d.outcome_description" rows="2" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5 text-white"></textarea>
-        </label>
-        <div class="md:col-span-2 flex flex-wrap items-center gap-2">
-          <label class="flex items-center gap-2 text-slate-300 font-bold">
-            <input v-model="d.is_locked" type="checkbox" class="accent-emerald-500" /> Starts locked
-          </label>
-          <template v-if="d.is_locked">
-            <select v-model="d.unlock_condition_type" class="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-white">
-              <option value="READ_ITEM">Unlocked by reading item</option>
-              <option value="FIND_ITEM">Unlocked by finding item</option>
-            </select>
-            <input v-model="d.unlock_condition_target" placeholder="ITEM_ID" class="w-40 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-white font-mono" />
-          </template>
-        </div>
-      </div>
+      <SpecialAttackForm
+        v-if="expanded === d._key"
+        v-model="drafts[idx]"
+        :is-protagonist="targetType === 'protagonist'"
+        :reference-options="referenceOptions"
+      />
     </article>
 
     <div class="flex flex-wrap items-center gap-3">

@@ -46,6 +46,7 @@ class ScriptChangeset:
     entity_movements: list[dict[str, Any]] = field(default_factory=list)
     entity_updates: list[dict[str, Any]] = field(default_factory=list)
     exit_updates: list[dict[str, Any]] = field(default_factory=list)
+    npc_attack_requests: list[str] = field(default_factory=list)
 
     narrative_messages: list[str] = field(default_factory=list)
     system_messages: list[str] = field(default_factory=list)
@@ -83,6 +84,7 @@ class ScriptChangeset:
             or self.entity_movements
             or self.entity_updates
             or self.exit_updates
+            or self.npc_attack_requests
             or self.narrative_messages
             or self.system_messages
             or self.rejected_actions
@@ -572,6 +574,11 @@ class NPCProxy(EntityProxy):
         """Alias for kill()."""
         self.kill()
 
+    def attack(self) -> None:
+        """Makes this NPC attack the protagonist; turn-based combat starts after the turn."""
+        if self._id not in self._changeset.npc_attack_requests:
+            self._changeset.npc_attack_requests.append(self._id)
+
     def modify_hp(self, delta: int) -> None:
         new_hp = max(0, self.hp + int(delta))
         self.hp = new_hp
@@ -820,6 +827,12 @@ class EntityManagerProxy:
         ent = self.get(entity_id)
         if isinstance(ent, NPCProxy):
             ent.kill(drop_inventory=drop_inventory)
+
+    def attack(self, entity_id: str) -> None:
+        """Makes an NPC attack the protagonist (combat starts after the turn)."""
+        ent = self.get(entity_id)
+        if isinstance(ent, NPCProxy):
+            ent.attack()
 
 
 class StoryFlagsProxy:

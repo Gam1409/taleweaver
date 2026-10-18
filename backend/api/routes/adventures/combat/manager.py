@@ -24,6 +24,9 @@ from backend.api.routes.adventures.combat.player_actions import (
 )
 from backend.api.routes.adventures.combat.rounds import CombatRoundMixin
 from backend.api.routes.adventures.combat.setup import CombatSetupMixin
+from backend.api.routes.adventures.combat.special_scripts import CombatSpecialScriptMixin
+from backend.api.routes.adventures.combat.triggers import CombatTriggerMixin
+from backend.api.routes.adventures.combat.unlocks import CombatUnlockMixin
 
 if TYPE_CHECKING:
     from backend.api.routes.adventures.gameplay_logic import GameTurnManager
@@ -33,6 +36,9 @@ FLEE_CHANCE = 0.10
 
 
 class TurnCombatManager(
+    CombatTriggerMixin,
+    CombatUnlockMixin,
+    CombatSpecialScriptMixin,
     CombatSetupMixin,
     CombatPlayerMixin,
     CombatEnemyMixin,
@@ -121,6 +127,9 @@ class TurnCombatManager(
         self._sync_combat_player_snapshot(combat)
         self._append_combat_log(combat, result["text"], result["type"], result.get("data"))
         yield system_event(result["text"])
+        if (result.get("data") or {}).get("kind") == "special":
+            async for chunk in self._special_script_events(combat, result["data"]):
+                yield chunk
         follow_up = (
             self._finish_escape(combat)
             if result.get("escaped")

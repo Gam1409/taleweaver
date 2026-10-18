@@ -141,7 +141,7 @@ function getSceneLabel(sceneId?: string | null): string {
               <button v-if="npc.image_url" @click="emit('download-asset', npc.image_url, `${npc.name || 'npc'}_image`)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-violet-500 hover:text-white transition-all">Download Image</button>
               <button @click="emit('request-move-npc-to-scene', npc.id, npc.name, npc.current_scene_id || '')" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('open-text-edit', 'npc', npc.id, npc.name, npc.description, '', npc.hp, npc.stamina, npc.mana, npc.goal, npc.character, npc.is_killable)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-blue-500 hover:text-white transition-all">Edit Details</button>
-              <button v-if="ruleEnforcementMode !== 'chat'" @click="emit('open-special-attacks', npc)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-rose-500 hover:text-white transition-all">Special Attacks…</button>
+              <button v-if="ruleEnforcementMode !== 'chat'" @click="emit('open-special-attacks', npc)" class="w-full px-4 py-2 text-left text-xs font-bold text-slate-300 hover:bg-rose-500 hover:text-white transition-all">Combat & Specials…</button>
             </div>
           </div>
         </div>

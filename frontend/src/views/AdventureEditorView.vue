@@ -38,7 +38,7 @@ import CreateSceneForm from '@/components/editor/CreateSceneForm.vue'
 import SceneRoutePanel from '@/components/editor/SceneRoutePanel.vue'
 import ExitRoutePanel from '@/components/editor/ExitRoutePanel.vue'
 import EditExitModal from '@/components/editor/EditExitModal.vue'
-import SpecialAttacksModal from '@/components/editor/SpecialAttacksModal.vue'
+import NpcCombatModal from '@/components/editor/NpcCombatModal.vue'
 
 // Utilities
 import { 
@@ -1443,7 +1443,7 @@ async function onSpecialAttacksSaved() {
     const refreshed = editorNpcs.value.find((npc: any) => npc.id === specialAttacksNpc.value?.id)
     specialAttacksNpc.value = refreshed ?? null
   }
-  addNotification('Special attacks saved.', 'success')
+  addNotification('Combat settings saved.', 'success')
 }
 
 async function saveProtagonistField(field: string, newValue: any) {
@@ -2897,8 +2897,10 @@ watch(
       :is-saving="isSavingText"
       :adventure-id="adventureId"
       :is-create-entity-mode="isCreateEntityMode"
+      :npc-data="editEntityContext?.type === 'npc' ? editorNpcs.find((n: any) => n.id === editEntityContext?.id) : null"
       @close="closeEditEntityModal"
       @save="saveEntityText"
+      @combat-saved="onSpecialAttacksSaved"
     />
 
     <ItemTypeSelectorModal
@@ -2939,10 +2941,11 @@ watch(
       @confirm="confirmMoveEntityToScene"
     />
 
-    <SpecialAttacksModal
+    <NpcCombatModal
       :open="!!specialAttacksNpc"
       :adventure-id="props.adventureId"
       :npc="specialAttacksNpc"
+      :reference-options="referenceOptions"
       @close="specialAttacksNpc = null"
       @saved="onSpecialAttacksSaved"
     />

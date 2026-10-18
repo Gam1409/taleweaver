@@ -107,6 +107,15 @@ export interface SpecialAttack {
   is_locked?: boolean
   unlock_condition_type?: 'READ_ITEM' | 'FIND_ITEM' | null
   unlock_condition_target?: string | null
+  unlock_required_item_id?: string | null
+  unlock_required_scene_id?: string | null
+  unlock_required_defeated_npc_id?: string | null
+  unlock_guard_expression?: string | null
+  unlock_text?: string | null
+  on_success_script?: string | null
+  on_success_text?: string | null
+  on_failure_script?: string | null
+  on_failure_text?: string | null
 }
 
 /** Special attack as normalized by the combat engine (always has cost, category and effects). */
@@ -118,6 +127,7 @@ export interface NormalizedSpecialAttack extends SpecialAttack {
   effects: SpecialEffect[]
   targets_enemy: boolean
   locked?: boolean
+  has_unlock_guard?: boolean
 }
 
 export interface AppliedEffect {

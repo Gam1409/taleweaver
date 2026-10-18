@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
+import NpcCombatSettings from '@/components/editor/NpcCombatSettings.vue'
 import { Plus, Trash2, Key, FileText, Lock, Code2, Sparkles, ToggleLeft, ChevronDown, ChevronRight, Edit3 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -69,11 +70,13 @@ const props = defineProps<{
   isSaving: boolean
   adventureId?: string
   isCreateEntityMode?: boolean
+  npcData?: any
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'save', data: any): void
+  (e: 'combat-saved'): void
 }>()
 
 const activeTab = ref<'simple' | 'advanced'>('simple')
@@ -2316,21 +2319,16 @@ const textLogPreviewClass = computed(() => {
               </div>
 
               <div v-else-if="context.type === 'npc'" class="space-y-6">
-                <!-- NPC Triggers -->
-                <div class="flex items-center justify-between p-4 bg-black/30 border border-white/10 rounded-2xl">
-                  <div class="space-y-1 pr-4">
-                    <p class="text-xs font-black text-red-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <i class="ra ra-swords"></i> Attack Mode
-                    </p>
-                    <p class="text-[10px] text-slate-500 uppercase tracking-tighter">If ATTACK_ON_SIGHT, the NPC attacks instantly upon entry.</p>
-                  </div>
-                  <button
-                    type="button"
-                    @click="localForm.attack_mode = localForm.attack_mode === 'PASSIVE' ? 'ATTACK_ON_SIGHT' : 'PASSIVE'"
-                    :class="['w-14 h-8 rounded-full transition-all relative flex items-center px-1 shrink-0', localForm.attack_mode === 'ATTACK_ON_SIGHT' ? 'bg-red-600' : 'bg-slate-700']"
-                  >
-                    <div :class="['w-6 h-6 bg-white rounded-full shadow-lg transition-transform duration-300', localForm.attack_mode === 'ATTACK_ON_SIGHT' ? 'translate-x-6' : 'translate-x-0']"></div>
-                  </button>
+                <!-- NPC combat behaviour & special attacks (shared with the NPC combat modal) -->
+                <div class="p-4 bg-black/30 border border-white/10 rounded-2xl">
+                  <NpcCombatSettings
+                    v-if="adventureId && npcData && !isCreateEntityMode"
+                    :adventure-id="adventureId"
+                    :npc="npcData"
+                    :reference-options="referenceOptions"
+                    @saved="emit('combat-saved')"
+                  />
+                  <p v-else class="text-[11px] text-slate-400">Save the NPC first to configure attack behaviour and special attacks.</p>
                 </div>
 
                 <div class="space-y-4 border border-white/5 bg-black/20 p-4 rounded-xl">

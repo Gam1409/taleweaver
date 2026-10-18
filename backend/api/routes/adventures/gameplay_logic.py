@@ -244,6 +244,7 @@ def _llm_error_type(exc: Exception) -> str | None:
 # WALKTHROUGH_REVEAL_COST / _friendly_llm_* from this module at load time (circular import).
 from backend.api.routes.adventures.turn_adventure_gen import TurnAdventureGenManager  # noqa: E402
 from backend.api.routes.adventures.turn_combat import TurnCombatManager  # noqa: E402
+from backend.api.routes.adventures.post_turn_hooks import PostTurnHooks  # noqa: E402
 from backend.api.routes.adventures.turn_guardrails import TurnGuardrailsManager  # noqa: E402
 from backend.api.routes.adventures.turn_interactions import TurnInteractionsManager  # noqa: E402
 from backend.api.routes.adventures.turn_state_applier import TurnStateApplier  # noqa: E402
@@ -285,6 +286,7 @@ class GameTurnManager:
         self._combat_state_helper = TurnCombatStateHelper(self)
         self._llm_context_builder = TurnLlmContextBuilder(self)
         self.combat = TurnCombatManager(self)
+        self.pending_npc_attacks: list[str] = []
         self.guardrails = TurnGuardrailsManager(self)
         self.interactions = TurnInteractionsManager(self)
         self.state_applier = TurnStateApplier(self)
@@ -770,6 +772,18 @@ class GameTurnManager:
         return True
 
     async def process_turn(
+        self, message: str, auto_visualize: bool = False, language: str | None = None
+    ) -> AsyncGenerator[str, None]:
+        """Runs one turn and applies post-turn hooks (special unlocks, NPC attacks) before its final event."""
+        hooks = PostTurnHooks(self)
+        async for chunk in self._process_turn_inner(message, auto_visualize, language):
+            if not chunk.startswith("event: final"):
+                yield chunk
+                continue
+            async for hooked in hooks.process_final(chunk):
+                yield hooked
+
+    async def _process_turn_inner(
         self, message: str, auto_visualize: bool = False, language: str | None = None
     ) -> AsyncGenerator[str, None]:
         self.turn_language = language
@@ -2868,13 +2882,17 @@ class GameTurnManager:
         return ScriptRunner(scripts, init_script=init_script)
 
     async def _execute_inline_script(
-        self, code: str, trigger_name: str, target_id: str
+        self,
+        code: str,
+        trigger_name: str,
+        target_id: str,
+        extra_scope: dict[str, Any] | None = None,
     ) -> list[str]:
         if not code or not code.strip():
             return []
         context = await self._build_script_context()
         runner = self._get_script_runner()
-        scope = {"tw": context, "game": context}
+        scope = {**(extra_scope or {}), "tw": context, "game": context}
         runner.execute_code(code, scope, script_id=f"inline_{trigger_name}_{target_id}")
         applied_messages = await self._apply_script_changeset(context.changeset)
         if context.is_debug_enabled:
@@ -3050,6 +3068,10 @@ class GameTurnManager:
                         db_ent.is_hidden = st["is_hidden"]
                     if "is_in_inventory" in st and hasattr(db_ent, "is_in_inventory"):
                         db_ent.is_in_inventory = st["is_in_inventory"]
+
+        for npc_id in changeset.npc_attack_requests:
+            if npc_id not in self.pending_npc_attacks:
+                self.pending_npc_attacks.append(npc_id)
 
         if changeset.exit_updates:
             exit_states = dict(self.state.exit_states or {})

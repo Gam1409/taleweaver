@@ -1839,6 +1839,7 @@ watch(
       :player-sheet="sheet"
       :evaluating="isCombatEvaluating"
       :is-debug="!!sheet?.debug_mode"
+      :scene-image="currentSceneImage"
       @attack="handleCombatAttack"
       @run="handleCombatRun"
       @rest="handleCombatRest"

@@ -88,9 +88,11 @@ To ensure player safety and server reliability:
 - **Custom Functions & Lambdas**: Scripts can declare custom helper functions (`def func_name(arg1, arg2=default): ...`) and lambda expressions (`lambda x: ...`). Return values are safely handled via internal signal exceptions.
 - **No System Calls or Imports**: Statements like `import`, `from ... import`, `open()`, `eval()`, or `exec()` are rejected at parse time.
 - **No Private or Dunder Identifiers**: Accessing attributes or defining functions starting with an underscore (e.g. `_internal`, `__class__`, `__subclasses__`, `__globals__`, or `__dict__`) is strictly forbidden.
-- **Instruction Budget**: Each script execution is capped at **10,000 steps** (`ScriptTimeoutError`), preventing infinite loops and CPU exhaustion.
-- **Memory Multiplication Protections**: Multiplying lists or strings by large factors (e.g. `[0] * 1_000_000`) is guarded against to prevent denial-of-service memory allocations.
+- **No Introspection Escapes**: `str.format`, `format_map` and `mro` are blocked (format strings could otherwise walk `{0.__globals__}`), as are frame/generator/code attributes (`f_*`, `gi_*`, `cr_*`, `ag_*`, `tb_*`, `co_*`). Use f-strings or `+` for text.
+- **Instruction & Time Budget**: Each script execution is capped at **10,000 steps** and **2 seconds** (`ScriptTimeoutError`), preventing infinite loops and CPU exhaustion.
+- **Memory Protections**: Strings, lists, tuples and dicts are capped at **100,000** elements/characters (repetition, concatenation, `join`, padding methods and call results are all checked), `range()` at 100,000 elements, and integers at 10,000 bits (`ScriptSecurityError`).
 - **Safe Builtins**: Available built-ins are restricted to `abs`, `all`, `any`, `bool`, `dict`, `float`, `int`, `len`, `list`, `max`, `min`, `range`, `round`, `str`, `sum`, `tuple`.
+- **Inline conditionals**: `a if condition else b` is supported.
 
 ---
 
@@ -139,6 +141,11 @@ In addition to standalone script assets, TaleWeaver allows configuring short inl
 | **Switches** | `gates.expression` *(Guard)* | Deterministic Python boolean condition required for a specific transition. |
 | | `on_success_script` | Executes when any state transition succeeds on this switch (or transition-specific). |
 | | `on_failure_script` | Executes when any state transition fails on this switch (or transition-specific). |
+| **NPC combat** *(metadata)* | `attack_mode: ATTACK_ON_SIGHT` | The NPC starts turn-based combat as soon as the protagonist enters its scene. |
+| | `attack_trigger` *(Hard Rules + Guard)* | `required_item_id`, `required_scene_id`, `required_defeated_npc_id`, `guard_expression`: the NPC attacks once when all are met while the protagonist shares its scene. |
+| **Special attacks** (protagonist & NPC `special_actions` entries) | `on_success_script`, `..._text` | Executes after a successful d20 success roll. A `special` dict (`id`, `name`, `caster`, `target`, `success`, `crit`, `fumble`, `roll`, `dc`) is in scope. |
+| | `on_failure_script`, `..._text` | Executes when the success roll fails. |
+| | `unlock_required_item_id`, `unlock_required_scene_id`, `unlock_required_defeated_npc_id`, `unlock_guard_expression` *(Hard Rules + Guard, protagonist only)* | A locked special unlocks after the turn in which all configured conditions are met; a system message (plus optional `unlock_text`) announces it. |
 | **Protagonist** | `on_hp_change_script`, `..._text` | Executes when protagonist HP changes (e.g. taking damage or healing). |
 | | `on_status_change_script`, `..._text` | Executes when protagonist status effects or conditions change. |
 | **Sequences** | `on_start_sequence_script`, `..._text` | Executes immediately when a sequence chapter becomes active. |
@@ -283,6 +290,7 @@ Inspects, dialogues with, moves, and manages Non-Player Characters:
 - `tw.npcs.drop_item(npc_id: str, item_id: str, scene_id: str = None, spatial_position: str = "")`: Transfers an item from an NPC's inventory into a scene. If `scene_id` is omitted, it drops into the NPC's current scene; passing `"current"` drops it into the player's scene.
 - `tw.npcs.give_item(npc_id: str, item_id: str)`: Transfers an item from a scene into an NPC's inventory and conceals it from the scene view.
 - `tw.npcs.kill(npc_id: str, drop_inventory: bool = True)`: Kills the NPC, setting HP to 0 and marking `is_defeated: True`. When `drop_inventory=True` (default), all items held by the NPC are dropped into their scene.
+- `tw.npcs.attack(npc_id: str)`: Makes an NPC attack the protagonist. Turn-based combat starts right after the current turn if the NPC is in the protagonist's scene, alive and attackable (ignored while a fight is already running). Example (`on_turn_end`): `if tw.player.has_item('IDOL') and not tw.vars.get('alarm'): tw.vars.set('alarm', True); tw.npcs.attack('TEMPLE_GUARD')`.
 - `tw.npcs.get(npc_id: str) -> NPCProxy`: Returns an `NPCProxy` instance. Available properties and methods on `NPCProxy`:
   - `.name`, `.hp`, `.is_defeated`, `.current_scene_id`, `.inventory`
   - `.say(text: str)`
@@ -292,6 +300,7 @@ Inspects, dialogues with, moves, and manages Non-Player Characters:
   - `.give_item(item_id: str)`
   - `.has_item(item_id: str) -> bool`
   - `.kill(drop_inventory: bool = True)` / `.die()`
+  - `.attack()` (see `tw.npcs.attack`)
   - `.modify_hp(delta: int)` / `.damage(amount: int)` / `.heal(amount: int)`
 
 ### `tw.objects` (or `tw.items`)

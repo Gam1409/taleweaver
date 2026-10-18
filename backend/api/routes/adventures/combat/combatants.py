@@ -75,6 +75,7 @@ class CombatCombatantMixin:
             "stats": {key: npc_stats[key] for key in ATTRIBUTE_KEYS},
             "modifiers": {},
             "special_actions": normalize_special_actions(meta.get("special_actions")),
+            "special_chance": meta.get("special_chance"),
             "inventory": await self._normalize_loot_items(list(npc.inventory or [])),
             "engaged": engaged,
             "defeated": False,

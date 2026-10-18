@@ -150,6 +150,11 @@ def normalize_special_action(raw: Any) -> Optional[dict[str, Any]]:
         "is_locked": bool(raw.get("is_locked")),
         "unlock_condition_type": raw.get("unlock_condition_type"),
         "unlock_condition_target": raw.get("unlock_condition_target"),
+        # Unlock hints for the UI; guard code and scripts stay server-side.
+        "unlock_required_item_id": raw.get("unlock_required_item_id") or None,
+        "unlock_required_scene_id": raw.get("unlock_required_scene_id") or None,
+        "unlock_required_defeated_npc_id": raw.get("unlock_required_defeated_npc_id") or None,
+        "has_unlock_guard": bool(str(raw.get("unlock_guard_expression") or "").strip()),
     }
 
 

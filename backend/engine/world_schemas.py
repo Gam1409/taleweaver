@@ -206,6 +206,44 @@ class SpecialActionSchema(WorldBaseSchema):
     unlock_condition_target: Optional[str] = Field(
         None, description="Item ID that triggers the unlock."
     )
+    unlock_required_item_id: Optional[str] = Field(
+        None,
+        description="Protagonist only: locked action unlocks once the protagonist holds this object ID.",
+    )
+    unlock_required_scene_id: Optional[str] = Field(
+        None, description="Protagonist only: locked action unlocks on entering this scene ID."
+    )
+    unlock_required_defeated_npc_id: Optional[str] = Field(
+        None, description="Protagonist only: locked action unlocks once this NPC ID is defeated."
+    )
+    unlock_guard_expression: Optional[str] = Field(
+        None,
+        description=(
+            "Protagonist only: optional sandboxed Python boolean expression that must also be True, "
+            "e.g. \"tw.vars.get('trained_with_master') == True\". All configured unlock rules must hold."
+        ),
+    )
+    unlock_text: Optional[str] = Field(
+        None,
+        description="Optional flavor text appended to the 'special attack unlocked' system message.",
+    )
+    on_success_script: Optional[str] = Field(
+        default="",
+        description=(
+            "Optional sandboxed script run when the action succeeds. A `special` dict is available "
+            "(id, name, caster, target, success, crit, fumble, roll, dc) besides `tw`. Use empty string for none."
+        ),
+    )
+    on_success_text: Optional[str] = Field(
+        default="", description="Optional system text shown when the action succeeds."
+    )
+    on_failure_script: Optional[str] = Field(
+        default="",
+        description="Optional sandboxed script run when the success roll fails. Use empty string for none.",
+    )
+    on_failure_text: Optional[str] = Field(
+        default="", description="Optional system text shown when the action fails."
+    )
 
     model_config = {"extra": "forbid"}
 
@@ -274,7 +312,11 @@ class WorldNPCSchema(WorldBaseSchema):
         description="Optional ID of the equipped armor object. Must exist in the objects list.",
     )
     special_actions: list[SpecialActionSchema] = Field(
-        default=[], description="List of up to 5 special actions this NPC can perform. Max 5."
+        default=[],
+        description=(
+            "Up to 5 special attacks this NPC uses at random during fights (magic, melee moves, ranged "
+            "shots or absurd social attacks like insults). NPCs never use unlock_* fields. Max 5."
+        ),
     )
     attack_mode: Literal["PASSIVE", "ATTACK_ON_SIGHT"] = Field(
         "PASSIVE",

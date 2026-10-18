@@ -683,6 +683,7 @@ function saveEquipmentSlot(slotKey: string, itemId: string) {
           :target-id="debugData.protagonist.id"
           :owner-name="debugData.protagonist.name"
           :attacks="debugData.protagonist.stats?.special_actions ?? []"
+          :reference-options="referenceOptions"
           @saved="emit('special-attacks-saved')"
         />
       </section>

@@ -308,6 +308,33 @@ def _build_switch_requirement(original_prompt: str) -> str:
     )
 
 
+def _build_special_attack_requirement(
+    can_damage_npcs: bool, npcs_can_damage_protagonist: bool
+) -> str:
+    """Explains configurable special attacks so the world builder can design memorable fights."""
+    if not (can_damage_npcs or npcs_can_damage_protagonist):
+        return ""
+    return (
+        "\n\nSPECIAL ATTACKS (turn-based combat): give the protagonist 2-4 and hostile NPCs 1-3 "
+        "`special_actions` that fit the story. They can be classic spells (MAGIC), weapon techniques "
+        "(MELEE/RANGED) or absurd moves like a devastating insult (SOCIAL). For each entry:\n"
+        "- `category` and `success_stat` (the stat added to the d20 success roll; default by category).\n"
+        "- `cost_type` ('mana' or 'stamina') and `cost`; keep costs affordable with the owner's pools.\n"
+        "- `effects`: list of {target: 'target'|'self', stat, amount} with signed amounts such as '-2d6' "
+        "(drain) or '+3' (boost). hp/mana/stamina change directly; strength/dexterity/intelligence/wisdom/"
+        "charisma/armor_class changes last until the fight ends. Example insult: "
+        "[{target:'target', stat:'charisma', amount:'-3'}, {target:'target', stat:'hp', amount:'-1d4'}].\n"
+        "- `difficulty`: omit to roll against the target's armor class; set a number for a fixed DC.\n"
+        "- Protagonist only: make 1-2 strong specials `is_locked: true` and unlock them through story "
+        "progress with `unlock_required_item_id`, `unlock_required_scene_id`, "
+        "`unlock_required_defeated_npc_id` and/or `unlock_guard_expression`, plus a short `unlock_text`. "
+        "Only reference IDs that exist in this manifest.\n"
+        "- Optional `on_success_text` / `on_failure_text` add flavour after the roll.\n"
+        "Set `attack_mode: ATTACK_ON_SIGHT` only for NPCs that should attack the moment the protagonist "
+        "enters their scene."
+    )
+
+
 def _build_cover_guidance(
     cover_source_manifest: Optional[dict[str, Any]],
     cover_source_adventure_name: Optional[str],
@@ -461,6 +488,7 @@ def build_world_generation_prompts(
     user_prompt += _build_container_requirement(
         container_generation_enabled, min_containers, max_containers
     )
+    user_prompt += _build_special_attack_requirement(can_damage_npcs, npcs_can_damage_protagonist)
     user_prompt += build_scripts_requirement(scripts_generation_enabled)
     user_prompt += _build_item_requirement(min_items, max_items)
     user_prompt += _build_switch_requirement(original_prompt)

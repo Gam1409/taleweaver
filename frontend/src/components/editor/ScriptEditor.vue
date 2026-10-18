@@ -132,6 +132,24 @@ const availableSnippets = computed(() => {
     ]
   }
 
+  if (props.context === 'special_action') {
+    return [
+      {
+        label: 'React to a critical success',
+        code: "if special['crit']:\n    tw.story.show_message('A devastating blow!')\n",
+      },
+      {
+        label: 'Remember who used the special',
+        code: "tw.vars.set('last_special_caster', special['caster'])\n",
+      },
+      {
+        label: 'Backfire on failure',
+        code: "if not special['success']:\n    tw.player.damage(5)\n    tw.story.show_message('The spell backfires! (-5 HP)')\n",
+      },
+      ...common,
+    ]
+  }
+
   if (props.context === 'on_enter_scene' || props.context === 'on_protagonist_enters_scene') {
     return [
       {

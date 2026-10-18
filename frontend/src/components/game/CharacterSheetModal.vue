@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import StatBar from './StatBar.vue'
+import SheetSpecialsPanel from './SheetSpecialsPanel.vue'
 import type { CharacterSheet, InventoryItem } from '@/types'
 import { getItemIcon, getTypeColor, getImageUrl } from '@/utils/game_icons'
 
@@ -23,7 +24,7 @@ const emit = defineEmits<{
   itemContextmenu: [item: any, event: MouseEvent]
 }>()
 
-type TabType = 'inventory' | 'equipment' | 'ailments'
+type TabType = 'inventory' | 'equipment' | 'ailments' | 'specials'
 const activeTab = ref<TabType>('inventory')
 const showBio = ref(false)
 const brokenImages = ref<Record<string, boolean>>({})
@@ -32,6 +33,10 @@ const stateChanged = ref(false)
 const inventoryList = computed(() => props.sheet?.inventory ?? [])
 const equipment = computed<Record<string, InventoryItem | null>>(() => props.sheet?.equipment ?? {})
 const statusEffects = computed(() => props.sheet?.status_effects ?? [])
+const unlockedSpecialCount = computed(() => {
+  const unlocked = new Set(props.sheet?.unlocked_actions ?? [])
+  return (props.sheet?.special_actions ?? []).filter((a) => unlocked.has(a.id)).length
+})
 
 const equippedCount = computed(() => {
   return Object.values(equipment.value).filter(item => !!item).length
@@ -349,6 +354,27 @@ const onClose = () => {
                   {{ statusEffects.length }}
                 </span>
               </button>
+
+              <!-- Tab 4: Special Attacks -->
+              <button
+                :class="[
+                  'flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2.5 px-1.5 sm:px-4 rounded-xl font-bold uppercase tracking-wider text-[11px] sm:text-xs md:text-sm transition-all select-none',
+                  activeTab === 'specials'
+                    ? 'bg-slate-800 text-amber-400 shadow-md border border-slate-700/80'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
+                ]"
+                @click="activeTab = 'specials'"
+              >
+                <i class="ra ra-crystal-wand text-xs sm:text-base"></i>
+                <span class="hidden md:inline truncate">Specials</span>
+                <span class="md:hidden">Skills</span>
+                <span
+                  class="text-[9px] sm:text-xs font-mono font-bold px-1 sm:px-1.5 py-0.5 rounded-md"
+                  :class="activeTab === 'specials' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-800/80 text-slate-400'"
+                >
+                  {{ unlockedSpecialCount }}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -515,6 +541,8 @@ const onClose = () => {
             <!-- ============================================== -->
             <!-- TAB 3: AILMENTS & BUFFS -->
             <!-- ============================================== -->
+            <SheetSpecialsPanel v-else-if="activeTab === 'specials'" :sheet="sheet" :is-debug="isDebug" />
+
             <div v-else-if="activeTab === 'ailments'" class="flex flex-col h-full">
               
               <!-- When No Effects: Perfect Condition Banner -->

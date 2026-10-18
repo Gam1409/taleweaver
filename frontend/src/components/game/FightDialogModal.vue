@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { FastForward } from 'lucide-vue-next'
 import type { CharacterSheet, CombatEnemyState, CombatState, InventoryItem } from '@/types'
-import { getItemIcon, getTypeColor } from '@/utils/game_icons'
+import { getImageUrl, getItemIcon, getTypeColor, hasRenderableImagePath } from '@/utils/game_icons'
 import CombatActionBar from './combat/CombatActionBar.vue'
 import CombatLogPanel from './combat/CombatLogPanel.vue'
 import InitiativeTrack from './combat/InitiativeTrack.vue'
@@ -19,6 +19,7 @@ const props = defineProps<{
   playerSheet: CharacterSheet | null
   evaluating?: boolean
   isDebug?: boolean
+  sceneImage?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -37,6 +38,9 @@ const emit = defineEmits<{
 }>()
 
 const isRendered = computed(() => !!(props.open && props.combat))
+const sceneBackground = computed(() => (
+  hasRenderableImagePath(props.sceneImage) ? `url("${getImageUrl(props.sceneImage as string)}")` : null
+))
 const revealedCount = ref(0)
 const arenaPlaying = ref(false)
 const selectedTargetId = ref<string | null>(null)
@@ -213,6 +217,14 @@ onBeforeUnmount(() => {
 
           <div class="relative flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[1fr_300px] gap-3 p-2 sm:p-4">
             <div class="relative min-h-[260px] rounded-xl border border-amber-500/10 bg-slate-950/40 overflow-hidden">
+              <!-- The current scene sets the stage behind the cards. -->
+              <div
+                v-if="sceneBackground"
+                class="absolute inset-0 bg-cover bg-center scale-105 blur-[2px] opacity-60"
+                :style="{ backgroundImage: sceneBackground }"
+                aria-hidden="true"
+              ></div>
+              <div class="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/20 to-slate-950/80" aria-hidden="true"></div>
               <CombatArena
                 :combat="combat"
                 :selected-target-id="selectedTargetId"

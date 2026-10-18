@@ -18,6 +18,7 @@ from backend.api.routes.adventures.editor import (
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.scripting.sandbox import SafeAstInterpreter
 from backend.engine.world_schemas import SpecialActionSchema
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -26,6 +27,31 @@ from backend.models.world_entity import WorldEntity
 router = APIRouter(tags=["Editor"])
 
 MAX_SPECIAL_ACTIONS = 8
+SCRIPT_FIELDS = ("on_success_script", "on_failure_script")
+NPC_ONLY_DROPPED_FIELDS = (
+    "is_locked",
+    "unlock_condition_type",
+    "unlock_condition_target",
+    "unlock_required_item_id",
+    "unlock_required_scene_id",
+    "unlock_required_defeated_npc_id",
+    "unlock_guard_expression",
+    "unlock_text",
+)
+
+
+def script_syntax_errors(action: dict[str, Any]) -> list[str]:
+    """Validates scripts and the unlock guard of one special action with the sandbox rules."""
+    errors = []
+    for field in SCRIPT_FIELDS:
+        errors += [
+            f"{field}: {e}" for e in SafeAstInterpreter.check_syntax(action.get(field) or "")
+        ]
+    guard = action.get("unlock_guard_expression") or ""
+    errors += [
+        f"unlock_guard_expression: {e}" for e in SafeAstInterpreter.check_expression_syntax(guard)
+    ]
+    return errors
 
 
 class SpecialActionsUpdateRequest(BaseModel):
@@ -36,15 +62,32 @@ class SpecialActionsUpdateRequest(BaseModel):
     )
 
 
-def _serialize_actions(actions: list[SpecialActionSchema]) -> list[dict[str, Any]]:
+def _serialize_action(action: SpecialActionSchema, target_type: str) -> dict[str, Any]:
+    data = {**action.model_dump(exclude_none=True), "id": action.id.strip().upper()}
+    if target_type == "npc":
+        # Unlock rules only make sense for the protagonist.
+        for field in NPC_ONLY_DROPPED_FIELDS:
+            data.pop(field, None)
+    errors = script_syntax_errors(data)
+    if errors:
+        raise HTTPException(status_code=400, detail=f"{data['id']}: " + "; ".join(errors))
+    return data
+
+
+def _serialize_actions(
+    actions: list[SpecialActionSchema], target_type: str
+) -> list[dict[str, Any]]:
     serialized = []
     seen: set[str] = set()
     for action in actions:
-        action_id = _sanitize_editor_id(action.id.strip().upper(), "special action id")
-        if action_id in seen:
-            raise HTTPException(status_code=400, detail=f"Duplicate special action id: {action_id}")
-        seen.add(action_id)
-        serialized.append({**action.model_dump(exclude_none=True), "id": action_id})
+        _sanitize_editor_id(action.id.strip().upper(), "special action id")
+        data = _serialize_action(action, target_type)
+        if data["id"] in seen:
+            raise HTTPException(
+                status_code=400, detail=f"Duplicate special action id: {data['id']}"
+            )
+        seen.add(data["id"])
+        serialized.append(data)
     return serialized
 
 
@@ -106,7 +149,7 @@ async def update_special_actions(
     """Replaces the special attacks of the protagonist or of one NPC."""
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     target_id = _sanitize_editor_id(payload.target_id, "target_id")
-    actions = _serialize_actions(payload.special_actions)
+    actions = _serialize_actions(payload.special_actions, payload.target_type)
 
     if payload.target_type == "protagonist":
         await _save_protagonist_actions(db, template_id, actions)

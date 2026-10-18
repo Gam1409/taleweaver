@@ -72,6 +72,10 @@ INLINE_TRIGGERS: dict[str, tuple[tuple[str, str], ...]] = {
         ("on_start_sequence", "this chapter sequence becomes active"),
         ("on_end_sequence", "this chapter sequence is completed"),
     ),
+    "SPECIAL_ACTIONS (entries of protagonist/NPC special_actions)": (
+        ("on_success", "the special attack's d20 success roll succeeds (`special` dict in scope)"),
+        ("on_failure", "the special attack's success roll fails"),
+    ),
 }
 
 # `tw` API reference. Only members that exist in engine/scripting/context.py.
@@ -84,8 +88,9 @@ TW_API_REFERENCE = (
     "- tw.exits: is_locked(from_scene_id, to_scene_id), lock(from_scene_id, to_scene_id, reason), "
     "unlock(from_scene_id, to_scene_id)  (ALWAYS pass the two scene IDs of the exit)\n"
     "- tw.npcs / tw.objects (alias tw.items): get(id), exists(id), say(id, text), move(id, scene_id), "
-    "move_to_player(id), kill(id), give_item(npc_id, item_id), drop_item(npc_id, item_id, scene_id=None)\n"
-    "- entity proxies from get(): id, name, current_scene_id, is_hidden, set_hidden(bool); NPCs also hp, is_defeated, say(text); "
+    "move_to_player(id), kill(id), give_item(npc_id, item_id), drop_item(npc_id, item_id, scene_id=None), "
+    "attack(npc_id) (an NPC in the current scene starts turn-based combat after the turn)\n"
+    "- entity proxies from get(): id, name, current_scene_id, is_hidden, set_hidden(bool); NPCs also hp, is_defeated, say(text), attack(); "
     "objects also state, switch_state, flip(), toggle()\n"
     "- tw.switches: get(id), get_state(id, default), set_state(id, new_state, apply_outcomes=True), "
     "is_state(id, state), flip(id, apply_outcomes=True), toggle(id, apply_outcomes=True) | switch proxies from get() or tw.switch(id): id, state, switch_state, states, initial_state, flip(), toggle()\n"
@@ -140,6 +145,15 @@ _EXAMPLES = (
     "   completed_guard_expression = \"tw.vars.get('boss_defeated') == True and tw.player.has_item('ITEM_CRYSTAL')\"\n"
     "13. Adventure Loss deterministic guard (top-level gameover_guard_expression):\n"
     "   gameover_guard_expression = \"tw.vars.get('countdown', 10) <= 0 or tw.vars.get('alarm_tripped') == True\"\n"
+    "14. Guard attacks once the idol is taken (top-level: trigger='on_turn_end', target_id=None):\n"
+    "   if tw.player.has_item('ITEM_IDOL') and not tw.vars.get('idol_alarm', False):\\n"
+    "       tw.vars.set('idol_alarm', True)\\n"
+    "       tw.npcs.attack('NPC_TEMPLE_GUARD')\n"
+    "15. Special attack success hook (inline on a special_actions entry: on_success_script):\n"
+    "   if special['crit']:\\n"
+    "       tw.story.show_message('The insult is so brutal that the troll starts to cry.')\n"
+    "16. Special attack unlock guard (protagonist special_actions entry with is_locked=true):\n"
+    "   unlock_guard_expression = \"tw.vars.get('trained_with_master') == True\"\n"
 )
 
 
