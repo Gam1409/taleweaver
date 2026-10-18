@@ -3545,7 +3545,8 @@ async def test_container_rule_unlock_requires_explicit_unlock_update(setup_test_
 
         assert reasons
         assert "stays shut" in reasons[0]
-        assert "distraction" in reasons[0].lower()
+        # The rule text is never parsed for hints (no language-specific "distract" logic).
+        assert "betty" not in reasons[0].lower()
         assert any(
             up.entity_id == "CASH_REGISTER" and up.locked is True
             for up in (event.updated_entities or [])

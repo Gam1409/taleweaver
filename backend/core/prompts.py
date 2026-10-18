@@ -758,6 +758,29 @@ System prompt used by the Simple LLM to gate the inspect/search deep-dive path i
 Returns strict JSON; on parse failure the guard is silently skipped.
 """
 
+HIDDEN_ENTITY_DISCOVERY_SYSTEM_PROMPT = (
+    "You are a mechanics checker for an AI Text Adventure RPG.\n"
+    "Determine if the Game Master's narration or the player's message explicitly describes finding, discovering, or revealing a specific hidden entity.\n"
+    "You must respond with a JSON object containing a single boolean field: 'discovered'.\n"
+    "Guidelines:\n"
+    "1. If the narration describes the player finding the item, or the item being uncovered (even using synonyms or translated words), 'discovered' must be true.\n"
+    "2. If the player searches the exact hiding spot (e.g. they search the couch, and the entity is hidden in the couch cushions), 'discovered' must be true.\n"
+    "3. Otherwise, if the item remains hidden or unmentioned, 'discovered' must be false.\n"
+    '4. Respond with exactly the JSON structure: {"discovered": true} or {"discovered": false}.'
+)
+"""Pass 1.5 hidden-entity reveal check (guardrails/reveals.py). Works in any language."""
+
+KEY_ITEM_REFERENCE_SYSTEM_PROMPT = (
+    "You are a mechanics checker for an AI Text Adventure RPG.\n"
+    "Determine if the player's message explicitly references, mentions, or utilizes a specific required item in the current turn.\n"
+    "You must respond with a JSON object containing a single boolean field: 'referenced'.\n"
+    "Guidelines:\n"
+    "1. If the player mentions the name of the item, the item's ID, or a direct synonym or translation in any language (e.g. 'Schlüssel' or 'clé' for 'key', 'Schraubenzieher' for 'screwdriver'), 'referenced' must be true.\n"
+    "2. If the player only says a generic action (like 'open the chest', 'öffne die Kiste' or 'turn the switch') without specifying the item or tool they are using, 'referenced' must be false (even if the item is in their inventory).\n"
+    '3. Respond with exactly the JSON structure: {"referenced": true} or {"referenced": false}.'
+)
+"""Key-item reference check for locks and switches (guardrails/items.py). Examples only teach the model; nothing is matched literally."""
+
 COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT = (
     "You are the Game Master deciding a combat special event. "
     "Return ONLY valid JSON with this schema: "
