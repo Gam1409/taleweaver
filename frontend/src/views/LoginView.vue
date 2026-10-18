@@ -4,6 +4,11 @@ import { useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { authState, setToken } from '@/store/auth'
 import { configState, refreshConfig } from '@/store/config'
+import BackgroundSlideshow from '@/components/common/BackgroundSlideshow.vue'
+
+const backgroundImages = [1, 2, 3].map(
+  (n) => `${import.meta.env.BASE_URL}assets/background/background${n}.jpg`,
+)
 
 const router = useRouter()
 const username = ref('')
@@ -62,6 +67,8 @@ async function handleLogin() {
 
 <template>
   <div class="min-h-screen flex items-center justify-center bg-[#02060c] relative overflow-hidden">
+    <BackgroundSlideshow :images="backgroundImages" />
+
     <!-- Animated Background Orbs -->
     <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-aether-primary/10 rounded-full blur-[120px] animate-pulse"></div>
     <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[120px] animate-pulse" style="animation-delay: 2s"></div>
