@@ -26,7 +26,7 @@ from backend.core.llm_provider_config import (
 from backend.core.llm_request_tuning import apply_prompt_cache_markers
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.security import encryption_util
-from backend.core.voice_tags import GERMAN_TO_ENGLISH_VOICE_TAGS, VOICE_TAG_SET
+from backend.core.voice_tags import VOICE_TAG_SET
 from backend.models.user import User
 
 T = TypeVar("T", bound=BaseModel)
@@ -43,12 +43,13 @@ class _StructuredRequest:
     normalized_model: str
     json_mode: bool
     system_prompt: str
+
+
 logger = logging.getLogger(__name__)
 
-# Compile regex pattern to match voice tags (English + German fallback normalization)
+# Compile regex pattern to match (English-only) voice tags.
 # Sort by length descending to match longest first
-_all_tags = set(VOICE_TAG_SET) | set(GERMAN_TO_ENGLISH_VOICE_TAGS.keys())
-_sorted_tags = sorted(_all_tags, key=len, reverse=True)
+_sorted_tags = sorted(VOICE_TAG_SET, key=len, reverse=True)
 _tag_pattern = "|".join(re.escape(t) for t in _sorted_tags)
 
 BRACKETED_RE = re.compile(
@@ -373,8 +374,7 @@ class GameMasterLLM:
 
     @staticmethod
     def _to_canonical_voice_tag(tag: str) -> str:
-        lowered = tag.strip().lower()
-        return GERMAN_TO_ENGLISH_VOICE_TAGS.get(lowered, lowered)
+        return tag.strip().lower()
 
     @staticmethod
     def normalize_voice_tags(text: str) -> str:
@@ -691,7 +691,9 @@ class GameMasterLLM:
             or "https://api.minimax.io/v1"
         ).rstrip("/")
 
-    def _resolve_enable_thinking(self, llm_settings: dict, prefix: str, model_category: str) -> bool:
+    def _resolve_enable_thinking(
+        self, llm_settings: dict, prefix: str, model_category: str
+    ) -> bool:
         """Thinking stays disabled unless explicitly configured truthy.
 
         The small model (fast structured extraction) never inherits the global flag:
@@ -1131,9 +1133,7 @@ class GameMasterLLM:
         return self._clean_stream_voice_tags(stream)
 
     @staticmethod
-    def _structured_response_format(
-        json_mode: bool, minimax: bool, response_model: type[T]
-    ) -> Any:
+    def _structured_response_format(json_mode: bool, minimax: bool, response_model: type[T]) -> Any:
         """MiniMax rejects response_format; JSON-mode providers get json_object."""
         if minimax:
             return None

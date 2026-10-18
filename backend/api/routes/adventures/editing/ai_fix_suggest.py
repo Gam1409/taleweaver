@@ -180,6 +180,16 @@ async def ai_suggest_fix_for_finding(
     short, anbieter-neutral ``error`` string.
     """
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
+    return await generate_fix_proposals(db, template_id, current_user, payload)
+
+
+async def generate_fix_proposals(
+    db: AsyncSession,
+    template_id: str,
+    current_user: User,
+    payload: AIFixSuggestionsRequest,
+) -> AIFixSuggestionsResponse:
+    """Cached-or-generated fix proposals for one finding (ownership is checked by callers)."""
     # Read before the cache lookup, which may commit/rollback and expire ``current_user``.
     user_id = current_user.id
     signature = _signing(payload)

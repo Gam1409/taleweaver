@@ -68,114 +68,103 @@ def _summarize_for_ai(payload: dict, *, max_field_len: int = 1500) -> dict:
     return _walk(payload)
 
 
-@router.post(
-    "/{template_id}/editor/validate",
-    response_model=ValidationRunResponse,
-)
-async def run_editor_validation(
-    template_id: str,
-    payload: ValidationRunRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Run structural validation, and optionally an AI logic-validation pass.
+def _build_ai_validation_prompt(debug_payload: Any) -> str:
+    summary = _summarize_for_ai(debug_payload)
+    adventure = summary.get("adventure") or {}
+    sequences_list = adventure.get("sequences") or []
+    scripts_list = adventure.get("scripts") or []
 
-    On save, the editor calls this with ``include_ai=False`` for fast,
-    deterministic feedback. The "Run full validation" button in the
-    Validation tab uses ``include_ai=True`` and is the only path that
-    triggers the LLM call.
-    """
-    import json
+    def _dump(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False)
+
+    return AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
+        title=adventure.get("title", ""),
+        language=adventure.get("language", ""),
+        rule_enforcement_mode=adventure.get("rule_enforcement_mode", "rpg"),
+        teaser=adventure.get("teaser", "") or "",
+        plot=adventure.get("plot", "") or "",
+        rules=adventure.get("rules", "") or "",
+        intro_text=adventure.get("intro_text", "") or "",
+        walkthrough=adventure.get("walkthrough", "") or "",
+        sequence_count=len(sequences_list),
+        sequences_json=_dump(sequences_list),
+        scene_count=len(summary.get("scenes") or []),
+        scenes_json=_dump(summary.get("scenes") or []),
+        exit_count=len(summary.get("exits") or []),
+        exits_json=_dump(summary.get("exits") or []),
+        npc_count=len(summary.get("npcs") or []),
+        npcs_json=_dump(summary.get("npcs") or []),
+        object_count=len(summary.get("objects") or []),
+        objects_json=_dump(summary.get("objects") or []),
+        quest_count=len(adventure.get("quests") or []),
+        quests_json=_dump(adventure.get("quests") or []),
+        script_count=len(scripts_list),
+        scripts_json=_dump(scripts_list),
+    )
+
+
+async def _run_ai_validation(
+    debug_payload: Any, user: User, template_id: str
+) -> tuple[list[ValidationFinding], Optional[str]]:
+    """Return (AI findings, skipped reason). Never raises; failures become a reason."""
+    scene_count = len(debug_payload.scenes or [])
+    if scene_count > settings.MAX_AI_VALIDATION_SCENES:
+        logger.info(
+            "Skipping AI validation for %s: %d scenes exceeds limit of %d",
+            template_id,
+            scene_count,
+            settings.MAX_AI_VALIDATION_SCENES,
+        )
+        return [], "scene_limit_exceeded"
+
+    from backend.api.routes.adventures.schemas import AIValidationResponse
+
+    llm_settings = user.llm_settings or {}
+    provider = (
+        llm_settings.get("complex_model_provider")
+        or llm_settings.get("small_model_provider")
+        or "openai"
+    )
+    model = llm_settings.get("complex_model") or "gpt-4o"
+    try:
+        gm = GameMasterLLM(user=user, provider=provider, model_category="complex")
+        response = await gm.aexecute_complex_task(
+            system_prompt=AI_VALIDATION_SYSTEM_PROMPT,
+            user_prompt=_build_ai_validation_prompt(debug_payload),
+            response_model=AIValidationResponse,
+            model=model,
+        )
+    except Exception as exc:
+        logger.exception("AI validation failed for %s: %s", template_id, exc)
+        return [], "ai_error"
+
+    findings = [
+        ValidationFinding(
+            severity="warn",  # AI may only emit warn-level findings
+            code=f.code,
+            message=f.message,
+            location=f.location,
+            context=f.context,
+        )
+        for f in (response.findings if response else [])
+    ]
+    return findings, None
+
+
+async def execute_validation_run(
+    db: AsyncSession, template_id: str, user: User, include_ai: bool
+) -> ValidationRunResponse:
+    """Run structural (and optionally AI) validation and persist it as the latest run."""
     from datetime import datetime, timezone
 
-    await _get_owned_adventure_or_404(db, template_id, current_user.id)
-
+    user_id = user.id
     debug_payload = await _build_adventure_editor_assets(template_id, db)
-
     structural = validate_adventure(debug_payload)
 
     ai_findings: list[ValidationFinding] = []
-    ai_skipped_reason: Optional[str] = None
-
-    if not payload.include_ai:
-        ai_skipped_reason = "ai_not_requested"
-    else:
-        scene_count = len(debug_payload.scenes or [])
-        if scene_count > settings.MAX_AI_VALIDATION_SCENES:
-            ai_skipped_reason = "scene_limit_exceeded"
-            logger.info(
-                "Skipping AI validation for %s: %d scenes exceeds limit of %d",
-                template_id,
-                scene_count,
-                settings.MAX_AI_VALIDATION_SCENES,
-            )
-        else:
-            try:
-                llm_settings = current_user.llm_settings or {}
-                provider = (
-                    llm_settings.get("complex_model_provider")
-                    or llm_settings.get("small_model_provider")
-                    or "openai"
-                )
-                model = llm_settings.get("complex_model") or "gpt-4o"
-                gm = GameMasterLLM(
-                    user=current_user,
-                    provider=provider,
-                    model_category="complex",
-                )
-
-                summary = _summarize_for_ai(debug_payload)
-                adventure = summary.get("adventure") or {}
-                sequences_list = adventure.get("sequences") or []
-                scripts_list = adventure.get("scripts") or []
-                user_prompt = AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
-                    title=adventure.get("title", ""),
-                    language=adventure.get("language", ""),
-                    rule_enforcement_mode=adventure.get("rule_enforcement_mode", "rpg"),
-                    teaser=adventure.get("teaser", "") or "",
-                    plot=adventure.get("plot", "") or "",
-                    rules=adventure.get("rules", "") or "",
-                    intro_text=adventure.get("intro_text", "") or "",
-                    walkthrough=adventure.get("walkthrough", "") or "",
-                    sequence_count=len(sequences_list),
-                    sequences_json=json.dumps(sequences_list, ensure_ascii=False),
-                    scene_count=len(summary.get("scenes") or []),
-                    scenes_json=json.dumps(summary.get("scenes") or [], ensure_ascii=False),
-                    exit_count=len(summary.get("exits") or []),
-                    exits_json=json.dumps(summary.get("exits") or [], ensure_ascii=False),
-                    npc_count=len(summary.get("npcs") or []),
-                    npcs_json=json.dumps(summary.get("npcs") or [], ensure_ascii=False),
-                    object_count=len(summary.get("objects") or []),
-                    objects_json=json.dumps(summary.get("objects") or [], ensure_ascii=False),
-                    quest_count=len(adventure.get("quests") or []),
-                    quests_json=json.dumps(adventure.get("quests") or [], ensure_ascii=False),
-                    script_count=len(scripts_list),
-                    scripts_json=json.dumps(scripts_list, ensure_ascii=False),
-                )
-
-                from backend.api.routes.adventures.schemas import (
-                    AIValidationResponse as _AIValidationResponse,
-                )
-
-                response = await gm.aexecute_complex_task(
-                    system_prompt=AI_VALIDATION_SYSTEM_PROMPT,
-                    user_prompt=user_prompt,
-                    response_model=_AIValidationResponse,
-                    model=model,
-                )
-                for f in response.findings if response else []:
-                    ai_findings.append(
-                        ValidationFinding(
-                            severity="warn",  # AI may only emit warn-level findings
-                            code=f.code,
-                            message=f.message,
-                            location=f.location,
-                            context=f.context,
-                        )
-                    )
-            except Exception as exc:
-                logger.exception("AI validation failed for %s: %s", template_id, exc)
-                ai_skipped_reason = "ai_error"
+    ai_skipped_reason: Optional[str] = "ai_not_requested"
+    if include_ai:
+        ai_findings, ai_skipped_reason = await _run_ai_validation(debug_payload, user, template_id)
 
     run_at_dt = datetime.now(timezone.utc)
     structural_dicts = [f.model_dump() for f in structural]
@@ -183,8 +172,8 @@ async def run_editor_validation(
 
     persisted = ValidationRun(
         template_id=template_id,
-        user_id=current_user.id,
-        include_ai=bool(payload.include_ai),
+        user_id=user_id,
+        include_ai=bool(include_ai),
         structural_findings=structural_dicts,
         ai_findings=ai_dicts,
         ai_skipped_reason=ai_skipped_reason,
@@ -208,6 +197,27 @@ async def run_editor_validation(
         ai_skipped_reason=ai_skipped_reason,
         run_at=run_at_dt.isoformat(),
     )
+
+
+@router.post(
+    "/{template_id}/editor/validate",
+    response_model=ValidationRunResponse,
+)
+async def run_editor_validation(
+    template_id: str,
+    payload: ValidationRunRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run structural validation, and optionally an AI logic-validation pass.
+
+    On save, the editor calls this with ``include_ai=False`` for fast,
+    deterministic feedback. The "Run full validation" button in the
+    Validation tab uses ``include_ai=True`` and is the only path that
+    triggers the LLM call.
+    """
+    await _get_owned_adventure_or_404(db, template_id, current_user.id)
+    return await execute_validation_run(db, template_id, current_user, bool(payload.include_ai))
 
 
 @router.get(

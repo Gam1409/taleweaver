@@ -71,6 +71,8 @@ class CreateAdventureTemplatePayload(BaseModel):
     cover_similarity_percent: int = 50
     allow_reuse_source_assets: bool = True
     skip_generation: Optional[bool] = False
+    # Run a full validation after generation and auto-apply the top AI fix per finding.
+    auto_validate_and_fix: bool = True
 
     @field_validator("title")
     @classmethod

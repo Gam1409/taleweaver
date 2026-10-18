@@ -22,6 +22,43 @@ import { configState } from '@/store/config'
 import { apiFetch, buildApiUrl } from '@/services/http'
 import type { ApiFetchInit } from '@/services/http'
 
+export interface PasswordPolicy {
+  min_length: number
+  requires_complexity: boolean
+}
+
+export interface BootstrapStatus {
+  has_admin: boolean
+  has_users: boolean
+  app_version: string
+  password_policy?: PasswordPolicy
+}
+
+export interface SequenceProgress {
+  id?: string | null
+  title: string
+  exp_reward: number
+  completed: boolean
+  active: boolean
+}
+
+export interface PlayerSessionSummary {
+  game_id: string
+  template_id?: string | null
+  adventure_title: string
+  image_url?: string | null
+  avatar_name?: string | null
+  avatar_image?: string | null
+  status: 'active' | 'archived' | 'completed' | 'game_over' | string
+  status_note?: string | null
+  xp: number
+  sequences: SequenceProgress[]
+  sequences_completed: number
+  sequences_total: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 class ApiError extends Error {
   status: number
   /**
@@ -644,7 +681,7 @@ export const api = {
     return request('/settings/tts', { method: 'POST', body: JSON.stringify(payload) })
   },
 
-  generateTTS(payload: { text: string; scene_description?: string; adventure_id?: string; session_id?: string; title?: string; scene_name?: string; tone?: string; voice_override?: string; speaker_voices?: Record<string, string>; director_notes?: string }): Promise<{ audio_url: string }> {
+  generateTTS(payload: { text: string; scene_description?: string; adventure_id?: string; session_id?: string; title?: string; scene_name?: string; tone?: string; voice_override?: string; speaker_voices?: Record<string, string>; director_notes?: string; language?: string }): Promise<{ audio_url: string }> {
     return request('/tts/generate', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 120000 })
   },
 
@@ -724,8 +761,35 @@ export const api = {
     return request('/auth/me')
   },
 
-  getBootstrapStatus(): Promise<{ has_admin: boolean; has_users: boolean; app_version: string }> {
+  getBootstrapStatus(): Promise<BootstrapStatus> {
     return request('/auth/bootstrap-status')
+  },
+
+  recoverPasswordWithCode(payload: { username: string; recovery_code: string; new_password: string }): Promise<{ access_token: string; token_type: string }> {
+    return request('/auth/recover', { method: 'POST', body: JSON.stringify(payload) })
+  },
+
+  resetPasswordWithToken(payload: { token: string; new_password: string }): Promise<{ access_token: string; token_type: string }> {
+    return request('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) })
+  },
+
+  regenerateMyRecoveryCodes(currentPassword: string): Promise<{ codes: string[] }> {
+    return request('/users/me/recovery-codes', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword }),
+    })
+  },
+
+  updateMyPreferences(payload: { default_language?: string | null }): Promise<any> {
+    return request('/users/me/preferences', { method: 'PUT', body: JSON.stringify(payload) })
+  },
+
+  getMySessions(): Promise<PlayerSessionSummary[]> {
+    return request('/users/me/sessions')
+  },
+
+  createPasswordResetLink(userId: string): Promise<{ token: string; expires_in_hours: number }> {
+    return request(`/users/${userId}/password-reset-link`, { method: 'POST' })
   },
 
   setupRootAdmin(payload: any): Promise<any> {

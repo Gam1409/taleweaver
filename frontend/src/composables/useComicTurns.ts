@@ -152,64 +152,9 @@ export function parseUserMessage(
   return { isDialogue: false, speechText: raw }
 }
 
-const GERMAN_TO_ENGLISH_TAGS: Record<string, string> = {
-  neugierig: 'curious',
-  amüsiert: 'amused',
-  amusiert: 'amused',
-  aufgeregt: 'excited',
-  begeistert: 'excited',
-  flüstert: 'whispers',
-  flüsternd: 'whispers',
-  geflüstert: 'whispers',
-  lacht: 'laughs',
-  lachend: 'laughs',
-  lächelt: 'amused',
-  lächelnd: 'amused',
-  kichert: 'giggles',
-  kichernd: 'giggles',
-  seufzt: 'sighs',
-  seufzend: 'sighs',
-  wütend: 'angry',
-  zornig: 'angry',
-  verärgert: 'frustrated',
-  frustriert: 'frustrated',
-  ängstlich: 'panicked',
-  panisch: 'panicked',
-  überrascht: 'surprised',
-  erstaunt: 'amazed',
-  nachdenklich: 'thoughtful',
-  ernst: 'serious',
-  ruhig: 'calm',
-  gelassen: 'calm',
-  spöttisch: 'mocking',
-  sarkastisch: 'sarcastic',
-  ironisch: 'sarcastic',
-  traurig: 'sad',
-  schnell: 'very fast',
-  'sehr schnell': 'very fast',
-  langsam: 'very slow',
-  'sehr langsam': 'very slow',
-  schreiend: 'shouting',
-  schreit: 'shouting',
-  nervös: 'nervous',
-  nervos: 'nervous',
-  gelangweilt: 'bored',
-  müde: 'tired',
-  mude: 'tired',
-  erleichtert: 'relieved',
-  verwirrt: 'confused',
-  sanft: 'gentle',
-  streng: 'stern',
-  warmherzig: 'warmly',
-  kalt: 'coldly',
-  spielerisch: 'playfully',
-  fröhlich: 'cheerfully',
-  frohlich: 'cheerfully',
-}
-
-export function normalizeTagToEnglish(tag: string): string {
-  const norm = tag.trim().toLowerCase()
-  return GERMAN_TO_ENGLISH_TAGS[norm] || norm
+/** Voice tags are always English; only normalize casing and whitespace. */
+export function normalizeVoiceTag(tag: string): string {
+  return tag.trim().toLowerCase()
 }
 
 export function parseAssistantContent(
@@ -248,14 +193,14 @@ export function parseAssistantContent(
       const isBold = Boolean(match[2] || match[4])
       let speakerName = (match[3] || match[5] || match[6] || '').trim()
       const rawSpeech = (match[7] || '').trim()
-      let voiceTag = match[1] ? normalizeTagToEnglish(match[1]) : undefined
+      let voiceTag = match[1] ? normalizeVoiceTag(match[1]) : undefined
       let speechText = rawSpeech
 
       // Check if rawSpeech starts with a voice tag (e.g. [amused] "Ah...", "[amused]" "Ah...", "[amused] "Ah...")
       const tagInSpeechMatch = speechText.match(/^"?\[([^\]\n]+)\]"?\s*"?\s*([\s\S]*)$/)
       if (tagInSpeechMatch) {
         if (!voiceTag) {
-          voiceTag = normalizeTagToEnglish(tagInSpeechMatch[1])
+          voiceTag = normalizeVoiceTag(tagInSpeechMatch[1])
         }
         speechText = tagInSpeechMatch[2].trim()
       }
@@ -314,7 +259,7 @@ export function parseAssistantContent(
       let voiceTag: string | undefined = undefined
       const tagMatch = narrationText.match(/^\[([^\]\n]+)\]\s*(.*)$/)
       if (tagMatch) {
-        voiceTag = normalizeTagToEnglish(tagMatch[1])
+        voiceTag = normalizeVoiceTag(tagMatch[1])
         narrationText = tagMatch[2].trim()
       }
 
@@ -346,7 +291,7 @@ export function renderFormattedHtml(text: string): string {
   const withVoiceTags = escaped.replace(/(\[[^\]\n]+\])/g, (match, tag) => {
     const raw = tag.slice(1, -1).trim()
     if (/^DEBUG/i.test(raw)) return match
-    const en = normalizeTagToEnglish(raw)
+    const en = normalizeVoiceTag(raw)
     return `<span class="comic-voice-tag">[${en}]</span>`
   })
   const withBolds = withVoiceTags.replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200 font-bold">$1</strong>')
