@@ -205,45 +205,166 @@ onMounted(() => {
 
 
 
+// ============ NAVIGATION CATEGORIES ============
+interface NavCategory {
+  title: string
+  items: {
+    id: Section
+    label: string
+    icon: string
+    activeClass: string
+    iconColor: string
+    badge?: () => string | number | null
+  }[]
+}
+
+const navCategories: NavCategory[] = [
+  {
+    title: 'AI & Pipeline',
+    items: [
+      {
+        id: 'keys',
+        label: 'Provider Vault',
+        icon: 'ra-locked',
+        activeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-sm shadow-emerald-950/20',
+        iconColor: 'text-emerald-400',
+        badge: () => Object.keys(settingsService.configuredKeys.value).length || null
+      },
+      {
+        id: 'llm',
+        label: 'Intelligence (LLM)',
+        icon: 'ra-brain',
+        activeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-sm shadow-purple-950/20',
+        iconColor: 'text-purple-400'
+      },
+      {
+        id: 't2i',
+        label: 'Visuals (Image Gen)',
+        icon: 'ra-camera',
+        activeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30 shadow-sm shadow-cyan-950/20',
+        iconColor: 'text-cyan-400'
+      },
+      {
+        id: 'tts',
+        label: 'Speech (TTS)',
+        icon: 'ra-speech-bubble',
+        activeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30 shadow-sm shadow-blue-950/20',
+        iconColor: 'text-blue-400'
+      },
+      {
+        id: 'stt',
+        label: 'Voice Input (STT)',
+        icon: 'ra-microphone',
+        activeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30 shadow-sm shadow-teal-950/20',
+        iconColor: 'text-teal-400'
+      }
+    ]
+  },
+  {
+    title: 'Adventure Catalogs',
+    items: [
+      {
+        id: 'styles',
+        label: 'Image Styles',
+        icon: 'ra-paint-brush',
+        activeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30 shadow-sm shadow-amber-950/20',
+        iconColor: 'text-amber-400',
+        badge: () => catalogService.imageStylesCatalog.value.length || null
+      },
+      {
+        id: 'tones',
+        label: 'Narrative Tones',
+        icon: 'ra-scroll',
+        activeClass: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30 shadow-sm shadow-indigo-950/20',
+        iconColor: 'text-indigo-400',
+        badge: () => catalogService.toneCatalog.value.length || null
+      }
+    ]
+  },
+  {
+    title: 'System & Realm',
+    items: [
+      {
+        id: 'game',
+        label: 'Game Settings',
+        icon: 'ra-gear',
+        activeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30 shadow-sm shadow-sky-950/20',
+        iconColor: 'text-sky-400'
+      },
+      {
+        id: 'users',
+        label: 'User Management',
+        icon: 'ra-person',
+        activeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30 shadow-sm shadow-rose-950/20',
+        iconColor: 'text-rose-400',
+        badge: () => userService.usersList.value.length || null
+      }
+    ]
+  }
+]
 </script>
 
-<<template>
+<template>
   <div class="min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden">
     
     <!-- SIDEBAR -->
-    <aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col p-6 h-screen sticky top-0">
-      <div class="flex items-center gap-4 mb-10">
-        <button @click="goBack" class="p-2 rounded-lg bg-slate-950 border border-slate-800 hover:bg-slate-800 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+    <aside class="w-72 bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col p-5 h-screen sticky top-0 z-20">
+      <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800/80">
+        <button @click="goBack" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:bg-slate-800 hover:text-white transition-all text-slate-400" title="Return to Portal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
           </svg>
         </button>
-        <h2 class="text-xl font-bold tracking-tight">Configuration</h2>
+        <div>
+          <h2 class="text-base font-bold tracking-tight text-white leading-tight">Admin Console</h2>
+          <p class="text-[11px] text-slate-500 font-mono">TaleWeaver Engine</p>
+        </div>
       </div>
 
-      <nav class="flex-grow space-y-2">
-        <button 
-          v-for="section in [
-            { id: 'keys', label: 'Provider Keys', icon: 'ra-locked', color: 'emerald' },
-            { id: 'llm', label: 'Intelligence', icon: 'ra-brain', color: 'purple' },
-            { id: 't2i', label: 'Visuals', icon: 'ra-camera', color: 'cyan' },
-            { id: 'tts', label: 'Speech (TTS)', icon: 'ra-speech-bubble', color: 'blue' },
-            { id: 'stt', label: 'Speech to Text (STT)', icon: 'ra-microphone', color: 'emerald' },
-            { id: 'styles', label: 'Image Styles', icon: 'ra-paint-brush', color: 'amber' },
-            { id: 'tones', label: 'Narrative Tones', icon: 'ra-scroll', color: 'indigo' },
-            { id: 'game', label: 'Game Settings', icon: 'ra-gear', color: 'blue' },
-            { id: 'users', label: 'User Management', icon: 'ra-person', color: 'red' }
-          ]"
-          :key="section.id"
-          @click="activeSection = section.id as Section"
-          :class="['w-full flex items-center text-left justify-start px-4 py-3 rounded-xl transition-all duration-300', activeSection === section.id ? `bg-${section.color}-500/10 text-${section.color}-400 border border-${section.color}-500/20` : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300']"
-        >
-          <span class="font-bold text-md font-mono uppercase tracking-widest">{{ section.label }}</span>
-        </button>
+      <!-- Grouped Navigation -->
+      <nav class="flex-grow space-y-5 overflow-y-auto pr-1 custom-scrollbar">
+        <div v-for="category in navCategories" :key="category.title" class="space-y-1">
+          <div class="px-3 text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">
+            {{ category.title }}
+          </div>
+          <button 
+            v-for="item in category.items"
+            :key="item.id"
+            @click="activeSection = item.id as Section"
+            :class="[
+              'w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left border transition-all duration-200 group',
+              activeSection === item.id 
+                ? item.activeClass 
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
+            ]"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <i 
+                :class="[
+                  'ra text-base transition-transform group-hover:scale-110', 
+                  item.icon,
+                  activeSection === item.id ? item.iconColor : 'text-slate-500 group-hover:text-slate-300'
+                ]"
+              ></i>
+              <span class="text-xs font-bold truncate">{{ item.label }}</span>
+            </div>
+            
+            <span 
+              v-if="item.badge && item.badge() !== null"
+              class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-950/80 border border-slate-800 text-slate-400"
+            >
+              {{ item.badge() }}
+            </span>
+          </button>
+        </div>
       </nav>
 
-      <div class="mt-auto pt-6 border-t border-slate-800 opacity-50">
-        <div class="text-xs font-bold text-slate-500 uppercase tracking-widest">TaleWeaver Engine v{{ configState.appVersion }}</div>
+      <div class="mt-auto pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          Online
+        </span>
+        <span>v{{ configState.appVersion }}</span>
       </div>
     </aside>
 
@@ -388,7 +509,7 @@ onMounted(() => {
       :is-submitting="catalogService.isSubmitting.value"
       @close="isCatalogModalOpen = false"
       @save="(item) => handleSaveCatalogItem(item)"
-      @generate="({ type, item, index }) => handleGenerateCatalogImage(type, item, index)"
+      @generate="({ type, item, index, prompt }) => handleGenerateCatalogImage(type, item, index, prompt)"
       @upload="({ event, type, item, index }) => handleUploadCatalogImage(event, type, item, index)"
     />
 
@@ -401,7 +522,6 @@ onMounted(() => {
 
   </div>
 </template>
->
 
 <style scoped>
 .animate-fade-in {
