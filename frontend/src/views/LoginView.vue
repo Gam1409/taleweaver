@@ -7,7 +7,7 @@ import { configState, refreshConfig } from '@/store/config'
 import BackgroundSlideshow from '@/components/common/BackgroundSlideshow.vue'
 import RecoveryCodeForm from '@/components/auth/RecoveryCodeForm.vue'
 
-const backgroundImages = [1, 2, 3].map(
+const backgroundImages = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(
   (n) => `${import.meta.env.BASE_URL}assets/background/background${n}.jpg`,
 )
 
