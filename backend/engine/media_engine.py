@@ -22,6 +22,7 @@ from PIL import Image
 from backend.core import prompts
 from backend.core.config import settings
 from backend.core.security import encryption_util
+from backend.engine.bfl_payloads import build_bfl_payload, resolve_bfl_model_alias
 from backend.utils.image_generator import (
     ColorTheme,
     OrganicGradientStrategy,
@@ -397,10 +398,8 @@ class MediaEngine:
         if lowered.startswith(("openai/", "dall-e", "openrouter/", "google/", "gemini/")):
             return BFL_DEFAULT_MODEL.removeprefix("black_forest_labs/")
 
-        if normalized.startswith("black_forest_labs/"):
-            return normalized.removeprefix("black_forest_labs/")
-
-        return normalized
+        normalized = normalized.removeprefix("black_forest_labs/")
+        return resolve_bfl_model_alias(normalized)
 
     @staticmethod
     async def _generate_image_black_forest_labs_direct(
@@ -416,26 +415,8 @@ class MediaEngine:
         model_slug = MediaEngine._normalize_black_forest_labs_model(model)
         endpoint = f"{BFL_API_BASE}/{model_slug}"
 
-        payload: dict[str, Any] = {"prompt": prompt[:1500]}
+        payload = build_bfl_payload(model_slug, prompt, provider_options)
         logger.info("BFL submission payload prepared (prompt_%s)", _safe_prompt_summary(prompt))
-        optional_fields = (
-            "input_image",
-            "input_image_2",
-            "input_image_3",
-            "input_image_4",
-            "seed",
-            "width",
-            "height",
-            "safety_tolerance",
-            "output_format",
-            "webhook_url",
-            "webhook_secret",
-            "transparent_bg",
-        )
-        for field in optional_fields:
-            value = provider_options.get(field)
-            if value is not None:
-                payload[field] = value
 
         response = await asyncio.to_thread(
             requests.post,

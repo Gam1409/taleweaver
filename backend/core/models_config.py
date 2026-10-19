@@ -42,7 +42,7 @@ PREDEFINED_IMAGE_MODELS = {
     "openai": ["gpt-image-1-mini","gpt-image-1.5", "gpt-image-2"],
     "openrouter": ["black-forest-labs/flux.2-klein-4b", "sourceful/riverflow-v2-fast",
      "openai/gpt-5.4-image-2", "google/gemini-3.1-flash-image-preview" ,"openai/gpt-5-image-mini"],
-    "black_forest_labs": ["flux-2-klein-4b", "flux-2-klein-9b", "flux-dev", "flux-pro", "flux-pro-1.1", "flux-2-flex", "flux-2-pro", "flux-2-max"],
+    "black_forest_labs": ["flux-3-image", "flux-3-image-klein", "flux-2-klein-4b", "flux-2-klein-9b", "flux-dev", "flux-pro", "flux-pro-1.1", "flux-2-flex", "flux-2-pro", "flux-2-max"],
     "google": ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image", "imagen-4.0-fast-generate-001", "imagen-4.0-generate-001"],
     "ollama": ["x/flux2-klein", "stable-diffusion-v1-5"],
     "stable_diffusion": ["default"],

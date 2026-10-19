@@ -5,6 +5,7 @@ import os
 import pytest
 
 from backend.core import prompts
+from backend.engine import bfl_payloads
 from backend.engine import media_engine as media_engine_module
 from backend.engine.media_engine import MediaEngine
 
@@ -153,6 +154,178 @@ async def test_generate_image_black_forest_labs_uses_direct_polling_flow(monkeyp
     assert post_calls[0]["json"]["safety_tolerance"] == 2
     assert get_calls[0]["url"] == "https://api.bfl.ai/v1/poll/req-1"
     assert get_calls[0]["headers"]["x-key"] == "bfl-key"
+
+
+def _patch_bfl_http(monkeypatch, post_calls):
+    """Patch BFL submit/poll/save so tests can inspect the submitted payload."""
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        post_calls.append({"url": url, "headers": headers, "json": json})
+        return _FakeResponse(
+            200, {"id": "req-3", "polling_url": "https://api.bfl.ai/v1/poll/req-3"}
+        )
+
+    def fake_get(url, headers=None, timeout=None):
+        return _FakeResponse(
+            200, {"status": "Ready", "result": {"sample": "https://delivery.bfl.ai/f3.png"}}
+        )
+
+    async def fake_save_remote_image(_url, _target_dir, _filename):
+        return "/data/adventures/test/f3.png"
+
+    monkeypatch.setattr("backend.engine.media_engine.requests.post", fake_post)
+    monkeypatch.setattr("backend.engine.media_engine.requests.get", fake_get)
+    monkeypatch.setattr(MediaEngine, "_save_remote_image", fake_save_remote_image)
+
+
+@pytest.mark.parametrize(
+    ("raw_model", "expected"),
+    [
+        ("flux-3", "flux-3-image"),
+        ("FLUX-3", "flux-3-image"),
+        ("black_forest_labs/flux-3", "flux-3-image"),
+        ("flux-3-image", "flux-3-image"),
+        ("flux-3-klein", "flux-3-image-klein"),
+        ("black_forest_labs/flux-3-klein", "flux-3-image-klein"),
+        ("black_forest_labs/flux-3-image-klein", "flux-3-image-klein"),
+        ("flux-pro-1.1", "flux-pro-1.1"),
+    ],
+)
+async def test_normalize_black_forest_labs_model_resolves_flux_3_aliases(raw_model, expected):
+    """FLUX 3 shorthand names should resolve to the official BFL endpoint slugs."""
+    # Act
+    result = MediaEngine._normalize_black_forest_labs_model(raw_model)
+
+    # Assert
+    assert result == expected
+
+
+async def test_generate_image_flux_3_image_sends_only_allowed_fields(monkeypatch):
+    """flux-3-image rejects width/height/seed/output_format; size maps to aspect_ratio."""
+    # Arrange
+    post_calls = []
+    _patch_bfl_http(monkeypatch, post_calls)
+
+    # Act
+    result = await MediaEngine.generate_image(
+        prompt="A misty harbor at dawn",
+        model="black_forest_labs/flux-3",
+        api_key="bfl-key",
+        provider="black_forest_labs",
+        target_dir=TEST_TARGET_DIR,
+        provider_options={
+            "width": 1344,
+            "height": 768,
+            "seed": 42,
+            "output_format": "png",
+            "safety_tolerance": 2,
+            "resolution": "1k",
+            "steps": 8,
+        },
+    )
+
+    # Assert
+    assert result == "/data/adventures/test/f3.png"
+    assert post_calls[0]["url"] == "https://api.bfl.ai/v1/flux-3-image"
+    assert post_calls[0]["json"] == {
+        "prompt": f"A misty harbor at dawn. {prompts.NO_TEXT_IMAGE_PROMPT_SUFFIX}",
+        "aspect_ratio": "16:9",
+        "resolution": "1k",
+        "safety_tolerance": 2,
+    }
+
+
+async def test_generate_image_flux_3_image_keeps_explicit_aspect_ratio(monkeypatch):
+    """An explicit aspect_ratio must win over width/height and input images map to `images`."""
+    # Arrange
+    post_calls = []
+    _patch_bfl_http(monkeypatch, post_calls)
+
+    # Act
+    await MediaEngine.generate_image(
+        prompt="A portrait of a knight",
+        model="flux-3-image",
+        api_key="bfl-key",
+        provider="black_forest_labs",
+        target_dir=TEST_TARGET_DIR,
+        provider_options={
+            "aspect_ratio": "3:4",
+            "width": 1024,
+            "height": 1024,
+            "input_image": "https://example.com/ref.png",
+            "grounding": True,
+        },
+    )
+
+    # Assert
+    payload = post_calls[0]["json"]
+    assert payload["aspect_ratio"] == "3:4"
+    assert payload["images"] == ["https://example.com/ref.png"]
+    assert payload["grounding"] is True
+    assert "width" not in payload
+    assert "height" not in payload
+    assert "input_image" not in payload
+
+
+async def test_generate_image_flux_3_image_klein_payload(monkeypatch):
+    """flux-3-image-klein accepts width/height/seed/output_format/steps but not legacy keys."""
+    # Arrange
+    post_calls = []
+    _patch_bfl_http(monkeypatch, post_calls)
+
+    # Act
+    await MediaEngine.generate_image(
+        prompt="A dragon over a castle",
+        model="flux-3-klein",
+        api_key="bfl-key",
+        provider="black_forest_labs",
+        target_dir=TEST_TARGET_DIR,
+        provider_options={
+            "width": 1024,
+            "height": 768,
+            "seed": 7,
+            "output_format": "jpeg",
+            "steps": 4,
+            "safety_tolerance": 2,
+            "transparent_bg": True,
+            "webhook_url": "https://example.com/hook",
+            "grounding": True,
+        },
+    )
+
+    # Assert
+    assert post_calls[0]["url"] == "https://api.bfl.ai/v1/flux-3-image-klein"
+    assert post_calls[0]["json"] == {
+        "prompt": f"A dragon over a castle. {prompts.NO_TEXT_IMAGE_PROMPT_SUFFIX}",
+        "width": 1024,
+        "height": 768,
+        "seed": 7,
+        "output_format": "jpeg",
+        "steps": 4,
+        "safety_tolerance": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "expected"),
+    [
+        (1024, 1024, "1:1"),
+        (1920, 1080, "16:9"),
+        (1080, 1920, "9:16"),
+        (1536, 1024, "3:2"),
+        (2560, 1080, "21:9"),
+        (768, 1024, "3:4"),
+        (None, 1024, None),
+        (1024, 0, None),
+    ],
+)
+async def test_nearest_flux_3_aspect_ratio(width, height, expected):
+    """width/height should map to the closest allowed FLUX 3 aspect ratio."""
+    # Act
+    result = bfl_payloads.nearest_flux_3_aspect_ratio(width, height)
+
+    # Assert
+    assert result == expected
 
 
 async def test_generate_image_ollama_raises_if_local_generation_fails(monkeypatch):

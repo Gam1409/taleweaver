@@ -58,7 +58,23 @@ const isModelCustom = (model: string, provider: string) => {
   return !predefined.includes(model)
 }
 
-const getModelOptionLabel = (_provider: string, model: string) => model
+const MODEL_OPTION_LABELS: Record<string, Record<string, string>> = {
+  black_forest_labs: {
+    'flux-3-image': 'FLUX 3 Image',
+    'flux-3-image-klein': 'FLUX 3 Image Klein',
+    'flux-2-klein-4b': 'FLUX.2 [klein] 4B',
+    'flux-2-klein-9b': 'FLUX.2 [klein] 9B',
+    'flux-2-flex': 'FLUX.2 [flex]',
+    'flux-2-pro': 'FLUX.2 [pro]',
+    'flux-2-max': 'FLUX.2 [max]',
+    'flux-dev': 'FLUX.1 [dev]',
+    'flux-pro': 'FLUX.1 [pro]',
+    'flux-pro-1.1': 'FLUX1.1 [pro]',
+  },
+}
+
+const getModelOptionLabel = (provider: string, model: string) =>
+  MODEL_OPTION_LABELS[provider]?.[model] ?? model
 
 const getProviderName = (id: string) => {
   return props.availableConstants.image_providers?.find((p: any) => p.id === id)?.name || id
