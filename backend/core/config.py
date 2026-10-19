@@ -2,10 +2,13 @@ import base64
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def get_app_version() -> str:
@@ -194,7 +197,8 @@ class Settings(BaseSettings):
         if p == "minimax": return self.MINIMAX_API_KEY
         return None
     
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # Resolve .env against the project root so loading does not depend on the CWD
+    model_config = {"env_file": PROJECT_ROOT / ".env", "extra": "ignore"}
 
 settings = Settings()
 print(f"DEBUG: TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}")

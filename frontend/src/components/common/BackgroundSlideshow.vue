@@ -7,7 +7,7 @@ const props = withDefaults(
     /** Time each image stays visible (ms) before the next crossfade starts. */
     interval?: number
   }>(),
-  { interval: 5000 },
+  { interval: 7000 },
 )
 
 const FADE_MS = 2000

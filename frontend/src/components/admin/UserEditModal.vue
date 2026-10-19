@@ -14,12 +14,15 @@ const emit = defineEmits<{
 }>()
 
 const editingUser = ref({ ...props.user })
+const showPassword = ref(false)
 
 watch(() => props.user, (newUser) => {
   editingUser.value = { ...newUser }
+  showPassword.value = false
 }, { deep: true })
 
 const handleSubmit = () => {
+  if (!editingUser.value.username?.trim()) return
   emit('save', editingUser.value)
 }
 </script>
@@ -27,42 +30,127 @@ const handleSubmit = () => {
 <template>
   <Teleport to="body">
     <div v-if="isOpen" class="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/90 backdrop-blur-md" @click="emit('close')"></div>
-      <div class="relative w-full max-w-lg bg-[#0a111c] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fade-in">
-        <div class="p-10">
-          <h2 class="text-2xl font-black text-white font-display mb-8">
-            {{ isEditingExisting ? 'Edit Domain Dweller' : 'Summon New Dweller' }}
-          </h2>
-
-          <form @submit.prevent="handleSubmit" class="space-y-6">
-            <div class="space-y-2">
-              <label class="text-xxs font-black text-slate-500 uppercase tracking-widest">Username</label>
-              <input v-model="editingUser.username" type="text" required class="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-red-500/50" />
+      <div class="absolute inset-0 bg-black/85 backdrop-blur-sm" @click="emit('close')"></div>
+      <div class="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-fade-in">
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center text-lg">
+              <i class="ra ra-hood"></i>
             </div>
-
-            <div class="space-y-2">
-              <label class="text-xxs font-black text-slate-500 uppercase tracking-widest">
-                {{ isEditingExisting ? 'Reset Password (optional)' : 'Master Password' }}
-              </label>
-              <input v-model="editingUser.password" type="password" :required="!isEditingExisting" class="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-red-500/50" />
+            <div>
+              <h2 class="text-xl font-bold text-white">
+                {{ isEditingExisting ? 'Edit Realm Dweller' : 'Summon New Dweller' }}
+              </h2>
+              <p class="text-xs text-slate-400">Manage account credentials and role authorization.</p>
             </div>
+          </div>
+          <button @click="emit('close')" class="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
+            <i class="ra ra-cancel text-sm"></i>
+          </button>
+        </div>
 
-            <div class="space-y-2">
-              <label class="text-xxs font-black text-slate-500 uppercase tracking-widest">Role</label>
-              <select v-model="editingUser.role" class="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-red-500/50">
-                <option value="user">User (Storyteller)</option>
-                <option value="admin">Admin (World Weaver)</option>
-              </select>
-            </div>
+        <form @submit.prevent="handleSubmit" class="space-y-5">
+          <!-- Username -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Username <span class="text-rose-400">*</span>
+            </label>
+            <input 
+              v-model="editingUser.username" 
+              type="text" 
+              required 
+              minlength="3"
+              placeholder="e.g. Jean"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-rose-500/50" 
+            />
+          </div>
 
-            <div class="flex gap-4 pt-4">
-              <button type="button" @click="emit('close')" class="flex-1 py-3 text-slate-500 font-bold hover:text-white transition-colors">Cancel</button>
-              <button type="submit" :disabled="isSubmitting" class="flex-[2] btn-primary !bg-red-600 hover:!bg-red-500 shadow-red-900/20">
-                {{ isSubmitting ? 'Weaving...' : 'Save Soul' }}
+          <!-- Password -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {{ isEditingExisting ? 'Reset Password (leave empty to keep current)' : 'Master Password' }}
+              <span v-if="!isEditingExisting" class="text-rose-400">*</span>
+            </label>
+            <div class="relative">
+              <input 
+                v-model="editingUser.password" 
+                :type="showPassword ? 'text' : 'password'" 
+                :required="!isEditingExisting" 
+                placeholder="••••••••••••"
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-4 pr-11 py-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-rose-500/50" 
+              />
+              <button
+                type="button"
+                @click="showPassword = !showPassword"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs px-1"
+                :title="showPassword ? 'Hide password' : 'Show password'"
+              >
+                <i :class="['ra', showPassword ? 'ra-eye-shield' : 'ra-eye-slash']"></i>
               </button>
             </div>
-          </form>
-        </div>
+          </div>
+
+          <!-- Role Selector (Visual Cards) -->
+          <div class="space-y-2">
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">Account Role</label>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                @click="editingUser.role = 'user'"
+                :class="[
+                  'p-3.5 rounded-2xl border text-left transition-all',
+                  editingUser.role === 'user'
+                    ? 'bg-rose-500/10 border-rose-500/40 text-white shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                ]"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <i class="ra ra-player text-rose-400"></i>
+                  <span class="text-xs font-bold text-white">Storyteller</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Plays adventures and generates personal campaigns.</p>
+              </button>
+
+              <button
+                type="button"
+                @click="editingUser.role = 'admin'"
+                :class="[
+                  'p-3.5 rounded-2xl border text-left transition-all',
+                  editingUser.role === 'admin'
+                    ? 'bg-rose-500/10 border-rose-500/40 text-white shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                ]"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <i class="ra ra-crown text-rose-400"></i>
+                  <span class="text-xs font-bold text-white">World Weaver</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Full administrative access to AI models & users.</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+            <button 
+              type="button" 
+              @click="emit('close')" 
+              class="px-5 py-2.5 rounded-xl border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              :disabled="isSubmitting || !editingUser.username?.trim()" 
+              class="px-6 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-900/30 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            >
+              <i v-if="isSubmitting" class="ra ra-cycle animate-spin"></i>
+              <i v-else class="ra ra-save"></i>
+              <span>{{ isSubmitting ? 'Summoning...' : 'Save Dweller' }}</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </Teleport>
@@ -70,10 +158,10 @@ const handleSubmit = () => {
 
 <style scoped>
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out;
+  animation: fadeIn 0.3s ease-out;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 </style>
