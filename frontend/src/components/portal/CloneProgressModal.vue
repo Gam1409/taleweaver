@@ -40,25 +40,9 @@ const canClose = computed(() => Boolean(props.errorMsg) || props.stage === 'comp
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
     <div class="w-full max-w-md rounded-2xl bg-[#081425]/90 border border-white/10 shadow-[0_0_50px_rgba(78,222,163,0.15)] overflow-hidden font-ui">
-      <div class="px-6 py-5 border-b border-white/10 flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-300"
-          :class="[
-            props.errorMsg
-              ? 'bg-red-500/20 border-red-500/40 text-red-400'
-              : props.stage === 'completed'
-                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                : 'bg-aether-primary/10 border-aether-primary/30 text-aether-primary animate-pulse'
-          ]"
-        >
-          <i v-if="props.errorMsg" class="ra ra-warning text-xl"></i>
-          <i v-else-if="props.stage === 'completed'" class="ra ra-checkmark text-xl"></i>
-          <i v-else class="ra ra-sideswipe text-xl"></i>
-        </div>
-        <div>
-          <h3 class="text-lg font-black text-white font-display uppercase tracking-wider">{{ modalHeader }}</h3>
-          <p class="text-xs text-slate-400 mt-0.5">Target: <span class="font-bold text-aether-primary">{{ props.sessionTitle }}</span></p>
-        </div>
+      <div class="px-6 py-5 border-b border-white/10">
+        <h3 class="text-lg font-black text-white font-display uppercase tracking-wider">{{ modalHeader }}</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Target: <span class="font-bold text-aether-primary">{{ props.sessionTitle }}</span></p>
       </div>
 
       <div class="px-6 py-6 flex flex-col gap-5">

@@ -338,14 +338,7 @@ const navCategories: NavCategory[] = [
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
             ]"
           >
-            <div class="flex items-center gap-3 min-w-0">
-              <i 
-                :class="[
-                  'ra text-base transition-transform group-hover:scale-110', 
-                  item.icon,
-                  activeSection === item.id ? item.iconColor : 'text-slate-500 group-hover:text-slate-300'
-                ]"
-              ></i>
+            <div class="flex items-center min-w-0">
               <span class="text-xs font-bold truncate">{{ item.label }}</span>
             </div>
             

@@ -206,14 +206,9 @@ onUnmounted(() => {
     <div class="w-full max-w-2xl h-[80vh] flex flex-col rounded-2xl bg-[#070e17]/95 border border-white/10 shadow-[0_0_50px_rgba(56,189,248,0.15)] overflow-hidden">
       <!-- Modal Header -->
       <div class="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#0a1424]">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-            <i class="ra ra-scroll text-lg animate-pulse"></i>
-          </div>
-          <div>
-            <h3 class="text-md font-black text-white uppercase tracking-wider">Generation Progress</h3>
-            <p class="text-xs text-slate-400 mt-0.5">Adventure: <span class="font-bold text-sky-400">{{ props.adventureTitle }}</span></p>
-          </div>
+        <div>
+          <h3 class="text-md font-black text-white uppercase tracking-wider">Generation Progress</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Adventure: <span class="font-bold text-sky-400">{{ props.adventureTitle }}</span></p>
         </div>
       </div>
 

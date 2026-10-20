@@ -83,6 +83,43 @@ const isModelCustom = (model: string, provider: string) => {
   return !predefined.includes(model)
 }
 
+const customTiers = ref<Record<string, boolean>>({
+  small: false,
+  complex: false,
+  generator: false,
+  play_agent: false,
+  compression: false,
+})
+
+const syncCustomTiers = () => {
+  for (const tier of ['small', 'complex', 'generator', 'play_agent', 'compression']) {
+    const model = (localForm.value as any)[`${tier}_model`]
+    const provider = (localForm.value as any)[`${tier}_model_provider`]
+    customTiers.value[tier] = isModelCustom(model, provider)
+  }
+}
+syncCustomTiers()
+
+watch(() => props.llmForm, () => {
+  syncCustomTiers()
+}, { deep: true })
+
+const onModelSelect = (tier: string, e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  const modelKey = `${tier}_model` as keyof typeof localForm.value
+  const providerKey = `${tier}_model_provider` as keyof typeof localForm.value
+  if (val === 'custom') {
+    customTiers.value[tier] = true
+    const predefined = props.availableConstants?.predefined_llm_models?.[localForm.value[providerKey]]
+    if (predefined?.includes(localForm.value[modelKey])) {
+      (localForm.value as any)[modelKey] = ''
+    }
+  } else {
+    customTiers.value[tier] = false
+    (localForm.value as any)[modelKey] = val
+  }
+}
+
 const getModelOptionLabel = (_provider: string, model: string) => model
 
 const getProviderName = (id: string) => {
@@ -117,22 +154,32 @@ const resolveModelOnProviderChange = (
 
 watch(() => localForm.value.small_model_provider, (provider, oldProvider) => {
   localForm.value.small_model = resolveModelOnProviderChange(localForm.value.small_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+  customTiers.value.small = Boolean(localForm.value.small_model && predefined && !predefined.includes(localForm.value.small_model))
 })
 
 watch(() => localForm.value.complex_model_provider, (provider, oldProvider) => {
   localForm.value.complex_model = resolveModelOnProviderChange(localForm.value.complex_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+  customTiers.value.complex = Boolean(localForm.value.complex_model && predefined && !predefined.includes(localForm.value.complex_model))
 })
 
 watch(() => localForm.value.generator_model_provider, (provider, oldProvider) => {
   localForm.value.generator_model = resolveModelOnProviderChange(localForm.value.generator_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+  customTiers.value.generator = Boolean(localForm.value.generator_model && predefined && !predefined.includes(localForm.value.generator_model))
 })
 
 watch(() => localForm.value.play_agent_model_provider, (provider, oldProvider) => {
   localForm.value.play_agent_model = resolveModelOnProviderChange(localForm.value.play_agent_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+  customTiers.value.play_agent = Boolean(localForm.value.play_agent_model && predefined && !predefined.includes(localForm.value.play_agent_model))
 })
 
 watch(() => localForm.value.compression_model_provider, (provider, oldProvider) => {
   localForm.value.compression_model = resolveModelOnProviderChange(localForm.value.compression_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+  customTiers.value.compression = Boolean(localForm.value.compression_model && predefined && !predefined.includes(localForm.value.compression_model))
 })
 
 const hasOllamaProviderSelected = computed(() => (
@@ -434,12 +481,8 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="isModelCustom(localForm.small_model, localForm.small_model_provider) ? 'custom' : localForm.small_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.small_model = val;
-              else if (!isModelCustom(localForm.small_model, localForm.small_model_provider)) localForm.small_model = '';
-            }"
+            :value="customTiers.small ? 'custom' : localForm.small_model"
+            @change="(e) => onModelSelect('small', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -455,7 +498,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Custom Model Input if custom -->
-      <div v-if="isModelCustom(localForm.small_model, localForm.small_model_provider)" class="pt-1">
+      <div v-if="customTiers.small" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.small_model"
@@ -621,12 +664,8 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="isModelCustom(localForm.complex_model, localForm.complex_model_provider) ? 'custom' : localForm.complex_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.complex_model = val;
-              else if (!isModelCustom(localForm.complex_model, localForm.complex_model_provider)) localForm.complex_model = '';
-            }"
+            :value="customTiers.complex ? 'custom' : localForm.complex_model"
+            @change="(e) => onModelSelect('complex', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -642,7 +681,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Custom Model Input -->
-      <div v-if="isModelCustom(localForm.complex_model, localForm.complex_model_provider)" class="pt-1">
+      <div v-if="customTiers.complex" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.complex_model"
@@ -802,12 +841,8 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="isModelCustom(localForm.generator_model, localForm.generator_model_provider) ? 'custom' : localForm.generator_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.generator_model = val;
-              else if (!isModelCustom(localForm.generator_model, localForm.generator_model_provider)) localForm.generator_model = '';
-            }"
+            :value="customTiers.generator ? 'custom' : localForm.generator_model"
+            @change="(e) => onModelSelect('generator', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -822,7 +857,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
         </div>
       </div>
 
-      <div v-if="isModelCustom(localForm.generator_model, localForm.generator_model_provider)" class="pt-1">
+      <div v-if="customTiers.generator" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.generator_model"
@@ -951,12 +986,8 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
               </button>
             </div>
             <select
-              :value="isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider) ? 'custom' : localForm.play_agent_model"
-              @change="(e) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val !== 'custom') localForm.play_agent_model = val;
-                else if (!isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider)) localForm.play_agent_model = '';
-              }"
+              :value="customTiers.play_agent ? 'custom' : localForm.play_agent_model"
+              @change="(e) => onModelSelect('play_agent', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               <option v-for="m in availableConstants.predefined_llm_models?.[localForm.play_agent_model_provider]" :key="m" :value="m">
@@ -968,7 +999,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
         </div>
 
         <!-- Custom Model Input if custom -->
-        <div v-if="isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider)" class="pt-1">
+        <div v-if="customTiers.play_agent" class="pt-1">
           <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
           <input
             v-model="localForm.play_agent_model"
@@ -1154,12 +1185,8 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           <div>
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
             <select
-              :value="isModelCustom(localForm.compression_model, localForm.compression_model_provider) ? 'custom' : localForm.compression_model"
-              @change="(e) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val !== 'custom') localForm.compression_model = val;
-                else if (!isModelCustom(localForm.compression_model, localForm.compression_model_provider)) localForm.compression_model = '';
-              }"
+              :value="customTiers.compression ? 'custom' : localForm.compression_model"
+              @change="(e) => onModelSelect('compression', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               <option value="">-- No Dedicated Model (Fall back to Pass 1) --</option>

@@ -49,18 +49,13 @@ function onCover() {
       >
         <!-- Modal Header -->
         <div class="px-6 py-5 border-b border-white/10 flex items-start justify-between gap-4 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent">
-          <div class="flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/10">
-              <Wrench class="w-5 h-5" />
-            </div>
-            <div>
-              <h3 class="text-lg font-black text-white font-display uppercase tracking-wider">
-                Migrate Adventure
-              </h3>
-              <p class="text-xs text-slate-400 mt-0.5">
-                Target: <span class="font-bold text-amber-400">{{ adventureTitle }}</span>
-              </p>
-            </div>
+          <div>
+            <h3 class="text-lg font-black text-white font-display uppercase tracking-wider">
+              Migrate Adventure
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Target: <span class="font-bold text-amber-400">{{ adventureTitle }}</span>
+            </p>
           </div>
 
           <button

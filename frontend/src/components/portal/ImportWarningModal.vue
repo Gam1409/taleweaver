@@ -27,18 +27,13 @@ const conflictList = computed(() => props.conflicts.filter(c => c.already_exists
     <div class="relative w-full max-w-lg bg-[#0a1120] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
       <div class="p-8">
         <!-- Icon & Header -->
-        <div class="flex items-center gap-6 mb-8">
-          <div class="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 text-3xl">
-            <i class="ra ra-warning"></i>
-          </div>
-          <div>
-            <h3 class="text-2xl font-black text-white tracking-tight leading-tight">
-              Adventures already exist
-            </h3>
-            <p class="text-slate-400 text-sm mt-1">
-              Some of the adventures you are about to import are already in your library.
-            </p>
-          </div>
+        <div class="mb-8">
+          <h3 class="text-2xl font-black text-white tracking-tight leading-tight">
+            Adventures already exist
+          </h3>
+          <p class="text-slate-400 text-sm mt-1">
+            Some of the adventures you are about to import are already in your library.
+          </p>
         </div>
 
         <!-- Conflict List -->

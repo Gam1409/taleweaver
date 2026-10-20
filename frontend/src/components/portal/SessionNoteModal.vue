@@ -25,14 +25,9 @@ onMounted(() => {
     <div class="w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
       <!-- Header -->
       <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-            <FileText class="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <h3 class="text-lg font-black text-white font-display">Session Note</h3>
-            <p class="text-xs text-slate-400">Add status notes to remember your progress.</p>
-          </div>
+        <div>
+          <h3 class="text-lg font-black text-white font-display">Session Note</h3>
+          <p class="text-xs text-slate-400">Add status notes to remember your progress.</p>
         </div>
         <button 
           class="text-slate-400 hover:text-white transition-colors"
