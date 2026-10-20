@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import CustomOpenAIEndpoint from './CustomOpenAIEndpoint.vue'
 
 const props = defineProps<{
   llmForm: any
@@ -67,7 +68,7 @@ const missingProviders = computed(() => {
   ])
   const missing: string[] = []
   for (const p of providers) {
-    if (p && p !== 'ollama' && !props.configuredKeys?.[p]) {
+    if (p && !['ollama', 'custom_openai'].includes(p) && !props.configuredKeys?.[p]) {
       missing.push(p)
     }
   }
@@ -75,7 +76,7 @@ const missingProviders = computed(() => {
 })
 
 const isModelCustom = (model: string, provider: string) => {
-  if (!model) return false
+  if (!model) return provider === 'custom_openai'
   const predefined = props.availableConstants?.predefined_llm_models?.[provider]
   if (!predefined) return true
   return !predefined.includes(model)
@@ -88,7 +89,7 @@ const getProviderName = (id: string) => {
 }
 
 const isProviderConfigured = (providerId: string) => {
-  if (providerId === 'ollama') return true
+  if (['ollama', 'custom_openai'].includes(providerId)) return true
   return Boolean(props.configuredKeys?.[providerId])
 }
 
@@ -173,7 +174,7 @@ const refreshMinimaxModels = () => {
   emit('refreshMinimaxModels', localForm.value.minimax_url)
 }
 
-const LLM_MODEL_DISCOVERY_PROVIDERS = ['openai', 'anthropic', 'google', 'openrouter', 'deepseek', 'kimi', 'minimax']
+const LLM_MODEL_DISCOVERY_PROVIDERS = ['custom_openai', 'openai', 'anthropic', 'google', 'openrouter', 'deepseek', 'kimi', 'minimax']
 
 const isLlmDiscoveryProvider = (provider: string | undefined | null) => {
   return !!provider && LLM_MODEL_DISCOVERY_PROVIDERS.includes(provider)
@@ -189,7 +190,7 @@ const refreshLlmProviderModels = (provider: string) => {
   if (provider === 'minimax') {
     emit('refreshMinimaxModels', localForm.value.minimax_url)
   } else {
-    emit('refreshLlmModels', provider, localForm.value.minimax_url)
+    emit('refreshLlmModels', provider, provider === 'custom_openai' ? localForm.value.custom_openai_url : undefined)
   }
 }
 
@@ -1130,6 +1131,11 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
         </div>
 
+        <label v-if="localForm.compression_model_provider === 'custom_openai' && isModelCustom(localForm.compression_model, localForm.compression_model_provider)" class="block text-xs text-slate-300">
+          Custom Model Identifier
+          <input v-model="localForm.compression_model" type="text" placeholder="Exact model ID, including vendor/name" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono" />
+        </label>
+
         <div v-if="testResults.compression" class="p-3 rounded-xl text-xs font-mono flex items-center gap-2 border bg-slate-950 border-slate-800">
           <i :class="testResults.compression.status === 'success' ? 'ra ra-check text-emerald-400' : 'ra ra-warning text-rose-400'"></i>
           <span>{{ testResults.compression.message }}</span>
@@ -1153,6 +1159,16 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <CustomOpenAIEndpoint
+          v-model:url="localForm.custom_openai_url"
+          v-model:timeout="localForm.custom_openai_timeout"
+          v-model:response-format="localForm.custom_openai_response_format"
+          :loading="isLlmProviderLoading('custom_openai')"
+          :model-count="availableConstants?.predefined_llm_models?.custom_openai?.length || 0"
+          :has-key="!!configuredKeys?.custom_openai"
+          @detect="refreshLlmProviderModels('custom_openai')"
+          @vault="emit('switchSection', 'keys')"
+        />
         <!-- Ollama Endpoint -->
         <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
           <div class="flex items-center justify-between">
