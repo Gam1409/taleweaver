@@ -89,7 +89,9 @@ class ContainerUnlockCodeRequest(BaseModel):
     code: str
 
 
-async def _require_session_state(db: AsyncSession, game_id: str, current_user: User) -> SessionState:
+async def _require_session_state(
+    db: AsyncSession, game_id: str, current_user: User
+) -> SessionState:
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -306,17 +308,9 @@ async def translate_text(
     if not target_language:
         raise HTTPException(status_code=400, detail="Target language is required.")
 
-    llm_settings = current_user.llm_settings or {}
-    small_model_provider = (
-        llm_settings.get("small_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    small_model = llm_settings.get("small_model") or "gpt-4o-mini"
-
     try:
-        llm = GameMasterLLM(current_user, provider=small_model_provider, model_category="small")
+        llm = GameMasterLLM.for_role(current_user, "small")
+        small_model = llm.model
     except ValueError:
         logger.warning("Invalid LLM configuration for translation (user %s)", current_user.id)
         raise HTTPException(
@@ -351,9 +345,7 @@ async def translate_text(
     return TranslateTextResponse(translated_text=cleaned or source_text, language=target_language)
 
 
-_WALKTHROUGH_STEP_RE = re.compile(
-    r"^(?:(?:Schritt|Step)\s*\d+[:.]?|\d+[.)])\s*(.*)", re.IGNORECASE
-)
+_WALKTHROUGH_STEP_RE = re.compile(r"^(?:(?:Schritt|Step)\s*\d+[:.]?|\d+[.)])\s*(.*)", re.IGNORECASE)
 
 
 def _walkthrough_heading(stripped: str) -> tuple[str, bool] | None:
@@ -817,7 +809,10 @@ async def unlock_exit_with_code(
 
     await enforce_exit_guard(db, state, world_exit)
     return await open_exit(
-        db, state, world_exit, f"{world_exit.label or 'The exit'} accepts the code and the way is open."
+        db,
+        state,
+        world_exit,
+        f"{world_exit.label or 'The exit'} accepts the code and the way is open.",
     )
 
 

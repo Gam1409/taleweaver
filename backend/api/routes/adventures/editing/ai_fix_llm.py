@@ -59,37 +59,41 @@ def _summarize_outcomes(outcomes: list[_AIAttemptOutcome]) -> str:
     return "The AI service is currently unavailable. Please retry in a moment."
 
 
-def _candidate_attempts(current_user: User, allow_fallback: bool) -> list[tuple[str, str]]:
-    """Distinct (provider, model) pairs: complex model, small model, then the admin fallback."""
+def _candidate_attempts(
+    current_user: User, allow_fallback: bool
+) -> list[tuple[str | None, str, str]]:
+    """Keep role identity even when two roles share a provider and model name."""
     llm_settings = current_user.llm_settings or {}
-    candidates = [
+    attempts: list[tuple[str | None, str, str]] = [
         (
-            llm_settings.get("complex_model_provider"),
-            llm_settings.get("complex_model") or "gpt-4o",
-        ),
-        (
-            llm_settings.get("small_model_provider"),
-            llm_settings.get("small_model") or "gpt-4o-mini",
-        ),
-    ]
-    if allow_fallback:
-        candidates.append(
-            (settings.AI_FIX_FALLBACK_PROVIDER, settings.AI_FIX_FALLBACK_MODEL or None)
+            role,
+            str(llm_settings[f"{role}_model_provider"]),
+            str(llm_settings.get(f"{role}_model") or ""),
         )
-    attempts: list[tuple[str, str]] = []
-    for provider, model in candidates:
-        candidate = (str(provider), str(model) if model else "")
-        if provider and candidate not in attempts:
-            attempts.append(candidate)
-    return attempts or [("openai", "gpt-4o")]
+        for role in ("complex", "small")
+        if llm_settings.get(f"{role}_model_provider")
+    ]
+    if allow_fallback and settings.AI_FIX_FALLBACK_PROVIDER:
+        attempts.append(
+            (None, settings.AI_FIX_FALLBACK_PROVIDER, settings.AI_FIX_FALLBACK_MODEL or "")
+        )
+    return attempts or [("complex", "openai", "gpt-4o")]
 
 
 def _init_provider(
-    current_user: User, provider: str, model: str
+    current_user: User, provider: str, model: str, role: str | None
 ) -> tuple[Optional[GameMasterLLM], Optional[_AIAttemptOutcome], Optional[Exception]]:
     """Build the provider client; on failure return the skip outcome instead."""
     try:
-        gm = GameMasterLLM(user=current_user, provider=provider, model_category="complex")
+        if role is not None:
+            gm = GameMasterLLM.for_role(current_user, role)
+        else:
+            gm = GameMasterLLM(
+                user=current_user,
+                provider=provider,
+                model_category="complex",
+                use_role_settings=False,
+            )
     except ValueError as exc:
         logger.info(
             "Skipping AI provider '%s' (model '%s'): %s", provider, model or "<default>", exc
@@ -178,17 +182,18 @@ async def _generate_llm_proposals(
     attempts = _candidate_attempts(current_user, allow_fallback)
     outcomes: list[_AIAttemptOutcome] = []
     last_error: Optional[Exception] = None
-    for idx, (provider, model) in enumerate(attempts):
-        gm, skipped, init_error = _init_provider(current_user, provider, model)
+    for idx, (role, provider, model) in enumerate(attempts):
+        gm, skipped, init_error = _init_provider(current_user, provider, model, role)
         if gm is None or skipped is not None:
             outcomes.append(skipped)  # type: ignore[arg-type]
             last_error = init_error
             continue
+        resolved_model = gm.model if role is not None else model
         try:
             result = await _call_provider(
                 gm,
                 provider=provider,
-                model=model,
+                model=resolved_model,
                 user_prompt=user_prompt,
                 response_model=response_model,
                 gm_kwargs=gm_kwargs,

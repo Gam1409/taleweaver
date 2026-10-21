@@ -297,11 +297,9 @@ async def upload_my_profile_image(
 
 @router.post("/users/me/bio/generate")
 async def generate_my_bio(current_user: User = USER_DEP, db: AsyncSession = DB_DEP):
-    llm_settings = current_user.llm_settings or {}
-    provider = (llm_settings.get("small_model_provider") or "openai").lower()
-    model = llm_settings.get("small_model") or "gpt-4o-mini"
 
-    gm = GameMasterLLM(current_user, provider=provider, model_category="small")
+    gm = GameMasterLLM.for_role(current_user, "small")
+    model = gm.model
     system_prompt = USER_BIO_GENERATION_SYSTEM_PROMPT
     user_prompt = USER_BIO_GENERATION_USER_PROMPT_TEMPLATE.format(username=current_user.username)
 

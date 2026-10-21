@@ -33,16 +33,9 @@ class CombatNarrationMixin:
     """Aftermath narration and the occasional dramatic special event."""
 
     def _complex_llm(self) -> tuple[Any, str] | None:
-        llm_settings = self.user.llm_settings or {}
-        provider = (
-            llm_settings.get("complex_model_provider")
-            or llm_settings.get("small_model_provider")
-            or llm_settings.get("preferred_provider")
-            or "openai"
-        )
-        model = llm_settings.get("complex_model") or "gpt-4o"
         try:
-            return gl.GameMasterLLM(self.user, provider=provider, model_category="complex"), model
+            gm = gl.GameMasterLLM.for_role(self.user, "complex")
+            return gm, gm.model
         except ValueError:
             return None
 

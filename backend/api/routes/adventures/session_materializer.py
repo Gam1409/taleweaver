@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.session_start import ensure_generated_session_scene
 from backend.core.config import settings
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
@@ -391,6 +392,7 @@ async def materialize_initial_session_from_template(
     await _copy_world_to_session(db, template_id, session_id, asset_cache)
 
     if session_state:
+        await ensure_generated_session_scene(db, template_id, session_state)
         await _store_asset_snapshot(
             db,
             template_id,

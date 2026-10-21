@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from backend.core import custom_openai
+from tests.llm_fakes import RoleLLMFactory
 
 
 @pytest.mark.asyncio
@@ -39,7 +40,7 @@ async def test_api_connection_uses_structured_path(auth_client, monkeypatch):
             return_value=custom_openai.ConnectionTestResult(message="ready")
         )
     )
-    monkeypatch.setattr(config_api, "GameMasterLLM", lambda *args, **kwargs: router)
+    monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(lambda *args, **kwargs: router))
     response = await auth_client.post(
         "/api/settings/test-llm", json={"provider": "custom_openai", "model": "vendor/model"}
     )

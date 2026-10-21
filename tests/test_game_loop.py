@@ -22,6 +22,7 @@ from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from tests.llm_fakes import RoleLLMFactory
 
 pytestmark = pytest.mark.asyncio
 
@@ -36,19 +37,16 @@ def _llm_call_text(call) -> str:
     parts.extend(str(msg.get("content", "")) for msg in call.kwargs.get("messages") or [])
     return "\n\n".join(parts)
 
+
 async def _seed_game_context(db):
     """Seeds a minimal game context for turn testing."""
     user = User(username="player1", hashed_password="pw", role="user")
     adv = AdventureTemplate(
-        id="adv-1", 
-        title="Test Adventure", 
-        owner_id="admin",
-        time_per_turn=5,
-        strict_rules=True
+        id="adv-1", title="Test Adventure", owner_id="admin", time_per_turn=5, strict_rules=True
     )
     db.add_all([user, adv])
     await db.flush()
-    
+
     avatar = Avatar(
         id="av-1",
         template_id=adv.id,
@@ -56,33 +54,34 @@ async def _seed_game_context(db):
         name="Hero",
         role="Warrior",
         hp=100,
-        stats={"strength": 10, "dexterity": 10}
+        stats={"strength": 10, "dexterity": 10},
     )
     db.add(avatar)
     await db.flush()
-    
+
     state = SessionState(
         session_id="session-1",
         template_id=adv.id,
         avatar_id=avatar.id,
         user_id=user.id,
         current_scene_id="START",
-        in_game_time=0
+        in_game_time=0,
     )
     db.add(state)
     await db.commit()
     return user, adv, avatar, state
 
+
 async def test_game_loop_standard_turn(setup_test_db, monkeypatch):
     """Verifies a standard turn with Pass 1 (Mechanics) and Pass 2 (Narration)."""
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Mock LLM
         mock_llm_instance = MagicMock()
-        
+
         # Pass 1: Returns a GameEvent with no changes
         mock_event = GameEvent(
             narrative_description="You walk into the room.",
@@ -92,41 +91,48 @@ async def test_game_loop_standard_turn(setup_test_db, monkeypatch):
             new_status_effects=[],
             new_inventory_items=[],
             scene_change=None,
-            requested_skill_checks=[]
+            requested_skill_checks=[],
         )
         mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=mock_event)
-        
+
         # Pass 2: Returns narration stream
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="The "))])
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="room "))])
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="is "))])
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="dark."))])
-            
+
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
-        
+
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
+
         # Act
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
         async for chunk in manager.process_turn("I look around"):
             chunks.append(chunk)
-            
+
         # Assert
         full_response = "".join(chunks)
         assert "The " in full_response
         assert "room " in full_response
         assert "is " in full_response
         assert "dark." in full_response
-        
+
         # Check if state was updated (time)
         await db.refresh(state)
         # No scene/sequence change: the message stays within the current in-game turn.
         assert state.in_game_time == 0
-        
+
         # Check if chat message was recorded
-        res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == "session-1", ChatMessage.role == "user"))
+        res = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.session_id == "session-1", ChatMessage.role == "user"
+            )
+        )
         user_msg = res.scalars().first()
         assert user_msg.content == "I look around"
 
@@ -140,26 +146,32 @@ async def test_off_scene_inspect_target_is_blocked_before_llm(setup_test_db, mon
         user.earned_awards = []
         adv.awards = [{"key": "health-inspector", "title": "Health Inspector", "tier": "bronze"}]
 
-        db.add(WorldScene(
-            id="NEXT",
-            session_id="session-1",
-            label="Back Alley",
-            description="A cramped alley behind the diner.",
-        ))
-        db.add(WorldEntity(
-            id="TRASHCAN",
-            session_id="session-1",
-            entity_type="OBJECT",
-            name="trashcan",
-            description="A rusty trashcan in the next scene.",
-            current_scene_id="NEXT",
-            is_hidden=False,
-            is_in_inventory=False,
-        ))
+        db.add(
+            WorldScene(
+                id="NEXT",
+                session_id="session-1",
+                label="Back Alley",
+                description="A cramped alley behind the diner.",
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="TRASHCAN",
+                session_id="session-1",
+                entity_type="OBJECT",
+                name="trashcan",
+                description="A rusty trashcan in the next scene.",
+                current_scene_id="NEXT",
+                is_hidden=False,
+                is_in_inventory=False,
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_simple_task = AsyncMock(return_value='{"action":"inspect","target":"trashcan"}')
+        mock_llm_instance.aexecute_simple_task = AsyncMock(
+            return_value='{"action":"inspect","target":"trashcan"}'
+        )
         mock_llm_instance.aexecute_complex_task = AsyncMock(
             return_value=GameEvent(
                 narrative_description="Should never run.",
@@ -171,7 +183,10 @@ async def test_off_scene_inspect_target_is_blocked_before_llm(setup_test_db, mon
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Should never stream."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -191,7 +206,9 @@ async def test_off_scene_inspect_target_is_blocked_before_llm(setup_test_db, mon
         assert mock_llm_instance.stream_simple_task.await_count == 0
 
 
-async def test_off_scene_name_mention_without_inspect_intent_is_not_blocked(setup_test_db, monkeypatch):
+async def test_off_scene_name_mention_without_inspect_intent_is_not_blocked(
+    setup_test_db, monkeypatch
+):
     """Mentioning an off-scene object in unrelated text should not be blocked by the inspect/search guard."""
     from tests.conftest import TestSessionLocal
 
@@ -200,26 +217,32 @@ async def test_off_scene_name_mention_without_inspect_intent_is_not_blocked(setu
         user.earned_awards = []
         adv.awards = [{"key": "health-inspector", "title": "Health Inspector", "tier": "bronze"}]
 
-        db.add(WorldScene(
-            id="NEXT",
-            session_id="session-1",
-            label="Back Alley",
-            description="A cramped alley behind the diner.",
-        ))
-        db.add(WorldEntity(
-            id="TRASHCAN",
-            session_id="session-1",
-            entity_type="OBJECT",
-            name="trashcan",
-            description="A rusty trashcan in the next scene.",
-            current_scene_id="NEXT",
-            is_hidden=False,
-            is_in_inventory=False,
-        ))
+        db.add(
+            WorldScene(
+                id="NEXT",
+                session_id="session-1",
+                label="Back Alley",
+                description="A cramped alley behind the diner.",
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="TRASHCAN",
+                session_id="session-1",
+                entity_type="OBJECT",
+                name="trashcan",
+                description="A rusty trashcan in the next scene.",
+                current_scene_id="NEXT",
+                is_hidden=False,
+                is_in_inventory=False,
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_simple_task = AsyncMock(return_value='{"action":"other","target":null}')
+        mock_llm_instance.aexecute_simple_task = AsyncMock(
+            return_value='{"action":"other","target":null}'
+        )
         mock_llm_instance.aexecute_complex_task = AsyncMock(
             return_value=GameEvent(
                 narrative_description="No direct interaction.",
@@ -231,11 +254,16 @@ async def test_off_scene_name_mention_without_inspect_intent_is_not_blocked(setu
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You pause and think."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
-        async for chunk in manager.process_turn("Ich denke gerade an die trashcan, aber mache nichts."):
+        async for chunk in manager.process_turn(
+            "Ich denke gerade an die trashcan, aber mache nichts."
+        ):
             chunks.append(chunk)
 
         await db.refresh(state)
@@ -255,52 +283,58 @@ async def test_switch_command_updates_state_and_unlocks_exit(setup_test_db):
     async with TestSessionLocal() as db:
         user, adv, _avatar, state = await _seed_game_context(db)
 
-        db.add(WorldExit(
-            id="EXIT_FORGE_HALL",
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="HALL",
-            label="Forge Hall Door",
-            is_locked=True,
-        ))
-        db.add(WorldEntity(
-            id="SW_FORGE_POWER",
-            session_id="session-1",
-            entity_type="OBJECT",
-            item_type="SWITCH",
-            name="Hochofen-Regler",
-            description="Regulates forge output.",
-            current_scene_id="START",
-            is_hidden=False,
-            is_in_inventory=False,
-            is_portable=False,
-            metadata_json={
-                "discovery_visibility": {
-                    "mentioned_in_scene": True,
-                    "listed_in_discoveries": False,
-                    "lootable": False,
+        db.add(
+            WorldExit(
+                id="EXIT_FORGE_HALL",
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="HALL",
+                label="Forge Hall Door",
+                is_locked=True,
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="SW_FORGE_POWER",
+                session_id="session-1",
+                entity_type="OBJECT",
+                item_type="SWITCH",
+                name="Hochofen-Regler",
+                description="Regulates forge output.",
+                current_scene_id="START",
+                is_hidden=False,
+                is_in_inventory=False,
+                is_portable=False,
+                metadata_json={
+                    "discovery_visibility": {
+                        "mentioned_in_scene": True,
+                        "listed_in_discoveries": False,
+                        "lootable": False,
+                    },
+                    "switch": {
+                        "states": ["LOW", "HIGH"],
+                        "initial_state": "LOW",
+                        "transitions": [
+                            {
+                                "from": "LOW",
+                                "to": "HIGH",
+                                "gates": {"item": None, "code": "7391", "rule": None},
+                                "fail_message": "Wrong access code.",
+                            }
+                        ],
+                        "outcomes": [
+                            {
+                                "on_state": "HIGH",
+                                "effects": [
+                                    {"type": "unlock_exit", "target_id": "EXIT_FORGE_HALL"}
+                                ],
+                            }
+                        ],
+                    },
                 },
-                "switch": {
-                    "states": ["LOW", "HIGH"],
-                    "initial_state": "LOW",
-                    "transitions": [
-                        {
-                            "from": "LOW",
-                            "to": "HIGH",
-                            "gates": {"item": None, "code": "7391", "rule": None},
-                            "fail_message": "Wrong access code.",
-                        }
-                    ],
-                    "outcomes": [
-                        {
-                            "on_state": "HIGH",
-                            "effects": [{"type": "unlock_exit", "target_id": "EXIT_FORGE_HALL"}],
-                        }
-                    ],
-                },
-            },
-        ))
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, "session-1", user)
@@ -327,32 +361,34 @@ async def test_switch_command_rejects_wrong_code(setup_test_db):
     async with TestSessionLocal() as db:
         user, _adv, _avatar, state = await _seed_game_context(db)
 
-        db.add(WorldEntity(
-            id="SW_SECURITY_OVERRIDE",
-            session_id="session-1",
-            entity_type="OBJECT",
-            item_type="SWITCH",
-            name="Security Override",
-            description="Emergency override switch.",
-            current_scene_id="START",
-            is_hidden=False,
-            is_in_inventory=False,
-            is_portable=False,
-            metadata_json={
-                "switch": {
-                    "states": ["OFF", "ON"],
-                    "initial_state": "OFF",
-                    "transitions": [
-                        {
-                            "from": "OFF",
-                            "to": "ON",
-                            "gates": {"item": None, "code": "1234", "rule": None},
-                            "fail_message": "Der Override akzeptiert diesen Code nicht.",
-                        }
-                    ],
-                }
-            },
-        ))
+        db.add(
+            WorldEntity(
+                id="SW_SECURITY_OVERRIDE",
+                session_id="session-1",
+                entity_type="OBJECT",
+                item_type="SWITCH",
+                name="Security Override",
+                description="Emergency override switch.",
+                current_scene_id="START",
+                is_hidden=False,
+                is_in_inventory=False,
+                is_portable=False,
+                metadata_json={
+                    "switch": {
+                        "states": ["OFF", "ON"],
+                        "initial_state": "OFF",
+                        "transitions": [
+                            {
+                                "from": "OFF",
+                                "to": "ON",
+                                "gates": {"item": None, "code": "1234", "rule": None},
+                                "fail_message": "Der Override akzeptiert diesen Code nicht.",
+                            }
+                        ],
+                    }
+                },
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, "session-1", user)
@@ -363,69 +399,82 @@ async def test_switch_command_rejects_wrong_code(setup_test_db):
         await db.refresh(state)
         output = "".join(chunks)
         assert "akzeptiert diesen Code nicht" in output
-        assert (state.entity_states or {}).get("SW_SECURITY_OVERRIDE", {}).get("switch_state") is None
+        assert (state.entity_states or {}).get("SW_SECURITY_OVERRIDE", {}).get(
+            "switch_state"
+        ) is None
+
 
 async def test_game_loop_session_overrides_template(setup_test_db, monkeypatch):
     """Verifies that the GameMaster receives plot/rules from SessionState, not AdventureTemplate."""
     from backend.engine.memory_manager import MemoryManager
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Override session state narrative
         state.plot = "SESSION PLOT"
         state.rules = "SESSION RULES"
         await db.commit()
-        
+
         # Spy on the static GM prompt builder arguments
         original_build = MemoryManager.build_static_prompt
         spy_context = {}
-        
+
         def mock_build(*args, **kwargs):
-            spy_context['plot'] = kwargs.get('plot')
-            spy_context['rules'] = kwargs.get('rules')
+            spy_context["plot"] = kwargs.get("plot")
+            spy_context["rules"] = kwargs.get("rules")
             return original_build(*args, **kwargs)
-            
-        monkeypatch.setattr("backend.engine.memory_manager.MemoryManager.build_static_prompt", mock_build)
-        
+
+        monkeypatch.setattr(
+            "backend.engine.memory_manager.MemoryManager.build_static_prompt", mock_build
+        )
+
         # Mock LLM to avoid actual calls
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=GameEvent(
-            narrative_description="OK",
-            hp_change=0,
-            stamina_change=0,
-            mana_change=0,
-            new_status_effects=[],
-            new_inventory_items=[]
-        ))
-        
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=GameEvent(
+                narrative_description="OK",
+                hp_change=0,
+                stamina_change=0,
+                mana_change=0,
+                new_status_effects=[],
+                new_inventory_items=[],
+            )
+        )
+
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Narrative"))])
+
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
-        
+
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
+
         # Act
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("Hello"):
             pass
-            
+
         # Assert
-        assert spy_context['plot'] == "SESSION PLOT"
-        assert spy_context['rules'] == "SESSION RULES"
+        assert spy_context["plot"] == "SESSION PLOT"
+        assert spy_context["rules"] == "SESSION RULES"
+
 
 async def test_game_loop_skill_check_trigger(setup_test_db, monkeypatch):
     """Verifies that the game loop processes skill checks requested by the GM."""
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         mock_llm_instance = MagicMock()
-        
+
         # Pass 1: Requests a Strength check
         from backend.engine.rule_engine import SkillCheckRequest
+
         mock_event = GameEvent(
             narrative_description="The door is heavy.",
             hp_change=0,
@@ -433,27 +482,37 @@ async def test_game_loop_skill_check_trigger(setup_test_db, monkeypatch):
             mana_change=0,
             new_status_effects=[],
             new_inventory_items=[],
-            requested_skill_checks=[SkillCheckRequest(stat="strength", dc=12, reason="Opening the heavy door")]
+            requested_skill_checks=[
+                SkillCheckRequest(stat="strength", dc=12, reason="Opening the heavy door")
+            ],
         )
         mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=mock_event)
-        
+
         # Pass 2: Acknowledges the check
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You strain against the wood..."))])
-            
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="You strain against the wood..."))]
+            )
+
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
-        
+
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
+
         # Mock dice roll to ensure predictable outcome
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.roll_skill_check", lambda *args, **kwargs: {"d20": 15, "modifier": 0, "total": 15, "success": True})
-        
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.roll_skill_check",
+            lambda *args, **kwargs: {"d20": 15, "modifier": 0, "total": 15, "success": True},
+        )
+
         # Act
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
         async for chunk in manager.process_turn("I push the door"):
             chunks.append(chunk)
-            
+
         # Assert
         # Verify skill check was yielded as a system message with dice roll details
         full_response = "".join(chunks)
@@ -462,28 +521,33 @@ async def test_game_loop_skill_check_trigger(setup_test_db, monkeypatch):
         assert "Opening the heavy door" in full_response
         assert "SUCCESS" in full_response
 
+
 async def test_game_loop_scene_change(setup_test_db, monkeypatch):
     """Verifies that the GM can trigger a scene change that updates the session state."""
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed WorldExit to allow adjacent transition to CELLAR
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="CELLAR",
-            label="Stairs down",
-            is_locked=False,
-        ))
-        db.add(WorldScene(
-            id="CELLAR",
-            session_id="session-1",
-            label="Cellar",
-            description="A damp cellar.",
-        ))
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="CELLAR",
+                label="Stairs down",
+                is_locked=False,
+            )
+        )
+        db.add(
+            WorldScene(
+                id="CELLAR",
+                session_id="session-1",
+                label="Cellar",
+                description="A damp cellar.",
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
@@ -494,21 +558,25 @@ async def test_game_loop_scene_change(setup_test_db, monkeypatch):
             mana_change=0,
             new_status_effects=[],
             new_inventory_items=[],
-            new_scene_id="CELLAR"
+            new_scene_id="CELLAR",
         )
         mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=mock_event)
-        
+
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="The air is damp here."))])
+
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
-        
+
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
+
         # Act
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("I go down"):
             pass
-            
+
         # Assert
         await db.refresh(state)
         assert state.current_scene_id == "CELLAR"
@@ -530,8 +598,20 @@ async def test_chat_progression_does_not_move_on_hypothetical_text(setup_test_db
 
         db.add_all(
             [
-                WorldScene(id="START", label="Start", description="Start room", session_id="session-1", template_id=adv.id),
-                WorldScene(id="CELLAR", label="Cellar", description="Cellar room", session_id="session-1", template_id=adv.id),
+                WorldScene(
+                    id="START",
+                    label="Start",
+                    description="Start room",
+                    session_id="session-1",
+                    template_id=adv.id,
+                ),
+                WorldScene(
+                    id="CELLAR",
+                    label="Cellar",
+                    description="Cellar room",
+                    session_id="session-1",
+                    template_id=adv.id,
+                ),
                 WorldExit(
                     id="EXIT_START_CELLAR",
                     from_scene_id="START",
@@ -552,14 +632,19 @@ async def test_chat_progression_does_not_move_on_hypothetical_text(setup_test_db
                 return AdventureGeneratorToolIntent(new_scene_id="CELLAR", exit_label="Stairs down")
             return AdventureGeneratorToolIntent()
 
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=_mock_progression_or_narration)
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=_mock_progression_or_narration
+        )
 
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You stay where you are."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("Wenn ich in den Keller gehe, was passiert?"):
@@ -569,7 +654,9 @@ async def test_chat_progression_does_not_move_on_hypothetical_text(setup_test_db
         assert state.current_scene_id == "START"
 
 
-async def test_chat_progression_does_not_move_on_non_movement_text_even_if_llm_flags_transition(setup_test_db, monkeypatch):
+async def test_chat_progression_does_not_move_on_non_movement_text_even_if_llm_flags_transition(
+    setup_test_db, monkeypatch
+):
     """Scene transition must not happen on non-movement text, even when intent classifier returns true."""
     from tests.conftest import TestSessionLocal
 
@@ -580,8 +667,20 @@ async def test_chat_progression_does_not_move_on_non_movement_text_even_if_llm_f
 
         db.add_all(
             [
-                WorldScene(id="START", label="Parking Lot", description="Rainy asphalt", session_id="session-1", template_id=adv.id),
-                WorldScene(id="DINER_ENTRANCE", label="Diner Entrance", description="A neon-lit doorway", session_id="session-1", template_id=adv.id),
+                WorldScene(
+                    id="START",
+                    label="Parking Lot",
+                    description="Rainy asphalt",
+                    session_id="session-1",
+                    template_id=adv.id,
+                ),
+                WorldScene(
+                    id="DINER_ENTRANCE",
+                    label="Diner Entrance",
+                    description="A neon-lit doorway",
+                    session_id="session-1",
+                    template_id=adv.id,
+                ),
                 WorldExit(
                     id="EXIT_PARKING_DINER",
                     from_scene_id="START",
@@ -599,18 +698,33 @@ async def test_chat_progression_does_not_move_on_non_movement_text_even_if_llm_f
 
         async def _mock_progression(*_args, **kwargs):
             if kwargs.get("response_model") is AdventureGeneratorToolIntent:
-                return AdventureGeneratorToolIntent(new_scene_id="DINER_ENTRANCE", exit_label="Glass doors")
+                return AdventureGeneratorToolIntent(
+                    new_scene_id="DINER_ENTRANCE", exit_label="Glass doors"
+                )
             return AdventureGeneratorToolIntent()
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=_mock_progression)
-        mock_llm_instance.aexecute_simple_task = AsyncMock(return_value='{"explicit_transition": true}')
+        mock_llm_instance.aexecute_simple_task = AsyncMock(
+            return_value='{"explicit_transition": true}'
+        )
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You stay on the parking lot, gathering your thoughts."))])
+            yield MagicMock(
+                choices=[
+                    MagicMock(
+                        delta=MagicMock(
+                            content="You stay on the parking lot, gathering your thoughts."
+                        )
+                    )
+                ]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -636,20 +750,24 @@ async def test_rule_pass_payload_is_compact_and_scene_split(setup_test_db, monke
             {"key": "fresh-award", "title": "Still available"},
         ]
         user.earned_awards = [{"key": "earned-award", "template_id": adv.id}]
-        avatar.inventory = [{
-            "id": "ITEM-1",
-            "name": "Test Blade",
-            "item_type": "WEAPON",
-            "metadata_json": {"damage_dice": "1d8"},
-            "extra_field": "drop-me",
-            "hp_change": None,
-        }]
-        db.add(WorldScene(
-            id="START",
-            session_id="session-1",
-            label="Start Chamber",
-            description="A very long description. " * 40,
-        ))
+        avatar.inventory = [
+            {
+                "id": "ITEM-1",
+                "name": "Test Blade",
+                "item_type": "WEAPON",
+                "metadata_json": {"damage_dice": "1d8"},
+                "extra_field": "drop-me",
+                "hp_change": None,
+            }
+        ]
+        db.add(
+            WorldScene(
+                id="START",
+                session_id="session-1",
+                label="Start Chamber",
+                description="A very long description. " * 40,
+            )
+        )
         await db.commit()
 
         captured: dict[str, str] = {}
@@ -664,11 +782,14 @@ async def test_rule_pass_payload_is_compact_and_scene_split(setup_test_db, monke
                 stamina_change=0,
                 mana_change=0,
                 new_status_effects=[],
-                new_inventory_items=[]
+                new_inventory_items=[],
             )
 
         async def _mock_stream_simple(system_prompt, _user_prompt, _model=None, **_kwargs):
-            system_prompt = "\n\n".join([system_prompt] + [str(msg.get("content", "")) for msg in _kwargs.get("messages") or []])
+            system_prompt = "\n\n".join(
+                [system_prompt]
+                + [str(msg.get("content", "")) for msg in _kwargs.get("messages") or []]
+            )
             captured["narration_prompt"] = system_prompt
 
             async def _stream():
@@ -679,7 +800,10 @@ async def test_rule_pass_payload_is_compact_and_scene_split(setup_test_db, monke
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=_mock_mechanics)
         mock_llm_instance.stream_simple_task = AsyncMock(side_effect=_mock_stream_simple)
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("Check state"):
@@ -713,20 +837,25 @@ async def test_adventure_generator_runs_mechanics_in_chat_mode(setup_test_db, mo
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=GameEvent(
-            narrative_description="Preparing generation.",
-            hp_change=0,
-            stamina_change=0,
-            mana_change=0,
-            new_status_effects=[],
-            new_inventory_items=[]
-        ))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=GameEvent(
+                narrative_description="Preparing generation.",
+                hp_change=0,
+                stamina_change=0,
+                mana_change=0,
+                new_status_effects=[],
+                new_inventory_items=[],
+            )
+        )
 
         async def mock_stream():
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Ready."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("generate now"):
@@ -763,8 +892,20 @@ async def test_adventure_generator_chat_mode_uses_tool_intent_pass(setup_test_db
         adv.strict_rules = False
         adv.rule_enforcement_mode = "chat"
         adv.is_adventure_generator = True
-        db.add(ChatMessage(session_id=state.session_id, role="user", content="The adventure should be called Neon Citadel."))
-        db.add(ChatMessage(session_id=state.session_id, role="assistant", content="Great, noted. We can set a cyberpunk tone and 6 scenes."))
+        db.add(
+            ChatMessage(
+                session_id=state.session_id,
+                role="user",
+                content="The adventure should be called Neon Citadel.",
+            )
+        )
+        db.add(
+            ChatMessage(
+                session_id=state.session_id,
+                role="assistant",
+                content="Great, noted. We can set a cyberpunk tone and 6 scenes.",
+            )
+        )
         await db.commit()
 
         captured = {}
@@ -775,7 +916,7 @@ async def test_adventure_generator_chat_mode_uses_tool_intent_pass(setup_test_db
             captured["system_prompt"] = system_prompt
             return AdventureGeneratorToolIntent(
                 request_available_tones=True,
-                narrative_description="I can offer tones for your new world."
+                narrative_description="I can offer tones for your new world.",
             )
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=_mock_intent)
@@ -785,7 +926,10 @@ async def test_adventure_generator_chat_mode_uses_tool_intent_pass(setup_test_db
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
         monkeypatch.setattr(
             "backend.engine.adventure_generator_service.AdventureGeneratorService.get_available_tones",
             AsyncMock(return_value=["heroic", "horror"]),
@@ -802,12 +946,18 @@ async def test_adventure_generator_chat_mode_uses_tool_intent_pass(setup_test_db
         assert "cyberpunk tone and 6 scenes" in captured.get("system_prompt", "")
         assert any("Available Tones: heroic, horror" in c for c in chunks)
 
-        res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == state.session_id, ChatMessage.role == "system"))
+        res = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.session_id == state.session_id, ChatMessage.role == "system"
+            )
+        )
         system_msgs = [m.content for m in res.scalars().all()]
         assert any("Available Tones: heroic, horror" in m for m in system_msgs)
 
 
-async def test_adventure_generator_chat_mode_emits_fallback_narrative_when_empty(setup_test_db, monkeypatch):
+async def test_adventure_generator_chat_mode_emits_fallback_narrative_when_empty(
+    setup_test_db, monkeypatch
+):
     """If no instant/pass2 narrative is produced, chat mode should emit a deterministic fallback narrative."""
     from tests.conftest import TestSessionLocal
 
@@ -819,10 +969,12 @@ async def test_adventure_generator_chat_mode_emits_fallback_narrative_when_empty
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=AdventureGeneratorToolIntent(
-            request_available_tones=True,
-            narrative_description="Requesting tones...",
-        ))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=AdventureGeneratorToolIntent(
+                request_available_tones=True,
+                narrative_description="Requesting tones...",
+            )
+        )
 
         async def empty_stream():
             if False:
@@ -830,7 +982,10 @@ async def test_adventure_generator_chat_mode_emits_fallback_narrative_when_empty
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=empty_stream())
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
         monkeypatch.setattr(
             "backend.engine.adventure_generator_service.AdventureGeneratorService.get_available_tones",
             AsyncMock(return_value=["heroic"]),
@@ -844,7 +999,9 @@ async def test_adventure_generator_chat_mode_emits_fallback_narrative_when_empty
         assert any("floating catalogs" in c for c in chunks)
 
 
-async def test_adventure_generator_emits_proposal_event_before_generation(setup_test_db, monkeypatch):
+async def test_adventure_generator_emits_proposal_event_before_generation(
+    setup_test_db, monkeypatch
+):
     """When the LLM requests adventure generation, it must emit an adventure_generator_proposal event with full request parameters."""
     from tests.conftest import TestSessionLocal
 
@@ -856,20 +1013,22 @@ async def test_adventure_generator_emits_proposal_event_before_generation(setup_
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=AdventureGeneratorToolIntent(
-            requested_adventure_generation={
-                "title": "Neon Foundry",
-                "prompt": "Build a neon city under a broken moon.",
-                "min_scenes": 4,
-                "max_scenes": 6,
-                "generate_scene_images": True,
-                "selected_image_styles": ["cinematic-realism"],
-                "selected_tone": "mystery",
-                "min_awards": 2,
-                "max_awards": 4,
-                "award_generation_enabled": True,
-            }
-        ))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=AdventureGeneratorToolIntent(
+                requested_adventure_generation={
+                    "title": "Neon Foundry",
+                    "prompt": "Build a neon city under a broken moon.",
+                    "min_scenes": 4,
+                    "max_scenes": 6,
+                    "generate_scene_images": True,
+                    "selected_image_styles": ["cinematic-realism"],
+                    "selected_tone": "mystery",
+                    "min_awards": 2,
+                    "max_awards": 4,
+                    "award_generation_enabled": True,
+                }
+            )
+        )
 
         async def empty_stream():
             if False:
@@ -877,7 +1036,10 @@ async def test_adventure_generator_emits_proposal_event_before_generation(setup_
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=empty_stream())
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         turn1_chunks = []
@@ -901,9 +1063,14 @@ async def test_token_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch
         user, _adv, _avatar, _state = await _seed_game_context(db)
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=Exception("maximum context length exceeded"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=Exception("maximum context length exceeded")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -922,9 +1089,14 @@ async def test_rate_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch)
         user, _adv, _avatar, _state = await _seed_game_context(db)
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=Exception("429 Too Many Requests: provider rate limit exceeded"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=Exception("429 Too Many Requests: provider rate limit exceeded")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -943,9 +1115,14 @@ async def test_timeout_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
         user, _adv, _avatar, _state = await _seed_game_context(db)
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=Exception("Request timeout while calling provider"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=Exception("Request timeout while calling provider")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -964,9 +1141,14 @@ async def test_service_unavailable_error_is_user_safe_in_chat(setup_test_db, mon
         user, _adv, _avatar, _state = await _seed_game_context(db)
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=Exception("503 Service Unavailable"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=Exception("503 Service Unavailable")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -989,7 +1171,10 @@ async def test_invalid_structured_llm_payload_is_user_safe_in_chat(setup_test_db
             side_effect=ValueError("No content returned from LLM for complex task.")
         )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -1008,9 +1193,14 @@ async def test_unknown_pass1_error_returns_generic_sse_error(setup_test_db, monk
         user, _adv, _avatar, _state = await _seed_game_context(db)
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=RuntimeError("database socket exploded with trace details"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=RuntimeError("database socket exploded with trace details")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -1018,7 +1208,9 @@ async def test_unknown_pass1_error_returns_generic_sse_error(setup_test_db, monk
             chunks.append(chunk)
 
         assert any("event: error" in c and "unexpected issue" in c.lower() for c in chunks)
-        assert not any("socket exploded" in c.lower() or "trace details" in c.lower() for c in chunks)
+        assert not any(
+            "socket exploded" in c.lower() or "trace details" in c.lower() for c in chunks
+        )
 
 
 async def test_repair_json_fixes_unescaped_quotes_and_trailing_commas():
@@ -1028,21 +1220,24 @@ async def test_repair_json_fixes_unescaped_quotes_and_trailing_commas():
     from backend.core.llm_router import GameMasterLLM
 
     raw_malformed = (
-        '{\n'
+        "{\n"
         '  "title": "The WG",\n'
         '  "tts_director_notes": "Tone: "heilige Couch", \'Seestern\'. Pause after.",\n'
         '  "description": "On the box it says: "Frag den Schreibtisch."",\n'
         '  "items": [\n'
         '    "item1",\n'
-        '  ]\n'
-        '}'
+        "  ]\n"
+        "}"
     )
 
     repaired = GameMasterLLM._repair_json(raw_malformed)
     data = json.loads(repaired)
     assert data["title"] == "The WG"
-    assert '\"heilige Couch\"' in data["tts_director_notes"] or 'heilige Couch' in data["tts_director_notes"]
-    assert 'Frag den Schreibtisch' in data["description"]
+    assert (
+        '"heilige Couch"' in data["tts_director_notes"]
+        or "heilige Couch" in data["tts_director_notes"]
+    )
+    assert "Frag den Schreibtisch" in data["description"]
     assert len(data["items"]) == 1
 
 
@@ -1058,9 +1253,14 @@ async def test_unknown_chat_progression_error_returns_generic_sse_error(setup_te
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=RuntimeError("chat progression blew up internally"))
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            side_effect=RuntimeError("chat progression blew up internally")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -1098,7 +1298,9 @@ async def test_adventure_generator_retry_uses_last_request(setup_test_db, monkey
         await db.commit()
 
         mock_llm_instance = MagicMock()
-        mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=AdventureGeneratorToolIntent())
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=AdventureGeneratorToolIntent()
+        )
 
         async def empty_stream():
             if False:
@@ -1108,7 +1310,10 @@ async def test_adventure_generator_retry_uses_last_request(setup_test_db, monkey
 
         generate_adventure_mock = AsyncMock(return_value="adv-retry-1")
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
         monkeypatch.setattr(
             "backend.engine.adventure_generator_service.AdventureGeneratorService.generate_adventure",
             generate_adventure_mock,
@@ -1124,7 +1329,9 @@ async def test_adventure_generator_retry_uses_last_request(setup_test_db, monkey
         assert any("Bundy Boulevard" in c for c in chunks)
 
 
-async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(setup_test_db, monkeypatch):
+async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(
+    setup_test_db, monkeypatch
+):
     """Normal chat mode should run a lightweight progression pass before narration."""
     from tests.conftest import TestSessionLocal
 
@@ -1136,28 +1343,34 @@ async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(setu
         adv.awards = [{"key": "heroic-heart", "title": "Heroic Heart", "tier": "silver"}]
         state.quests = [{"id": "q-1", "title": "Open the Gate", "status": "open", "is_main": True}]
         user.earned_awards = []
-        db.add(WorldScene(
-            id="START",
-            session_id="session-1",
-            label="Gate Hall",
-            description="A stone corridor leads to an ancient gate.",
-        ))
-        db.add(WorldEntity(
-            id="GUARDIAN",
-            session_id="session-1",
-            entity_type="NPC",
-            name="Gate Guardian",
-            description="A vigilant armored watcher.",
-            current_scene_id="START",
-            is_hidden=False,
-            is_in_inventory=False,
-        ))
+        db.add(
+            WorldScene(
+                id="START",
+                session_id="session-1",
+                label="Gate Hall",
+                description="A stone corridor leads to an ancient gate.",
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="GUARDIAN",
+                session_id="session-1",
+                entity_type="NPC",
+                name="Gate Guardian",
+                description="A vigilant armored watcher.",
+                current_scene_id="START",
+                is_hidden=False,
+                is_in_inventory=False,
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
 
         async def mock_progression(_system_prompt, _user_prompt, **_kwargs):
-            _system_prompt = f"{_system_prompt}\n\n{_user_prompt}"  # state lives in the user message
+            _system_prompt = (
+                f"{_system_prompt}\n\n{_user_prompt}"  # state lives in the user message
+            )
             return AdventureGeneratorToolIntent(
                 completed_quest_ids=[],
                 earned_award_keys=[],
@@ -1168,10 +1381,17 @@ async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(setu
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_progression)
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="A quiet wind passes through the gate."))])
+            yield MagicMock(
+                choices=[
+                    MagicMock(delta=MagicMock(content="A quiet wind passes through the gate."))
+                ]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
@@ -1213,22 +1433,26 @@ async def test_chat_mode_progression_completes_quest_and_award(setup_test_db, mo
         adv.awards = [{"key": "heroic-heart", "title": "Heroic Heart", "tier": "silver"}]
         state.quests = [{"id": "q-1", "title": "Open the Gate", "status": "open", "is_main": True}]
         user.earned_awards = []
-        db.add(WorldScene(
-            id="START",
-            session_id="session-1",
-            label="Gate Hall",
-            description="A stone corridor leads to an ancient gate.",
-        ))
-        db.add(WorldEntity(
-            id="GUARDIAN",
-            session_id="session-1",
-            entity_type="NPC",
-            name="Gate Guardian",
-            description="A vigilant armored watcher.",
-            current_scene_id="START",
-            is_hidden=False,
-            is_in_inventory=False,
-        ))
+        db.add(
+            WorldScene(
+                id="START",
+                session_id="session-1",
+                label="Gate Hall",
+                description="A stone corridor leads to an ancient gate.",
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="GUARDIAN",
+                session_id="session-1",
+                entity_type="NPC",
+                name="Gate Guardian",
+                description="A vigilant armored watcher.",
+                current_scene_id="START",
+                is_hidden=False,
+                is_in_inventory=False,
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
@@ -1250,14 +1474,21 @@ async def test_chat_mode_progression_completes_quest_and_award(setup_test_db, mo
             )
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You feel a surge of accomplishment."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="You feel a surge of accomplishment."))]
+            )
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_progression)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.SessionCheckpointService.create_checkpoint",
-            AsyncMock(return_value=SimpleNamespace(id=1, trigger_reason="AWARD_GRANTED", created_at=None)),
+            AsyncMock(
+                return_value=SimpleNamespace(id=1, trigger_reason="AWARD_GRANTED", created_at=None)
+            ),
         )
 
         manager = GameTurnManager(db, "session-1", user)
@@ -1320,15 +1551,22 @@ async def test_traverse_exit_with_lowercase_uuid_id(setup_test_db, monkeypatch):
         await db.commit()
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You step into the courtyard."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="You step into the courtyard."))]
+            )
 
         mock_llm_instance = MagicMock()
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
-        async for chunk in manager.process_turn("/traverse_exit 01a062c3-bc95-79c3-affa-1bd8e5f4683b"):
+        async for chunk in manager.process_turn(
+            "/traverse_exit 01a062c3-bc95-79c3-affa-1bd8e5f4683b"
+        ):
             chunks.append(chunk)
 
         await db.refresh(state)
@@ -1338,7 +1576,9 @@ async def test_traverse_exit_with_lowercase_uuid_id(setup_test_db, monkeypatch):
         assert any("scene-2" in c for c in chunks)
 
 
-async def test_deterministic_quest_completion_marks_inactive_quest_and_emits_system_message(setup_test_db, monkeypatch):
+async def test_deterministic_quest_completion_marks_inactive_quest_and_emits_system_message(
+    setup_test_db, monkeypatch
+):
     """Unresolved quests must complete even when not currently active and emit system feedback."""
     from tests.conftest import TestSessionLocal
 
@@ -1371,10 +1611,15 @@ async def test_deterministic_quest_completion_marks_inactive_quest_and_emits_sys
         )
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You are ready for battle."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="You are ready for battle."))]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("I put on my helmet"):
@@ -1431,7 +1676,10 @@ async def test_chat_mode_progression_persists_and_reuses_notes(setup_test_db, mo
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_progression)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
 
@@ -1439,7 +1687,9 @@ async def test_chat_mode_progression_persists_and_reuses_notes(setup_test_db, mo
             pass
 
         await db.refresh(state)
-        assert (state.exit_states or {}).get("__gm_notes__") == ["Innkeeper owes the player a favor"]
+        assert (state.exit_states or {}).get("__gm_notes__") == [
+            "Innkeeper owes the player a favor"
+        ]
 
         manager = GameTurnManager(db, "session-1", user)  # fresh manager after db.refresh(state)
         async for _ in manager.process_turn("I return to the inn"):
@@ -1495,7 +1745,10 @@ async def test_rpg_strict_mode_persists_and_reuses_notes(setup_test_db, monkeypa
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_mechanics)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
 
@@ -1557,7 +1810,10 @@ async def test_story_mode_persists_and_reuses_notes(setup_test_db, monkeypatch):
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_story_mechanics)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
 
@@ -1565,7 +1821,9 @@ async def test_story_mode_persists_and_reuses_notes(setup_test_db, monkeypatch):
             pass
 
         await db.refresh(state)
-        assert (state.exit_states or {}).get("__gm_notes__") == ["Old clocktower bell rings at midnight"]
+        assert (state.exit_states or {}).get("__gm_notes__") == [
+            "Old clocktower bell rings at midnight"
+        ]
 
         manager = GameTurnManager(db, "session-1", user)  # fresh manager after db.refresh(state)
         async for _ in manager.process_turn("I wait at the square"):
@@ -1600,7 +1858,10 @@ async def test_notes_are_rotated_to_maximum_size(setup_test_db, monkeypatch):
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_progression)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
 
@@ -1613,24 +1874,28 @@ async def test_notes_are_rotated_to_maximum_size(setup_test_db, monkeypatch):
         assert persisted[0] == "note-5"
         assert persisted[-1] == "note-24"
 
+
 async def test_game_loop_slash_command_inventory(setup_test_db, monkeypatch):
     """Verifies that slash commands (like /inventory) are handled directly without LLM calls."""
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
         avatar.inventory = [{"id": "DAGGER", "name": "Rusty Dagger"}]
         await db.commit()
-        
+
         mock_llm_call = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", mock_llm_call)
-        
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(mock_llm_call),
+        )
+
         # Act
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
         async for chunk in manager.process_turn("/inventory"):
             chunks.append(chunk)
-            
+
         # Assert
         # Should NOT call LLM
         assert mock_llm_call.call_count == 0
@@ -1649,7 +1914,9 @@ async def test_process_turn_rejects_input_when_terminal_lock_active(setup_test_d
         monkeypatch.setattr(manager, "_is_input_locked", lambda: True)
 
         llm_ctor = AsyncMock()
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", llm_ctor)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM", RoleLLMFactory(llm_ctor)
+        )
 
         chunks = []
         async for chunk in manager.process_turn("I attack"):
@@ -1660,17 +1927,20 @@ async def test_process_turn_rejects_input_when_terminal_lock_active(setup_test_d
         assert "event: final" in response
         assert llm_ctor.call_count == 0
 
+
 async def test_rule_engine_apply_ticks():
     """Verifies that status effect ticks correctly update avatar resources."""
     avatar = Avatar(hp=100, stamina=100, mana=100, status_effects=["Poisoned", "Resting"])
-    
+
     from backend.engine.rule_engine import RuleEngine
+
     messages = RuleEngine.apply_ticks(avatar)
-    
-    assert avatar.hp == 95 # Poisoned: -5
-    assert avatar.stamina == 103 # Resting: +3
+
+    assert avatar.hp == 95  # Poisoned: -5
+    assert avatar.stamina == 103  # Resting: +3
     assert avatar.mana == 103
     assert any("Poisoned" in m for m in messages)
+
 
 async def test_rule_engine_apply_event_game_over():
     """Verifies that the rule engine raises GameOverException when HP reaches 0."""
@@ -1681,9 +1951,10 @@ async def test_rule_engine_apply_event_game_over():
         stamina_change=0,
         mana_change=0,
         new_status_effects=[],
-        new_inventory_items=[]
+        new_inventory_items=[],
     )
     from backend.engine.rule_engine import GameOverException, RuleEngine
+
     with pytest.raises(GameOverException):
         RuleEngine.apply_event(avatar, event)
     assert avatar.hp == 0
@@ -1846,12 +2117,14 @@ async def test_non_killable_npc_not_marked_permanently_defeated(setup_test_db, m
             pass
 
         await db.refresh(state)
-        npc_state = ((state.entity_states or {}).get("RAT_ENEMY") or {})
+        npc_state = (state.entity_states or {}).get("RAT_ENEMY") or {}
         assert npc_state.get("is_defeated") is not True
         assert npc_state.get("is_attackable") is not False
 
 
-async def test_enemy_turn_no_damage_when_npc_damage_to_protagonist_disabled(setup_test_db, monkeypatch):
+async def test_enemy_turn_no_damage_when_npc_damage_to_protagonist_disabled(
+    setup_test_db, monkeypatch
+):
     from tests.conftest import TestSessionLocal
 
     async with TestSessionLocal() as db:
@@ -1863,8 +2136,13 @@ async def test_enemy_turn_no_damage_when_npc_damage_to_protagonist_disabled(setu
         manager = GameTurnManager(db, state.session_id, user)
 
         # Ensure player starts combat and enemy turn resolves deterministically.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -1883,7 +2161,10 @@ async def test_combat_loot_take_moves_item_to_inventory(setup_test_db, monkeypat
         manager = GameTurnManager(db, state.session_id, user)
 
         # Deterministic initiative so the player can act first.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -1913,7 +2194,9 @@ async def test_combat_loot_take_moves_item_to_inventory(setup_test_db, monkeypat
         assert any((item or {}).get("id") == "RAT_TOOTH" for item in (avatar.inventory or []))
 
 
-async def test_combat_loot_done_spawns_visible_scene_loot_with_stale_overrides(setup_test_db, monkeypatch):
+async def test_combat_loot_done_spawns_visible_scene_loot_with_stale_overrides(
+    setup_test_db, monkeypatch
+):
     from backend.api.routes.adventures.logic import AdventureLogic
     from tests.conftest import TestSessionLocal
 
@@ -1930,7 +2213,10 @@ async def test_combat_loot_done_spawns_visible_scene_loot_with_stale_overrides(s
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -1972,47 +2258,53 @@ async def test_combat_loot_done_spawns_visible_scene_loot_with_stale_overrides(s
         assert any(ent.get("id") == "RAT_TOOTH" for ent in visible_entities)
 
 
-async def test_build_session_entities_hides_items_inside_container_inventory(setup_test_db, monkeypatch: pytest.MonkeyPatch):
+async def test_build_session_entities_hides_items_inside_container_inventory(
+    setup_test_db, monkeypatch: pytest.MonkeyPatch
+):
     import os
 
     from backend.api.routes.adventures.logic import AdventureLogic
     from tests.conftest import TestSessionLocal
 
     original_isfile = os.path.isfile
-    monkeypatch.setattr("os.path.isfile", lambda p: True if "crumpled-receipt.png" in p else original_isfile(p))
+    monkeypatch.setattr(
+        "os.path.isfile", lambda p: True if "crumpled-receipt.png" in p else original_isfile(p)
+    )
 
     async with TestSessionLocal() as db:
         _user, _adv, _avatar, state = await _seed_game_context(db)
 
-        db.add_all([
-            WorldEntity(
-                id="TRASH_CAN",
-                session_id=state.session_id,
-                entity_type="OBJECT",
-                name="Overflowing Trash Can",
-                description="A plastic bin full of greasy napkins.",
-                current_scene_id=state.current_scene_id,
-                item_type="CONTAINER",
-                is_hidden=False,
-                is_in_inventory=False,
-                is_portable=False,
-                inventory=["CRUMPLED_RECEIPT"],
-            ),
-            WorldEntity(
-                id="CRUMPLED_RECEIPT",
-                session_id=state.session_id,
-                entity_type="OBJECT",
-                name="Crumpled Receipt",
-                description="A greasy piece of thermal paper.",
-                current_scene_id=state.current_scene_id,
-                image_url="/data/adventures/test/crumpled-receipt.png",
-                item_type="READABLE",
-                is_hidden=False,
-                is_in_inventory=False,
-                is_portable=True,
-                inventory=[],
-            ),
-        ])
+        db.add_all(
+            [
+                WorldEntity(
+                    id="TRASH_CAN",
+                    session_id=state.session_id,
+                    entity_type="OBJECT",
+                    name="Overflowing Trash Can",
+                    description="A plastic bin full of greasy napkins.",
+                    current_scene_id=state.current_scene_id,
+                    item_type="CONTAINER",
+                    is_hidden=False,
+                    is_in_inventory=False,
+                    is_portable=False,
+                    inventory=["CRUMPLED_RECEIPT"],
+                ),
+                WorldEntity(
+                    id="CRUMPLED_RECEIPT",
+                    session_id=state.session_id,
+                    entity_type="OBJECT",
+                    name="Crumpled Receipt",
+                    description="A greasy piece of thermal paper.",
+                    current_scene_id=state.current_scene_id,
+                    image_url="/data/adventures/test/crumpled-receipt.png",
+                    item_type="READABLE",
+                    is_hidden=False,
+                    is_in_inventory=False,
+                    is_portable=True,
+                    inventory=[],
+                ),
+            ]
+        )
         await db.commit()
 
         visible_entities = await AdventureLogic.build_session_entities(db, state)
@@ -2036,7 +2328,10 @@ async def test_debug_win_fight_uses_loot_phase_mechanism(setup_test_db, monkeypa
         user, _adv, _avatar, state, _npc = await _seed_combat_npc(db)
         manager = GameTurnManager(db, state.session_id, user)
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2049,7 +2344,9 @@ async def test_debug_win_fight_uses_loot_phase_mechanism(setup_test_db, monkeypa
         assert combat.get("active") is False
         assert combat.get("outcome") == "victory"
         assert combat.get("loot_pending") is True
-        assert any((item or {}).get("id") == "RAT_TOOTH" for item in (combat.get("loot_items") or []))
+        assert any(
+            (item or {}).get("id") == "RAT_TOOTH" for item in (combat.get("loot_items") or [])
+        )
 
 
 async def test_combat_loot_done_emits_dropped_items_system_message(setup_test_db, monkeypatch):
@@ -2065,9 +2362,15 @@ async def test_combat_loot_done_emits_dropped_items_system_message(setup_test_db
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="The battlefield quiets."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2241,7 +2544,10 @@ async def test_combat_auto_triggers_from_gm_requested_attacks(setup_test_db, mon
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="ignored"))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, state.session_id, user)
         async for _ in manager.process_turn("I approach the rat"):
@@ -2254,7 +2560,9 @@ async def test_combat_auto_triggers_from_gm_requested_attacks(setup_test_db, mon
         assert combat.get("enemy", {}).get("id") == "RAT_ENEMY"
 
 
-async def test_enemy_requested_attacks_auto_trigger_even_when_player_damage_disabled(setup_test_db, monkeypatch):
+async def test_enemy_requested_attacks_auto_trigger_even_when_player_damage_disabled(
+    setup_test_db, monkeypatch
+):
     from backend.engine.rule_engine import AttackRequest
     from tests.conftest import TestSessionLocal
 
@@ -2288,7 +2596,10 @@ async def test_enemy_requested_attacks_auto_trigger_even_when_player_damage_disa
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="ignored"))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, state.session_id, user)
         async for _ in manager.process_turn("I enter the nest"):
@@ -2301,7 +2612,9 @@ async def test_enemy_requested_attacks_auto_trigger_even_when_player_damage_disa
         assert combat.get("enemy", {}).get("id") == "RAT_ENEMY"
 
 
-async def test_enemy_requested_attacks_do_not_auto_trigger_when_npc_damage_disabled(setup_test_db, monkeypatch):
+async def test_enemy_requested_attacks_do_not_auto_trigger_when_npc_damage_disabled(
+    setup_test_db, monkeypatch
+):
     from backend.engine.rule_engine import AttackRequest
     from tests.conftest import TestSessionLocal
 
@@ -2334,7 +2647,10 @@ async def test_enemy_requested_attacks_do_not_auto_trigger_when_npc_damage_disab
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="ignored"))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, state.session_id, user)
         async for _ in manager.process_turn("I step into the lair"):
@@ -2353,7 +2669,10 @@ async def test_combat_special_event_damage_updates_player_hp_snapshot(setup_test
         manager = GameTurnManager(db, state.session_id, user)
 
         # Deterministic initiative so the player acts first.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2377,7 +2696,9 @@ async def test_combat_special_event_damage_updates_player_hp_snapshot(setup_test
 
         # First random.random call enters special-event branch, second chooses damage event.
         rolls = iter([0.0, 0.0])
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: next(rolls, 1.0))
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: next(rolls, 1.0)
+        )
 
         async for _ in manager.process_turn("/attack"):
             pass
@@ -2389,7 +2710,9 @@ async def test_combat_special_event_damage_updates_player_hp_snapshot(setup_test
         assert (combat.get("player") or {}).get("hp") == 80
 
 
-async def test_combat_enemy_without_dexterity_uses_baseline_hit_modifier(setup_test_db, monkeypatch):
+async def test_combat_enemy_without_dexterity_uses_baseline_hit_modifier(
+    setup_test_db, monkeypatch
+):
     from tests.conftest import TestSessionLocal
 
     async with TestSessionLocal() as db:
@@ -2401,8 +2724,13 @@ async def test_combat_enemy_without_dexterity_uses_baseline_hit_modifier(setup_t
         manager = GameTurnManager(db, state.session_id, user)
 
         # Ensure player starts, then force player miss and enemy hit with deterministic rolls.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
 
         def fake_roll_attack(attacker, _hit_stat, target_ac, _damage_dice):
             is_enemy = getattr(attacker, "name", "") == "Giant Rat"
@@ -2432,7 +2760,9 @@ async def test_combat_enemy_without_dexterity_uses_baseline_hit_modifier(setup_t
                 "damage_dice_str": "1d8",
             }
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.roll_attack", fake_roll_attack)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.roll_attack", fake_roll_attack
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2442,7 +2772,9 @@ async def test_combat_enemy_without_dexterity_uses_baseline_hit_modifier(setup_t
         await db.refresh(avatar)
         await db.refresh(state)
         combat = (state.entity_states or {}).get("__combat__") or {}
-        enemy_logs = [entry for entry in (combat.get("log") or []) if entry.get("type") == "enemy_action"]
+        enemy_logs = [
+            entry for entry in (combat.get("log") or []) if entry.get("type") == "enemy_action"
+        ]
         assert enemy_logs
         assert " + 10 = " in enemy_logs[-1].get("text", "")
         assert avatar.hp == 93
@@ -2468,7 +2800,10 @@ async def test_combat_consume_parses_description_healing_effect(setup_test_db, m
         manager = GameTurnManager(db, state.session_id, user)
 
         # Ensure player starts; enemy turn after consume should not alter HP in this test.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.roll_attack",
             lambda *_args, **_kwargs: {
@@ -2484,7 +2819,9 @@ async def test_combat_consume_parses_description_healing_effect(setup_test_db, m
                 "damage_dice_str": "1d6",
             },
         )
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2495,7 +2832,9 @@ async def test_combat_consume_parses_description_healing_effect(setup_test_db, m
         await db.refresh(state)
 
         assert avatar.hp == 90
-        assert not any((item or {}).get("id") == "HEALING_POTION_1" for item in (avatar.inventory or []))
+        assert not any(
+            (item or {}).get("id") == "HEALING_POTION_1" for item in (avatar.inventory or [])
+        )
         combat = (state.entity_states or {}).get("__combat__") or {}
         assert (combat.get("player") or {}).get("hp") == 90
 
@@ -2527,7 +2866,10 @@ async def test_combat_consume_uses_explicit_resource_fields(setup_test_db, monke
         manager = GameTurnManager(db, state.session_id, user)
 
         # Keep the turn deterministic and avoid special-event side effects.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.roll_attack",
             lambda *_args, **_kwargs: {
@@ -2543,7 +2885,9 @@ async def test_combat_consume_uses_explicit_resource_fields(setup_test_db, monke
                 "damage_dice_str": "1d6",
             },
         )
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2556,7 +2900,9 @@ async def test_combat_consume_uses_explicit_resource_fields(setup_test_db, monke
         assert avatar.hp == 95
         assert avatar.mana == 50
         assert avatar.stamina == 10
-        assert not any((item or {}).get("id") == "COMBAT_TONIC" for item in (avatar.inventory or []))
+        assert not any(
+            (item or {}).get("id") == "COMBAT_TONIC" for item in (avatar.inventory or [])
+        )
 
         combat = (state.entity_states or {}).get("__combat__") or {}
         assert (combat.get("player") or {}).get("hp") == 95
@@ -2572,25 +2918,40 @@ async def test_combat_exit_run_triggers_gm_narrative_pass(setup_test_db, monkeyp
         mock_llm_instance = MagicMock()
 
         async def mock_stream(*_args, **_kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="The dust settles as you retreat."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="The dust settles as you retreat."))]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         # Start with deterministic player initiative.
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
 
         # Deterministic successful escape.
         escape_rolls = iter([20, 1])
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: next(escape_rolls, 20))
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: next(escape_rolls, 20),
+        )
 
         async for _ in manager.process_turn("/run"):
             pass
 
-        res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == state.session_id, ChatMessage.role == "assistant"))
+        res = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.session_id == state.session_id, ChatMessage.role == "assistant"
+            )
+        )
         assistant_msgs = [m.content for m in res.scalars().all()]
         assert any("dust settles" in msg for msg in assistant_msgs)
 
@@ -2605,12 +2966,20 @@ async def test_combat_exit_loot_done_triggers_gm_narrative_pass(setup_test_db, m
         mock_llm_instance = MagicMock()
 
         async def mock_stream(*_args, **_kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Silence returns after your victory."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="Silence returns after your victory."))]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
 
         async for _ in manager.process_turn("/fight RAT_ENEMY"):
             pass
@@ -2637,7 +3006,11 @@ async def test_combat_exit_loot_done_triggers_gm_narrative_pass(setup_test_db, m
         async for _ in manager.process_turn("/loot done"):
             pass
 
-        res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == state.session_id, ChatMessage.role == "assistant"))
+        res = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.session_id == state.session_id, ChatMessage.role == "assistant"
+            )
+        )
         assistant_msgs = [m.content for m in res.scalars().all()]
         assert any("Silence returns" in msg for msg in assistant_msgs)
 
@@ -2655,9 +3028,14 @@ async def test_combat_npc_stamina_logic_active(setup_test_db, monkeypatch):
         manager = GameTurnManager(db, state.session_id, user)
 
         # Force player to act first, and player misses so fight continues
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
-        
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
+
         # Player and enemy attack miss
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.roll_attack",
@@ -2713,9 +3091,14 @@ async def test_combat_npc_stamina_logic_inactive(setup_test_db, monkeypatch):
         manager = GameTurnManager(db, state.session_id, user)
 
         # Force player to act first, and player misses so fight continues
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.randint", lambda *_args, **_kwargs: 20)
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0)
-        
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.randint",
+            lambda *_args, **_kwargs: 20,
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 1.0
+        )
+
         # Player and enemy attack miss
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.roll_attack",
@@ -2747,7 +3130,9 @@ async def test_combat_npc_stamina_logic_inactive(setup_test_db, monkeypatch):
         assert combat.get("enemy", {}).get("stamina") == 0
         logs = combat.get("log") or []
         # Enemy should not rest/be exhausted
-        assert not any("is exhausted and rests to recover" in entry.get("text", "") for entry in logs)
+        assert not any(
+            "is exhausted and rests to recover" in entry.get("text", "") for entry in logs
+        )
 
 
 async def test_wrong_container_access_code_is_rejected_server_side(setup_test_db):
@@ -2780,15 +3165,21 @@ async def test_wrong_container_access_code_is_rejected_server_side(setup_test_db
         event = GameEvent(
             updated_entities=[WorldEntityUpdate(entity_id="LOCKER", locked=False)],
             completed_quest_ids=["LOCKER_ROOKIE"],
-            new_inventory_items=[InventoryItem(id="MEDIKIT_01", name="Medikit", item_type="CONSUMABLE")],
+            new_inventory_items=[
+                InventoryItem(id="MEDIKIT_01", name="Medikit", item_type="CONSUMABLE")
+            ],
         )
 
-        messages = await manager._enforce_container_unlock_guardrails(event, "use code 1111 on maintenance locker")
+        messages = await manager._enforce_container_unlock_guardrails(
+            event, "use code 1111 on maintenance locker"
+        )
 
         assert any("mocking click" in msg for msg in messages)
         assert event.completed_quest_ids == []
         assert event.new_inventory_items == []
-        assert any(up.entity_id == "LOCKER" and up.locked is True for up in (event.updated_entities or []))
+        assert any(
+            up.entity_id == "LOCKER" and up.locked is True for up in (event.updated_entities or [])
+        )
 
 
 async def test_quest_and_award_accessibility_guardrail(setup_test_db):
@@ -2798,7 +3189,7 @@ async def test_quest_and_award_accessibility_guardrail(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed the slang dictionary item in another room (MEN_RESTROOM)
         dictionary = WorldEntity(
             id="DINER_SLANG_DICTIONARY",
@@ -2812,7 +3203,7 @@ async def test_quest_and_award_accessibility_guardrail(setup_test_db):
             is_in_inventory=False,
         )
         db.add(dictionary)
-        
+
         # Seed quest and award in state/adventure
         state.quests = [
             {
@@ -2820,7 +3211,7 @@ async def test_quest_and_award_accessibility_guardrail(setup_test_db):
                 "title": "Slang 101",
                 "description": "Betty left notes. Find a translation guide.",
                 "goal": "Read DINER_SLANG_DICTIONARY.",
-                "status": "open"
+                "status": "open",
             }
         ]
         adv.awards = [
@@ -2830,7 +3221,7 @@ async def test_quest_and_award_accessibility_guardrail(setup_test_db):
                 "description": "Found and studied the diner slang dictionary.",
                 "tier": "bronze",
                 "requirement": "Read DINER_SLANG_DICTIONARY.",
-                "is_earned": False
+                "is_earned": False,
             }
         ]
         await db.commit()
@@ -2875,13 +3266,22 @@ async def test_quest_completion_accumulates_xp(setup_test_db, monkeypatch):
         adv.strict_rules = False
         adv.rule_enforcement_mode = "chat"
         adv.is_adventure_generator = False
-        
+
         # Seed quest with 250 XP reward
-        state.quests = [{"id": "q-xp-test", "title": "XP Quest", "status": "open", "is_main": True, "exp_reward": 250}]
+        state.quests = [
+            {
+                "id": "q-xp-test",
+                "title": "XP Quest",
+                "status": "open",
+                "is_main": True,
+                "exp_reward": 250,
+            }
+        ]
         avatar.exp = 50
         await db.commit()
 
         mock_llm_instance = MagicMock()
+
         async def mock_progression(*args, **kwargs):
             return AdventureGeneratorToolIntent(
                 completed_quest_ids=["q-xp-test"],
@@ -2892,7 +3292,10 @@ async def test_quest_completion_accumulates_xp(setup_test_db, monkeypatch):
 
         mock_llm_instance.aexecute_complex_task = AsyncMock(side_effect=mock_progression)
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, "session-1", user)
         async for _ in manager.process_turn("I complete the quest"):
@@ -2907,13 +3310,17 @@ async def test_quest_completion_accumulates_xp(setup_test_db, monkeypatch):
 
         # Check ChatMessage system entry
         sys_msgs = (
-            await db.execute(
-                select(ChatMessage).where(
-                    ChatMessage.session_id == "session-1",
-                    ChatMessage.role == "system",
+            (
+                await db.execute(
+                    select(ChatMessage).where(
+                        ChatMessage.session_id == "session-1",
+                        ChatMessage.role == "system",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any("Quest completed: XP Quest" in m.content for m in sys_msgs)
         assert any("you gained 250 XP" in m.content for m in sys_msgs)
 
@@ -2929,7 +3336,7 @@ async def test_combat_defeat_adds_xp(setup_test_db, monkeypatch):
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
-        
+
         # Start combat
         async for _ in manager.process_turn(f"/fight {npc.id}"):
             pass
@@ -2961,13 +3368,17 @@ async def test_combat_defeat_adds_xp(setup_test_db, monkeypatch):
 
         # Check ChatMessage
         sys_msgs = (
-            await db.execute(
-                select(ChatMessage).where(
-                    ChatMessage.session_id == state.session_id,
-                    ChatMessage.role == "system",
+            (
+                await db.execute(
+                    select(ChatMessage).where(
+                        ChatMessage.session_id == state.session_id,
+                        ChatMessage.role == "system",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any(f"Defeated {npc.name}" in m.content for m in sys_msgs)
         assert any("you gained 75 XP" in m.content for m in sys_msgs)
 
@@ -2985,7 +3396,7 @@ async def test_container_code_unlock_adds_xp(setup_test_db):
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
         avatar.exp = 100
-        
+
         # Seed container requiring code
         chest = WorldEntity(
             id="CHEST_1",
@@ -3009,7 +3420,7 @@ async def test_container_code_unlock_adds_xp(setup_test_db):
             entity_id="CHEST_1",
             payload=ContainerUnlockCodeRequest(code="1234"),
             db=db,
-            current_user=user
+            current_user=user,
         )
         assert response["locked"] is False
 
@@ -3019,13 +3430,17 @@ async def test_container_code_unlock_adds_xp(setup_test_db):
 
         # Check system message
         sys_msgs = (
-            await db.execute(
-                select(ChatMessage).where(
-                    ChatMessage.session_id == state.session_id,
-                    ChatMessage.role == "system",
+            (
+                await db.execute(
+                    select(ChatMessage).where(
+                        ChatMessage.session_id == state.session_id,
+                        ChatMessage.role == "system",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any("Unlocked Iron Chest with the correct code!" in m.content for m in sys_msgs)
         assert any("you gained 80 XP" in m.content for m in sys_msgs)
 
@@ -3035,7 +3450,7 @@ async def test_container_code_unlock_adds_xp(setup_test_db):
                 entity_id="CHEST_1",
                 payload=ContainerUnlockCodeRequest(code="9999"),
                 db=db,
-                current_user=user
+                current_user=user,
             )
         assert exc_info.value.status_code == 403
 
@@ -3048,53 +3463,53 @@ async def test_container_code_unlock_adds_xp(setup_test_db):
         manager = GameTurnManager(db, state.session_id, user)
         await manager.initialize()
         # Simulate LLM game event unlocking it
-        event = GameEvent(
-            updated_entities=[WorldEntityUpdate(entity_id="CHEST_1", locked=False)]
-        )
-        
+        event = GameEvent(updated_entities=[WorldEntityUpdate(entity_id="CHEST_1", locked=False)])
+
         await manager._apply_game_event(event)
         await db.refresh(avatar)
         # 100 + 80 = 180 XP
         assert avatar.exp == 180
- 
- 
+
+
 async def test_game_loop_adjacent_only_scene_transitions(setup_test_db, monkeypatch):
     """Verifies that scene transitions are allowed to adjacent scenes and blocked otherwise."""
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed WorldExit: START -> CELLAR (adjacent)
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="CELLAR",
-            label="cellar door",
-            is_locked=False,
-        ))
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="CELLAR",
+                label="cellar door",
+                is_locked=False,
+            )
+        )
         await db.commit()
-        
+
         manager = GameTurnManager(db, "session-1", user)
         await manager.initialize()
-        
+
         # 1. Attempt valid adjacent transition
         event_valid = GameEvent(new_scene_id="CELLAR")
         await manager._apply_game_event(event_valid)
         await db.refresh(state)
         assert state.current_scene_id == "CELLAR"
-        
+
         # 2. Attempt invalid non-adjacent transition (to VAULT)
         event_invalid = GameEvent(new_scene_id="VAULT")
         await manager._apply_game_event(event_invalid)
         await db.refresh(state)
         # Should stay in CELLAR
         assert state.current_scene_id == "CELLAR"
-        
+
         # Check that transition fields in event_invalid were cleared
         assert event_invalid.new_scene_id is None
-        
+
         # Check system message in DB
         res = await db.execute(
             select(ChatMessage).where(
@@ -3103,7 +3518,9 @@ async def test_game_loop_adjacent_only_scene_transitions(setup_test_db, monkeypa
             )
         )
         sys_msgs = [m.content for m in res.scalars().all()]
-        assert any("Movement blocked: The destination 'VAULT' is not adjacent" in msg for msg in sys_msgs)
+        assert any(
+            "Movement blocked: The destination 'VAULT' is not adjacent" in msg for msg in sys_msgs
+        )
 
 
 async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
@@ -3111,31 +3528,35 @@ async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
     import json
 
     from tests.conftest import TestSessionLocal
-    
+
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed exits from START:
         # 1. Locked exit
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="CELLAR",
-            label="Iron Door",
-            is_locked=True,
-        ))
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="CELLAR",
+                label="Iron Door",
+                is_locked=True,
+            )
+        )
         # 2. Open exit
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="HALL",
-            label="Wooden Door",
-            is_locked=False,
-        ))
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="HALL",
+                label="Wooden Door",
+                is_locked=False,
+            )
+        )
         await db.commit()
-        
+
         # Mock LLM
         mock_llm_instance = MagicMock()
         mock_event = GameEvent(
@@ -3146,22 +3567,25 @@ async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
             new_status_effects=[],
             new_inventory_items=[],
             scene_change=None,
-            requested_skill_checks=[]
+            requested_skill_checks=[],
         )
         mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=mock_event)
-        
+
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="The room is dark."))])
-            
+
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
-        
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
+
         # Test 1: look around (natural language)
         manager = GameTurnManager(db, "session-1", user)
         chunks = []
         async for chunk in manager.process_turn("look around"):
             chunks.append(chunk)
-            
+
         # Parse SSE events from chunk
         # Yield is in format: f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
         full_text = ""
@@ -3171,7 +3595,7 @@ async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
                 data_line = [line for line in chunk.split("\n") if line.startswith("data:")][0]
                 content = json.loads(data_line[5:])["content"]
                 full_text += content
-                
+
         assert "The room is dark." in full_text
         assert "Exits:" not in full_text
 
@@ -3187,7 +3611,7 @@ async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
         chunks_de = []
         async for chunk in manager.process_turn("look around", language="de"):
             chunks_de.append(chunk)
-            
+
         full_text_de = ""
         for chunk in chunks_de:
             if "event: chunk" in chunk:
@@ -3197,7 +3621,9 @@ async def test_game_loop_lookaround_exits(setup_test_db, monkeypatch):
 
         assert "Exits:" not in full_text_de
 
-        prompt_lookaround_de = _llm_call_text(mock_llm_instance.stream_simple_task.await_args_list[1])
+        prompt_lookaround_de = _llm_call_text(
+            mock_llm_instance.stream_simple_task.await_args_list[1]
+        )
         assert "EXIT DESCRIPTION TASK (MANDATORY)" in prompt_lookaround_de
         assert "CURRENT SCENE EXITS:" in prompt_lookaround_de
         assert "Keep it short (max 2 sentences)." in prompt_lookaround_de
@@ -3215,36 +3641,44 @@ async def test_game_loop_scene_change_auto_appends_narrative_exits(setup_test_db
     async with TestSessionLocal() as db:
         user, adv, avatar, state = await _seed_game_context(db)
 
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="START",
-            to_scene_id="HALL",
-            label="Wooden Door",
-            is_locked=False,
-        ))
-        db.add(WorldExit(
-            session_id="session-1",
-            template_id=adv.id,
-            from_scene_id="HALL",
-            to_scene_id="GARDEN",
-            label="Garden Gate",
-            is_locked=False,
-        ))
-        db.add(WorldScene(
-            id="HALL",
-            session_id="session-1",
-            template_id=adv.id,
-            label="Hall",
-            description="A narrow hallway.",
-        ))
-        db.add(WorldScene(
-            id="GARDEN",
-            session_id="session-1",
-            template_id=adv.id,
-            label="Garden",
-            description="A damp garden.",
-        ))
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="START",
+                to_scene_id="HALL",
+                label="Wooden Door",
+                is_locked=False,
+            )
+        )
+        db.add(
+            WorldExit(
+                session_id="session-1",
+                template_id=adv.id,
+                from_scene_id="HALL",
+                to_scene_id="GARDEN",
+                label="Garden Gate",
+                is_locked=False,
+            )
+        )
+        db.add(
+            WorldScene(
+                id="HALL",
+                session_id="session-1",
+                template_id=adv.id,
+                label="Hall",
+                description="A narrow hallway.",
+            )
+        )
+        db.add(
+            WorldScene(
+                id="GARDEN",
+                session_id="session-1",
+                template_id=adv.id,
+                label="Garden",
+                description="A damp garden.",
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
@@ -3266,10 +3700,15 @@ async def test_game_loop_scene_change_auto_appends_narrative_exits(setup_test_db
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="You step into the hall."))])
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.SessionCheckpointService.create_checkpoint",
-            AsyncMock(return_value=SimpleNamespace(id=1, trigger_reason="SCENE_CHANGE", created_at=None)),
+            AsyncMock(
+                return_value=SimpleNamespace(id=1, trigger_reason="SCENE_CHANGE", created_at=None)
+            ),
         )
 
         manager = GameTurnManager(db, "session-1", user)
@@ -3287,7 +3726,9 @@ async def test_game_loop_scene_change_auto_appends_narrative_exits(setup_test_db
         assert "You step into the hall." in full_text
         assert "Exits:" not in full_text
 
-        prompt_scene_change = _llm_call_text(mock_llm_instance.stream_simple_task.await_args_list[0])
+        prompt_scene_change = _llm_call_text(
+            mock_llm_instance.stream_simple_task.await_args_list[0]
+        )
         assert "EXIT DESCRIPTION TASK (MANDATORY)" in prompt_scene_change
         assert "CURRENT SCENE EXITS:" in prompt_scene_change
         assert "Use exactly 1 sentence for the exit paragraph" in prompt_scene_change
@@ -3301,17 +3742,19 @@ async def test_exit_lock_guardrail_wrong_code(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed locked exit with code
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="CELLAR",
-            label="Digital Security Door",
-            is_locked=True,
-            code_to_unlock="4711",
-            item_to_unlock=None,
-        ))
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="CELLAR",
+                label="Digital Security Door",
+                is_locked=True,
+                code_to_unlock="4711",
+                item_to_unlock=None,
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3320,16 +3763,24 @@ async def test_exit_lock_guardrail_wrong_code(setup_test_db):
         # Simulate LLM trying to transition to CELLAR
         event = GameEvent(
             new_scene_id="CELLAR",
-            updated_exits=[ExitUpdate(from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False)],
+            updated_exits=[
+                ExitUpdate(
+                    from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False
+                )
+            ],
             completed_quest_ids=["ENTER_CELLAR"],
         )
 
-        reasons = await manager._enforce_exit_unlock_guardrails(event, "I try to use code 1234 on the digital security door")
+        reasons = await manager._enforce_exit_unlock_guardrails(
+            event, "I try to use code 1234 on the digital security door"
+        )
 
         assert any("cold red blink" in r for r in reasons)
         assert event.new_scene_id is None
         assert event.completed_quest_ids == []
-        assert any(up.to_scene_id == "CELLAR" and up.is_locked is True for up in event.updated_exits)
+        assert any(
+            up.to_scene_id == "CELLAR" and up.is_locked is True for up in event.updated_exits
+        )
 
 
 async def test_exit_lock_guardrail_correct_code(setup_test_db):
@@ -3337,17 +3788,19 @@ async def test_exit_lock_guardrail_correct_code(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed locked exit with code
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="CELLAR",
-            label="Digital Security Door",
-            is_locked=True,
-            code_to_unlock="4711",
-            item_to_unlock=None,
-        ))
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="CELLAR",
+                label="Digital Security Door",
+                is_locked=True,
+                code_to_unlock="4711",
+                item_to_unlock=None,
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3358,12 +3811,16 @@ async def test_exit_lock_guardrail_correct_code(setup_test_db):
             completed_quest_ids=["ENTER_CELLAR"],
         )
 
-        reasons = await manager._enforce_exit_unlock_guardrails(event, "I enter code 4711 on the digital security door")
+        reasons = await manager._enforce_exit_unlock_guardrails(
+            event, "I enter code 4711 on the digital security door"
+        )
 
         assert not reasons
         assert event.new_scene_id == "CELLAR"
         assert event.completed_quest_ids == ["ENTER_CELLAR"]
-        assert any(up.to_scene_id == "CELLAR" and up.is_locked is False for up in event.updated_exits)
+        assert any(
+            up.to_scene_id == "CELLAR" and up.is_locked is False for up in event.updated_exits
+        )
 
 
 async def test_exit_lock_guardrail_missing_item(setup_test_db):
@@ -3371,17 +3828,19 @@ async def test_exit_lock_guardrail_missing_item(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed locked exit with item
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="CELLAR",
-            label="Heavy Steel Gate",
-            is_locked=True,
-            code_to_unlock=None,
-            item_to_unlock="CELLAR_KEY",
-        ))
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="CELLAR",
+                label="Heavy Steel Gate",
+                is_locked=True,
+                code_to_unlock=None,
+                item_to_unlock="CELLAR_KEY",
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3389,14 +3848,22 @@ async def test_exit_lock_guardrail_missing_item(setup_test_db):
 
         event = GameEvent(
             new_scene_id="CELLAR",
-            updated_exits=[ExitUpdate(from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False)],
+            updated_exits=[
+                ExitUpdate(
+                    from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False
+                )
+            ],
         )
 
-        reasons = await manager._enforce_exit_unlock_guardrails(event, "I open the heavy steel gate")
+        reasons = await manager._enforce_exit_unlock_guardrails(
+            event, "I open the heavy steel gate"
+        )
 
         assert any("You need a specific item to unlock" in r for r in reasons)
         assert event.new_scene_id is None
-        assert any(up.to_scene_id == "CELLAR" and up.is_locked is True for up in event.updated_exits)
+        assert any(
+            up.to_scene_id == "CELLAR" and up.is_locked is True for up in event.updated_exits
+        )
 
 
 async def test_exit_lock_guardrail_correct_item(setup_test_db):
@@ -3404,20 +3871,22 @@ async def test_exit_lock_guardrail_correct_item(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Give item to player
         avatar.inventory = [{"id": "CELLAR_KEY", "name": "Cellar Key", "item_type": "KEY"}]
-        
+
         # Seed locked exit with item
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="CELLAR",
-            label="Heavy Steel Gate",
-            is_locked=True,
-            code_to_unlock=None,
-            item_to_unlock="CELLAR_KEY",
-        ))
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="CELLAR",
+                label="Heavy Steel Gate",
+                is_locked=True,
+                code_to_unlock=None,
+                item_to_unlock="CELLAR_KEY",
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3427,11 +3896,15 @@ async def test_exit_lock_guardrail_correct_item(setup_test_db):
             new_scene_id="CELLAR",
         )
 
-        reasons = await manager._enforce_exit_unlock_guardrails(event, "I unlock the heavy steel gate with my cellar key")
+        reasons = await manager._enforce_exit_unlock_guardrails(
+            event, "I unlock the heavy steel gate with my cellar key"
+        )
 
         assert not reasons
         assert event.new_scene_id == "CELLAR"
-        assert any(up.to_scene_id == "CELLAR" and up.is_locked is False for up in event.updated_exits)
+        assert any(
+            up.to_scene_id == "CELLAR" and up.is_locked is False for up in event.updated_exits
+        )
 
 
 async def test_exit_rule_unlock_passes(setup_test_db):
@@ -3439,18 +3912,20 @@ async def test_exit_rule_unlock_passes(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed locked exit with rule_to_unlock
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="CELLAR",
-            label="Narrative Gate",
-            is_locked=True,
-            code_to_unlock=None,
-            item_to_unlock=None,
-            rule_to_unlock="Protagonist defeats NPC_2"
-        ))
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="CELLAR",
+                label="Narrative Gate",
+                is_locked=True,
+                code_to_unlock=None,
+                item_to_unlock=None,
+                rule_to_unlock="Protagonist defeats NPC_2",
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3460,16 +3935,24 @@ async def test_exit_rule_unlock_passes(setup_test_db):
         event_fail = GameEvent(
             new_scene_id="CELLAR",
         )
-        reasons_fail = await manager._enforce_exit_unlock_guardrails(event_fail, "I try to walk through narrative gate")
+        reasons_fail = await manager._enforce_exit_unlock_guardrails(
+            event_fail, "I try to walk through narrative gate"
+        )
         assert any("is locked" in r for r in reasons_fail)
         assert event_fail.new_scene_id is None
 
         # CASE 2: GM explicitly unlocks it (is_being_unlocked is True). It should succeed!
         event_ok = GameEvent(
             new_scene_id="CELLAR",
-            updated_exits=[ExitUpdate(from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False)]
+            updated_exits=[
+                ExitUpdate(
+                    from_scene_id=state.current_scene_id, to_scene_id="CELLAR", is_locked=False
+                )
+            ],
         )
-        reasons_ok = await manager._enforce_exit_unlock_guardrails(event_ok, "I defeated the NPC, let me through")
+        reasons_ok = await manager._enforce_exit_unlock_guardrails(
+            event_ok, "I defeated the NPC, let me through"
+        )
         assert not reasons_ok
         assert event_ok.new_scene_id == "CELLAR"
 
@@ -3479,30 +3962,36 @@ async def test_container_rule_unlock_passes(setup_test_db):
 
     async with TestSessionLocal() as db:
         user, _adv, avatar, state = await _seed_game_context(db)
-        
+
         # Seed locked container object with rule_to_unlock
-        db.add(WorldEntity(
-            id="MAGIC_CHEST",
-            session_id=state.session_id,
-            entity_type="OBJECT",
-            name="Magic Chest",
-            description="A glowing wooden chest",
-            current_scene_id=state.current_scene_id,
-            item_type="CONTAINER",
-            metadata_json={
-                "code_to_unlock": "",
-                "item_to_unlock": "",
-                "rule_to_unlock": "Protagonist overpersuades NPC_1",
-                "locked": True,
-            }
-        ))
+        db.add(
+            WorldEntity(
+                id="MAGIC_CHEST",
+                session_id=state.session_id,
+                entity_type="OBJECT",
+                name="Magic Chest",
+                description="A glowing wooden chest",
+                current_scene_id=state.current_scene_id,
+                item_type="CONTAINER",
+                metadata_json={
+                    "code_to_unlock": "",
+                    "item_to_unlock": "",
+                    "rule_to_unlock": "Protagonist overpersuades NPC_1",
+                    "locked": True,
+                },
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
         await manager.initialize()
 
         # Check that is_container_locked returns True initially
-        chest_res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id, WorldEntity.id == "MAGIC_CHEST"))
+        chest_res = await db.execute(
+            select(WorldEntity).where(
+                WorldEntity.session_id == state.session_id, WorldEntity.id == "MAGIC_CHEST"
+            )
+        )
         chest = chest_res.scalars().first()
         assert manager._is_container_locked(chest, None) is True
 
@@ -3510,7 +3999,9 @@ async def test_container_rule_unlock_passes(setup_test_db):
         event = GameEvent(
             updated_entities=[WorldEntityUpdate(entity_id="MAGIC_CHEST", locked=False)]
         )
-        reasons = await manager._enforce_container_unlock_guardrails(event, "I persuaded the librarian to let me open the chest")
+        reasons = await manager._enforce_container_unlock_guardrails(
+            event, "I persuaded the librarian to let me open the chest"
+        )
         assert not reasons
 
 
@@ -3520,28 +4011,32 @@ async def test_container_rule_unlock_requires_explicit_unlock_update(setup_test_
     async with TestSessionLocal() as db:
         user, _adv, _avatar, state = await _seed_game_context(db)
 
-        db.add(WorldEntity(
-            id="CASH_REGISTER",
-            session_id=state.session_id,
-            entity_type="OBJECT",
-            name="Diner Cash Register",
-            description="A vintage mechanical cash register that rings loudly.",
-            current_scene_id=state.current_scene_id,
-            item_type="CONTAINER",
-            metadata_json={
-                "code_to_unlock": "",
-                "item_to_unlock": "",
-                "rule_to_unlock": "Protagonist distracts Betty",
-                "locked": True,
-            },
-        ))
+        db.add(
+            WorldEntity(
+                id="CASH_REGISTER",
+                session_id=state.session_id,
+                entity_type="OBJECT",
+                name="Diner Cash Register",
+                description="A vintage mechanical cash register that rings loudly.",
+                current_scene_id=state.current_scene_id,
+                item_type="CONTAINER",
+                metadata_json={
+                    "code_to_unlock": "",
+                    "item_to_unlock": "",
+                    "rule_to_unlock": "Protagonist distracts Betty",
+                    "locked": True,
+                },
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
         await manager.initialize()
 
         event = GameEvent()
-        reasons = await manager._enforce_container_unlock_guardrails(event, "OPEN_CONTAINER CASH_REGISTER")
+        reasons = await manager._enforce_container_unlock_guardrails(
+            event, "OPEN_CONTAINER CASH_REGISTER"
+        )
 
         assert reasons
         assert "stays shut" in reasons[0]
@@ -3560,47 +4055,53 @@ async def test_build_context_includes_global_soft_unlock_rules(setup_test_db):
     async with TestSessionLocal() as db:
         user, _adv, _avatar, state = await _seed_game_context(db)
 
-        db.add_all([
-            WorldScene(
-                id="DINER_FLOOR",
+        db.add_all(
+            [
+                WorldScene(
+                    id="DINER_FLOOR",
+                    session_id=state.session_id,
+                    template_id=state.template_id,
+                    label="Diner Floor",
+                    description="Greasy tables and neon lights.",
+                ),
+                WorldScene(
+                    id="BACK_ALLEY",
+                    session_id=state.session_id,
+                    template_id=state.template_id,
+                    label="Back Alley",
+                    description="Rain drips from rusty pipes.",
+                ),
+            ]
+        )
+        db.add(
+            WorldEntity(
+                id="CASH_REGISTER",
                 session_id=state.session_id,
-                template_id=state.template_id,
-                label="Diner Floor",
-                description="Greasy tables and neon lights.",
-            ),
-            WorldScene(
-                id="BACK_ALLEY",
+                entity_type="OBJECT",
+                name="Diner Cash Register",
+                description="A vintage mechanical cash register.",
+                current_scene_id="DINER_FLOOR",
+                item_type="CONTAINER",
+                metadata_json={
+                    "code_to_unlock": "",
+                    "item_to_unlock": "",
+                    "rule_to_unlock": "Protagonist distracts Betty",
+                    "locked": True,
+                },
+            )
+        )
+        db.add(
+            WorldExit(
                 session_id=state.session_id,
-                template_id=state.template_id,
-                label="Back Alley",
-                description="Rain drips from rusty pipes.",
-            ),
-        ])
-        db.add(WorldEntity(
-            id="CASH_REGISTER",
-            session_id=state.session_id,
-            entity_type="OBJECT",
-            name="Diner Cash Register",
-            description="A vintage mechanical cash register.",
-            current_scene_id="DINER_FLOOR",
-            item_type="CONTAINER",
-            metadata_json={
-                "code_to_unlock": "",
-                "item_to_unlock": "",
-                "rule_to_unlock": "Protagonist distracts Betty",
-                "locked": True,
-            },
-        ))
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id="DINER_FLOOR",
-            to_scene_id="BACK_ALLEY",
-            label="Service Door",
-            is_locked=True,
-            code_to_unlock=None,
-            item_to_unlock=None,
-            rule_to_unlock="Protagonist convinces Betty to buzz the door",
-        ))
+                from_scene_id="DINER_FLOOR",
+                to_scene_id="BACK_ALLEY",
+                label="Service Door",
+                is_locked=True,
+                code_to_unlock=None,
+                item_to_unlock=None,
+                rule_to_unlock="Protagonist convinces Betty to buzz the door",
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3623,31 +4124,35 @@ async def test_apply_game_event_emits_unlock_messages_for_container_and_exit(set
     async with TestSessionLocal() as db:
         user, _adv, _avatar, state = await _seed_game_context(db)
 
-        db.add(WorldEntity(
-            id="CASH_REGISTER",
-            session_id=state.session_id,
-            entity_type="OBJECT",
-            name="Diner Cash Register",
-            description="A vintage mechanical cash register.",
-            current_scene_id=state.current_scene_id,
-            item_type="CONTAINER",
-            metadata_json={
-                "code_to_unlock": "",
-                "item_to_unlock": "",
-                "rule_to_unlock": "Protagonist distracts Betty",
-                "locked": True,
-            },
-        ))
-        db.add(WorldExit(
-            session_id=state.session_id,
-            from_scene_id=state.current_scene_id,
-            to_scene_id="BACKROOM",
-            label="Kitchen Swing Door",
-            is_locked=True,
-            code_to_unlock=None,
-            item_to_unlock=None,
-            rule_to_unlock="Protagonist distracts Betty",
-        ))
+        db.add(
+            WorldEntity(
+                id="CASH_REGISTER",
+                session_id=state.session_id,
+                entity_type="OBJECT",
+                name="Diner Cash Register",
+                description="A vintage mechanical cash register.",
+                current_scene_id=state.current_scene_id,
+                item_type="CONTAINER",
+                metadata_json={
+                    "code_to_unlock": "",
+                    "item_to_unlock": "",
+                    "rule_to_unlock": "Protagonist distracts Betty",
+                    "locked": True,
+                },
+            )
+        )
+        db.add(
+            WorldExit(
+                session_id=state.session_id,
+                from_scene_id=state.current_scene_id,
+                to_scene_id="BACKROOM",
+                label="Kitchen Swing Door",
+                is_locked=True,
+                code_to_unlock=None,
+                item_to_unlock=None,
+                rule_to_unlock="Protagonist distracts Betty",
+            )
+        )
         await db.commit()
 
         manager = GameTurnManager(db, state.session_id, user)
@@ -3655,7 +4160,11 @@ async def test_apply_game_event_emits_unlock_messages_for_container_and_exit(set
 
         event = GameEvent(
             updated_entities=[WorldEntityUpdate(entity_id="CASH_REGISTER", locked=False)],
-            updated_exits=[ExitUpdate(from_scene_id=state.current_scene_id, to_scene_id="BACKROOM", is_locked=False)],
+            updated_exits=[
+                ExitUpdate(
+                    from_scene_id=state.current_scene_id, to_scene_id="BACKROOM", is_locked=False
+                )
+            ],
         )
 
         system_messages = await manager._apply_game_event(event)
@@ -3670,36 +4179,42 @@ async def test_off_scene_rule_unlock_flow_unlocks_container_globally(setup_test_
         user, _adv, _avatar, state = await _seed_game_context(db)
 
         # Current scene is START (scene 3 in this scenario), container sits in another scene.
-        db.add(WorldScene(
-            id="DINER_ENTRANCE",
-            session_id=state.session_id,
-            template_id=state.template_id,
-            label="Diner Entrance",
-            description="Rain-slick glass doors and a long counter.",
-        ))
-        db.add(WorldEntity(
-            id="BETTY",
-            session_id=state.session_id,
-            entity_type="NPC",
-            name="Betty",
-            description="A tired waitress with sharp eyes.",
-            current_scene_id=state.current_scene_id,
-        ))
-        db.add(WorldEntity(
-            id="CASH_REGISTER",
-            session_id=state.session_id,
-            entity_type="OBJECT",
-            name="Diner Cash Register",
-            description="A vintage mechanical cash register.",
-            current_scene_id="DINER_ENTRANCE",
-            item_type="CONTAINER",
-            metadata_json={
-                "code_to_unlock": "",
-                "item_to_unlock": "",
-                "rule_to_unlock": "Protagonist distracts Betty",
-                "locked": True,
-            },
-        ))
+        db.add(
+            WorldScene(
+                id="DINER_ENTRANCE",
+                session_id=state.session_id,
+                template_id=state.template_id,
+                label="Diner Entrance",
+                description="Rain-slick glass doors and a long counter.",
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="BETTY",
+                session_id=state.session_id,
+                entity_type="NPC",
+                name="Betty",
+                description="A tired waitress with sharp eyes.",
+                current_scene_id=state.current_scene_id,
+            )
+        )
+        db.add(
+            WorldEntity(
+                id="CASH_REGISTER",
+                session_id=state.session_id,
+                entity_type="OBJECT",
+                name="Diner Cash Register",
+                description="A vintage mechanical cash register.",
+                current_scene_id="DINER_ENTRANCE",
+                item_type="CONTAINER",
+                metadata_json={
+                    "code_to_unlock": "",
+                    "item_to_unlock": "",
+                    "rule_to_unlock": "Protagonist distracts Betty",
+                    "locked": True,
+                },
+            )
+        )
         await db.commit()
 
         mock_llm_instance = MagicMock()
@@ -3715,10 +4230,15 @@ async def test_off_scene_rule_unlock_flow_unlocks_container_globally(setup_test_
         mock_llm_instance.aexecute_complex_task = AsyncMock(return_value=mock_event)
 
         async def mock_stream(*args, **kwargs):
-            yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Betty curses and grabs a towel."))])
+            yield MagicMock(
+                choices=[MagicMock(delta=MagicMock(content="Betty curses and grabs a towel."))]
+            )
 
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
-        monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *args, **kwargs: mock_llm_instance)
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm_instance),
+        )
 
         manager = GameTurnManager(db, state.session_id, user)
         chunks = []
@@ -3726,7 +4246,9 @@ async def test_off_scene_rule_unlock_flow_unlocks_container_globally(setup_test_
             chunks.append(chunk)
 
         # The mechanics prompt must include the global soft unlock rule list with IDs.
-        mechanics_prompt = _llm_call_text(mock_llm_instance.aexecute_complex_task.await_args_list[0])
+        mechanics_prompt = _llm_call_text(
+            mock_llm_instance.aexecute_complex_task.await_args_list[0]
+        )
         assert "GLOBAL SOFT UNLOCK RULES (ADVENTURE-WIDE)" in mechanics_prompt
         assert "CASH_REGISTER" in mechanics_prompt
         assert "Protagonist distracts Betty" in mechanics_prompt
@@ -3848,7 +4370,3 @@ async def test_session_debug_endpoint_guard_and_payload(setup_test_db, monkeypat
         assert "raw" in payload
         assert payload["session"]["id"] == "session-1"
         assert payload["runtime"]["is_debug_enabled"] is True
-
-
-
-

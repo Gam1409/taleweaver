@@ -96,7 +96,11 @@ class TurnSuggestionsManager:
         return [entry for entry in parsed if isinstance(entry, str)]
 
     def build_prompt_suggestions_payload(self) -> dict[str, Any]:
-        return {"prompt_suggestions": self.extract_prompt_suggestions(self.manager.state.exit_states or {})}
+        return {
+            "prompt_suggestions": self.extract_prompt_suggestions(
+                self.manager.state.exit_states or {}
+            )
+        }
 
     def set_prompt_suggestions_state(self, suggestions: list[str]) -> None:
         exit_states = dict(self.manager.state.exit_states or {})
@@ -117,7 +121,11 @@ class TurnSuggestionsManager:
         inventory_items: list[str],
     ) -> list[str]:
         sensory_target = visible_objects[0] if visible_objects else scene_label or "the area"
-        interaction_target = visible_npcs[0] if visible_npcs else (inventory_items[0] if inventory_items else sensory_target)
+        interaction_target = (
+            visible_npcs[0]
+            if visible_npcs
+            else (inventory_items[0] if inventory_items else sensory_target)
+        )
         second_object = visible_objects[1] if len(visible_objects) > 1 else None
         second_npc = visible_npcs[1] if len(visible_npcs) > 1 else None
         fallback = [
@@ -144,7 +152,11 @@ class TurnSuggestionsManager:
             )
         )
         current_scene = scene_res.scalars().first()
-        scene_label = current_scene.label if current_scene else self.manager.state.current_scene_id or "Current Scene"
+        scene_label = (
+            current_scene.label
+            if current_scene
+            else self.manager.state.current_scene_id or "Current Scene"
+        )
         scene_description = current_scene.description if current_scene else ""
 
         ent_res = await self.manager.db.execute(
@@ -213,25 +225,20 @@ class TurnSuggestionsManager:
             visible_npcs=context["visible_npcs"],
             inventory_items=context["inventory_items"],
         )
-        llm_settings = self.manager.user.llm_settings or {}
-        provider = (
-            llm_settings.get("small_model_provider")
-            or llm_settings.get("complex_model_provider")
-            or llm_settings.get("preferred_provider")
-            or "openai"
-        )
-        model = llm_settings.get("small_model") or "gpt-4o-mini"
 
         suggestions: list[str] = []
         try:
-            llm = GameMasterLLM(self.manager.user, provider=provider, model_category="small")
+            llm = GameMasterLLM.for_role(self.manager.user, "small")
+            model = llm.model
             user_prompt = prompts.PROMPT_SUGGESTION_USER_PROMPT_TEMPLATE.format(
                 scene_context=f"{context['scene_label']}: {context['scene_description']}".strip(),
                 visible_npcs=json.dumps(context["visible_npcs"], ensure_ascii=False),
                 visible_objects=json.dumps(context["visible_objects"], ensure_ascii=False),
                 unlocked_exits=json.dumps(context["unlocked_exits"], ensure_ascii=False),
                 inventory_items=json.dumps(context["inventory_items"], ensure_ascii=False),
-                last_response=(last_response or "").strip()[:PROMPT_SUGGESTION_MAX_LAST_RESPONSE_CHARS],
+                last_response=(last_response or "").strip()[
+                    :PROMPT_SUGGESTION_MAX_LAST_RESPONSE_CHARS
+                ],
             )
             raw = await llm.aexecute_simple_task(
                 prompts.PROMPT_SUGGESTION_SYSTEM_PROMPT,
@@ -244,7 +251,9 @@ class TurnSuggestionsManager:
             )
             suggestions = self.normalize_prompt_suggestions(self.parse_json_string_array(raw))
         except Exception as exc:
-            logger.warning("[Turn %s] Prompt suggestion generation failed: %s", self.manager.game_id, exc)
+            logger.warning(
+                "[Turn %s] Prompt suggestion generation failed: %s", self.manager.game_id, exc
+            )
 
         if len(suggestions) < 3:
             suggestions = self.normalize_prompt_suggestions(suggestions + fallback)

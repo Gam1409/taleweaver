@@ -67,14 +67,6 @@ async def suggest_story_idea(
     current_user: User = Depends(get_current_user),
 ):
     """Generates or improves an adventure title/story idea using the configured small model."""
-    llm_settings = current_user.llm_settings or {}
-    provider = (
-        llm_settings.get("small_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    model = llm_settings.get("small_model") or "gpt-4o-mini"
 
     selected_tone = payload.selected_tone or {}
     tone_label = ""
@@ -85,7 +77,8 @@ async def suggest_story_idea(
     story_idea = (payload.story_idea or "").strip()
     has_existing_input = bool(title or story_idea)
 
-    gm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
+    gm = GameMasterLLM.for_role(current_user, "small")
+    model = gm.model
     user_prompt = STORY_IDEA_GENERATION_USER_PROMPT_TEMPLATE.format(
         selected_tone=tone_label or "Neutral",
         rule_enforcement_mode=(payload.rule_enforcement_mode or "story").upper(),
@@ -234,20 +227,6 @@ async def generate_surprise_preset(
     using the world-generation LLM (model_category="generator").
     """
     req = payload or GeneratorSurprisePresetRequest()
-    llm_settings = current_user.llm_settings or {}
-    provider = (
-        llm_settings.get("generator_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("small_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    model = (
-        llm_settings.get("generator_model")
-        or llm_settings.get("complex_model")
-        or llm_settings.get("small_model")
-        or "gpt-4o"
-    )
 
     available_tones = req.available_tones or [
         "Heroic",
@@ -293,7 +272,8 @@ async def generate_surprise_preset(
         f"6. Optionally set min_scenes (3-6), max_scenes (5-10), min_quests (2-4), max_quests (3-6)."
     )
 
-    gm = GameMasterLLM(user=current_user, provider=provider, model_category="generator")
+    gm = GameMasterLLM.for_role(current_user, "generator")
+    model = gm.model
 
     try:
         preset = await gm.aexecute_complex_task(
@@ -354,17 +334,6 @@ _FIELD_CONTEXT_KEYS = (
     "gameover_guard_expression",
     "tts_director_notes",
 )
-
-
-def _small_model_choice(user: User) -> tuple[str, str]:
-    llm_settings = user.llm_settings or {}
-    provider = (
-        llm_settings.get("small_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    return provider, llm_settings.get("small_model") or "gpt-4o-mini"
 
 
 def _field_generation_context(
@@ -430,9 +399,8 @@ async def generate_template_field(
         raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
 
     # 2. Get user's LLM settings for small model
-    provider, model = _small_model_choice(current_user)
-
-    gm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
+    gm = GameMasterLLM.for_role(current_user, "small")
+    model = gm.model
 
     # 3. Determine the target field and limits
     target_field = payload.field

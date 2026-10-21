@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import type { OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import { api } from '@/composables/useApi'
 
 /**
@@ -72,14 +73,18 @@ class TestService {
    * Test an LLM model with the specified provider.
    * Returns response time if successful.
    */
-  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string) {
+  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions) {
     this.testResults.value[key] = { status: 'loading', message: 'Testing connection...' }
 
     try {
       const data = await api.testLlm({
         model,
         provider,
-        ollama_url: ollamaUrl,
+        ollama_url: ollamaOptions?.url ?? ollamaUrl,
+        role: ollamaOptions?.role ?? 'small',
+        ollama_api_mode: provider === 'ollama' ? ollamaOptions?.apiMode : undefined,
+        ollama_timeout: provider === 'ollama' ? ollamaOptions?.timeout : undefined,
+        ollama_num_ctx: provider === 'ollama' ? ollamaOptions?.numCtx : undefined,
         openrouter_provider: openrouterProvider || undefined,
       })
 

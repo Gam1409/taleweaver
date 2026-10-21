@@ -14,6 +14,7 @@ from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
+from tests.llm_fakes import RoleLLMFactory
 
 pytestmark = pytest.mark.asyncio
 
@@ -379,8 +380,14 @@ async def test_agent_prompt_includes_scene_items_and_take_name_guidance(setup_te
         "backend.api.routes.adventures.agent_logic.TurnLlmContextBuilder.build_context",
         fake_build_context,
     )
+
+    def fake_router(*args, **kwargs):
+        captured["llm_role"] = kwargs["model_category"]
+        return FakeLLM()
+
     monkeypatch.setattr(
-        "backend.api.routes.adventures.agent_logic.GameMasterLLM", lambda *args, **kwargs: FakeLLM()
+        "backend.api.routes.adventures.agent_logic.GameMasterLLM",
+        RoleLLMFactory(fake_router),
     )
 
     async with TestSessionLocal() as db:
@@ -423,6 +430,7 @@ async def test_agent_prompt_includes_scene_items_and_take_name_guidance(setup_te
         decision = await AgentService.get_decision(db, game_id, user, state, avatar, adv, manager)
         _ = decision
 
+    assert captured["llm_role"] == "play_agent"
     prompt = captured.get("system_prompt", "")
     assert "CURRENT SCENE ITEMS (VISIBLE NOW)" in prompt
     assert "Ancient Key" in prompt
@@ -469,7 +477,8 @@ async def test_agent_prompt_switches_to_monkey_mode_objective(setup_test_db, mon
         fake_build_context,
     )
     monkeypatch.setattr(
-        "backend.api.routes.adventures.agent_logic.GameMasterLLM", lambda *args, **kwargs: FakeLLM()
+        "backend.api.routes.adventures.agent_logic.GameMasterLLM",
+        RoleLLMFactory(lambda *args, **kwargs: FakeLLM()),
     )
 
     async with TestSessionLocal() as db:
@@ -733,7 +742,8 @@ async def test_agent_prompt_walkthrough_disabled_vs_enabled(setup_test_db, monke
         fake_build_context,
     )
     monkeypatch.setattr(
-        "backend.api.routes.adventures.agent_logic.GameMasterLLM", lambda *args, **kwargs: FakeLLM()
+        "backend.api.routes.adventures.agent_logic.GameMasterLLM",
+        RoleLLMFactory(lambda *args, **kwargs: FakeLLM()),
     )
 
     async with TestSessionLocal() as db:

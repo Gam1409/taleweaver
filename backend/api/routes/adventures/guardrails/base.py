@@ -114,21 +114,8 @@ class GuardrailBase:
         """
         import backend.api.routes.adventures.gameplay_logic as gl
 
-        cfg = self.user.llm_settings or {}
-        provider = (
-            cfg.get("small_model_provider")
-            or cfg.get("complex_model_provider")
-            or cfg.get("preferred_provider")
-            or cfg.get("provider")
-            or "openai"
-        )
-        fallback = (
-            f"openai/{DEFAULT_SMALL_MODEL}" if provider == "openrouter" else DEFAULT_SMALL_MODEL
-        )
-        model = (
-            cfg.get("small_model") or cfg.get("small_model_name") or cfg.get("model") or fallback
-        )
-        return gl.GameMasterLLM(self.user, provider=provider, model_category="small"), model
+        gm = gl.GameMasterLLM.for_role(self.user, "small")
+        return gm, gm.model
 
     @staticmethod
     def _revoke_turn_rewards(event: GameEvent) -> None:

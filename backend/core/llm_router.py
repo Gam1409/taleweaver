@@ -24,6 +24,7 @@ from backend.core.llm_provider_config import (
     uses_json_mode_fallback,
 )
 from backend.core.llm_request_tuning import apply_prompt_cache_markers
+from backend.core.llm_roles import resolve_llm_role
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.security import encryption_util
 from backend.core.voice_tags import VOICE_TAG_SET
@@ -324,6 +325,9 @@ class GameMasterLLM:
         cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         # Also strip any dangling open think tag to the end of the text (in case of truncation/interruption)
         cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL)
+        # Some model templates put the opening tag in the prompt rather than the response.
+        if "</think>" in cleaned:
+            cleaned = cleaned.rsplit("</think>", 1)[1]
         return cleaned.strip()
 
     @staticmethod
@@ -709,7 +713,7 @@ class GameMasterLLM:
         """
         key = f"{prefix}enable_thinking"
         raw_value = llm_settings.get(key)
-        if raw_value is None and model_category != "small":
+        if raw_value is None and model_category not in {"small", "play_agent"}:
             key = "enable_thinking"
             raw_value = llm_settings.get(key)
         if raw_value is not None and not self._is_supported_bool_value(raw_value):
@@ -722,14 +726,24 @@ class GameMasterLLM:
             return False
         return self._coerce_bool(raw_value, default=False)
 
-    def __init__(self, user: User, provider: str = "openai", model_category: str = "small"):
+    def __init__(
+        self,
+        user: User,
+        provider: str = "openai",
+        model_category: str = "small",
+        *,
+        use_role_settings: bool = True,
+    ):
         """
         Initialize the router for a specific user, provider and model category (small/complex).
         """
         self.user = user
         self.provider = (provider or "openai").lower()
+        self.model: str = ""
         self.api_key = None
         self.api_base = None
+        self.ollama_num_ctx: int | None = None
+        self.ollama_api_mode = (user.llm_settings or {}).get("ollama_api_mode", "generate")
 
         llm_settings = self.user.llm_settings or {}
         prefix = self._CATEGORY_PREFIXES.get(model_category, "small_")
@@ -753,7 +767,15 @@ class GameMasterLLM:
 
             configure_custom_router(self, llm_settings)
         elif self.provider == "ollama":
-            self.api_base = (llm_settings.get("ollama_url") or "http://localhost:11434").rstrip("/")
+            from backend.core.ollama_role_config import resolve_ollama_role_settings
+
+            ollama = resolve_ollama_role_settings(
+                llm_settings, model_category if use_role_settings else ""
+            )
+            self.api_base = ollama.url
+            self.ollama_num_ctx = ollama.num_ctx
+            if ollama.timeout is not None:
+                self.request_timeout = ollama.timeout
         else:
             self.api_key = self._get_decrypted_key(self.provider)
 
@@ -765,6 +787,50 @@ class GameMasterLLM:
             self.enable_thinking,
             self.max_tokens,
             self.request_timeout,
+        )
+
+    @classmethod
+    def for_role(
+        cls, user: User, role: str, *, provider: str | None = None, model: str | None = None
+    ) -> "GameMasterLLM":
+        """Construct a router with one resolved provider/model pair and role settings."""
+        role_settings = dict(user.llm_settings or {})
+        if provider:
+            role_settings[f"{role}_model_provider"] = provider
+        if model:
+            role_settings[f"{role}_model"] = model
+        config = resolve_llm_role(role_settings, role)
+        router = cls(user, provider=config.provider, model_category=role)
+        router.model = config.model
+        if config.provider == "ollama":
+            router.api_base = config.ollama_url
+            router.ollama_num_ctx = config.num_ctx
+            if config.timeout is not None:
+                router.request_timeout = config.timeout
+        return router
+
+    def _apply_ollama_options(self, kwargs: dict[str, Any], model: str) -> None:
+        """Keep all five Ollama request paths consistent without replacing token options."""
+        self._validate_ollama_model(model)
+        kwargs.update(
+            api_base=self.api_base,
+            custom_llm_provider="ollama_chat" if self.ollama_api_mode == "chat" else "ollama",
+            think=self.enable_thinking,
+        )
+        if self.ollama_num_ctx is not None:
+            kwargs["num_ctx"] = self.ollama_num_ctx
+
+    def _apply_provider_options(self, kwargs: dict[str, Any], model: str) -> None:
+        if self.provider == "ollama":
+            self._apply_ollama_options(kwargs, model)
+            return
+        apply_provider_endpoint(
+            kwargs,
+            provider=self.provider,
+            api_key=self.api_key,
+            api_base=self.api_base,
+            kimi_api_base=self.kimi_api_base,
+            minimax_api_base=self.minimax_api_base,
         )
 
     def _normalize_model(self, model: str) -> str:
@@ -890,16 +956,7 @@ class GameMasterLLM:
         }
         self._apply_thinking_settings(kwargs)
 
-        if self.provider == "ollama":
-            self._validate_ollama_model(model)
-        apply_provider_endpoint(
-            kwargs,
-            provider=self.provider,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            kimi_api_base=self.kimi_api_base,
-            minimax_api_base=self.minimax_api_base,
-        )
+        self._apply_provider_options(kwargs, model)
 
         self._apply_openrouter_provider_routing(kwargs)
 
@@ -967,16 +1024,7 @@ class GameMasterLLM:
         }
         self._apply_thinking_settings(kwargs)
 
-        if self.provider == "ollama":
-            self._validate_ollama_model(model)
-        apply_provider_endpoint(
-            kwargs,
-            provider=self.provider,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            kimi_api_base=self.kimi_api_base,
-            minimax_api_base=self.minimax_api_base,
-        )
+        self._apply_provider_options(kwargs, model)
 
         self._apply_openrouter_provider_routing(kwargs)
 
@@ -1049,16 +1097,7 @@ class GameMasterLLM:
         }
         self._apply_thinking_settings(kwargs)
 
-        if self.provider == "ollama":
-            self._validate_ollama_model(model)
-        apply_provider_endpoint(
-            kwargs,
-            provider=self.provider,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            kimi_api_base=self.kimi_api_base,
-            minimax_api_base=self.minimax_api_base,
-        )
+        self._apply_provider_options(kwargs, model)
 
         self._apply_openrouter_provider_routing(kwargs)
 
@@ -1124,16 +1163,7 @@ class GameMasterLLM:
             kwargs["response_format"] = response_format
         if not json_mode:
             self._apply_thinking_settings(kwargs)
-        if self.provider == "ollama":
-            self._validate_ollama_model(model)
-        apply_provider_endpoint(
-            kwargs,
-            provider=self.provider,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            kimi_api_base=self.kimi_api_base,
-            minimax_api_base=self.minimax_api_base,
-        )
+        self._apply_provider_options(kwargs, model)
         self._apply_openrouter_provider_routing(kwargs)
         self._prepare_cacheable_messages(kwargs, normalized_model)
         return _StructuredRequest(kwargs, normalized_model, json_mode, system_prompt)

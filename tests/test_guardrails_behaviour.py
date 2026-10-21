@@ -8,6 +8,7 @@ from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.conftest import TestSessionLocal
+from tests.llm_fakes import RoleLLMFactory
 from tests.test_game_loop import _seed_game_context
 
 pytestmark = pytest.mark.asyncio
@@ -18,7 +19,8 @@ def _intent_llm(monkeypatch, target: str) -> MagicMock:
     llm.aexecute_simple_task = AsyncMock(return_value=f'{{"action":"search","target":"{target}"}}')
     llm.aexecute_complex_task = AsyncMock(side_effect=RuntimeError("no LLM in tests"))
     monkeypatch.setattr(
-        "backend.api.routes.adventures.gameplay_logic.GameMasterLLM", lambda *a, **k: llm
+        "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
+        RoleLLMFactory(lambda *a, **k: llm),
     )
     return llm
 

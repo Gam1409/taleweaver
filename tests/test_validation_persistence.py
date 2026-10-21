@@ -12,6 +12,7 @@ from backend.models.user import User
 from backend.models.validation_run import ValidationRun
 from backend.models.world_entity import WorldScene
 from tests.conftest import TestSessionLocal
+from tests.llm_fakes import RoleLLMFactory
 
 
 def _auth_headers(username: str) -> dict:
@@ -225,7 +226,7 @@ async def test_validation_persists_ai_when_requested(client, setup_test_db, monk
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     post = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",
