@@ -233,6 +233,24 @@ cd taleweaver
 .\setup.ps1
 ```
 
+For subsequent starts, use `.\run.ps1`. Setup and the runner resolve the same
+Poetry environment, which may be stored in `.venv`, `venv`, or Poetry's cache.
+An existing `venv` directory alone does not mean the backend dependencies are installed.
+
+If startup reports `ModuleNotFoundError: No module named 'fastapi'`, run from
+the project directory:
+
+```powershell
+.\setup.ps1 -SkipStart
+.\run.ps1
+```
+
+If you manage Poetry yourself, `poetry install` followed by
+`poetry run python -m backend.main` starts the backend in its configured environment.
+Avoid starting it with a bare `python -m backend.main` from an unrelated Python installation.
+The setup script stops if dependency installation or migrations fail; resolve the first
+reported error before retrying.
+
 ---
 
 ### Option B: Manual Development Setup
