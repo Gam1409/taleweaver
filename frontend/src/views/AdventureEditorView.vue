@@ -2885,7 +2885,7 @@ watch(
     </main>
 
     <EntityTooltip 
-      :hovered-entity="canShowSceneRoutePanel ? null : hoveredEntity"
+      :hovered-entity="activeTab === 'scenes' && canShowSceneRoutePanel ? null : hoveredEntity"
       :active-menu-id="activeMenuId"
       :mouse-pos="mousePos"
       :tooltip-align-top="tooltipAlignTop"
