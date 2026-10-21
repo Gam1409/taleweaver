@@ -1477,6 +1477,7 @@ async function saveProtagonistField(field: string, newValue: any) {
       mana: field === 'mana' ? Number(newValue) : p.mana,
       goal: field === 'goal' ? String(newValue).trim() : p.goal,
       character: field === 'character' ? String(newValue).trim() : p.character,
+      appearance: field === 'appearance' ? String(newValue || '').trim() : p.appearance,
       strength: field === 'strength' ? Number(newValue) : p.strength,
       intelligence: field === 'intelligence' ? Number(newValue) : p.intelligence,
       wisdom: field === 'wisdom' ? Number(newValue) : p.wisdom,

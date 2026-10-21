@@ -70,7 +70,7 @@ export const visualService = {
       signal,
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Generation failed')
     }
   },
@@ -94,7 +94,10 @@ export const visualService = {
       }),
       signal,
     })
-    if (!res.ok) throw new Error('Failed to regenerate.')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.detail || 'Failed to regenerate.')
+    }
   },
 
   async suggestPrompt(adventureId: string, kind: VisualKind, id: string): Promise<string> {

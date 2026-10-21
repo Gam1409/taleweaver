@@ -227,15 +227,6 @@ Decorative objects added to scene image prompts.
 Variables: items.
 """
 
-SCENE_IMAGE_NPCS_TEMPLATE = (
-    "Characters present in the scene: {npcs}. "
-    "Integrate them naturally into the environment as part of the scene, not as posed portraits."
-)
-"""
-NPCs placed in a scene, added to scene image prompts.
-Variables: npcs.
-"""
-
 NPC_IMAGE_PROMPT_TEMPLATE = (
     "Character portrait: {name}. {description}. {context}Game attribute art style. "
     "3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting."

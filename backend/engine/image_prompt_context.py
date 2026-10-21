@@ -1,24 +1,19 @@
 """Context enrichment for image generation prompts.
 
 Protagonist, NPC, item and cover prompts carry the optional ``appearance`` keywords
-(max 100 chars). Scene images are described by their decorative objects and the
-NPCs placed in the scene; protagonist portraits borrow setting and mood from the plot.
+(max 100 chars). Scene images are described by their description and decorative
+objects only; protagonist portraits borrow setting and mood from the plot.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Any, Optional
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import prompts
 
 MAX_APPEARANCE_LENGTH = 100
 MAX_SCENE_DECORATIONS = 7
-MAX_SCENE_NPCS = 4
-MAX_NPC_DESCRIPTION_LENGTH = 160
 MAX_PLOT_CONTEXT_LENGTH = 1000
 
 
@@ -44,35 +39,14 @@ def appearance_context(appearance: Any) -> str:
     return prompts.IMAGE_APPEARANCE_TEMPLATE.format(appearance=keywords.rstrip("."))
 
 
-def _npc_phrase(npc: Mapping[str, Any]) -> str:
-    name = _clip(npc.get("name"), 100)
-    looks = clean_appearance(npc.get("appearance")) or _clip(
-        npc.get("description"), MAX_NPC_DESCRIPTION_LENGTH
-    )
-    if not looks:
-        return name
-    return f"{name} ({looks})"
-
-
-def scene_context(
-    decorative_objects: Optional[Iterable[Any]] = None,
-    npcs: Optional[Iterable[Mapping[str, Any]]] = None,
-) -> str:
+def scene_context(decorative_objects: Optional[Iterable[Any]] = None) -> str:
     """Returns visual details for a scene prompt, or an empty string when there are none."""
     items = [_clip(d, 100) for d in decorative_objects or [] if isinstance(d, str) and d.strip()]
-    phrases = [_npc_phrase(npc) for npc in npcs or [] if npc.get("name")]
-    parts: list[str] = []
-    if items:
-        parts.append(
-            prompts.SCENE_IMAGE_DECORATIONS_TEMPLATE.format(
-                items=", ".join(items[:MAX_SCENE_DECORATIONS])
-            )
-        )
-    if phrases:
-        parts.append(
-            prompts.SCENE_IMAGE_NPCS_TEMPLATE.format(npcs="; ".join(phrases[:MAX_SCENE_NPCS]))
-        )
-    return " ".join(parts)
+    if not items:
+        return ""
+    return prompts.SCENE_IMAGE_DECORATIONS_TEMPLATE.format(
+        items=", ".join(items[:MAX_SCENE_DECORATIONS])
+    )
 
 
 def protagonist_context(plot: Optional[str], appearance: Any = None) -> str:
@@ -98,12 +72,11 @@ def build_scene_image_prompt(
     name: str,
     description: str,
     decorative_objects: Optional[Iterable[Any]] = None,
-    npcs: Optional[Iterable[Mapping[str, Any]]] = None,
 ) -> str:
     return prompts.SCENE_IMAGE_PROMPT_TEMPLATE.format(
         name=name,
         description=_sentence_body(description),
-        context=with_context(scene_context(decorative_objects, npcs)),
+        context=with_context(scene_context(decorative_objects)),
     )
 
 
@@ -136,37 +109,3 @@ def build_object_image_prompt(name: str, description: str, appearance: Any = Non
         description=_sentence_body(description),
         context=with_context(appearance_context(appearance)),
     )
-
-
-def manifest_scene_npcs(
-    npcs: Iterable[Mapping[str, Any]], scene_id: str, default_scene_id: str
-) -> list[Mapping[str, Any]]:
-    """Visible manifest NPCs starting in the given scene (same fallback as NPC persistence)."""
-    return [
-        npc
-        for npc in npcs
-        if not npc.get("is_hidden")
-        and (npc.get("start_scene_id") or npc.get("current_scene_id") or default_scene_id)
-        == scene_id
-    ]
-
-
-async def load_scene_npcs(
-    db: AsyncSession, template_id: str, scene_id: str
-) -> list[dict[str, Any]]:
-    """Visible template NPCs currently placed in the given scene."""
-    from backend.models.world_entity import WorldEntity
-
-    res = await db.execute(
-        select(WorldEntity).where(
-            WorldEntity.template_id == template_id,
-            WorldEntity.session_id.is_(None),
-            WorldEntity.entity_type == "NPC",
-            WorldEntity.current_scene_id == scene_id,
-            WorldEntity.is_hidden.is_(False),
-        )
-    )
-    return [
-        {"name": entity.name, "description": entity.description, "appearance": entity.appearance}
-        for entity in res.scalars().all()
-    ]

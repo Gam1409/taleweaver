@@ -20,9 +20,9 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
+from backend.engine.image_error_messages import image_error_reason
 from backend.engine.image_prompt_context import (
     appearance_context,
-    load_scene_npcs,
     protagonist_context,
     scene_context,
 )
@@ -146,7 +146,9 @@ def _build_uploaded_visual_path(
         storage_path = base_storage_path
         filename = f"cover_{uuid.uuid4().hex}.{safe_file_ext}"
     else:
-        storage_path = safe_data_path("adventures", "library", safe_template_id, "visuals", safe_target_type)
+        storage_path = safe_data_path(
+            "adventures", "library", safe_template_id, "visuals", safe_target_type
+        )
         safe_token = _sanitize_filename_token(trusted_target_token)
         filename_prefix = safe_token or safe_target_type
         filename = f"{filename_prefix}_{uuid.uuid4().hex}.{safe_file_ext}"
@@ -197,12 +199,15 @@ async def _regenerate_cover(db: AsyncSession, ctx: _RegenerateContext) -> Option
     adv = ctx.adv
     image_url = await asyncio.wait_for(
         MediaEngine.generate_adventure_cover(
-            title=adv.title, original_prompt=ctx.payload.prompt or adv.original_prompt or "",
-            adventure_id=ctx.template_id, user_config=ctx.user_config, api_keys=ctx.api_keys,
+            title=adv.title,
+            original_prompt=ctx.payload.prompt or adv.original_prompt or "",
+            adventure_id=ctx.template_id,
+            user_config=ctx.user_config,
+            api_keys=ctx.api_keys,
             style_instruction=ctx.style_instruction,
             appearance=None if ctx.payload.prompt else adv.cover_appearance,
         ),
-        timeout=float(settings.VISUAL_TIMEOUT)
+        timeout=float(settings.VISUAL_TIMEOUT),
     )
     if image_url:
         adv.image_url = image_url
@@ -225,12 +230,15 @@ async def _regenerate_protagonist(db: AsyncSession, ctx: _RegenerateContext) -> 
     image_url = await asyncio.wait_for(
         MediaEngine.generate_entity_image(
             prompt=prompt,
-            adventure_id=ctx.template_id, entity_id=avatar.id, entity_type="PROTAGONIST",
-            user_config=ctx.user_config, api_keys=ctx.api_keys,
+            adventure_id=ctx.template_id,
+            entity_id=avatar.id,
+            entity_type="PROTAGONIST",
+            user_config=ctx.user_config,
+            api_keys=ctx.api_keys,
             style_instruction=ctx.style_instruction,
-            use_advanced_model=ctx.is_advanced("protagonist_model_quality")
+            use_advanced_model=ctx.is_advanced("protagonist_model_quality"),
         ),
-        timeout=float(settings.VISUAL_TIMEOUT)
+        timeout=float(settings.VISUAL_TIMEOUT),
     )
     if image_url:
         avatar.profile_image = image_url
@@ -241,7 +249,11 @@ async def _regenerate_scene(db: AsyncSession, ctx: _RegenerateContext) -> Option
     from backend.models.world_entity import WorldScene
 
     template_id = ctx.template_id
-    res = await db.execute(select(WorldScene).where(WorldScene.id == ctx.payload.target_id, WorldScene.template_id == template_id))
+    res = await db.execute(
+        select(WorldScene).where(
+            WorldScene.id == ctx.payload.target_id, WorldScene.template_id == template_id
+        )
+    )
     scene = res.scalars().first()
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
@@ -252,18 +264,18 @@ async def _regenerate_scene(db: AsyncSession, ctx: _RegenerateContext) -> Option
         ctx.payload.prompt,
         style_instruction=ctx.style_instruction,
         tone_instruction=ctx.tone_instruction,
-        context=scene_context(
-            scene.decorative_objects, await load_scene_npcs(db, template_id, scene.id)
-        ),
+        context=scene_context(scene.decorative_objects),
     )
     image_url = await asyncio.wait_for(
         MediaEngine.generate_scene_image(
             prompt=prompt,
-            adventure_id=template_id, user_config=ctx.user_config, api_keys=ctx.api_keys,
+            adventure_id=template_id,
+            user_config=ctx.user_config,
+            api_keys=ctx.api_keys,
             style_instruction=ctx.style_instruction,
-            use_advanced_model=ctx.is_advanced("scene_model_quality")
+            use_advanced_model=ctx.is_advanced("scene_model_quality"),
         ),
-        timeout=float(settings.VISUAL_TIMEOUT)
+        timeout=float(settings.VISUAL_TIMEOUT),
     )
     if image_url:
         scene.image_url = image_url
@@ -274,7 +286,11 @@ async def _regenerate_entity(db: AsyncSession, ctx: _RegenerateContext) -> Optio
     from backend.models.world_entity import WorldEntity
 
     target_type = ctx.payload.target_type
-    res = await db.execute(select(WorldEntity).where(WorldEntity.id == ctx.payload.target_id, WorldEntity.template_id == ctx.template_id))
+    res = await db.execute(
+        select(WorldEntity).where(
+            WorldEntity.id == ctx.payload.target_id, WorldEntity.template_id == ctx.template_id
+        )
+    )
     entity = res.scalars().first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -295,12 +311,15 @@ async def _regenerate_entity(db: AsyncSession, ctx: _RegenerateContext) -> Optio
     image_url = await asyncio.wait_for(
         MediaEngine.generate_entity_image(
             prompt=prompt,
-            adventure_id=ctx.template_id, entity_id=entity.id, entity_type=target_type.upper(),
-            user_config=ctx.user_config, api_keys=ctx.api_keys,
+            adventure_id=ctx.template_id,
+            entity_id=entity.id,
+            entity_type=target_type.upper(),
+            user_config=ctx.user_config,
+            api_keys=ctx.api_keys,
             style_instruction=ctx.style_instruction,
-            use_advanced_model=use_advanced_model
+            use_advanced_model=use_advanced_model,
         ),
-        timeout=float(settings.VISUAL_TIMEOUT)
+        timeout=float(settings.VISUAL_TIMEOUT),
     )
     if image_url:
         entity.image_url = image_url
@@ -347,18 +366,25 @@ async def regenerate_visual(
 
     try:
         image_url = await _VISUAL_REGENERATORS[payload.target_type](db, ctx)
-        await db.commit()
-        return {"status": "success", "image_url": image_url}
     except HTTPException:
         raise
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Visual generation timed out.") from None
     except ValueError as exc:
         logger.warning("Visual regeneration blocked/invalid: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid visual regeneration request.") from None
-    except Exception:
+        raise HTTPException(status_code=400, detail=image_error_reason(exc)) from None
+    except Exception as exc:
         logger.exception("Visual regeneration failed")
-        raise HTTPException(status_code=500, detail="Visual generation failed.") from None
+        raise HTTPException(status_code=502, detail=image_error_reason(exc)) from None
+
+    if not image_url:
+        raise HTTPException(
+            status_code=502,
+            detail="Visual generation failed: the image provider returned no image. "
+            "Check the server logs and your image settings.",
+        )
+    await db.commit()
+    return {"status": "success", "image_url": image_url}
 
 
 @router.post("/suggest-prompt", response_model=SuggestPromptResponse)
@@ -371,7 +397,7 @@ async def suggest_prompt(
     """Generate an AI prompt suggestion based on the asset's description."""
     from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
-    
+
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Adventure template not found")
@@ -380,7 +406,12 @@ async def suggest_prompt(
     description = ""
     context = ""
 
-    logger.info("Suggesting prompt for %s (%s) in adventure %s", payload.target_type, payload.target_id, template_id)
+    logger.info(
+        "Suggesting prompt for %s (%s) in adventure %s",
+        payload.target_type,
+        payload.target_id,
+        template_id,
+    )
 
     if payload.target_type == "cover":
         name = adv.title
@@ -399,22 +430,31 @@ async def suggest_prompt(
             description = avatar.description
             context = protagonist_context(adv.plot, avatar.appearance)
     elif payload.target_type == "scene":
-        res = await db.execute(select(WorldScene).where(WorldScene.id == payload.target_id, WorldScene.template_id == template_id))
+        res = await db.execute(
+            select(WorldScene).where(
+                WorldScene.id == payload.target_id, WorldScene.template_id == template_id
+            )
+        )
         scene = res.scalars().first()
         if scene:
             name = scene.label
             description = scene.description
-            scene_npcs = await load_scene_npcs(db, template_id, scene.id)
-            context = scene_context(scene.decorative_objects, scene_npcs)
+            context = scene_context(scene.decorative_objects)
     elif payload.target_type in ["npc", "object"]:
-        res = await db.execute(select(WorldEntity).where(WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id))
+        res = await db.execute(
+            select(WorldEntity).where(
+                WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id
+            )
+        )
         entity = res.scalars().first()
         if entity:
             name = entity.name
             description = entity.description
             context = appearance_context(entity.appearance)
 
-    logger.info("Resolved name '%s', description length: %d", name, len(description) if description else 0)
+    logger.info(
+        "Resolved name '%s', description length: %d", name, len(description) if description else 0
+    )
 
     if not description:
         logger.warning("No description found for %s %s", payload.target_type, payload.target_id)
@@ -429,26 +469,29 @@ async def suggest_prompt(
         or "openai"
     )
     model = llm_settings.get("small_model") or "gpt-4o-mini"
-    
+
     llm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
-    
+
     user_prompt = prompts.IMAGE_PROMPT_SUGGESTION_USER_PROMPT_TEMPLATE.format(
         target_type=payload.target_type.upper(),
         name=name,
         description=f"{description}\n{context}" if context else description,
     )
-    
+
     suggested = await llm.aexecute_simple_task(
         system_prompt=prompts.IMAGE_PROMPT_SUGGESTION_SYSTEM_PROMPT,
         user_prompt=user_prompt,
-        model=model
+        model=model,
     )
     return SuggestPromptResponse(suggested_prompt=suggested.strip())
+
 
 def _validate_upload_content(content: bytes, content_type: Optional[str], target_type: str) -> None:
     """Validate MIME type, byte size and pixel dimensions of an uploaded visual."""
     if content_type and content_type not in _ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP.")
+        raise HTTPException(
+            status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP."
+        )
 
     limits = _VISUAL_UPLOAD_LIMITS.get(target_type)
     if not limits:

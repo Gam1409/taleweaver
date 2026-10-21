@@ -574,6 +574,26 @@ function saveEquipmentSlot(slotKey: string, itemId: string) {
                 </InlineEditableField>
               </div>
             </div>
+
+            <div class="space-y-1">
+              <span class="text-xs font-black text-slate-500 uppercase tracking-widest px-1">Appearance Keywords</span>
+              <InlineEditableField
+                :value="debugData.protagonist.appearance ?? ''"
+                type="text"
+                :maxlength="100"
+                placeholder="lean young woman, short red hair, leather coat, brass goggles"
+                :is-saving="isSavingText"
+                edit-id="appearance"
+                :active-edit-id="activeEditId"
+                empty-text="No appearance keywords set. Click to add visual keywords for image generation."
+                @save="emit('save-field', 'appearance', $event)"
+                @start-edit="activeEditId = $event"
+              >
+                <template #default="{ value }">
+                  <p class="text-sm text-slate-200 leading-relaxed">{{ value }}</p>
+                </template>
+              </InlineEditableField>
+            </div>
           </div>
         </div>
       </div>

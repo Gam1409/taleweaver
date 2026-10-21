@@ -1,31 +1,26 @@
 from backend.engine.image_prompt_context import (
     MAX_APPEARANCE_LENGTH,
     MAX_PLOT_CONTEXT_LENGTH,
-    MAX_SCENE_NPCS,
     build_npc_image_prompt,
     build_object_image_prompt,
     build_protagonist_image_prompt,
     build_scene_image_prompt,
     clean_appearance,
-    manifest_scene_npcs,
     protagonist_context,
     scene_context,
 )
 
 
-def test_scene_prompt_includes_decorations_and_npcs():
-    # Arrange
-    npcs = [{"name": "Old Librarian", "description": "A hunched man with ink-stained fingers."}]
-
+def test_scene_prompt_includes_decorations_only():
     # Act
     prompt = build_scene_image_prompt(
-        "Library", "Dusty shelves.", decorative_objects=["candelabra", "globe"], npcs=npcs
+        "Library", "Dusty shelves.", decorative_objects=["candelabra", "globe"]
     )
 
     # Assert
     assert prompt.startswith("Background scene: Library. Dusty shelves. ")
     assert "candelabra, globe" in prompt
-    assert "Old Librarian (A hunched man with ink-stained fingers.)" in prompt
+    assert "Characters present" not in prompt
     assert "3:2 aspect ratio" in prompt
 
 
@@ -37,35 +32,13 @@ def test_scene_prompt_without_context_keeps_base_template():
     assert prompt.startswith("Background scene: Cave. Dark and damp. 3:2 aspect ratio")
 
 
-def test_scene_context_limits_npcs_and_skips_blank_decorations():
-    # Arrange
-    npcs = [{"name": f"NPC {i}", "description": ""} for i in range(MAX_SCENE_NPCS + 2)]
-
+def test_scene_context_skips_blank_decorations():
     # Act
-    context = scene_context(["  ", "lantern"], npcs)
+    context = scene_context(["  ", "lantern"])
 
     # Assert
-    assert "Visible details in the environment: lantern." in context
-    assert f"NPC {MAX_SCENE_NPCS - 1}" in context
-    assert f"NPC {MAX_SCENE_NPCS}" not in context
-
-
-def test_manifest_scene_npcs_filters_by_scene_and_visibility():
-    # Arrange
-    npcs = [
-        {"id": "A", "name": "A", "start_scene_id": "HALL"},
-        {"id": "B", "name": "B", "current_scene_id": "CELLAR"},
-        {"id": "C", "name": "C"},
-        {"id": "D", "name": "D", "start_scene_id": "HALL", "is_hidden": True},
-    ]
-
-    # Act
-    hall = manifest_scene_npcs(npcs, "HALL", default_scene_id="HALL")
-    cellar = manifest_scene_npcs(npcs, "CELLAR", default_scene_id="HALL")
-
-    # Assert
-    assert [npc["id"] for npc in hall] == ["A", "C"]
-    assert [npc["id"] for npc in cellar] == ["B"]
+    assert context == "Visible details in the environment: lantern."
+    assert scene_context(None) == ""
 
 
 def test_protagonist_prompt_includes_clipped_plot():
@@ -124,15 +97,3 @@ def test_protagonist_prompt_puts_appearance_before_plot():
 
     # Assert
     assert prompt.index("Visual keywords: red hair, goggles.") < prompt.index("Adventure setting")
-
-
-def test_scene_npc_phrase_prefers_appearance_over_description():
-    # Arrange
-    npcs = [{"name": "Guard", "description": "Long biography text.", "appearance": "burly, chainmail"}]
-
-    # Act
-    context = scene_context(None, npcs)
-
-    # Assert
-    assert "Guard (burly, chainmail)" in context
-    assert "biography" not in context
