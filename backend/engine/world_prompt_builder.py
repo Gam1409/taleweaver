@@ -451,7 +451,8 @@ def build_world_generation_prompts(
     if language:
         system_prompt += (
             f"\n\nCRITICAL: You MUST generate all content (names, descriptions, teaser, plot, "
-            f"intro_text, walkthrough, quests) in {language}. Do not use any other language."
+            f"intro_text, walkthrough, quests) in {language}. Do not use any other language. "
+            "Exception: `appearance` and `cover_appearance` keywords are always English."
         )
     if not quest_generation_enabled:
         system_prompt += (

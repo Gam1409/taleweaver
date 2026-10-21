@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,8 @@ class EntityUpdateRequest(BaseModel):
     stamina: Optional[int] = None
     goal: Optional[str] = None
     character: Optional[str] = None
+    # Visual keywords for image prompts; maps to ``cover_appearance`` for the cover.
+    appearance: Optional[str] = Field(default=None, max_length=100)
     is_killable: Optional[bool] = None
     item_type: Optional[str] = None
     is_portable: Optional[bool] = None
@@ -130,6 +132,7 @@ class EntityCreateRequest(BaseModel):
     scene_id: str
     name: str
     description: str
+    appearance: Optional[str] = Field(default=None, max_length=100)
     image_url: Optional[str] = None
     item_type: Optional[str] = None
     is_portable: Optional[bool] = None

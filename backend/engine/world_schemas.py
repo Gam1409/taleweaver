@@ -280,6 +280,10 @@ class WorldNPCSchema(WorldBaseSchema):
         ...,
         description="Concise description of the NPC's personality, demeanor, or character traits, max 200 characters.",
     )
+    appearance: str = Field(
+        default="",
+        description="Comma-separated English visual keywords for the image generator (build, face, hair, clothing, distinctive marks), max 100 characters.",
+    )
     start_scene_id: str = Field(..., description="The ID of the scene where the NPC starts.")
     spatial_position: str = Field(
         ...,
@@ -473,6 +477,10 @@ class WorldObjectSchema(WorldBaseSchema):
     id: str = Field(..., description="Unique slug for the object, e.g., GOLDEN_KEY")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Physical characteristics and details.")
+    appearance: str = Field(
+        default="",
+        description="Comma-separated English visual keywords for the image generator (material, shape, color, condition), max 100 characters.",
+    )
     start_scene_id: str = Field(..., description="The ID of the scene where the object starts.")
     spatial_position: str = Field(
         ...,
@@ -810,6 +818,10 @@ class ProtagonistSchema(WorldBaseSchema):
         ...,
         description="Concise description of the protagonist's personality, quirks, and character traits, max 200 characters.",
     )
+    appearance: str = Field(
+        default="",
+        description="Comma-separated English visual keywords for the image generator (build, face, hair, clothing, gear), max 100 characters.",
+    )
     strength: int = Field(..., description="Base strength stat (1-99)")
     dexterity: int = Field(..., description="Base dexterity stat (1-99)")
     intelligence: int = Field(..., description="Base intelligence stat (1-99)")
@@ -889,6 +901,10 @@ class WorldManifesto(WorldBaseSchema):
     protagonist: ProtagonistSchema
     teaser: str = Field(
         ..., description="A short, atmospheric teaser text for the adventure, max 100 characters."
+    )
+    cover_appearance: str = Field(
+        default="",
+        description="Comma-separated English visual keywords for the cover image (key motif, setting, colors, mood), max 100 characters.",
     )
     language: str = Field(
         ..., description="The target language for all generated content, e.g. 'English'."

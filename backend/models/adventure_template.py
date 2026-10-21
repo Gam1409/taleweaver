@@ -22,6 +22,7 @@ class AdventureTemplate(Base, TimestampMixin):
     owner_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(50), nullable=False)
     teaser: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    cover_appearance: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Visual keywords for the cover image
     version: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
     language: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     origin_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True) # Stable ID for default/sample templates

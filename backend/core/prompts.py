@@ -87,6 +87,13 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "PROTAGONIST:\n"
     "The protagonist must also have a 'goal' (primary motivation, max 200 chars) and 'character' (personality traits, max 200 chars).\n"
     "These help the GM understand how the player character thinks and acts.\n\n"
+    "APPEARANCE KEYWORDS (IMAGE GENERATION):\n"
+    "The protagonist, every NPC and every object MUST have an 'appearance' field, and the manifest MUST have a top-level 'cover_appearance' field.\n"
+    "Each is a comma-separated list of short ENGLISH visual keywords (max 100 characters), used verbatim in image generation prompts.\n"
+    "- Characters: build, age, face, hair, clothing, gear, distinctive marks (e.g. 'gaunt elderly man, white beard, ink-stained robe, round spectacles').\n"
+    "- Objects: material, shape, color, size, condition (e.g. 'small brass key, ornate bow, tarnished green patina').\n"
+    "- Cover: key motif, setting, color palette, mood (e.g. 'ruined lighthouse, stormy sea, teal and amber, ominous').\n"
+    "Keep appearance consistent with the description, the plot and the world's era. No names, IDs, story events or text/lettering.\n\n"
     "STATS & RESOURCES:\n"
     "For NPCs, always assign 'hp' (range 40-100) and 'stamina' (range 50-100). Default to 0 if not relevant.\n"
     "For NPCs, include both booleans: 'is_attackable' and 'is_killable'.\n"
@@ -169,7 +176,7 @@ Global negative instruction appended to all image prompts to prevent AI-generate
 
 ADVENTURE_COVER_PROMPT_TEMPLATE = (
     "A single unified cinematic cover art illustration capturing the iconic atmosphere of {title}. "
-    "Depicting: {original_prompt}. "
+    "Depicting: {original_prompt}. {context}"
     "Single continuous scene, single seamless frame, single focal point, wide-angle cinematic composition. "
     "ABSOLUTELY NO split-screen, NO multi-panel, NO collage, NO triptych, NO diptych, "
     "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
@@ -177,44 +184,74 @@ ADVENTURE_COVER_PROMPT_TEMPLATE = (
 )
 """
 Template for generating the main cover image of an adventure.
-Variables: title, original_prompt.
+Variables: title, original_prompt, context (appearance keywords incl. trailing space, or empty).
 """
 
 PROTAGONIST_IMAGE_PROMPT_TEMPLATE = (
-    "Portrait of character {name}, {role}. {description}. Game attribute art style. "
+    "Portrait of character {name}, {role}. {description}. {context}Game attribute art style. "
     "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
     "2:3 aspect ratio, dramatic cinematic lighting, highly detailed digital painting."
 )
 """
 Template for generating the player character's portrait.
-Variables: name, role, description.
+Variables: name, role, description, context (appearance keywords and plot hint incl. trailing space, or empty).
+"""
+
+IMAGE_APPEARANCE_TEMPLATE = "Visual keywords: {appearance}."
+"""
+Optional appearance keywords (max 100 chars) added to protagonist, NPC, item and cover prompts.
+Variables: appearance.
+"""
+
+PROTAGONIST_IMAGE_PLOT_TEMPLATE = (
+    "Adventure setting (use only to match era, world, attire, gear and mood; "
+    "do not depict story events or other characters): {plot}"
+)
+"""
+Plot hint added to protagonist portraits.
+Variables: plot.
 """
 
 SCENE_IMAGE_PROMPT_TEMPLATE = (
-    "Background scene: {name}. {description}. 3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
+    "Background scene: {name}. {description}. {context}3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
     "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
 )
 """
 Template for generating background images for scenes.
-Variables: name, description.
+Variables: name, description, context (scene details incl. trailing space, or empty).
+"""
+
+SCENE_IMAGE_DECORATIONS_TEMPLATE = "Visible details in the environment: {items}."
+"""
+Decorative objects added to scene image prompts.
+Variables: items.
+"""
+
+SCENE_IMAGE_NPCS_TEMPLATE = (
+    "Characters present in the scene: {npcs}. "
+    "Integrate them naturally into the environment as part of the scene, not as posed portraits."
+)
+"""
+NPCs placed in a scene, added to scene image prompts.
+Variables: npcs.
 """
 
 NPC_IMAGE_PROMPT_TEMPLATE = (
-    "Character portrait: {name}. {description}. Game attribute art style. "
+    "Character portrait: {name}. {description}. {context}Game attribute art style. "
     "3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting."
 )
 """
 Template for generating NPC portraits.
-Variables: name, description.
+Variables: name, description, context (appearance keywords incl. trailing space, or empty).
 """
 
 OBJECT_IMAGE_PROMPT_TEMPLATE = (
-    "Item asset: {name}. {description}. Centered, isolated on simple background."
+    "Item asset: {name}. {description}. {context}Centered, isolated on simple background."
 )
 ITEM_IMAGE_PROMPT_TEMPLATE = OBJECT_IMAGE_PROMPT_TEMPLATE
 """
 Template for generating icons/portraits for items and objects.
-Variables: name, description.
+Variables: name, description, context (appearance keywords incl. trailing space, or empty).
 """
 
 # --- Game Master (Chat) Prompts ---

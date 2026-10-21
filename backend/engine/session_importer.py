@@ -11,6 +11,7 @@ import uuid6
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.image_prompt_context import clean_appearance
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -221,6 +222,7 @@ class SessionImporter:
                     description=avatar_data.get("description"),
                     goal=avatar_data.get("goal"),
                     character=avatar_data.get("character"),
+                    appearance=clean_appearance(avatar_data.get("appearance")),
                     profile_image=avatar_data.get("profile_image"),
                     hp=avatar_data.get("hp", 200),
                     max_hp=avatar_data.get("max_hp", 200),
@@ -327,6 +329,7 @@ class SessionImporter:
                         notes=ent.get("notes"),
                         goal=ent.get("goal"),
                         character=ent.get("character"),
+                        appearance=clean_appearance(ent.get("appearance")),
                         hp=ent.get("hp"),
                         max_hp=ent.get("max_hp"),
                         mana=ent.get("mana"),

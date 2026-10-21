@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from backend.core import prompts
 from backend.core.config import settings
+from backend.engine.image_prompt_context import build_npc_image_prompt, clean_appearance
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -83,9 +83,7 @@ async def _generate_portrait(
 ) -> Optional[str]:
     from backend.engine.media_engine import MediaEngine
 
-    prompt = prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(
-        name=npc["name"], description=npc["description"]
-    )
+    prompt = build_npc_image_prompt(npc["name"], npc["description"], npc.get("appearance"))
     user_config, api_keys = t2i_config(ctx)
     return await generate_image(
         ctx,
@@ -144,6 +142,7 @@ def _npc_entity(
         entity_type="NPC",
         name=npc["name"],
         description=npc["description"],
+        appearance=clean_appearance(npc.get("appearance")),
         goal=npc.get("goal"),
         character=npc.get("character"),
         current_scene_id=npc.get("start_scene_id")

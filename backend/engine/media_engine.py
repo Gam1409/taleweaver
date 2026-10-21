@@ -43,6 +43,7 @@ from backend.engine.image_generation_support import (
     resolve_required_api_key,
     retry_openrouter_minimal,
 )
+from backend.engine.image_prompt_context import appearance_context, with_context
 from backend.utils.image_generator import (
     OrganicGradientStrategy,
     PlaceholderImageGenerator,
@@ -1078,7 +1079,7 @@ class MediaEngine:
         )
 
     @staticmethod
-    async def generate_adventure_cover(title: str, original_prompt: str, adventure_id: str, user_config: dict, api_keys: dict, style_instruction: Optional[str] = None) -> Optional[str]:
+    async def generate_adventure_cover(title: str, original_prompt: str, adventure_id: str, user_config: dict, api_keys: dict, style_instruction: Optional[str] = None, appearance: Optional[str] = None) -> Optional[str]:
         """High-level wrapper for adventure cover generation (uses Advanced Model, 3:2 aspect ratio)."""
         t2i = user_config.get("t2i_settings")
         if not t2i: 
@@ -1123,7 +1124,9 @@ class MediaEngine:
             clean_prompt = clean_prompt[:400]
 
         prompt = prompts.ADVENTURE_COVER_PROMPT_TEMPLATE.format(
-            title=title, original_prompt=clean_prompt
+            title=title,
+            original_prompt=clean_prompt,
+            context=with_context(appearance_context(appearance)),
         )
         
         # Resolve steps and cfg_scale for advanced model

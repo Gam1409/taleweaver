@@ -5,6 +5,7 @@ from typing import Any, Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.image_prompt_context import clean_appearance
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -59,6 +60,7 @@ def _npc_from_def(
         entity_type="NPC",
         name=npc_def.get("name", ""),
         description=npc_def.get("description", ""),
+        appearance=clean_appearance(npc_def.get("appearance")),
         current_scene_id=npc_def.get("start_scene_id"),
         image_url=images.get(npc_def["id"]),
     )
@@ -74,6 +76,7 @@ def _object_from_def(
         entity_type="OBJECT",
         name=obj_def.get("name", ""),
         description=obj_def.get("description", ""),
+        appearance=clean_appearance(obj_def.get("appearance")),
         current_scene_id=obj_def.get("start_scene_id"),
         image_url=images.get(obj_def["id"]),
         spatial_position=obj_def.get("spatial_position"),
@@ -113,6 +116,7 @@ async def _restore_protagonist(
     avatar.name = prot_def.get("name") or avatar.name
     avatar.role = prot_def.get("role") or avatar.role
     avatar.description = prot_def.get("description") or avatar.description
+    avatar.appearance = clean_appearance(prot_def.get("appearance")) or avatar.appearance
 
 
 def _with_ids(definitions: list[Any]) -> list[dict[str, Any]]:

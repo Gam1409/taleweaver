@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 
+from backend.engine.image_prompt_context import clean_appearance
 from backend.engine.manifest_apply.assets import is_usable_image_url, resolve_source_asset_image
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
 from backend.engine.manifest_apply.visuals import publish_status, t2i_config
@@ -21,6 +22,7 @@ _EMPTY_TOKENS = {"NONE", "NULL", "UNDEFINED", "N/A", "FALSE"}
 # Narrative fields keep the stored value when the manifest has none.
 _NARRATIVE_FIELDS = (
     "teaser",
+    "cover_appearance",
     "plot",
     "rules",
     "intro_text",
@@ -121,6 +123,7 @@ def _apply_quests_awards_sequences(
 def _apply_narrative(ctx: ApplyContext, adventure: AdventureTemplate) -> None:
     for key in _NARRATIVE_FIELDS:
         setattr(adventure, key, adventure_field(ctx.manifest, key) or getattr(adventure, key))
+    adventure.cover_appearance = clean_appearance(adventure.cover_appearance)  # type: ignore[assignment]
 
     walkthrough = adventure_field(ctx.manifest, "walkthrough")
     if getattr(adventure, "sequences", None) or not walkthrough:
@@ -198,6 +201,7 @@ async def _create_cover(
         user_config=user_config,
         api_keys=api_keys,
         style_instruction=ctx.style_instruction,
+        appearance=adventure.cover_appearance,
     )
     return cover_url, False
 

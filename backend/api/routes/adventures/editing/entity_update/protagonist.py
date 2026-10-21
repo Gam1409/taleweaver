@@ -19,6 +19,7 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.engine.image_prompt_context import clean_appearance
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -55,6 +56,8 @@ async def update_cover(
         adv.teaser = payload.teaser
     if given(payload, "description"):
         adv.original_prompt = payload.description
+    if given(payload, "appearance"):
+        adv.cover_appearance = clean_appearance(payload.appearance)
 
 
 def _protagonist_manifest(adv: AdventureTemplate) -> Optional[dict[str, Any]]:
@@ -151,6 +154,8 @@ async def update_protagonist(
     if not avatar:
         return
     copy_given(avatar, payload, _PROFILE_FIELDS)
+    if given(payload, "appearance"):
+        avatar.appearance = clean_appearance(payload.appearance)
     apply_vitals(avatar, payload)
     if given(payload, "inventory") or given(payload, "equipment"):
         await _update_items(db, template_id, adv, avatar, payload)

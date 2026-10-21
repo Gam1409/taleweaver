@@ -23,6 +23,7 @@ _ENTITY_BASE_KEYS = {
     "entity_type",
     "name",
     "description",
+    "appearance",
     "current_scene_id",
     "spatial_position",
     "image_url",
@@ -401,6 +402,7 @@ def _build_adventure_section(adv: AdventureTemplate) -> dict[str, Any]:
     return {
         "title": adv.title,
         "teaser": adv.teaser,
+        "cover_appearance": adv.cover_appearance,
         "version": adv.version,
         "creator": adv.creator,
         "copyright": adv.copyright,
@@ -470,6 +472,7 @@ def _build_protagonist_section(
         "description": avatar.description if avatar else "",
         "goal": avatar.goal if avatar else "",
         "character": avatar.character if avatar else "",
+        "appearance": avatar.appearance if avatar else None,
         "profile_image": avatar.profile_image if avatar else None,
         "hp": avatar.hp if avatar else 200,
         "max_hp": avatar.max_hp if avatar else 200,

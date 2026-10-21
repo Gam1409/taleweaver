@@ -23,6 +23,7 @@ from backend.engine.adventure_import_support import (
 from backend.engine.adventure_import_support import (
     ensure_within_data_dir as _ensure_within_data_dir,
 )
+from backend.engine.image_prompt_context import clean_appearance
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
@@ -411,6 +412,7 @@ class AdventureTemplateImporter:
                         "exp": prot.get("exp", 0) if prot else 0,
                         "goal": prot.get("goal", "") if prot else "",
                         "character": prot.get("character", "") if prot else "",
+                        "appearance": prot.get("appearance") if prot else None,
                         "status_effects": prot.get("status_effects", []) if prot else [],
                         "stats": prot.get("stats", {}) if prot else {},
                         "starting_inventory": prot.get("starting_inventory", prot.get("inventory", [])) if prot else [],
@@ -424,6 +426,7 @@ class AdventureTemplateImporter:
                     "quests": manifest_data.get("quests") or adv_data.get("quests", []),
                     "awards": manifest_data.get("awards") or adv_data.get("awards", []),
                     "teaser": manifest_data.get("teaser") or adv_data.get("teaser"),
+                    "cover_appearance": manifest_data.get("cover_appearance") or adv_data.get("cover_appearance"),
                     "intro_text": manifest_data.get("intro_text") or adv_data.get("intro_text"),
                     "plot": manifest_data.get("plot") or adv_data.get("plot"),
                     "rules": manifest_data.get("rules") or adv_data.get("rules"),
@@ -622,6 +625,7 @@ class AdventureTemplateImporter:
                 exp=old_avatar.get("exp", 0),
                 goal=old_avatar.get("goal", ""),
                 character=old_avatar.get("character", ""),
+                appearance=clean_appearance(old_avatar.get("appearance")),
                 stats=old_avatar["stats"], 
                 inventory=old_avatar["inventory"],
                 equipment=normalize_equipment_keys(old_avatar.get("equipment")),

@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core import prompts
+from backend.engine.image_prompt_context import build_scene_image_prompt, manifest_scene_npcs
 from backend.engine.manifest_apply.assets import needs_image
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
 from backend.engine.manifest_apply.visuals import (
@@ -47,8 +47,18 @@ def clean_decorative_objects(decorative: Any) -> list[str]:
     return cleaned[:MAX_DECORATIVE_OBJECTS]
 
 
+def _scene_prompt(ctx: ApplyContext, scene: dict[str, Any], default_scene_id: str) -> str:
+    npcs = manifest_scene_npcs(ctx.manifest.get("npcs") or [], scene["id"], default_scene_id)
+    return build_scene_image_prompt(
+        scene["name"],
+        scene["description"],
+        decorative_objects=clean_decorative_objects(scene.get("decorative_objects")),
+        npcs=npcs,
+    )
+
+
 async def _scene_image(
-    ctx: ApplyContext, scene: dict[str, Any], idx: int, total: int
+    ctx: ApplyContext, scene: dict[str, Any], position: tuple[int, int], default_scene_id: str
 ) -> Optional[str]:
     from backend.engine.media_engine import MediaEngine
 
@@ -63,10 +73,9 @@ async def _scene_image(
     if not needs_image(image_url):
         return image_url
     if ctx.user and ctx.gen_scenes:
-        prompt = prompts.SCENE_IMAGE_PROMPT_TEMPLATE.format(
-            name=scene["name"], description=scene["description"]
-        )
+        prompt = _scene_prompt(ctx, scene, default_scene_id)
         user_config, api_keys = t2i_config(ctx)
+        idx, total = position
         image_url = await generate_image(
             ctx,
             status=f"Envisioning Scene {idx}/{total}: {scene['name']}...",
@@ -88,11 +97,13 @@ async def _scene_image(
 
 async def persist_scenes(ctx: ApplyContext, scenes: list[dict[str, Any]]) -> None:
     total = len(scenes)
+    # Mirrors the NPC fallback scene used by apply._persist_world.
+    default_scene_id = scenes[0]["id"] if scenes else "START"
     for idx, scene in enumerate(scenes, start=1):
         if scene["id"] in ctx.seen_scene_ids:
             continue
         ctx.seen_scene_ids.add(scene["id"])
-        image_url = await _scene_image(ctx, scene, idx, total)
+        image_url = await _scene_image(ctx, scene, (idx, total), default_scene_id)
         ctx.db.add(
             WorldScene(
                 id=scene["id"],

@@ -7,8 +7,8 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 
-from backend.core import prompts
 from backend.core.config import settings
+from backend.engine.image_prompt_context import build_protagonist_image_prompt, clean_appearance
 from backend.engine.manifest_apply.assets import needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -30,6 +30,7 @@ AVATAR_FIELDS: tuple[tuple[str, str, Any], ...] = (
     ("description", "description", ""),
     ("goal", "goal", ""),
     ("character", "character", ""),
+    ("appearance", "appearance", None),
     ("hp", "hp", 200),
     ("max_hp", "hp", 200),
     ("stamina", "stamina", 200),
@@ -118,12 +119,13 @@ def _update_avatar(avatar: Any, prot: dict[str, Any], stats: dict[str, Any]) -> 
 async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
     from backend.engine.media_engine import MediaEngine
 
-    prompt = prompts.PROTAGONIST_IMAGE_PROMPT_TEMPLATE.format(
-        name=avatar.name, role=avatar.role, description=avatar.description
+    prompt = build_protagonist_image_prompt(
+        avatar.name,
+        avatar.role,
+        avatar.description,
+        plot=ctx.manifest.get("plot"),
+        appearance=avatar.appearance,
     )
-    plot = (ctx.manifest.get("plot") or "").strip()
-    if plot:
-        prompt = f"{prompt} Narrative context: {plot[:1200]}"
     user_config, api_keys = t2i_config(ctx)
     return await generate_image(
         ctx,
@@ -182,5 +184,6 @@ async def persist_avatar(ctx: ApplyContext, prot: dict[str, Any]) -> tuple[Any, 
         _update_avatar(avatar, prot, stats)
     else:
         avatar = _new_avatar(ctx, prot, stats)
+    avatar.appearance = clean_appearance(avatar.appearance)
     avatar.profile_image = await _portrait(ctx, avatar, prot)
     return avatar, items

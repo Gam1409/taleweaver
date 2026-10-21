@@ -54,6 +54,8 @@ def _describe_npc(e: Any, detail: str) -> str:
     pos_str = f" (Position: {e.spatial_position})" if e.spatial_position else ""
     goal_str = f" [Goal: {e.goal}]" if e.goal else ""
     char_str = f" [Character: {e.character}]" if e.character else ""
+    looks = getattr(e, "appearance", None)
+    looks_str = f" [Looks: {looks}]" if looks else ""
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     inv_refs = _format_item_refs(e.inventory)
     inv_str = f" [Inventory: {', '.join(inv_refs)}]" if inv_refs else ""
@@ -62,7 +64,7 @@ def _describe_npc(e: Any, detail: str) -> str:
     notes_str = f' [Status/Notes: "{e.notes}"]' if getattr(e, "notes", None) else ""
     move_str = f" [{_movement_label(e, '').strip()}]"
     return (
-        f"{e.name} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
+        f"{e.name} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{looks_str}{hidden_str}"
         f"{defeated_str}{notes_str}{move_str}{inv_str}{desc_str}"
     )
 
@@ -284,12 +286,14 @@ def build_world_npcs_context(
             desc = desc[:-1]
         goal_str = f", Goal: {npc.goal}" if npc.goal else ""
         char_str = f", Character: {npc.character}" if npc.character else ""
+        looks = getattr(npc, "appearance", None)
+        looks_str = f", Looks: {looks}" if looks else ""
         inv_refs = _format_item_refs(npc.inventory)
         inv_str = f", Inventory: {', '.join(inv_refs)}" if inv_refs else ""
         notes_str = f', Status: "{npc.notes}"' if getattr(npc, "notes", None) else ""
         move_str = _movement_label(npc, ", ")
         lines.append(
-            f"- {npc.name}: {desc}. Location: {scene_label}{pos_str}{goal_str}{char_str}"
+            f"- {npc.name}: {desc}. Location: {scene_label}{pos_str}{goal_str}{char_str}{looks_str}"
             f"{hidden_str}{notes_str}{move_str}{inv_str}"
         )
 

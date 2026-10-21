@@ -20,6 +20,12 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
+from backend.engine.image_prompt_context import (
+    appearance_context,
+    load_scene_npcs,
+    protagonist_context,
+    scene_context,
+)
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -54,6 +60,7 @@ def _build_visual_prompt(
     *,
     style_instruction: Optional[str] = None,
     tone_instruction: Optional[str] = None,
+    context: str = "",
 ) -> str:
     if custom_prompt and custom_prompt.strip():
         return custom_prompt.strip()
@@ -63,6 +70,7 @@ def _build_visual_prompt(
         prompt_suffix += f" Style constraints: {style_instruction}."
     if tone_instruction:
         prompt_suffix += f" Narrative tone reference: {tone_instruction}."
+    context_text = f" {context}" if context else ""
 
     def get_attr(obj, attr, default=""):
         if isinstance(obj, dict):
@@ -73,22 +81,22 @@ def _build_visual_prompt(
         name = get_attr(target_obj, "name", "The protagonist")
         role = get_attr(target_obj, "role", "adventurer")
         description = get_attr(target_obj, "description", "A distinctive fantasy hero.")
-        return f"Portrait of character {name}, {role}. {description}. Game character art style.{prompt_suffix}"
+        return f"Portrait of character {name}, {role}. {description}.{context_text} Game character art style.{prompt_suffix}"
 
     if target_type == "scene":
         label = get_attr(target_obj, "label") or get_attr(target_obj, "name") or "Scene"
         description = get_attr(target_obj, "description")
-        return f"Atmospheric background: {label}. {description}. RPG visual novel style, high detail.{prompt_suffix}"
+        return f"Atmospheric background: {label}. {description}.{context_text} RPG visual novel style, high detail.{prompt_suffix}"
 
     if target_type == "npc":
         name = get_attr(target_obj, "name", "NPC")
         description = get_attr(target_obj, "description", "A distinctive non-player character.")
-        return f"Portrait of NPC {name}. {description}. Character portrait, high detail.{prompt_suffix}"
+        return f"Portrait of NPC {name}. {description}.{context_text} Character portrait, high detail.{prompt_suffix}"
 
     if target_type == "object":
         name = get_attr(target_obj, "name", "Object")
         description = get_attr(target_obj, "description", "A detailed fantasy object.")
-        return f"Detailed illustration of object {name}. {description}. Fantasy item concept art, isolated and clearly readable.{prompt_suffix}"
+        return f"Detailed illustration of object {name}. {description}.{context_text} Fantasy item concept art, isolated and clearly readable.{prompt_suffix}"
 
     raise HTTPException(status_code=400, detail="Unsupported visual target type.")
 
@@ -191,7 +199,8 @@ async def _regenerate_cover(db: AsyncSession, ctx: _RegenerateContext) -> Option
         MediaEngine.generate_adventure_cover(
             title=adv.title, original_prompt=ctx.payload.prompt or adv.original_prompt or "",
             adventure_id=ctx.template_id, user_config=ctx.user_config, api_keys=ctx.api_keys,
-            style_instruction=ctx.style_instruction
+            style_instruction=ctx.style_instruction,
+            appearance=None if ctx.payload.prompt else adv.cover_appearance,
         ),
         timeout=float(settings.VISUAL_TIMEOUT)
     )
@@ -211,6 +220,7 @@ async def _regenerate_protagonist(db: AsyncSession, ctx: _RegenerateContext) -> 
         ctx.payload.prompt,
         style_instruction=ctx.style_instruction,
         tone_instruction=ctx.tone_instruction,
+        context=protagonist_context(ctx.adv.plot, avatar.appearance),
     )
     image_url = await asyncio.wait_for(
         MediaEngine.generate_entity_image(
@@ -242,6 +252,9 @@ async def _regenerate_scene(db: AsyncSession, ctx: _RegenerateContext) -> Option
         ctx.payload.prompt,
         style_instruction=ctx.style_instruction,
         tone_instruction=ctx.tone_instruction,
+        context=scene_context(
+            scene.decorative_objects, await load_scene_npcs(db, template_id, scene.id)
+        ),
     )
     image_url = await asyncio.wait_for(
         MediaEngine.generate_scene_image(
@@ -272,6 +285,7 @@ async def _regenerate_entity(db: AsyncSession, ctx: _RegenerateContext) -> Optio
         ctx.payload.prompt,
         style_instruction=ctx.style_instruction,
         tone_instruction=ctx.tone_instruction,
+        context=appearance_context(entity.appearance),
     )
     use_advanced_model = (
         ctx.is_advanced("profile_model_quality")
@@ -364,12 +378,14 @@ async def suggest_prompt(
 
     name = ""
     description = ""
+    context = ""
 
     logger.info("Suggesting prompt for %s (%s) in adventure %s", payload.target_type, payload.target_id, template_id)
 
     if payload.target_type == "cover":
         name = adv.title
         description = adv.teaser or adv.original_prompt or ""
+        context = appearance_context(adv.cover_appearance)
     elif payload.target_type == "protagonist":
         av_res = await db.execute(
             select(Avatar)
@@ -381,18 +397,22 @@ async def suggest_prompt(
         if avatar:
             name = avatar.name
             description = avatar.description
+            context = protagonist_context(adv.plot, avatar.appearance)
     elif payload.target_type == "scene":
         res = await db.execute(select(WorldScene).where(WorldScene.id == payload.target_id, WorldScene.template_id == template_id))
         scene = res.scalars().first()
         if scene:
             name = scene.label
             description = scene.description
+            scene_npcs = await load_scene_npcs(db, template_id, scene.id)
+            context = scene_context(scene.decorative_objects, scene_npcs)
     elif payload.target_type in ["npc", "object"]:
         res = await db.execute(select(WorldEntity).where(WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id))
         entity = res.scalars().first()
         if entity:
             name = entity.name
             description = entity.description
+            context = appearance_context(entity.appearance)
 
     logger.info("Resolved name '%s', description length: %d", name, len(description) if description else 0)
 
@@ -415,7 +435,7 @@ async def suggest_prompt(
     user_prompt = prompts.IMAGE_PROMPT_SUGGESTION_USER_PROMPT_TEMPLATE.format(
         target_type=payload.target_type.upper(),
         name=name,
-        description=description
+        description=f"{description}\n{context}" if context else description,
     )
     
     suggested = await llm.aexecute_simple_task(

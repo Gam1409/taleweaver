@@ -18,6 +18,7 @@ class Avatar(Base, TimestampMixin):
     description: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     goal: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     character: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    appearance: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Visual keywords for image prompts
     profile_image: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
     # Character Sheet values

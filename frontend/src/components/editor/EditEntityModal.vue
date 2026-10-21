@@ -4,6 +4,7 @@ import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
 import NpcCombatSettings from '@/components/editor/NpcCombatSettings.vue'
+import AppearanceField from '@/components/editor/AppearanceField.vue'
 import { Plus, Trash2, Key, FileText, Lock, Code2, Sparkles, ToggleLeft, ChevronDown, ChevronRight, Edit3 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -18,6 +19,7 @@ const props = defineProps<{
     mana: number
     goal: string
     character: string
+    appearance: string
     is_killable: boolean
     item_type: string
     is_portable: boolean
@@ -346,7 +348,8 @@ const isFormInvalid = computed(() => {
          (localForm.value.description || '').length > 1000
   const personaInvalid = (localForm.value.goal || '').length > 200 ||
          (localForm.value.character || '').length > 200
-  const teaserInvalid = (localForm.value.teaser || '').length > 300
+  const teaserInvalid = (localForm.value.teaser || '').length > 300 ||
+         (localForm.value.appearance || '').length > 100
   const hasEditableId = props.isCreateEntityMode || (props.context && ['npc', 'object', 'scene'].includes(props.context.type))
   const maxIdLen = props.context?.type === 'scene' ? 50 : 30
   const idInvalid = hasEditableId
@@ -595,6 +598,7 @@ function handleSave() {
     is_hidden: Boolean(localForm.value.is_hidden),
     spatial_position: spatialPosition,
     reveals_item_id: revealsItemId,
+    appearance: String(localForm.value.appearance || '').trim(),
     moveable: Boolean(localForm.value.moveable),
     allowed_scenes: (localForm.value.allowed_scenes_input || []).map((s: any) => String(s).trim().toUpperCase()).filter(Boolean),
     notes: String(localForm.value.notes || '').trim(),
@@ -2093,6 +2097,12 @@ const textLogPreviewClass = computed(() => {
                   <span>Quick-Gen Description</span>
                 </button>
               </div>
+
+              <AppearanceField
+                v-if="['cover', 'protagonist', 'npc', 'object'].includes(context.type)"
+                v-model="localForm.appearance"
+                :target-type="context.type"
+              />
             </div> <!-- End simple tab -->
 
             <div v-show="activeTab === 'advanced'" class="space-y-6">

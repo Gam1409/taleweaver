@@ -24,6 +24,7 @@ from backend.api.routes.adventures.editing.schemas import (
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.image_prompt_context import clean_appearance
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -331,6 +332,7 @@ async def create_editor_entity(
         entity_type=payload.entity_type,
         name=name,
         description=description,
+        appearance=clean_appearance(payload.appearance),
         current_scene_id=scene_id,
         image_url=str(payload.image_url or "").strip() or None,
         item_type=item_type,
@@ -459,6 +461,7 @@ async def clone_editor_entity(
         movement_type=source.movement_type,
         goal=source.goal,
         character=source.character,
+        appearance=source.appearance,
         hp=source.hp,
         max_hp=source.max_hp,
         mana=source.mana,

@@ -5,6 +5,7 @@ export interface Adventure {
   id: string
   title: string
   teaser?: string
+  cover_appearance?: string | null
   version?: string
   creator?: string
   copyright?: string

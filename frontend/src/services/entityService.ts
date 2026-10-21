@@ -13,6 +13,7 @@ export interface EntityEditData {
   mana?: number
   goal?: string
   character?: string
+  appearance?: string
   is_killable?: boolean
   moveable?: boolean
   allowed_scenes?: string[]
@@ -101,6 +102,7 @@ export interface EntityCreateData {
   is_portable?: boolean
   goal?: string
   character?: string
+  appearance?: string
   hp?: number
   stamina?: number
   mana?: number

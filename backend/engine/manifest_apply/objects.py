@@ -6,8 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from backend.core import prompts
 from backend.core.config import settings
+from backend.engine.image_prompt_context import build_object_image_prompt, clean_appearance
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
 from backend.engine.manifest_apply.avatar import StartingItems
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
@@ -234,9 +234,7 @@ async def _generate_item_image(
 ) -> Optional[str]:
     from backend.engine.media_engine import MediaEngine
 
-    prompt = prompts.OBJECT_IMAGE_PROMPT_TEMPLATE.format(
-        name=obj["name"], description=obj["description"]
-    )
+    prompt = build_object_image_prompt(obj["name"], obj["description"], obj.get("appearance"))
     user_config, api_keys = t2i_config(ctx)
     return await generate_image(
         ctx,
@@ -311,6 +309,7 @@ def _object_entity(
         entity_type="OBJECT",
         name=obj["name"],
         description=obj["description"],
+        appearance=clean_appearance(obj.get("appearance")),
         current_scene_id="INVENTORY"
         if held
         else (obj.get("start_scene_id") or obj.get("current_scene_id") or default_scene_id),

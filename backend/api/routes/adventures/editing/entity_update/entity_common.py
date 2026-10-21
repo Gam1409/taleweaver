@@ -9,12 +9,14 @@ from backend.api.routes.adventures.editing.common import _get_template_avatar
 from backend.api.routes.adventures.editing.entity_update.fields import (
     apply_vitals,
     copy_given,
+    given,
     ref_id,
     template_row_exists,
     template_rows,
     validated_new_id,
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.engine.image_prompt_context import clean_appearance
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 _MAX_ENTITY_ID_LENGTH = 30
@@ -79,4 +81,6 @@ async def rename_entity(db: AsyncSession, template_id: str, ent: WorldEntity, ra
 
 def apply_common_fields(ent: WorldEntity, payload: EntityUpdateRequest) -> None:
     copy_given(ent, payload, ("name", "description"))
+    if given(payload, "appearance"):
+        ent.appearance = clean_appearance(payload.appearance)
     apply_vitals(ent, payload)

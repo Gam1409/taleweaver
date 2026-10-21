@@ -117,6 +117,7 @@ const editForm = ref({
   mana: 0,
   goal: '',
   character: '',
+  appearance: '',
   is_killable: true,
   item_type: 'DEFAULT',
   is_portable: true,
@@ -282,6 +283,7 @@ function openCreateNpc(targetSceneId?: string) {
     mana: 20,
     goal: '',
     character: '',
+    appearance: '',
     is_killable: true,
     moveable: false,
     allowed_scenes_input: [],
@@ -358,6 +360,7 @@ function handleItemTypeSelected(itemType: string, isFixed = false, preselectedSl
     mana: 0,
     goal: '',
     character: '',
+    appearance: '',
     is_killable: true,
     item_type: itemType,
     is_portable: String(itemType).toUpperCase() !== 'SWITCH',
@@ -986,6 +989,12 @@ async function handleCreateScene(data: { sceneId: string; name: string; descript
   }
 }
 
+function resolveEditAppearance(type: string, entity: any): string {
+  if (type === 'cover') return debugData.value?.adventure?.cover_appearance || ''
+  if (type === 'protagonist') return debugData.value?.protagonist?.appearance || ''
+  return entity?.appearance || ''
+}
+
 function openTextEdit(type: string, id: string, currentName: string, currentDesc: string, currentTeaser: string = '', hp?: number, stamina?: number, mana?: number, goal?: string, character?: string, isKillable?: boolean) {
   if (type === 'npc' && (id === 'NEW_NPC' || id.startsWith('NEW_'))) {
     openCreateNpc()
@@ -1019,6 +1028,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     name: currentName || '', 
     description: resolvedDescription,
     teaser: fixNewlines(currentTeaser || ''),
+    appearance: resolveEditAppearance(type, selectedNpc || selectedObject),
     hp: hp ?? 0,
     stamina: stamina ?? 0,
     mana: mana ?? 0,
@@ -1159,6 +1169,7 @@ async function saveEntityText(data: any) {
           mana: Number(data.mana || 20),
           goal: String(data.goal || '').trim() || undefined,
           character: String(data.character || '').trim() || undefined,
+          appearance: String(data.appearance || '').trim() || undefined,
           is_killable: Boolean(data.is_killable),
           moveable: Boolean(data.moveable),
           allowed_scenes: data.allowed_scenes || [],
@@ -1185,6 +1196,7 @@ async function saveEntityText(data: any) {
           scene_id: sceneId,
           name: entityName,
           description: entityDescription,
+          appearance: String(data.appearance || '').trim() || undefined,
           item_type: itemType,
           is_portable: itemType !== 'SWITCH',
           inventory: data.inventory || [],
@@ -1320,6 +1332,7 @@ async function saveEntityText(data: any) {
       mana: data.mana || undefined,
       goal: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.goal : undefined,
       character: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.character : undefined,
+      appearance: ['cover', 'npc', 'object', 'protagonist'].includes(editEntityContext.value.type) ? (data.appearance ?? '') : undefined,
       is_killable: editEntityContext.value.type === 'npc' ? data.is_killable : undefined,
       moveable: editEntityContext.value.type === 'npc' ? data.moveable : undefined,
       allowed_scenes: editEntityContext.value.type === 'npc' ? data.allowed_scenes : undefined,

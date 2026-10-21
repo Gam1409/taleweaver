@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.engine.image_prompt_context import clean_appearance
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldScene
@@ -163,6 +164,7 @@ async def _restore_missing_template_avatar(
         description=(str(prot.get("description") or "").strip() or None),
         goal=(str(prot.get("goal") or "").strip() or None),
         character=(str(prot.get("character") or "").strip() or None),
+        appearance=clean_appearance(prot.get("appearance")),
         profile_image=image_url,
         hp=int(prot.get("hp") or 200),
         max_hp=int(prot.get("hp") or 200),

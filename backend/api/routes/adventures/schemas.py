@@ -297,6 +297,7 @@ class AdventureTemplateResponse(BaseModel):
     id: str
     title: str
     teaser: Optional[str] = None
+    cover_appearance: Optional[str] = None
     version: Optional[str] = None
     creator: Optional[str] = None
     copyright: Optional[str] = None
@@ -604,6 +605,7 @@ class AdventureTemplateUpdate(BaseModel):
 
     title: Optional[str] = None
     teaser: Optional[str] = None
+    cover_appearance: Optional[str] = Field(default=None, max_length=100)
     version: Optional[str] = None
     creator: Optional[str] = None
     copyright: Optional[str] = None

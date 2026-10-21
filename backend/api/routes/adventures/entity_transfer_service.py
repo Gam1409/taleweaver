@@ -55,6 +55,7 @@ _AVATAR_FIELDS = (
     "description",
     "goal",
     "character",
+    "appearance",
     "hp",
     "max_hp",
     "stamina",

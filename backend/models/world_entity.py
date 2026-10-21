@@ -90,6 +90,7 @@ class WorldEntity(Base, TimestampMixin):
     entity_type = Column(String(20), nullable=False)  # "NPC" or "OBJECT"
     name = Column(String(100), nullable=False)
     description = Column(String(1000), nullable=False)
+    appearance = Column(String(100), nullable=True)  # Visual keywords for image prompts
 
     current_scene_id = Column(String(50), nullable=False)
     spatial_position = Column(String(255), nullable=True)  # e.g. "inside the desk"
