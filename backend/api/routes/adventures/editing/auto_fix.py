@@ -3,17 +3,23 @@
 Reuses the editor pipeline (validation run -> fix proposals -> patch apply) so
 the result is identical to a user clicking "AI-Fix" on every finding and
 accepting the first proposal. Remaining findings stay in the persisted
-validation run and are visible in the editor's Validation tab.
+validation run and are visible in the editor's Validation tab; a compact summary
+is also appended to the generation log for the generation view.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.editing.ai_fix_apply import _apply_patches, _commit_fix
 from backend.api.routes.adventures.editing.ai_fix_suggest import generate_fix_proposals
+from backend.api.routes.adventures.editing.auto_fix_log import (
+    append_validation_log,
+    build_validation_log_entry,
+)
 from backend.api.routes.adventures.editing.validation import execute_validation_run
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -31,6 +37,10 @@ class AutoFixReport:
     findings_total: int = 0
     attempted: int = 0
     fixed: int = 0
+    errors: int = 0
+    warnings: int = 0
+    ai_skipped_reason: Optional[str] = None
+    unresolved: list[ValidationFinding] = field(default_factory=list)
 
     @property
     def remaining(self) -> int:
@@ -80,13 +90,19 @@ async def run_post_generation_auto_fix(
     """Validate the adventure and apply the top AI fix proposal to each finding."""
     run = await execute_validation_run(db, template_id, user, include_ai)
     findings = _prioritized([*run.structural_findings, *run.ai_findings])
-    report = AutoFixReport(findings_total=len(findings))
+    report = AutoFixReport(
+        findings_total=len(findings),
+        errors=sum(1 for f in findings if f.severity == "error"),
+        warnings=sum(1 for f in findings if f.severity != "error"),
+        ai_skipped_reason=run.ai_skipped_reason,
+    )
     if not findings:
         return report
 
     result = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == template_id))
     adventure = result.scalars().first()
     if adventure is None:
+        report.unresolved = findings
         return report
 
     for finding in findings[:MAX_AUTO_FIX_FINDINGS]:
@@ -98,8 +114,13 @@ async def run_post_generation_auto_fix(
             await db.rollback()
             await db.refresh(user)
             await db.refresh(adventure)
-            continue
+            fixed = False
         report.fixed += int(fixed)
+        if not fixed:
+            report.unresolved.append(finding)
+
+    # Findings beyond the cap are never attempted and stay unresolved.
+    report.unresolved.extend(findings[MAX_AUTO_FIX_FINDINGS:])
 
     logger.info(
         "Post-generation auto-fix for %s: %d findings, %d attempted, %d fixed",
@@ -122,8 +143,25 @@ async def run_auto_fix_pass_safely(db: AsyncSession, template_id: str, user: Use
         return
     adventure.creation_status = "Validating and auto-fixing"
     await db.commit()
+    report: Optional[AutoFixReport] = None
+    failure: Optional[str] = None
     try:
-        await run_post_generation_auto_fix(db, template_id, user)
-    except Exception:
+        report = await run_post_generation_auto_fix(db, template_id, user)
+    except Exception as exc:
         logger.exception("Post-generation auto-fix failed for %s", template_id)
+        await db.rollback()
+        failure = str(exc) or type(exc).__name__
+    await _log_validation_result(db, template_id, build_validation_log_entry(report, failure))
+
+
+async def _log_validation_result(db: AsyncSession, template_id: str, entry: dict) -> None:
+    """Surface the validation outcome in the generation view; never fails the generation."""
+    try:
+        adventure = await db.get(AdventureTemplate, template_id, populate_existing=True)
+        if adventure is None:
+            return
+        append_validation_log(adventure, entry)
+        await db.commit()
+    except Exception:
+        logger.exception("Could not log validation result for %s", template_id)
         await db.rollback()

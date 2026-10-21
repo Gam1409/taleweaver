@@ -140,3 +140,69 @@ async def test_safe_wrapper_swallows_failures_and_skips_cancelled(monkeypatch) -
 
     # Assert
     assert failing.await_count == 1
+
+
+async def test_safe_wrapper_logs_compact_validation_summary(monkeypatch) -> None:
+    # Arrange
+    user, template_id = await _seed()
+    report = auto_fix.AutoFixReport(
+        findings_total=3,
+        attempted=3,
+        fixed=2,
+        errors=1,
+        warnings=2,
+        unresolved=[_finding("W9", "warn")],
+    )
+    monkeypatch.setattr(auto_fix, "run_post_generation_auto_fix", AsyncMock(return_value=report))
+
+    # Act
+    async with TestSessionLocal() as db:
+        await _REAL_SAFE_WRAPPER(db, template_id, await db.get(User, user.id))
+        adventure = await db.get(AdventureTemplate, template_id, populate_existing=True)
+        entry = adventure.generation_logs[-1]
+
+    # Assert
+    assert entry["type"] == "validation"
+    assert entry["content"] == "3 findings (1 error, 2 warnings) · 2 auto-fixed · 1 open"
+    assert entry["details"]["remaining"] == 1
+    assert entry["details"]["open_findings"] == [
+        {"severity": "warn", "message": "W9 broken", "location": "scene:START"}
+    ]
+
+
+async def test_safe_wrapper_logs_failed_validation(monkeypatch) -> None:
+    # Arrange
+    user, template_id = await _seed()
+    monkeypatch.setattr(
+        auto_fix, "run_post_generation_auto_fix", AsyncMock(side_effect=RuntimeError("llm down"))
+    )
+
+    # Act
+    async with TestSessionLocal() as db:
+        await _REAL_SAFE_WRAPPER(db, template_id, await db.get(User, user.id))
+        adventure = await db.get(AdventureTemplate, template_id, populate_existing=True)
+        entry = adventure.generation_logs[-1]
+
+    # Assert
+    assert entry["details"] == {"failed": True}
+    assert entry["content"] == "Validation could not complete: llm down"
+
+
+async def test_unresolved_findings_include_failed_and_uncapped(monkeypatch) -> None:
+    # Arrange
+    user, template_id = await _seed()
+    findings = [_finding(f"W{i}", "warn") for i in range(auto_fix.MAX_AUTO_FIX_FINDINGS + 2)]
+    run = ValidationRunResponse(structural_findings=findings, ai_findings=[], run_at="now")
+    monkeypatch.setattr(auto_fix, "execute_validation_run", AsyncMock(return_value=run))
+    empty = AIFixSuggestionsResponse(finding_signature="s", proposals=[], generated_at="now")
+    monkeypatch.setattr(auto_fix, "generate_fix_proposals", AsyncMock(return_value=empty))
+
+    # Act
+    async with TestSessionLocal() as db:
+        report = await auto_fix.run_post_generation_auto_fix(
+            db, template_id, await db.get(User, user.id)
+        )
+
+    # Assert
+    assert len(report.unresolved) == report.remaining == len(findings)
+    assert report.warnings == len(findings)
