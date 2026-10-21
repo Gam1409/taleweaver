@@ -1,15 +1,19 @@
-import uuid6
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
+import uuid6
 from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin
 
 
-class GenerationCancelled(Exception):
+class GenerationCancelledError(Exception):
     """Raised when the user cancels a background generation task."""
-    pass
+
+
+# Backward-compatible alias for existing importers.
+GenerationCancelled = GenerationCancelledError
+
 
 class AdventureTemplate(Base, TimestampMixin):
     __tablename__ = "adventure_templates"
@@ -37,26 +41,26 @@ class AdventureTemplate(Base, TimestampMixin):
     clock_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     max_memory_turns: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     time_system: Mapped[str] = mapped_column(String(20), default="calendar", nullable=False)
-    time_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    time_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     generate_scene_images: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     generate_npc_images: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     generate_item_images: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    selected_image_styles: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
-    selected_tone: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    selected_image_styles: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    selected_tone: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
-    game_over_rules: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    quests: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    game_over_rules: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    quests: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     # Status
     is_ready: Mapped[bool] = mapped_column(Boolean, default=False)
     creation_status: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     creation_error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    generation_logs: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    generation_logs: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
 
     # Metadata
-    original_manifest: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    original_manifest: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     # Generation Constraints
     min_scenes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
@@ -88,7 +92,7 @@ class AdventureTemplate(Base, TimestampMixin):
     npcs_can_damage_protagonist: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Award System
-    awards: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    awards: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     award_generation_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     min_awards: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
     max_awards: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
@@ -99,7 +103,7 @@ class AdventureTemplate(Base, TimestampMixin):
     is_adventure_generator: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Sequences
-    sequences: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    sequences: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     generation_strictness: Mapped[str] = mapped_column(String(20), default="creative", nullable=False)
 
     # Creator, Copyright, License Metadata
@@ -109,14 +113,14 @@ class AdventureTemplate(Base, TimestampMixin):
     license_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     @property
-    def scripts(self) -> List[Dict[str, Any]]:
+    def scripts(self) -> list[dict[str, Any]]:
         """Returns scripts from original_manifest if present."""
         if not self.original_manifest or not isinstance(self.original_manifest, dict):
             return []
         return list(self.original_manifest.get("scripts", []))
 
     @scripts.setter
-    def scripts(self, value: Optional[List[Dict[str, Any]]]) -> None:
+    def scripts(self, value: Optional[list[dict[str, Any]]]) -> None:
         """Sets scripts inside original_manifest and marks original_manifest modified."""
         from sqlalchemy.orm.attributes import flag_modified
         manifest = dict(self.original_manifest or {})

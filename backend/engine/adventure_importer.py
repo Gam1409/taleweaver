@@ -2,47 +2,36 @@ import io
 import json
 import logging
 import os
-import uuid
 import zipfile
 from copy import deepcopy
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import validate_manifest_version
-from backend.core.auth import get_password_hash
 from backend.core.config import settings
-from backend.engine.world_generator import WorldGenerator
+from backend.engine.adventure_import_support import (
+    check_adz_limits,
+    collect_existing_image_urls,
+    extract_adz_assets,
+    fill_start_scene_ids,
+    find_existing_template,
+    load_owner,
+    read_adz_manifest,
+    resolve_import_user,
+)
+from backend.engine.adventure_import_support import (
+    ensure_within_data_dir as _ensure_within_data_dir,
+)
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
-from backend.models.user import User
 from backend.utils.text_utils import generate_adventure_id, generate_session_id
-from backend.engine.media_engine import MediaEngine
 
 logger = logging.getLogger(__name__)
-
-# ZIP-bomb / resource-exhaustion guards for .adz imports.
-# Tuned to be permissive enough for legitimate adventures but tight enough
-# to stop "decompression bomb" payloads (small archive → huge extracted tree).
-MAX_ADZ_TOTAL_ENTRIES = 1000
-MAX_ADZ_ENTRY_BYTES = 50 * 1024 * 1024  # 50 MB per file
-MAX_ADZ_TOTAL_BYTES = 500 * 1024 * 1024  # 500 MB cumulative
-MAX_ADZ_COMPRESSION_RATIO = 100  # uncompressed/compressed size cap
-
-
-def _ensure_within_data_dir(path: str) -> str:
-    data_root = os.path.abspath(settings.DATA_DIR)
-    resolved = os.path.abspath(path)
-    try:
-        if os.path.commonpath([resolved, data_root]) != data_root:
-            raise ValueError("Resolved path escapes DATA_DIR.")
-    except ValueError as exc:
-        raise ValueError("Invalid path: cannot resolve against DATA_DIR.") from exc
-    return resolved
 
 
 # Canonical URLs for well-known license identifiers. Used to auto-fill the
@@ -91,14 +80,6 @@ class AdventureConflictError(Exception):
         super().__init__(f"Adventure '{title}' already exists.")
 
 
-def _build_local_default_user() -> User:
-    # Import-only fallback user; password is intentionally random and unknown.
-    return User(
-        username="local_default_user",
-        hashed_password=get_password_hash(uuid.uuid4().hex),
-        role="user",
-    )
-
 class AdventureTemplateImporter:
     @staticmethod
     async def import_from_directory(db: AsyncSession, directory: str, owner_id: Optional[str] = None, delete_after: bool = False, allow_session: bool = False, overwrite: bool = False):
@@ -140,6 +121,29 @@ class AdventureTemplateImporter:
         await AdventureLogic.delete_adventure(db, template_id)
 
     @staticmethod
+    async def _resolve_existing_template(
+        db: AsyncSession,
+        owner_id: Optional[str],
+        title: str,
+        origin_id: Optional[str],
+        new_version: Optional[str],
+        overwrite: bool,
+    ) -> None:
+        """Raise AdventureConflictError for an existing template, or delete it when overwriting."""
+        existing = await find_existing_template(db, owner_id, title, origin_id)
+        if not existing:
+            return
+        if not overwrite:
+            raise AdventureConflictError(
+                title=title,
+                existing_version=existing.version,
+                new_version=new_version,
+                template_id=existing.id
+            )
+        logger.info(f"Overwriting existing adventure '{title}'...")
+        await AdventureTemplateImporter.delete_template_for_overwrite(db, existing.id)
+
+    @staticmethod
     async def import_file(db: AsyncSession, file_path: str, owner_id: Optional[str] = None, allow_session: bool = True, overwrite: bool = False) -> bool:
         """Imports a single file (.adv or .adz)."""
         if file_path.endswith(".adz"):
@@ -158,81 +162,20 @@ class AdventureTemplateImporter:
             zip_buffer = io.BytesIO(adz_data)
 
             with zipfile.ZipFile(zip_buffer, "r") as zip_file:
-                infos = zip_file.infolist()
-
                 # Zip-bomb / resource-exhaustion guards.
-                if len(infos) > MAX_ADZ_TOTAL_ENTRIES:
-                    logger.error(
-                        "Refusing ADZ import: %d entries exceeds limit of %d.",
-                        len(infos), MAX_ADZ_TOTAL_ENTRIES,
-                    )
+                if not check_adz_limits(zip_file.infolist()):
                     return False
 
-                total_uncompressed = 0
-                for info in infos:
-                    if info.file_size > MAX_ADZ_ENTRY_BYTES:
-                        logger.error(
-                            "Refusing ADZ import: entry '%s' is %d bytes (limit %d).",
-                            info.filename, info.file_size, MAX_ADZ_ENTRY_BYTES,
-                        )
-                        return False
-                    total_uncompressed += info.file_size
-                    if total_uncompressed > MAX_ADZ_TOTAL_BYTES:
-                        logger.error(
-                            "Refusing ADZ import: total uncompressed size exceeds %d bytes.",
-                            MAX_ADZ_TOTAL_BYTES,
-                        )
-                        return False
-                    if info.compress_size > 0:
-                        ratio = info.file_size / info.compress_size
-                        if ratio > MAX_ADZ_COMPRESSION_RATIO:
-                            logger.error(
-                                "Refusing ADZ import: entry '%s' compression ratio %.1fx exceeds %dx.",
-                                info.filename, ratio, MAX_ADZ_COMPRESSION_RATIO,
-                            )
-                            return False
-
-                if "adventure.adv" not in zip_file.namelist():
-                    logger.error("Invalid ADZ: Missing adventure.adv")
+                manifest_data = read_adz_manifest(zip_file)
+                if manifest_data is None:
                     return False
-                
-                manifest_data = json.loads(zip_file.read("adventure.adv").decode("utf-8"))
-                try:
-                    validate_manifest_version(manifest_data, require_format=True)
-                except ValueError as exc:
-                    logger.error("Invalid ADZ format: %s", exc)
-                    return False
-
-                adv_data = manifest_data.get("adventure")
-                if not adv_data:
-                    logger.error("Invalid ADZ: Missing adventure section in manifest")
-                    return False
+                adv_data = manifest_data["adventure"]
 
                 # Check if template with this title or origin_id already exists for this owner
                 origin_id = adv_data.get("origin_id") or manifest_data.get("origin_id")
-                
-                query = select(AdventureTemplate).where(
-                    (AdventureTemplate.owner_id == owner_id) if owner_id else (AdventureTemplate.owner_id == None)
+                await AdventureTemplateImporter._resolve_existing_template(
+                    db, owner_id, adv_data["title"], origin_id, adv_data.get("version"), overwrite
                 )
-                if origin_id:
-                    query = query.where((AdventureTemplate.title == adv_data["title"]) | (AdventureTemplate.origin_id == origin_id))
-                else:
-                    query = query.where(AdventureTemplate.title == adv_data["title"])
-                
-                existing_res = await db.execute(query)
-                existing = existing_res.scalars().first()
-                if existing:
-                    if not overwrite:
-                        raise AdventureConflictError(
-                            title=adv_data["title"],
-                            existing_version=existing.version,
-                            new_version=adv_data.get("version"),
-                            template_id=existing.id
-                        )
-                    else:
-                        logger.info(f"Overwriting existing adventure '{adv_data['title']}'...")
-                        await AdventureTemplateImporter.delete_template_for_overwrite(db, existing.id)
-
 
                 # Create new template ID
                 new_template_id = generate_adventure_id(adv_data["title"])
@@ -443,18 +386,7 @@ class AdventureTemplateImporter:
                 )
                 os.makedirs(target_base_dir, exist_ok=True)
                 
-                existing_images_mapping = {} # zip_path -> local_url
-                for zip_path in zip_file.namelist():
-                    if zip_path.startswith("assets/"):
-                        filename = os.path.basename(zip_path)
-                        if not filename:
-                            continue
-                        target_path = _ensure_within_data_dir(os.path.join(target_base_dir, filename))
-                        with open(target_path, "wb") as f:
-                            f.write(zip_file.read(zip_path))
-                        
-                        rel_path = os.path.relpath(target_path, settings.DATA_DIR).replace("\\", "/")
-                        existing_images_mapping[zip_path] = f"/data/{rel_path}"
+                existing_images_mapping = extract_adz_assets(zip_file, target_base_dir)
 
                 # Reconstruct world
                 prot = manifest_data.get("protagonist")
@@ -508,25 +440,11 @@ class AdventureTemplateImporter:
                 }
 
                 default_scene_id = manifest_data["scenes"][0]["id"] if manifest_data.get("scenes") else "START"
-                for n in world_manifest["npcs"]:
-                    if "start_scene_id" not in n: n["start_scene_id"] = n.get("current_scene_id") or default_scene_id
-                for o in world_manifest["objects"]:
-                    if "start_scene_id" not in o: o["start_scene_id"] = o.get("current_scene_id") or default_scene_id
-                
-                image_urls = {}
-                if prot and prot.get("profile_image") in existing_images_mapping:
-                    image_urls["PROTAGONIST"] = existing_images_mapping[prot["profile_image"]]
-                for s in manifest_data.get("scenes", []):
-                    if s.get("image_url") in existing_images_mapping: image_urls[s["id"]] = existing_images_mapping[s["image_url"]]
-                for n in manifest_data.get("npcs", []):
-                    if n.get("image_url") in existing_images_mapping: image_urls[n["id"]] = existing_images_mapping[n["image_url"]]
-                for o in manifest_data.get("objects", []):
-                    if o.get("image_url") in existing_images_mapping: image_urls[o["id"]] = existing_images_mapping[o["image_url"]]
+                fill_start_scene_ids(world_manifest["npcs"], default_scene_id, ("current_scene_id",))
+                fill_start_scene_ids(world_manifest["objects"], default_scene_id, ("current_scene_id",))
 
-                user = None
-                if owner_id:
-                    user_res = await db.execute(select(User).where(User.id == owner_id))
-                    user = user_res.scalars().first()
+                image_urls = collect_existing_image_urls(manifest_data, existing_images_mapping)
+                user = await load_owner(db, owner_id)
 
                 await WorldGenerator.apply_manifest(
                     db=db,
@@ -572,342 +490,24 @@ class AdventureTemplateImporter:
             except ValueError as exc:
                 logger.error("Invalid ADV format: %s", exc)
                 return False
-            
+
             is_session = payload.get("type") == "SESSION_BUNDLE"
             title = payload.get("adventure", {}).get("title") if is_session else payload.get("title", "Imported AdventureTemplate")
             origin_id = payload.get("adventure", {}).get("origin_id") if is_session else payload.get("origin_id")
 
-            query = select(AdventureTemplate).where(
-                (AdventureTemplate.owner_id == owner_id) if owner_id else (AdventureTemplate.owner_id == None)
+            await AdventureTemplateImporter._resolve_existing_template(
+                db,
+                owner_id,
+                title,
+                origin_id,
+                payload.get("version") or (payload.get("adventure", {}).get("version") if is_session else None),
+                overwrite,
             )
-            if origin_id:
-                query = query.where((AdventureTemplate.title == title) | (AdventureTemplate.origin_id == origin_id))
-            else:
-                query = query.where(AdventureTemplate.title == title)
-            
-            existing_res = await db.execute(query)
-            existing = existing_res.scalars().first()
-            if existing:
-                if not overwrite:
-                    raise AdventureConflictError(
-                        title=title,
-                        existing_version=existing.version,
-                        new_version=payload.get("version") or (payload.get("adventure", {}).get("version") if is_session else None),
-                        template_id=existing.id
-                    )
-                else:
-                    logger.info(f"Overwriting existing adventure '{title}'...")
-                    await AdventureTemplateImporter.delete_template_for_overwrite(db, existing.id)
-
-            user = None
-            if owner_id:
-                user_res = await db.execute(select(User).where(User.id == owner_id))
-                user = user_res.scalars().first()
-            else:
-                res = await db.execute(select(User).limit(1))
-                user = res.scalars().first()
-            
-            if not user:
-                user = _build_local_default_user()
-                db.add(user)
-                await db.flush()
-
+            user = await resolve_import_user(db, owner_id)
 
             if is_session and allow_session:
-                data = payload
-                old_adv = data["adventure"]
-                
-                new_template = AdventureTemplate(
-                    id=generate_adventure_id(old_adv['title']),
-                    owner_id=user.id,
-                    title=old_adv['title'],
-                    teaser=old_adv.get("teaser"),
-                    version=old_adv.get("version"),
-                    sequences=old_adv.get("sequences") or data.get("sequences"),
-                    creator=old_adv.get("creator"),
-                    copyright=old_adv.get("copyright"),
-                    license=old_adv.get("license"),
-                    license_url=_resolve_license_url(old_adv.get("license_url"), old_adv.get("license")),
-                    original_prompt=old_adv.get("original_prompt") or old_adv.get("context"),
-                    image_url=old_adv.get("image_url"),
-                    strict_rules=old_adv.get("strict_rules", True),
-                    rule_enforcement_mode=old_adv.get("rule_enforcement_mode") or data.get("rule_enforcement_mode") or "rpg",
-                    time_per_turn=old_adv.get("time_per_turn", 10),
-                    pacing_minutes=old_adv.get("pacing_minutes", 5),
-                    max_time_per_turn=old_adv.get("max_time_per_turn"),
-                    max_memory_turns=old_adv.get("max_memory_turns") or 10,
-                    clock_enabled=old_adv.get("clock_enabled", False),
-                    game_over_rules=old_adv.get("game_over_rules"),
-                    quests=old_adv.get("quests", []),
-                    awards=old_adv.get("awards", []),
-                    original_manifest=old_adv.get("original_manifest"),
-                    plot=old_adv.get("plot"),
-                    rules=old_adv.get("rules"),
-                    intro_text=old_adv.get("intro_text"),
-                    walkthrough=old_adv.get("walkthrough"),
-                    completed_condition=old_adv.get("completed_condition"),
-                    gameover_condition=old_adv.get("gameover_condition"),
-                    tts_director_notes=old_adv.get("tts_director_notes"),
-                    starting_timestamp=old_adv.get("starting_timestamp", 0),
-                    time_system=old_adv.get("time_system", "calendar"),
-                    time_config=old_adv.get("time_config"),
-                    allow_dynamic_items=old_adv.get("allow_dynamic_items", False),
-                    can_damage_npcs=old_adv.get("can_damage_npcs", True),
-                    npcs_can_damage_protagonist=old_adv.get("npcs_can_damage_protagonist", True),
-                    cover_source_adventure_id=old_adv.get("cover_source_adventure_id"),
-                    cover_source_adventure_name=old_adv.get("cover_source_adventure_name"),
-                    cover_similarity_percent=old_adv.get("cover_similarity_percent", 50),
-                    allow_reuse_source_assets=old_adv.get("allow_reuse_source_assets", True),
-                    min_scenes=old_adv.get("min_scenes") if old_adv.get("min_scenes") is not None else data.get("min_scenes"),
-                    max_scenes=old_adv.get("max_scenes") if old_adv.get("max_scenes") is not None else data.get("max_scenes"),
-                    min_items=old_adv.get("min_items") if old_adv.get("min_items") is not None else data.get("min_items"),
-                    max_items=old_adv.get("max_items") if old_adv.get("max_items") is not None else data.get("max_items"),
-                    container_generation_enabled=old_adv.get("container_generation_enabled", True) if "container_generation_enabled" in old_adv else data.get("container_generation_enabled", True),
-                    scripts_generation_enabled=old_adv.get("scripts_generation_enabled", False) if "scripts_generation_enabled" in old_adv else data.get("scripts_generation_enabled", False),
-                    min_containers=old_adv.get("min_containers") if old_adv.get("min_containers") is not None else data.get("min_containers"),
-                    max_containers=old_adv.get("max_containers") if old_adv.get("max_containers") is not None else data.get("max_containers"),
-                    text_log_generation_enabled=old_adv.get("text_log_generation_enabled", True) if "text_log_generation_enabled" in old_adv else data.get("text_log_generation_enabled", True),
-                    min_text_logs=old_adv.get("min_text_logs") if old_adv.get("min_text_logs") is not None else data.get("min_text_logs"),
-                    max_text_logs=old_adv.get("max_text_logs") if old_adv.get("max_text_logs") is not None else data.get("max_text_logs"),
-                    min_quests=old_adv.get("min_quests") if old_adv.get("min_quests") is not None else data.get("min_quests"),
-                    max_quests=old_adv.get("max_quests") if old_adv.get("max_quests") is not None else data.get("max_quests"),
-                    quest_generation_enabled=old_adv.get("quest_generation_enabled", True) if "quest_generation_enabled" in old_adv else data.get("quest_generation_enabled", True),
-                    min_awards=old_adv.get("min_awards") if old_adv.get("min_awards") is not None else data.get("min_awards"),
-                    max_awards=old_adv.get("max_awards") if old_adv.get("max_awards") is not None else data.get("max_awards"),
-                    award_generation_enabled=old_adv.get("award_generation_enabled", False) if "award_generation_enabled" in old_adv else data.get("award_generation_enabled", False),
-                    language=old_adv.get("language") or data.get("language"),
-                    origin_id=origin_id,
-                    is_adventure_generator=old_adv.get("is_adventure_generator", False),
-                    is_ready=True,
-                    creation_status="Ready"
-                )
-
-                db.add(new_template)
-                await db.flush()
-                
-                await WorldGenerator.apply_manifest(db, new_template.id, data, user=user)
-
-                # Imported session bundles should not enter generation polling state.
-                new_template.is_ready = True
-                new_template.creation_status = "Ready"
-                new_template.creation_error = None
-                
-                old_state = data.get("game_state") or data.get("session_state")
-                old_avatar = data.get("avatar")
-                if old_state and old_avatar:
-                    new_avatar = Avatar(
-                        user_id=user.id, 
-                        template_id=new_template.id, 
-                        name=old_avatar["name"],
-                        role=old_avatar.get("role"),
-                        description=old_avatar.get("description"),
-                        profile_image=old_avatar.get("profile_image"),
-                        hp=old_avatar["hp"], 
-                        max_hp=old_avatar.get("max_hp", old_avatar["hp"]),
-                        stamina=old_avatar["stamina"], 
-                        max_stamina=old_avatar.get("max_stamina", old_avatar["stamina"]),
-                        mana=old_avatar["mana"],
-                        max_mana=old_avatar.get("max_mana", old_avatar["mana"]),
-                        strength=old_avatar.get("strength", 10),
-                        dexterity=old_avatar.get("dexterity", 10),
-                        intelligence=old_avatar.get("intelligence", 10),
-                        wisdom=old_avatar.get("wisdom", 10),
-                        charisma=old_avatar.get("charisma", 10),
-                        armor_class=old_avatar.get("armor_class", 10),
-                        exp=old_avatar.get("exp", 0),
-                        goal=old_avatar.get("goal", ""),
-                        character=old_avatar.get("character", ""),
-                        stats=old_avatar["stats"], 
-                        inventory=old_avatar["inventory"],
-                        equipment=normalize_equipment_keys(old_avatar.get("equipment")),
-                        status_effects=old_avatar.get("status_effects", [])
-                    )
-                    db.add(new_avatar)
-                    await db.flush()
-                    
-                    new_sess = GameSession(
-                        id=generate_session_id(new_template.title or old_adv.get('title') or 'session'),
-                        user_id=user.id,
-                        avatar_id=new_avatar.id,
-                        template_id=new_template.id,
-                        adventure_title=new_template.title,
-                        adventure_image_url=new_template.image_url
-                    )
-                    db.add(new_sess)
-                    await db.flush()
-
-                    restored_entity_states = old_state.get("entity_states", {})
-                    if not isinstance(restored_entity_states, dict):
-                        restored_entity_states = {}
-                    restored_entity_states = deepcopy(restored_entity_states)
-                    restored_entity_states.setdefault(
-                        "__manifest_snapshot__",
-                        {
-                            "adventure": {
-                                "id": new_template.id,
-                                "title": new_template.title,
-                                "version": new_template.version,
-                                "image_url": new_template.image_url,
-                                "strict_rules": new_template.strict_rules,
-                                "rule_enforcement_mode": new_template.rule_enforcement_mode,
-                                "time_per_turn": new_template.time_per_turn,
-                                "clock_enabled": new_template.clock_enabled,
-                                "time_system": new_template.time_system,
-                                "time_config": deepcopy(new_template.time_config or {}),
-                                "selected_tone": deepcopy(new_template.selected_tone or {}),
-                                "selected_image_styles": deepcopy(new_template.selected_image_styles or []),
-                                "quests": deepcopy(new_template.quests or []),
-                                "awards": deepcopy(new_template.awards or []),
-                                "plot": new_template.plot,
-                                "rules": new_template.rules,
-                                "intro_text": new_template.intro_text,
-                                "walkthrough": new_template.walkthrough,
-                                "completed_condition": new_template.completed_condition,
-                                "gameover_condition": new_template.gameover_condition,
-                                "tts_director_notes": new_template.tts_director_notes,
-                                "original_prompt": new_template.original_prompt,
-                                "allow_dynamic_items": new_template.allow_dynamic_items,
-                                "is_adventure_generator": new_template.is_adventure_generator,
-                            },
-                            "original_manifest": deepcopy(new_template.original_manifest or {}),
-                        },
-                    )
-
-                    db.add(SessionState(
-                        session_id=new_sess.id,
-                        current_scene_id=old_state.get("scene_id") or old_state.get("current_scene_id") or "START",
-                        in_game_time=old_state.get("in_game_time", 0),
-                        inventory=old_state.get("inventory", []),
-                        entity_states=restored_entity_states,
-                        exit_states=old_state.get("exit_states", {}),
-                        discovered_scenes=old_state.get("discovered_scenes", [])
-                    ))
-                
-                await db.commit()
-                # Ensure thumbnails are generated for imported assets
-                from backend.engine.media_engine import MediaEngine
-                await MediaEngine.ensure_thumbnails(new_template.id)
-                return True
-            else:
-                manifest = payload.get("original_manifest") or payload.get("manifest") or payload
-                adv_meta = payload.get("adventure") or payload
-                
-                enforcement_mode = adv_meta.get("rule_enforcement_mode") or manifest.get("rule_enforcement_mode") or "rpg"
-                is_strict = adv_meta.get("strict_rules") if "strict_rules" in adv_meta else (manifest.get("strict_rules") if "strict_rules" in manifest else (enforcement_mode != "chat"))
-                
-                new_template = AdventureTemplate(
-                    id=generate_adventure_id(adv_meta.get("title") or manifest.get("title") or "Imported Blueprint"),
-                    owner_id=owner_id,
-                    title=adv_meta.get("title") or manifest.get("title") or "Imported Blueprint",
-                    teaser=adv_meta.get("teaser") or manifest.get("teaser"),
-                    version=adv_meta.get("version") or manifest.get("version"),
-                    creator=adv_meta.get("creator") or manifest.get("creator"),
-                    copyright=adv_meta.get("copyright") or manifest.get("copyright"),
-                    license=adv_meta.get("license") or manifest.get("license"),
-                    license_url=_resolve_license_url(
-                        adv_meta.get("license_url") or manifest.get("license_url"),
-                        adv_meta.get("license") or manifest.get("license"),
-                    ),
-                    original_prompt=adv_meta.get("original_prompt") or adv_meta.get("context") or manifest.get("description") or "Restored from blueprint.",
-                    image_url=adv_meta.get("image_url") or manifest.get("image_url"),
-                    strict_rules=is_strict,
-                    rule_enforcement_mode=enforcement_mode,
-                    time_per_turn=adv_meta.get("time_per_turn", 5),
-                    pacing_minutes=adv_meta.get("pacing_minutes", 5),
-                    max_time_per_turn=adv_meta.get("max_time_per_turn") or manifest.get("max_time_per_turn"),
-                    max_memory_turns=adv_meta.get("max_memory_turns") or manifest.get("max_memory_turns") or 10,
-                    clock_enabled=adv_meta.get("clock_enabled", False),
-                    selected_image_styles=adv_meta.get("selected_image_styles") or manifest.get("selected_image_styles", []),
-                    selected_tone=adv_meta.get("selected_tone") or manifest.get("selected_tone"),
-                    quests=adv_meta.get("quests") or manifest.get("quests") or [],
-                    awards=adv_meta.get("awards") or manifest.get("awards") or [],
-                    original_manifest=manifest,
-                    plot=adv_meta.get("plot") or manifest.get("plot"),
-                    rules=adv_meta.get("rules") or manifest.get("rules"),
-                    intro_text=adv_meta.get("intro_text") or manifest.get("intro_text"),
-                    walkthrough=adv_meta.get("walkthrough") or manifest.get("walkthrough"),
-                    completed_condition=adv_meta.get("completed_condition") or manifest.get("completed_condition"),
-                    gameover_condition=adv_meta.get("gameover_condition") or manifest.get("gameover_condition"),
-                    completed_guard_expression=adv_meta.get("completed_guard_expression") or manifest.get("completed_guard_expression"),
-                    gameover_guard_expression=adv_meta.get("gameover_guard_expression") or manifest.get("gameover_guard_expression"),
-                    tts_director_notes=adv_meta.get("tts_director_notes") or manifest.get("tts_director_notes"),
-                    starting_timestamp=adv_meta.get("starting_timestamp") or manifest.get("starting_timestamp", 0),
-                    time_system=adv_meta.get("time_system") or manifest.get("time_system", "calendar"),
-                    time_config=adv_meta.get("time_config") or manifest.get("time_config"),
-                    allow_dynamic_items=adv_meta.get("allow_dynamic_items", False) if "allow_dynamic_items" in adv_meta else (manifest.get("allow_dynamic_items", False)),
-                    can_damage_npcs=adv_meta.get("can_damage_npcs", True) if "can_damage_npcs" in adv_meta else (manifest.get("can_damage_npcs", True)),
-                    npcs_can_damage_protagonist=adv_meta.get("npcs_can_damage_protagonist", True) if "npcs_can_damage_protagonist" in adv_meta else (manifest.get("npcs_can_damage_protagonist", True)),
-                    cover_source_adventure_id=adv_meta.get("cover_source_adventure_id") or manifest.get("cover_source_adventure_id"),
-                    cover_source_adventure_name=adv_meta.get("cover_source_adventure_name") or manifest.get("cover_source_adventure_name"),
-                    cover_similarity_percent=(
-                        adv_meta.get("cover_similarity_percent")
-                        if "cover_similarity_percent" in adv_meta
-                        else manifest.get("cover_similarity_percent", 50)
-                    ),
-                    allow_reuse_source_assets=adv_meta.get("allow_reuse_source_assets", True) if "allow_reuse_source_assets" in adv_meta else manifest.get("allow_reuse_source_assets", True),
-                    min_scenes=adv_meta.get("min_scenes") if adv_meta.get("min_scenes") is not None else manifest.get("min_scenes"),
-                    max_scenes=adv_meta.get("max_scenes") if adv_meta.get("max_scenes") is not None else manifest.get("max_scenes"),
-                    min_items=adv_meta.get("min_items") if adv_meta.get("min_items") is not None else manifest.get("min_items"),
-                    max_items=adv_meta.get("max_items") if adv_meta.get("max_items") is not None else manifest.get("max_items"),
-                    container_generation_enabled=adv_meta.get("container_generation_enabled", True) if "container_generation_enabled" in adv_meta else manifest.get("container_generation_enabled", True),
-                    scripts_generation_enabled=adv_meta.get("scripts_generation_enabled", False) if "scripts_generation_enabled" in adv_meta else manifest.get("scripts_generation_enabled", False),
-                    min_containers=adv_meta.get("min_containers") if adv_meta.get("min_containers") is not None else manifest.get("min_containers"),
-                    max_containers=adv_meta.get("max_containers") if adv_meta.get("max_containers") is not None else manifest.get("max_containers"),
-                    text_log_generation_enabled=adv_meta.get("text_log_generation_enabled", True) if "text_log_generation_enabled" in adv_meta else manifest.get("text_log_generation_enabled", True),
-                    min_text_logs=adv_meta.get("min_text_logs") if adv_meta.get("min_text_logs") is not None else manifest.get("min_text_logs"),
-                    max_text_logs=adv_meta.get("max_text_logs") if adv_meta.get("max_text_logs") is not None else manifest.get("max_text_logs"),
-                    min_quests=adv_meta.get("min_quests") if adv_meta.get("min_quests") is not None else manifest.get("min_quests"),
-                    max_quests=adv_meta.get("max_quests") if adv_meta.get("max_quests") is not None else manifest.get("max_quests"),
-                    quest_generation_enabled=adv_meta.get("quest_generation_enabled", True) if "quest_generation_enabled" in adv_meta else manifest.get("quest_generation_enabled", True),
-                    min_awards=adv_meta.get("min_awards") if adv_meta.get("min_awards") is not None else manifest.get("min_awards"),
-                    max_awards=adv_meta.get("max_awards") if adv_meta.get("max_awards") is not None else manifest.get("max_awards"),
-                    award_generation_enabled=adv_meta.get("award_generation_enabled", False) if "award_generation_enabled" in adv_meta else manifest.get("award_generation_enabled", False),
-                    language=adv_meta.get("language") or manifest.get("language"),
-                    origin_id=origin_id,
-                    is_adventure_generator=adv_meta.get("is_adventure_generator", False),
-                    is_ready=True,
-                    creation_status="Ready"
-                )
-
-                db.add(new_template)
-                await db.flush()
-                
-                if not new_template.image_url:
-                    from backend.engine.media_engine import MediaEngine
-                    new_template.image_url = await MediaEngine.generate_placeholder(
-                        new_template.id, new_template.title, os.path.join(settings.DATA_DIR, "adventures", "library", new_template.id),
-                        category="COVER"
-                    )
-                    await db.flush()
-                
-
-                # Prepare manifest for apply_manifest to ensure protagonist has starting items
-                if "protagonist" in manifest:
-                    p = manifest["protagonist"]
-                    if "starting_inventory" not in p:
-                        p["starting_inventory"] = p.get("inventory", [])
-                    if "starting_equipment" not in p:
-                        p["starting_equipment"] = p.get("equipment", {})
-
-                default_scene_id = manifest.get("scenes", [{}])[0].get("id") if manifest.get("scenes") else "START"
-                for n in manifest.get("npcs", []):
-                    if "start_scene_id" not in n:
-                        n["start_scene_id"] = n.get("current_scene_id") or n.get("scene_id") or default_scene_id
-                for o in manifest.get("objects", []):
-                    if "start_scene_id" not in o:
-                        o["start_scene_id"] = o.get("current_scene_id") or o.get("scene_id") or default_scene_id
-
-                await WorldGenerator.apply_manifest(db, new_template.id, manifest, user=user)
-
-                # Imports populate world data directly; mark template as fully ready.
-                new_template.is_ready = True
-                new_template.creation_status = "Ready"
-                new_template.creation_error = None
-                await db.commit()
-                # Ensure thumbnails are generated for imported assets
-                from backend.engine.media_engine import MediaEngine
-                await MediaEngine.ensure_thumbnails(new_template.id)
-                return True
+                return await AdventureTemplateImporter._import_session_bundle(db, payload, user, origin_id)
+            return await AdventureTemplateImporter._import_blueprint(db, payload, owner_id, user, origin_id)
         except AdventureConflictError:
             raise
         except Exception:
@@ -915,4 +515,304 @@ class AdventureTemplateImporter:
             await db.rollback()
             return False
 
+    @staticmethod
+    async def _import_session_bundle(
+        db: AsyncSession, data: dict[str, Any], user: Any, origin_id: Optional[str]
+    ) -> bool:
+        """Import a SESSION_BUNDLE payload: template, world and (if present) the saved session."""
+        old_adv = data["adventure"]
 
+        new_template = AdventureTemplate(
+            id=generate_adventure_id(old_adv['title']),
+            owner_id=user.id,
+            title=old_adv['title'],
+            teaser=old_adv.get("teaser"),
+            version=old_adv.get("version"),
+            sequences=old_adv.get("sequences") or data.get("sequences"),
+            creator=old_adv.get("creator"),
+            copyright=old_adv.get("copyright"),
+            license=old_adv.get("license"),
+            license_url=_resolve_license_url(old_adv.get("license_url"), old_adv.get("license")),
+            original_prompt=old_adv.get("original_prompt") or old_adv.get("context"),
+            image_url=old_adv.get("image_url"),
+            strict_rules=old_adv.get("strict_rules", True),
+            rule_enforcement_mode=old_adv.get("rule_enforcement_mode") or data.get("rule_enforcement_mode") or "rpg",
+            time_per_turn=old_adv.get("time_per_turn", 10),
+            pacing_minutes=old_adv.get("pacing_minutes", 5),
+            max_time_per_turn=old_adv.get("max_time_per_turn"),
+            max_memory_turns=old_adv.get("max_memory_turns") or 10,
+            clock_enabled=old_adv.get("clock_enabled", False),
+            game_over_rules=old_adv.get("game_over_rules"),
+            quests=old_adv.get("quests", []),
+            awards=old_adv.get("awards", []),
+            original_manifest=old_adv.get("original_manifest"),
+            plot=old_adv.get("plot"),
+            rules=old_adv.get("rules"),
+            intro_text=old_adv.get("intro_text"),
+            walkthrough=old_adv.get("walkthrough"),
+            completed_condition=old_adv.get("completed_condition"),
+            gameover_condition=old_adv.get("gameover_condition"),
+            tts_director_notes=old_adv.get("tts_director_notes"),
+            starting_timestamp=old_adv.get("starting_timestamp", 0),
+            time_system=old_adv.get("time_system", "calendar"),
+            time_config=old_adv.get("time_config"),
+            allow_dynamic_items=old_adv.get("allow_dynamic_items", False),
+            can_damage_npcs=old_adv.get("can_damage_npcs", True),
+            npcs_can_damage_protagonist=old_adv.get("npcs_can_damage_protagonist", True),
+            cover_source_adventure_id=old_adv.get("cover_source_adventure_id"),
+            cover_source_adventure_name=old_adv.get("cover_source_adventure_name"),
+            cover_similarity_percent=old_adv.get("cover_similarity_percent", 50),
+            allow_reuse_source_assets=old_adv.get("allow_reuse_source_assets", True),
+            min_scenes=old_adv.get("min_scenes") if old_adv.get("min_scenes") is not None else data.get("min_scenes"),
+            max_scenes=old_adv.get("max_scenes") if old_adv.get("max_scenes") is not None else data.get("max_scenes"),
+            min_items=old_adv.get("min_items") if old_adv.get("min_items") is not None else data.get("min_items"),
+            max_items=old_adv.get("max_items") if old_adv.get("max_items") is not None else data.get("max_items"),
+            container_generation_enabled=old_adv.get("container_generation_enabled", True) if "container_generation_enabled" in old_adv else data.get("container_generation_enabled", True),
+            scripts_generation_enabled=old_adv.get("scripts_generation_enabled", False) if "scripts_generation_enabled" in old_adv else data.get("scripts_generation_enabled", False),
+            min_containers=old_adv.get("min_containers") if old_adv.get("min_containers") is not None else data.get("min_containers"),
+            max_containers=old_adv.get("max_containers") if old_adv.get("max_containers") is not None else data.get("max_containers"),
+            text_log_generation_enabled=old_adv.get("text_log_generation_enabled", True) if "text_log_generation_enabled" in old_adv else data.get("text_log_generation_enabled", True),
+            min_text_logs=old_adv.get("min_text_logs") if old_adv.get("min_text_logs") is not None else data.get("min_text_logs"),
+            max_text_logs=old_adv.get("max_text_logs") if old_adv.get("max_text_logs") is not None else data.get("max_text_logs"),
+            min_quests=old_adv.get("min_quests") if old_adv.get("min_quests") is not None else data.get("min_quests"),
+            max_quests=old_adv.get("max_quests") if old_adv.get("max_quests") is not None else data.get("max_quests"),
+            quest_generation_enabled=old_adv.get("quest_generation_enabled", True) if "quest_generation_enabled" in old_adv else data.get("quest_generation_enabled", True),
+            min_awards=old_adv.get("min_awards") if old_adv.get("min_awards") is not None else data.get("min_awards"),
+            max_awards=old_adv.get("max_awards") if old_adv.get("max_awards") is not None else data.get("max_awards"),
+            award_generation_enabled=old_adv.get("award_generation_enabled", False) if "award_generation_enabled" in old_adv else data.get("award_generation_enabled", False),
+            language=old_adv.get("language") or data.get("language"),
+            origin_id=origin_id,
+            is_adventure_generator=old_adv.get("is_adventure_generator", False),
+            is_ready=True,
+            creation_status="Ready"
+        )
+
+        db.add(new_template)
+        await db.flush()
+
+        await WorldGenerator.apply_manifest(db, new_template.id, data, user=user)
+
+        # Imported session bundles should not enter generation polling state.
+        new_template.is_ready = True
+        new_template.creation_status = "Ready"
+        new_template.creation_error = None
+
+        old_state = data.get("game_state") or data.get("session_state")
+        old_avatar = data.get("avatar")
+        if old_state and old_avatar:
+            new_avatar = Avatar(
+                user_id=user.id, 
+                template_id=new_template.id, 
+                name=old_avatar["name"],
+                role=old_avatar.get("role"),
+                description=old_avatar.get("description"),
+                profile_image=old_avatar.get("profile_image"),
+                hp=old_avatar["hp"], 
+                max_hp=old_avatar.get("max_hp", old_avatar["hp"]),
+                stamina=old_avatar["stamina"], 
+                max_stamina=old_avatar.get("max_stamina", old_avatar["stamina"]),
+                mana=old_avatar["mana"],
+                max_mana=old_avatar.get("max_mana", old_avatar["mana"]),
+                strength=old_avatar.get("strength", 10),
+                dexterity=old_avatar.get("dexterity", 10),
+                intelligence=old_avatar.get("intelligence", 10),
+                wisdom=old_avatar.get("wisdom", 10),
+                charisma=old_avatar.get("charisma", 10),
+                armor_class=old_avatar.get("armor_class", 10),
+                exp=old_avatar.get("exp", 0),
+                goal=old_avatar.get("goal", ""),
+                character=old_avatar.get("character", ""),
+                stats=old_avatar["stats"], 
+                inventory=old_avatar["inventory"],
+                equipment=normalize_equipment_keys(old_avatar.get("equipment")),
+                status_effects=old_avatar.get("status_effects", [])
+            )
+            db.add(new_avatar)
+            await db.flush()
+
+            new_sess = GameSession(
+                id=generate_session_id(new_template.title or old_adv.get('title') or 'session'),
+                user_id=user.id,
+                avatar_id=new_avatar.id,
+                template_id=new_template.id,
+                adventure_title=new_template.title,
+                adventure_image_url=new_template.image_url
+            )
+            db.add(new_sess)
+            await db.flush()
+
+            restored_entity_states = old_state.get("entity_states", {})
+            if not isinstance(restored_entity_states, dict):
+                restored_entity_states = {}
+            restored_entity_states = deepcopy(restored_entity_states)
+            restored_entity_states.setdefault(
+                "__manifest_snapshot__",
+                {
+                    "adventure": {
+                        "id": new_template.id,
+                        "title": new_template.title,
+                        "version": new_template.version,
+                        "image_url": new_template.image_url,
+                        "strict_rules": new_template.strict_rules,
+                        "rule_enforcement_mode": new_template.rule_enforcement_mode,
+                        "time_per_turn": new_template.time_per_turn,
+                        "clock_enabled": new_template.clock_enabled,
+                        "time_system": new_template.time_system,
+                        "time_config": deepcopy(new_template.time_config or {}),
+                        "selected_tone": deepcopy(new_template.selected_tone or {}),
+                        "selected_image_styles": deepcopy(new_template.selected_image_styles or []),
+                        "quests": deepcopy(new_template.quests or []),
+                        "awards": deepcopy(new_template.awards or []),
+                        "plot": new_template.plot,
+                        "rules": new_template.rules,
+                        "intro_text": new_template.intro_text,
+                        "walkthrough": new_template.walkthrough,
+                        "completed_condition": new_template.completed_condition,
+                        "gameover_condition": new_template.gameover_condition,
+                        "tts_director_notes": new_template.tts_director_notes,
+                        "original_prompt": new_template.original_prompt,
+                        "allow_dynamic_items": new_template.allow_dynamic_items,
+                        "is_adventure_generator": new_template.is_adventure_generator,
+                    },
+                    "original_manifest": deepcopy(new_template.original_manifest or {}),
+                },
+            )
+
+            db.add(SessionState(
+                session_id=new_sess.id,
+                current_scene_id=old_state.get("scene_id") or old_state.get("current_scene_id") or "START",
+                in_game_time=old_state.get("in_game_time", 0),
+                inventory=old_state.get("inventory", []),
+                entity_states=restored_entity_states,
+                exit_states=old_state.get("exit_states", {}),
+                discovered_scenes=old_state.get("discovered_scenes", [])
+            ))
+
+        await db.commit()
+        # Ensure thumbnails are generated for imported assets
+        from backend.engine.media_engine import MediaEngine
+        await MediaEngine.ensure_thumbnails(new_template.id)
+        return True
+
+    @staticmethod
+    async def _import_blueprint(
+        db: AsyncSession,
+        payload: dict[str, Any],
+        owner_id: Optional[str],
+        user: Any,
+        origin_id: Optional[str],
+    ) -> bool:
+        """Import a plain .adv blueprint manifest."""
+        manifest = payload.get("original_manifest") or payload.get("manifest") or payload
+        adv_meta = payload.get("adventure") or payload
+
+        enforcement_mode = adv_meta.get("rule_enforcement_mode") or manifest.get("rule_enforcement_mode") or "rpg"
+        is_strict = adv_meta.get("strict_rules") if "strict_rules" in adv_meta else (manifest.get("strict_rules") if "strict_rules" in manifest else (enforcement_mode != "chat"))
+
+        new_template = AdventureTemplate(
+            id=generate_adventure_id(adv_meta.get("title") or manifest.get("title") or "Imported Blueprint"),
+            owner_id=owner_id,
+            title=adv_meta.get("title") or manifest.get("title") or "Imported Blueprint",
+            teaser=adv_meta.get("teaser") or manifest.get("teaser"),
+            version=adv_meta.get("version") or manifest.get("version"),
+            creator=adv_meta.get("creator") or manifest.get("creator"),
+            copyright=adv_meta.get("copyright") or manifest.get("copyright"),
+            license=adv_meta.get("license") or manifest.get("license"),
+            license_url=_resolve_license_url(
+                adv_meta.get("license_url") or manifest.get("license_url"),
+                adv_meta.get("license") or manifest.get("license"),
+            ),
+            original_prompt=adv_meta.get("original_prompt") or adv_meta.get("context") or manifest.get("description") or "Restored from blueprint.",
+            image_url=adv_meta.get("image_url") or manifest.get("image_url"),
+            strict_rules=is_strict,
+            rule_enforcement_mode=enforcement_mode,
+            time_per_turn=adv_meta.get("time_per_turn", 5),
+            pacing_minutes=adv_meta.get("pacing_minutes", 5),
+            max_time_per_turn=adv_meta.get("max_time_per_turn") or manifest.get("max_time_per_turn"),
+            max_memory_turns=adv_meta.get("max_memory_turns") or manifest.get("max_memory_turns") or 10,
+            clock_enabled=adv_meta.get("clock_enabled", False),
+            selected_image_styles=adv_meta.get("selected_image_styles") or manifest.get("selected_image_styles", []),
+            selected_tone=adv_meta.get("selected_tone") or manifest.get("selected_tone"),
+            quests=adv_meta.get("quests") or manifest.get("quests") or [],
+            awards=adv_meta.get("awards") or manifest.get("awards") or [],
+            original_manifest=manifest,
+            plot=adv_meta.get("plot") or manifest.get("plot"),
+            rules=adv_meta.get("rules") or manifest.get("rules"),
+            intro_text=adv_meta.get("intro_text") or manifest.get("intro_text"),
+            walkthrough=adv_meta.get("walkthrough") or manifest.get("walkthrough"),
+            completed_condition=adv_meta.get("completed_condition") or manifest.get("completed_condition"),
+            gameover_condition=adv_meta.get("gameover_condition") or manifest.get("gameover_condition"),
+            completed_guard_expression=adv_meta.get("completed_guard_expression") or manifest.get("completed_guard_expression"),
+            gameover_guard_expression=adv_meta.get("gameover_guard_expression") or manifest.get("gameover_guard_expression"),
+            tts_director_notes=adv_meta.get("tts_director_notes") or manifest.get("tts_director_notes"),
+            starting_timestamp=adv_meta.get("starting_timestamp") or manifest.get("starting_timestamp", 0),
+            time_system=adv_meta.get("time_system") or manifest.get("time_system", "calendar"),
+            time_config=adv_meta.get("time_config") or manifest.get("time_config"),
+            allow_dynamic_items=adv_meta.get("allow_dynamic_items", False) if "allow_dynamic_items" in adv_meta else (manifest.get("allow_dynamic_items", False)),
+            can_damage_npcs=adv_meta.get("can_damage_npcs", True) if "can_damage_npcs" in adv_meta else (manifest.get("can_damage_npcs", True)),
+            npcs_can_damage_protagonist=adv_meta.get("npcs_can_damage_protagonist", True) if "npcs_can_damage_protagonist" in adv_meta else (manifest.get("npcs_can_damage_protagonist", True)),
+            cover_source_adventure_id=adv_meta.get("cover_source_adventure_id") or manifest.get("cover_source_adventure_id"),
+            cover_source_adventure_name=adv_meta.get("cover_source_adventure_name") or manifest.get("cover_source_adventure_name"),
+            cover_similarity_percent=(
+                adv_meta.get("cover_similarity_percent")
+                if "cover_similarity_percent" in adv_meta
+                else manifest.get("cover_similarity_percent", 50)
+            ),
+            allow_reuse_source_assets=adv_meta.get("allow_reuse_source_assets", True) if "allow_reuse_source_assets" in adv_meta else manifest.get("allow_reuse_source_assets", True),
+            min_scenes=adv_meta.get("min_scenes") if adv_meta.get("min_scenes") is not None else manifest.get("min_scenes"),
+            max_scenes=adv_meta.get("max_scenes") if adv_meta.get("max_scenes") is not None else manifest.get("max_scenes"),
+            min_items=adv_meta.get("min_items") if adv_meta.get("min_items") is not None else manifest.get("min_items"),
+            max_items=adv_meta.get("max_items") if adv_meta.get("max_items") is not None else manifest.get("max_items"),
+            container_generation_enabled=adv_meta.get("container_generation_enabled", True) if "container_generation_enabled" in adv_meta else manifest.get("container_generation_enabled", True),
+            scripts_generation_enabled=adv_meta.get("scripts_generation_enabled", False) if "scripts_generation_enabled" in adv_meta else manifest.get("scripts_generation_enabled", False),
+            min_containers=adv_meta.get("min_containers") if adv_meta.get("min_containers") is not None else manifest.get("min_containers"),
+            max_containers=adv_meta.get("max_containers") if adv_meta.get("max_containers") is not None else manifest.get("max_containers"),
+            text_log_generation_enabled=adv_meta.get("text_log_generation_enabled", True) if "text_log_generation_enabled" in adv_meta else manifest.get("text_log_generation_enabled", True),
+            min_text_logs=adv_meta.get("min_text_logs") if adv_meta.get("min_text_logs") is not None else manifest.get("min_text_logs"),
+            max_text_logs=adv_meta.get("max_text_logs") if adv_meta.get("max_text_logs") is not None else manifest.get("max_text_logs"),
+            min_quests=adv_meta.get("min_quests") if adv_meta.get("min_quests") is not None else manifest.get("min_quests"),
+            max_quests=adv_meta.get("max_quests") if adv_meta.get("max_quests") is not None else manifest.get("max_quests"),
+            quest_generation_enabled=adv_meta.get("quest_generation_enabled", True) if "quest_generation_enabled" in adv_meta else manifest.get("quest_generation_enabled", True),
+            min_awards=adv_meta.get("min_awards") if adv_meta.get("min_awards") is not None else manifest.get("min_awards"),
+            max_awards=adv_meta.get("max_awards") if adv_meta.get("max_awards") is not None else manifest.get("max_awards"),
+            award_generation_enabled=adv_meta.get("award_generation_enabled", False) if "award_generation_enabled" in adv_meta else manifest.get("award_generation_enabled", False),
+            language=adv_meta.get("language") or manifest.get("language"),
+            origin_id=origin_id,
+            is_adventure_generator=adv_meta.get("is_adventure_generator", False),
+            is_ready=True,
+            creation_status="Ready"
+        )
+
+        db.add(new_template)
+        await db.flush()
+
+        if not new_template.image_url:
+            from backend.engine.media_engine import MediaEngine
+            new_template.image_url = await MediaEngine.generate_placeholder(
+                new_template.id, new_template.title, os.path.join(settings.DATA_DIR, "adventures", "library", new_template.id),
+                category="COVER"
+            )
+            await db.flush()
+
+
+        # Prepare manifest for apply_manifest to ensure protagonist has starting items
+        if "protagonist" in manifest:
+            p = manifest["protagonist"]
+            p.setdefault("starting_inventory", p.get("inventory", []))
+            p.setdefault("starting_equipment", p.get("equipment", {}))
+
+        default_scene_id = manifest.get("scenes", [{}])[0].get("id") if manifest.get("scenes") else "START"
+        fill_start_scene_ids(manifest.get("npcs", []), default_scene_id, ("current_scene_id", "scene_id"))
+        fill_start_scene_ids(manifest.get("objects", []), default_scene_id, ("current_scene_id", "scene_id"))
+
+        await WorldGenerator.apply_manifest(db, new_template.id, manifest, user=user)
+
+        # Imports populate world data directly; mark template as fully ready.
+        new_template.is_ready = True
+        new_template.creation_status = "Ready"
+        new_template.creation_error = None
+        await db.commit()
+        # Ensure thumbnails are generated for imported assets
+        from backend.engine.media_engine import MediaEngine
+        await MediaEngine.ensure_thumbnails(new_template.id)
+        return True

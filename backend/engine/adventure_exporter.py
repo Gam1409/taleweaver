@@ -322,6 +322,217 @@ def _serialize_world_entity(entity: WorldEntity) -> dict[str, Any]:
     return filtered
 
 
+def _normalize_loadout_item(item: Any) -> str | None:
+    if isinstance(item, dict):
+        return item.get("id")
+    return item
+
+
+def _normalize_avatar_loadout(
+    avatar: Avatar, entities: list[WorldEntity]
+) -> tuple[list[str], dict[str, str]]:
+    """Normalize legacy avatar inventory/equipment to ID references for the manifest.
+
+    NOTE: This must NOT mutate the database — exporting is a read-only operation.
+    Mutating during export causes "database is locked" errors on SQLite when
+    background tasks (e.g. world generation) hold a write lock. We compute
+    the cleaned values locally and use them when building the manifest.
+    """
+    cleaned_inventory = [
+        item_id
+        for item_id in (_normalize_loadout_item(item) for item in avatar.inventory or [])
+        if item_id
+    ]
+    cleaned_equipment: dict[str, str] = {}
+    for slot, item in (avatar.equipment or {}).items():
+        item_id = _normalize_loadout_item(item)
+        if item_id:
+            cleaned_equipment[slot] = item_id
+
+    # Priority deduplication: Scene > Inventory > Equipped
+    items_in_scene = {
+        ent.id
+        for ent in entities
+        if ent.entity_type == "OBJECT"
+        and ent.current_scene_id
+        and ent.current_scene_id != "INVENTORY"
+    }
+
+    final_inventory: list[str] = []
+    for item_id in cleaned_inventory:
+        if item_id in items_in_scene or item_id in final_inventory:
+            continue
+        final_inventory.append(item_id)
+
+    final_equipment: dict[str, str] = {}
+    for slot, item_id in cleaned_equipment.items():
+        if item_id in items_in_scene or item_id in final_inventory:
+            continue
+        if item_id in final_equipment.values():
+            continue
+        final_equipment[slot] = item_id
+
+    return final_inventory, final_equipment
+
+
+def _record_to_dict(obj: Any) -> dict[str, Any] | None:
+    if not obj:
+        return None
+    data = {
+        c.name: getattr(obj, c.name)
+        for c in obj.__table__.columns
+        if c.name not in _SYSTEM_ENTITY_KEYS
+    }
+    if isinstance(obj, WorldScene):
+        decor = data.get("decorative_objects")
+        if not isinstance(decor, list):
+            decor = []
+        data["decorative_objects"] = [
+            str(d) for d in decor if isinstance(d, (str, int, float))
+        ]
+    if isinstance(obj, WorldExit):
+        exit_type = str(getattr(obj, "exit_type", "one_way") or "one_way").strip().lower()
+        data["exit_type"] = exit_type
+        data["is_bidirectional"] = exit_type == "bidirectional"
+    return data
+
+
+def _build_adventure_section(adv: AdventureTemplate) -> dict[str, Any]:
+    return {
+        "title": adv.title,
+        "teaser": adv.teaser,
+        "version": adv.version,
+        "creator": adv.creator,
+        "copyright": adv.copyright,
+        "license": adv.license,
+        "license_url": adv.license_url,
+        "language": adv.language,
+        "original_prompt": adv.original_prompt,
+        "image_url": adv.image_url,
+        "rule_enforcement_mode": adv.rule_enforcement_mode,
+        "time_per_turn": adv.time_per_turn,
+        "pacing_minutes": adv.pacing_minutes,
+        "max_time_per_turn": adv.max_time_per_turn,
+        "max_memory_turns": getattr(adv, "max_memory_turns", 10) or 10,
+        "clock_enabled": adv.clock_enabled,
+        "selected_tone": adv.selected_tone,
+        "selected_image_styles": adv.selected_image_styles,
+        "generate_scene_images": adv.generate_scene_images,
+        "generate_npc_images": adv.generate_npc_images,
+        "generate_item_images": adv.generate_item_images,
+        "min_scenes": adv.min_scenes,
+        "max_scenes": adv.max_scenes,
+        "min_items": adv.min_items,
+        "max_items": adv.max_items,
+        "container_generation_enabled": adv.container_generation_enabled,
+        "scripts_generation_enabled": getattr(adv, "scripts_generation_enabled", False),
+        "min_containers": adv.min_containers,
+        "max_containers": adv.max_containers,
+        "text_log_generation_enabled": adv.text_log_generation_enabled,
+        "min_text_logs": adv.min_text_logs,
+        "max_text_logs": adv.max_text_logs,
+        "quest_generation_enabled": adv.quest_generation_enabled,
+        "min_quests": adv.min_quests,
+        "max_quests": adv.max_quests,
+        "award_generation_enabled": adv.award_generation_enabled,
+        "min_awards": adv.min_awards,
+        "max_awards": adv.max_awards,
+        "plot": adv.plot,
+        "rules": adv.rules,
+        "intro_text": adv.intro_text,
+        "walkthrough": adv.walkthrough,
+        "completed_condition": adv.completed_condition,
+        "gameover_condition": adv.gameover_condition,
+        "completed_guard_expression": adv.completed_guard_expression,
+        "gameover_guard_expression": adv.gameover_guard_expression,
+        "tts_director_notes": adv.tts_director_notes,
+        "starting_timestamp": adv.starting_timestamp,
+        "is_adventure_generator": adv.is_adventure_generator,
+        "time_system": adv.time_system,
+        "time_config": adv.time_config,
+        "game_over_rules": adv.game_over_rules,
+        "allow_dynamic_items": adv.allow_dynamic_items,
+        "can_damage_npcs": adv.can_damage_npcs,
+        "npcs_can_damage_protagonist": adv.npcs_can_damage_protagonist,
+        "cover_source_adventure_id": adv.cover_source_adventure_id,
+        "cover_source_adventure_name": adv.cover_source_adventure_name,
+        "cover_similarity_percent": adv.cover_similarity_percent,
+        "allow_reuse_source_assets": adv.allow_reuse_source_assets,
+    }
+
+
+def _build_protagonist_section(
+    avatar: Avatar | None, inventory: list[str], equipment: dict[str, str]
+) -> dict[str, Any]:
+    return {
+        "name": avatar.name if avatar else "Hero",
+        "role": avatar.role if avatar else "Protagonist",
+        "description": avatar.description if avatar else "",
+        "goal": avatar.goal if avatar else "",
+        "character": avatar.character if avatar else "",
+        "profile_image": avatar.profile_image if avatar else None,
+        "hp": avatar.hp if avatar else 200,
+        "max_hp": avatar.max_hp if avatar else 200,
+        "stamina": avatar.stamina if avatar else 200,
+        "max_stamina": avatar.max_stamina if avatar else 200,
+        "mana": avatar.mana if avatar else 200,
+        "max_mana": avatar.max_mana if avatar else 200,
+        "exp": avatar.exp if avatar else 0,
+        "strength": avatar.strength if avatar else 10,
+        "dexterity": avatar.dexterity if avatar else 10,
+        "intelligence": avatar.intelligence if avatar else 10,
+        "wisdom": avatar.wisdom if avatar else 10,
+        "charisma": avatar.charisma if avatar else 10,
+        "armor_class": avatar.armor_class if avatar else 10,
+        "stats": avatar.stats if avatar else {},
+        "status_effects": avatar.status_effects if avatar else [],
+        "starting_inventory": list(inventory) if avatar else [],
+        "starting_equipment": dict(equipment) if avatar else {},
+    }
+
+
+def _localize_asset_path(path: Any, adventure_dir: str, asset_mapping: dict[str, str]) -> Any:
+    """Map a /data/ URL to an assets/ zip path, recording the local file to bundle."""
+    if not path or not path.startswith("/data/"):
+        return path
+
+    local_full = data_url_to_local_path(path)
+    if not local_full:
+        logger.warning("Skipping unsafe asset path during ADZ export: %s", path)
+        return path
+
+    if os.path.exists(local_full):
+        fname = _safe_zip_asset_name(local_full)
+        zip_rel = f"assets/{fname}"
+        asset_mapping[local_full] = zip_rel
+        return zip_rel
+
+    # Fallback: search in adventure_dir if not found directly
+    # (handles cases where path might be different but file exists there)
+    fname = _safe_zip_asset_name(path)
+    for root, _dirs, files in os.walk(adventure_dir):
+        if fname in files:
+            local_full = _ensure_within_data_dir(os.path.join(root, fname))
+            zip_rel = f"assets/{fname}"
+            asset_mapping[local_full] = zip_rel
+            return zip_rel
+
+    return path
+
+
+def _localize_manifest_images(
+    manifest: dict[str, Any], adventure_dir: str, asset_mapping: dict[str, str]
+) -> None:
+    adventure = manifest["adventure"]
+    adventure["image_url"] = _localize_asset_path(adventure.get("image_url"), adventure_dir, asset_mapping)
+    if manifest["protagonist"]:
+        manifest["protagonist"]["profile_image"] = _localize_asset_path(
+            manifest["protagonist"].get("profile_image"), adventure_dir, asset_mapping
+        )
+    for record in [*manifest["scenes"], *manifest["npcs"], *manifest["objects"]]:
+        record["image_url"] = _localize_asset_path(record.get("image_url"), adventure_dir, asset_mapping)
+
+
 class AdventureExporter:
     @staticmethod
     async def build_full_manifest(db: AsyncSession, template_id: str) -> dict[str, Any]:
@@ -355,170 +566,18 @@ class AdventureExporter:
         )
         avatar = avatar_res.scalars().first()
 
-        # Normalize legacy avatar inventory/equipment to ID references for the manifest.
-        # NOTE: This must NOT mutate the database — exporting is a read-only operation.
-        # Mutating during export causes "database is locked" errors on SQLite when
-        # background tasks (e.g. world generation) hold a write lock. We compute
-        # the cleaned values locally and use them when building the manifest below.
-        local_final_inventory: list[str] = []
-        local_final_equipment: dict[str, str] = {}
-        if avatar:
-
-            def _normalize_item(item: Any) -> str | None:
-                if isinstance(item, dict):
-                    return item.get("id")
-                return item
-
-            cleaned_inventory: list[str] = []
-            for item in avatar.inventory or []:
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_inventory.append(item_id)
-
-            cleaned_equipment: dict[str, str] = {}
-            for slot, item in (avatar.equipment or {}).items():
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_equipment[slot] = item_id
-
-            # Priority deduplication: Scene > Inventory > Equipped
-            items_in_scene = set()
-            for ent in entities:
-                if (
-                    ent.entity_type == "OBJECT"
-                    and ent.current_scene_id
-                    and ent.current_scene_id != "INVENTORY"
-                ):
-                    items_in_scene.add(ent.id)
-
-            for item_id in cleaned_inventory:
-                if item_id in items_in_scene:
-                    continue
-                if item_id not in local_final_inventory:
-                    local_final_inventory.append(item_id)
-
-            for slot, item_id in cleaned_equipment.items():
-                if item_id in items_in_scene:
-                    continue
-                if item_id in local_final_inventory:
-                    continue
-                if item_id in local_final_equipment.values():
-                    continue
-                local_final_equipment[slot] = item_id
-
-        def to_dict(obj):
-            if not obj:
-                return None
-            data = {
-                c.name: getattr(obj, c.name)
-                for c in obj.__table__.columns
-                if c.name not in _SYSTEM_ENTITY_KEYS
-            }
-            if isinstance(obj, WorldScene):
-                decor = data.get("decorative_objects")
-                if not isinstance(decor, list):
-                    decor = []
-                data["decorative_objects"] = [
-                    str(d) for d in decor if isinstance(d, (str, int, float))
-                ]
-            if isinstance(obj, WorldExit):
-                exit_type = str(getattr(obj, "exit_type", "one_way") or "one_way").strip().lower()
-                data["exit_type"] = exit_type
-                data["is_bidirectional"] = exit_type == "bidirectional"
-            return data
+        inventory, equipment = (
+            _normalize_avatar_loadout(avatar, entities) if avatar else ([], {})
+        )
 
         # Build standard manifest structure according to docs/specs/adventure_format.md
         manifest = {
             "format": "TaleWeaver",
             "version": CURRENT_VERSION,
-            "adventure": {
-                "title": adv.title,
-                "teaser": adv.teaser,
-                "version": adv.version,
-                "creator": adv.creator,
-                "copyright": adv.copyright,
-                "license": adv.license,
-                "license_url": adv.license_url,
-                "language": adv.language,
-                "original_prompt": adv.original_prompt,
-                "image_url": adv.image_url,
-                "rule_enforcement_mode": adv.rule_enforcement_mode,
-                "time_per_turn": adv.time_per_turn,
-                "pacing_minutes": adv.pacing_minutes,
-                "max_time_per_turn": adv.max_time_per_turn,
-                "max_memory_turns": getattr(adv, "max_memory_turns", 10) or 10,
-                "clock_enabled": adv.clock_enabled,
-                "selected_tone": adv.selected_tone,
-                "selected_image_styles": adv.selected_image_styles,
-                "generate_scene_images": adv.generate_scene_images,
-                "generate_npc_images": adv.generate_npc_images,
-                "generate_item_images": adv.generate_item_images,
-                "min_scenes": adv.min_scenes,
-                "max_scenes": adv.max_scenes,
-                "min_items": adv.min_items,
-                "max_items": adv.max_items,
-                "container_generation_enabled": adv.container_generation_enabled,
-                "scripts_generation_enabled": getattr(adv, "scripts_generation_enabled", False),
-                "min_containers": adv.min_containers,
-                "max_containers": adv.max_containers,
-                "text_log_generation_enabled": adv.text_log_generation_enabled,
-                "min_text_logs": adv.min_text_logs,
-                "max_text_logs": adv.max_text_logs,
-                "quest_generation_enabled": adv.quest_generation_enabled,
-                "min_quests": adv.min_quests,
-                "max_quests": adv.max_quests,
-                "award_generation_enabled": adv.award_generation_enabled,
-                "min_awards": adv.min_awards,
-                "max_awards": adv.max_awards,
-                "plot": adv.plot,
-                "rules": adv.rules,
-                "intro_text": adv.intro_text,
-                "walkthrough": adv.walkthrough,
-                "completed_condition": adv.completed_condition,
-                "gameover_condition": adv.gameover_condition,
-                "completed_guard_expression": adv.completed_guard_expression,
-                "gameover_guard_expression": adv.gameover_guard_expression,
-                "tts_director_notes": adv.tts_director_notes,
-                "starting_timestamp": adv.starting_timestamp,
-                "is_adventure_generator": adv.is_adventure_generator,
-                "time_system": adv.time_system,
-                "time_config": adv.time_config,
-                "game_over_rules": adv.game_over_rules,
-                "allow_dynamic_items": adv.allow_dynamic_items,
-                "can_damage_npcs": adv.can_damage_npcs,
-                "npcs_can_damage_protagonist": adv.npcs_can_damage_protagonist,
-                "cover_source_adventure_id": adv.cover_source_adventure_id,
-                "cover_source_adventure_name": adv.cover_source_adventure_name,
-                "cover_similarity_percent": adv.cover_similarity_percent,
-                "allow_reuse_source_assets": adv.allow_reuse_source_assets,
-            },
-            "protagonist": {
-                "name": avatar.name if avatar else "Hero",
-                "role": avatar.role if avatar else "Protagonist",
-                "description": avatar.description if avatar else "",
-                "goal": avatar.goal if avatar else "",
-                "character": avatar.character if avatar else "",
-                "profile_image": avatar.profile_image if avatar else None,
-                "hp": avatar.hp if avatar else 200,
-                "max_hp": avatar.max_hp if avatar else 200,
-                "stamina": avatar.stamina if avatar else 200,
-                "max_stamina": avatar.max_stamina if avatar else 200,
-                "mana": avatar.mana if avatar else 200,
-                "max_mana": avatar.max_mana if avatar else 200,
-                "exp": avatar.exp if avatar else 0,
-                "strength": avatar.strength if avatar else 10,
-                "dexterity": avatar.dexterity if avatar else 10,
-                "intelligence": avatar.intelligence if avatar else 10,
-                "wisdom": avatar.wisdom if avatar else 10,
-                "charisma": avatar.charisma if avatar else 10,
-                "armor_class": avatar.armor_class if avatar else 10,
-                "stats": avatar.stats if avatar else {},
-                "status_effects": avatar.status_effects if avatar else [],
-                "starting_inventory": list(local_final_inventory) if avatar else [],
-                "starting_equipment": dict(local_final_equipment) if avatar else {},
-            },
-            "scenes": [to_dict(s) for s in scenes],
-            "exits": [to_dict(e) for e in exits],
+            "adventure": _build_adventure_section(adv),
+            "protagonist": _build_protagonist_section(avatar, inventory, equipment),
+            "scenes": [_record_to_dict(s) for s in scenes],
+            "exits": [_record_to_dict(e) for e in exits],
             "npcs": [_serialize_world_entity(ent) for ent in entities if ent.entity_type == "NPC"],
             "objects": [
                 _serialize_world_entity(ent) for ent in entities if ent.entity_type == "OBJECT"
@@ -543,47 +602,9 @@ class AdventureExporter:
         if not os.path.exists(adventure_dir):
             # Legacy fallback for pre-migration adventures.
             adventure_dir = _safe_data_path("adventures", template_id)
-        asset_mapping = {}  # local_path -> zip_path
+        asset_mapping: dict[str, str] = {}  # local_path -> zip_path
 
-        def localize_path(path):
-            if not path or not path.startswith("/data/"):
-                return path
-
-            local_full = data_url_to_local_path(path)
-            if not local_full:
-                logger.warning("Skipping unsafe asset path during ADZ export: %s", path)
-                return path
-
-            if os.path.exists(local_full):
-                fname = _safe_zip_asset_name(local_full)
-                zip_rel = f"assets/{fname}"
-                asset_mapping[local_full] = zip_rel
-                return zip_rel
-
-            # Fallback: search in adventure_dir if not found directly
-            # (handles cases where path might be different but file exists there)
-            fname = _safe_zip_asset_name(path)
-            for root, _dirs, files in os.walk(adventure_dir):
-                if fname in files:
-                    local_full = _ensure_within_data_dir(os.path.join(root, fname))
-                    zip_rel = f"assets/{fname}"
-                    asset_mapping[local_full] = zip_rel
-                    return zip_rel
-
-            return path
-
-        # Localize all image fields
-        manifest["adventure"]["image_url"] = localize_path(manifest["adventure"].get("image_url"))
-        if manifest["protagonist"]:
-            manifest["protagonist"]["profile_image"] = localize_path(
-                manifest["protagonist"].get("profile_image")
-            )
-        for s in manifest["scenes"]:
-            s["image_url"] = localize_path(s.get("image_url"))
-        for n in manifest["npcs"]:
-            n["image_url"] = localize_path(n.get("image_url"))
-        for o in manifest["objects"]:
-            o["image_url"] = localize_path(o.get("image_url"))
+        _localize_manifest_images(manifest, adventure_dir, asset_mapping)
 
         # Create the ZIP
         zip_buffer = io.BytesIO()

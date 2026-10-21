@@ -6,14 +6,12 @@ import asyncio
 import base64
 import io
 import logging
-from typing import Optional
 import os
 import re
 import shutil
-import time
 import uuid
+from typing import Any, Optional
 from urllib.parse import urlsplit, urlunsplit
-from typing import Any
 
 import litellm
 import requests
@@ -23,16 +21,41 @@ from backend.core import prompts
 from backend.core.config import settings
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import build_bfl_payload, resolve_bfl_model_alias
+from backend.engine.image_generation_support import (
+    build_litellm_image_kwargs,
+    build_ollama_request,
+    build_openrouter_chat_kwargs,
+    build_openrouter_image_payload,
+    build_stable_diffusion_payload,
+    ensure_local_ollama_model,
+    extract_chat_image_payload,
+    extract_image_payload,
+    extract_openrouter_image,
+    inject_style_instruction,
+    is_chat_only_model_error,
+    is_moderation_error,
+    is_static_only_placeholder_category,
+    openrouter_headers,
+    placeholder_extension,
+    poll_bfl_sample_url,
+    post_openrouter_images,
+    resolve_color_theme,
+    resolve_required_api_key,
+    retry_openrouter_minimal,
+)
 from backend.utils.image_generator import (
-    ColorTheme,
     OrganicGradientStrategy,
     PlaceholderImageGenerator,
 )
 from backend.utils.path_security import (
     ensure_within_base_dir,
-    ensure_within_data_dir as ensure_within_data_dir_shared,
     local_path_to_data_url,
     sanitize_relative_segment,
+)
+from backend.utils.path_security import (
+    ensure_within_data_dir as ensure_within_data_dir_shared,
+)
+from backend.utils.path_security import (
     sanitize_path_component as sanitize_path_component_shared,
 )
 from backend.utils.svg_generator import SVGPlaceholderGenerator
@@ -168,11 +191,20 @@ def _resolve_output_dir(target_dir: str) -> str:
                 continue
             safe_part = _sanitize_path_component(part)
             if not safe_part:
-                raise ValueError("Invalid target directory.")
+                raise ValueError("Invalid target directory.") from None
             safe_parts.append(safe_part)
         if not safe_parts:
-            raise ValueError("Invalid target directory.")
+            raise ValueError("Invalid target directory.") from None
         return _safe_data_path(*safe_parts)
+
+
+def _resolve_image_target_dir(target_dir: Optional[str], adventure_id: Optional[str]) -> str:
+    """Default to the adventure library folder; otherwise validate the requested directory."""
+    if target_dir is not None:
+        return _resolve_output_dir(target_dir)
+    if adventure_id:
+        return _safe_data_path("adventures", "library", adventure_id)
+    return _safe_data_path("adventures", "library")
 
 
 def _write_binary_file(filepath: str, payload: bytes) -> None:
@@ -435,44 +467,10 @@ class MediaEngine:
             logger.error("BFL response did not include polling_url")
             return None
 
-        poll_deadline = time.monotonic() + 600.0
-        while time.monotonic() < poll_deadline:
-            poll_response = await asyncio.to_thread(
-                requests.get,
-                polling_url,
-                headers={"accept": "application/json", "x-key": api_key},
-                timeout=max(30, settings.VISUAL_TIMEOUT),
-            )
-            if poll_response.status_code != 200:
-                logger.error(
-                    "BFL polling failed. status=%s",
-                    poll_response.status_code,
-                )
-                return None
-
-            poll_body = poll_response.json()
-            status = str(poll_body.get("status") or "").lower()
-            logger.info("BFL polling status: %s", status)
-            if status == "ready":
-                result = poll_body.get("result") or {}
-                sample_url = result.get("sample")
-                if not sample_url:
-                    logger.error("BFL polling response missing result.sample")
-                    return None
-                return await MediaEngine._save_remote_image(sample_url, target_dir, filename)
-            
-            if "moderated" in status:
-                logger.warning("BFL generation moderated")
-                raise ValueError(f"BFL Image Generation blocked by safety filter: {status}")
-
-            if status in {"error", "failed", "expired", "task not found", "tasknotfound"}:
-                logger.error("BFL generation failed, expired or not found")
-                return None
-
-            await asyncio.sleep(2.0)
-
-        logger.error("BFL polling timed out after 600s")
-        return None
+        sample_url = await poll_bfl_sample_url(polling_url, api_key)
+        if not sample_url:
+            return None
+        return await MediaEngine._save_remote_image(sample_url, target_dir, filename)
 
     @staticmethod
     async def _generate_image_openrouter_direct(
@@ -488,111 +486,38 @@ class MediaEngine:
         image_format = provider_options.get("image_format", "jpeg")
         image_quality = provider_options.get("image_quality", 85)
 
-        clean_model = model
-        if clean_model.startswith("openrouter/"):
-            clean_model = clean_model[len("openrouter/"):]
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://taleweaver.local",
-            "X-Title": "TaleWeaver",
-        }
-
-        payload: dict[str, Any] = {
-            "model": clean_model,
-            "prompt": prompt,
-        }
-
-        width = provider_options.get("width")
-        height = provider_options.get("height")
-        if width and height:
-            payload["size"] = f"{width}x{height}"
-        elif provider_options.get("aspect_ratio"):
-            payload["aspect_ratio"] = provider_options["aspect_ratio"]
+        clean_model = model.removeprefix("openrouter/")
+        headers = openrouter_headers(api_key)
+        payload = build_openrouter_image_payload(clean_model, prompt, provider_options)
 
         logger.info(
             "Calling OpenRouter image endpoint (https://openrouter.ai/api/v1/images) for model %s",
             clean_model,
         )
+        response = await post_openrouter_images(headers, payload)
 
-        response = await asyncio.to_thread(
-            requests.post,
-            "https://openrouter.ai/api/v1/images",
-            headers=headers,
-            json=payload,
-            timeout=settings.VISUAL_TIMEOUT,
-        )
+        error_msg = ""
+        if response.status_code != 200:
+            response, error_msg = await retry_openrouter_minimal(response, headers, payload)
 
         if response.status_code != 200:
-            error_msg = f"HTTP {response.status_code}"
-            try:
-                err_data = response.json()
-                if isinstance(err_data, dict) and "error" in err_data:
-                    err_obj = err_data["error"]
-                    if isinstance(err_obj, dict) and "message" in err_obj:
-                        error_msg = err_obj["message"]
-                    elif isinstance(err_obj, str):
-                        error_msg = err_obj
-            except Exception:
-                error_msg = response.text[:300]
-
-            logger.warning("OpenRouter /api/v1/images endpoint returned error (%s): %s", response.status_code, error_msg)
-
-            # If parameter error with size/aspect_ratio, retry with minimal payload (model + prompt)
-            if response.status_code == 400 and ("size" in payload or "aspect_ratio" in payload):
-                logger.info("Retrying OpenRouter /api/v1/images with minimal payload due to parameter rejection: %s", error_msg)
-                retry_payload = {"model": clean_model, "prompt": prompt}
-                retry_resp = await asyncio.to_thread(
-                    requests.post,
-                    "https://openrouter.ai/api/v1/images",
-                    headers=headers,
-                    json=retry_payload,
-                    timeout=settings.VISUAL_TIMEOUT,
-                )
-                if retry_resp.status_code == 200:
-                    response = retry_resp
-                else:
-                    try:
-                        r_err = retry_resp.json().get("error", {})
-                        error_msg = r_err.get("message", retry_resp.text[:300]) if isinstance(r_err, dict) else str(r_err)
-                    except Exception:
-                        error_msg = retry_resp.text[:300]
-
-            if response.status_code != 200:
-                # If OpenRouter explicitly informs that it's a chat model or cannot be used with /images, try chat fallback
-                if "chat/completions" in error_msg.lower() or "modalities" in error_msg.lower():
-                    logger.info("Falling back to chat/completions with modalities=['image'] for %s", clean_model)
-                    return await MediaEngine._generate_image_openrouter_chat_fallback(
-                        prompt=prompt,
-                        model=model,
-                        api_key=api_key,
-                        target_dir=target_dir,
-                        filename=filename,
-                        provider_options=provider_options,
-                    )
-
+            # If OpenRouter explicitly informs that it's a chat model or cannot be used with /images, try chat fallback
+            if not is_chat_only_model_error(error_msg):
                 raise RuntimeError(f"OpenRouter image generation failed: {error_msg}")
+            logger.info("Falling back to chat/completions with modalities=['image'] for %s", clean_model)
+            return await MediaEngine._generate_image_openrouter_chat_fallback(
+                prompt=prompt,
+                model=model,
+                api_key=api_key,
+                target_dir=target_dir,
+                filename=filename,
+                provider_options=provider_options,
+            )
 
-        result = response.json()
-        data_list = result.get("data", [])
-        if not data_list or not isinstance(data_list, list):
-            logger.error("OpenRouter response missing 'data' list: %s", result)
-            raise RuntimeError("OpenRouter response did not contain image data.")
-
-        first_img = data_list[0]
-        if isinstance(first_img, dict):
-            b64_json = first_img.get("b64_json")
-            if b64_json:
-                return await MediaEngine._save_b64_image(b64_json, target_dir, filename, image_format, image_quality)
-
-            image_url = first_img.get("url")
-            if image_url:
-                if image_url.startswith("data:image/"):
-                    return await MediaEngine._save_b64_image(image_url, target_dir, filename, image_format, image_quality)
-                return await MediaEngine._save_remote_image(image_url, target_dir, filename, image_format, image_quality)
-
-        raise RuntimeError("No valid image data or URL found in OpenRouter response.")
+        image_url, b64_data = extract_openrouter_image(response.json())
+        if image_url:
+            return await MediaEngine._save_remote_image(image_url, target_dir, filename, image_format, image_quality)
+        return await MediaEngine._save_b64_image(b64_data, target_dir, filename, image_format, image_quality)
 
     @staticmethod
     async def _generate_image_openrouter_chat_fallback(
@@ -605,80 +530,12 @@ class MediaEngine:
     ) -> Optional[str]:
         """Fallback image generation using OpenRouter /v1/chat/completions with modalities=['image']."""
         provider_options = provider_options or {}
-        kwargs: dict[str, Any] = {
-            "model": f"openrouter/{model}" if not model.startswith("openrouter/") else model,
-            "messages": [{"role": "user", "content": prompt}],
-            "modalities": ["image"],
-            "api_base": "https://openrouter.ai/api/v1",
-        }
-        if api_key:
-            kwargs["api_key"] = api_key
-
-        image_config = {}
-        if provider_options.get("width") and provider_options.get("height"):
-            image_config["image_size"] = f"{provider_options['width']}x{provider_options['height']}"
-        if image_config:
-            kwargs["image_config"] = image_config
+        kwargs = build_openrouter_chat_kwargs(model, prompt, api_key, provider_options)
 
         response = await asyncio.to_thread(MediaEngine._get_litellm().completion, **kwargs)
         logger.info("OpenRouter completion finished")
 
-        image_url = None
-        b64_data = None
-
-        message = response.choices[0].message
-        content = getattr(message, "content", "")
-        images_field = getattr(message, "images", [])
-
-        if isinstance(images_field, list) and len(images_field) > 0:
-            for img_item in images_field:
-                if isinstance(img_item, dict):
-                    img_url_obj = img_item.get("image_url") or img_item
-                    if isinstance(img_url_obj, dict):
-                        url_val = img_url_obj.get("url")
-                        if url_val:
-                            if url_val.startswith("data:image/"):
-                                b64_data = url_val
-                            else:
-                                image_url = url_val
-                            break
-
-        if not image_url and not b64_data and isinstance(content, list):
-            for item in content:
-                if hasattr(item, "model_dump"):
-                    item_dict = item.model_dump()
-                elif hasattr(item, "dict"):
-                    item_dict = item.dict()
-                elif isinstance(item, dict):
-                    item_dict = item
-                else:
-                    item_dict = getattr(item, "__dict__", {})
-
-                if item_dict.get("type") == "image_url":
-                    image_obj = item_dict.get("image_url", {})
-                    if isinstance(image_obj, dict):
-                        url_val = image_obj.get("url")
-                    else:
-                        url_val = getattr(image_obj, "url", None)
-
-                    if not url_val:
-                        url_val = item_dict.get("url")
-
-                    if url_val:
-                        if url_val.startswith("data:image/"):
-                            b64_data = url_val
-                        else:
-                            image_url = url_val
-                        break
-
-        if not image_url and not b64_data:
-            url_match = re.search(r'https?://[^\s)"\']+\.(?:jpg|jpeg|png|webp)', str(content))
-            if url_match:
-                image_url = url_match.group(0)
-            elif "data:image/" in str(content):
-                data_match = re.search(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]+', str(content))
-                if data_match:
-                    b64_data = data_match.group(0)
+        image_url, b64_data = extract_chat_image_payload(response.choices[0].message)
 
         image_format = provider_options.get("image_format", "jpeg")
         image_quality = provider_options.get("image_quality", 85)
@@ -712,9 +569,9 @@ class MediaEngine:
 
     @staticmethod
     async def generate_image(
-        prompt: str, 
-        model: str, 
-        api_key: Optional[str], 
+        prompt: str,
+        model: str,
+        api_key: Optional[str],
         provider: str = "openai",
         adventure_id: Optional[str] = None,
         target_dir: Optional[str] = None,
@@ -726,51 +583,21 @@ class MediaEngine:
         provider_key = (provider or "openai").lower()
         if not prompt or not model:
             raise ValueError("Missing prompt or model for image generation.")
-        
+
         # Inject style instruction if provided
-        if style_instruction:
-            # Ensure we don't have multiple dots
-            prompt = prompt.strip()
-            while prompt.endswith("."):
-                prompt = prompt[:-1].strip()
-            prompt += f". Style: {style_instruction}."
-            logger.info("Style instruction injected")
+        prompt = inject_style_instruction(prompt, style_instruction)
 
         prompt = MediaEngine._apply_no_text_instruction(prompt)
         logger.info("Image prompt prepared (%s)", _safe_prompt_summary(prompt))
 
-        if provider_key not in ("ollama", "stable_diffusion") and not api_key:
-            # Try to resolve from ENV if not passed
-            api_key = settings.get_env_api_key(provider_key)
-            if not api_key:
-                raise ValueError(f"Missing API key for image generation provider '{provider_key}'.")
+        api_key = resolve_required_api_key(provider_key, api_key)
 
         if provider_key == "ollama":
             logger.info("Generating image with local Ollama (%s)", _safe_prompt_summary(prompt))
-            remote_prefixes = (
-                "openai/",
-                "openrouter/",
-                "anthropic/",
-                "google/",
-                "gemini/",
-                "azure/",
-                "bedrock/",
-                "cohere/",
-            )
-            if model.startswith(remote_prefixes):
-                raise ValueError(
-                    f"Provider is 'ollama' but image model '{model}' looks like a remote/cloud model. "
-                    "Configure a local Ollama image model (for example: x/flux2-klein)."
-                )
+            ensure_local_ollama_model(model)
 
         # Default target dir if not provided
-        if target_dir is None:
-            if adventure_id:
-                target_dir = _safe_data_path("adventures", "library", adventure_id)
-            else:
-                target_dir = _safe_data_path("adventures", "library")
-        else:
-            target_dir = _resolve_output_dir(target_dir)
+        target_dir = _resolve_image_target_dir(target_dir, adventure_id)
 
         logger.info(
             "Generating image with model %s (provider: %s, prompt_%s)",
@@ -778,12 +605,17 @@ class MediaEngine:
             provider_key,
             _safe_prompt_summary(prompt),
         )
-        
+
+        provider_options = provider_options or {}
+        direct_generators = {
+            "openrouter": MediaEngine._generate_image_openrouter_direct,
+            "black_forest_labs": MediaEngine._generate_image_black_forest_labs_direct,
+            "stable_diffusion": MediaEngine._generate_image_stable_diffusion_from_options,
+        }
         try:
-            provider_options = provider_options or {}
-
-            if provider_key == "openrouter":
-                return await MediaEngine._generate_image_openrouter_direct(
+            direct_generator = direct_generators.get(provider_key)
+            if direct_generator:
+                return await direct_generator(
                     prompt=prompt,
                     model=model,
                     api_key=api_key,
@@ -791,133 +623,22 @@ class MediaEngine:
                     filename=filename,
                     provider_options=provider_options,
                 )
-
-            if provider_key == "black_forest_labs":
-                return await MediaEngine._generate_image_black_forest_labs_direct(
-                    prompt=prompt,
-                    model=model,
-                    api_key=api_key,
-                    target_dir=target_dir,
-                    filename=filename,
-                    provider_options=provider_options,
-                )
-
-            if provider_key == "stable_diffusion":
-                sd_url = (provider_options.get("stable_diffusion_url") or "http://127.0.0.1:7860")
-                image_format = provider_options.get("image_format", "jpeg")
-                image_quality = provider_options.get("image_quality", 85)
-                return await MediaEngine._generate_image_stable_diffusion_direct(
-                    prompt=prompt,
-                    model=model,
-                    stable_diffusion_url=sd_url,
-                    target_dir=target_dir,
-                    filename=filename,
-                    width=provider_options.get("width"),
-                    height=provider_options.get("height"),
-                    steps=provider_options.get("steps") if provider_options.get("steps") is not None else 4,
-                    cfg_scale=provider_options.get("cfg_scale") if provider_options.get("cfg_scale") is not None else 1.0,
-                    seed=provider_options.get("seed"),
-                    negative_prompt=provider_options.get("negative_prompt"),
-                    image_format=image_format,
-                    image_quality=image_quality,
-                    sampler_name=provider_options.get("sampler_name") or "Euler",
-                    scheduler=provider_options.get("scheduler") or "Normal",
-                )
-
-            kwargs: dict[str, Any] = {
-                "prompt": prompt,
-                "model": model,
-                "custom_llm_provider": provider_key,
-            }
-            if api_key:
-                kwargs["api_key"] = api_key
-
-            # Pass common optional generation controls through when available.
-            optional_fields = ("width", "height", "steps", "seed", "negative_prompt")
-            for field in optional_fields:
-                value = provider_options.get(field)
-                if value is not None:
-                    kwargs[field] = value
-            
-            if provider_key == "ollama":
-                ollama_url = (provider_options.get("ollama_url") or "http://localhost:11434").rstrip("/")
-                kwargs["api_base"] = ollama_url
-
-            logger.info(
-                "Final image generation config: provider=%s model=%s prompt=%s controls=%s",
-                provider_key,
-                model,
-                _safe_prompt_summary(prompt),
-                {
-                    "width": "width" in kwargs,
-                    "height": "height" in kwargs,
-                    "steps": "steps" in kwargs,
-                    "seed": "seed" in kwargs,
-                    "negative_prompt": "negative_prompt" in kwargs,
-                    "api_base": "api_base" in kwargs,
-                },
+            return await MediaEngine._generate_image_litellm(
+                prompt, model, api_key, provider_key, target_dir, filename, provider_options
             )
-
-            # Call LiteLLM first - wrap in to_thread because LiteLLM image_generation is synchronous
-            response = await asyncio.to_thread(
-                MediaEngine._get_litellm().image_generation,
-                **kwargs, 
-                request_timeout=settings.VISUAL_TIMEOUT
-            )
-            image_url, b64_json = MediaEngine._extract_image_payload(response)
-            
-            image_format = provider_options.get("image_format", "jpeg")
-            image_quality = provider_options.get("image_quality", 85)
-
-            if image_url:
-                return await MediaEngine._save_remote_image(image_url, target_dir, filename, image_format, image_quality)
-            elif b64_json:
-                return await MediaEngine._save_b64_image(b64_json, target_dir, filename, image_format, image_quality)
-            elif provider_key == "ollama":
-                logger.warning("LiteLLM returned no image payload for ollama; trying direct Ollama API fallback.")
-                direct_result = await MediaEngine._generate_image_ollama_direct(
-                    prompt=prompt,
-                    model=model,
-                    ollama_url=provider_options.get("ollama_url") or "http://localhost:11434",
-                    target_dir=target_dir,
-                    filename=filename,
-                    width=provider_options.get("width"),
-                    height=provider_options.get("height"),
-                    steps=provider_options.get("steps"),
-                    seed=provider_options.get("seed"),
-                    negative_prompt=provider_options.get("negative_prompt"),
-                )
-                if direct_result:
-                    return direct_result
-                raise RuntimeError("Ollama image generation returned no image payload.")
-            else:
-                logger.error("No image data in provider response")
-                return None
-
         except Exception as e:
-            error_str = str(e)
             if provider_key == "ollama":
                 logger.warning("LiteLLM ollama path failed; trying direct Ollama API fallback.")
-                direct_result = await MediaEngine._generate_image_ollama_direct(
-                    prompt=prompt,
-                    model=model,
-                    ollama_url=(provider_options or {}).get("ollama_url") or "http://localhost:11434",
-                    target_dir=target_dir,
-                    filename=filename,
-                    width=(provider_options or {}).get("width"),
-                    height=(provider_options or {}).get("height"),
-                    steps=(provider_options or {}).get("steps"),
-                    seed=(provider_options or {}).get("seed"),
-                    negative_prompt=(provider_options or {}).get("negative_prompt"),
+                direct_result = await MediaEngine._generate_image_ollama_from_options(
+                    prompt, model, target_dir, filename, provider_options
                 )
                 if direct_result:
                     return direct_result
                 raise RuntimeError(
                     f"Ollama image generation failed for model '{model}'. "
-                    f"Original error: {error_str}"
+                    f"Original error: {e}"
                 ) from e
-            err_lower = error_str.lower()
-            if "content moderated" in err_lower or "safety filter" in err_lower or "moderated" in err_lower:
+            if is_moderation_error(str(e)):
                 logger.warning("Image generation was moderated (Safety Filter).")
                 raise ValueError(
                     "Image generation was blocked by the AI provider's safety filter. "
@@ -927,40 +648,113 @@ class MediaEngine:
             raise
 
     @staticmethod
+    async def _generate_image_litellm(
+        prompt: str,
+        model: str,
+        api_key: Optional[str],
+        provider_key: str,
+        target_dir: str,
+        filename: Optional[str],
+        provider_options: dict[str, Any],
+    ) -> Optional[str]:
+        """Generate through LiteLLM's image_generation (OpenAI, Google, Ollama, ...)."""
+        kwargs = build_litellm_image_kwargs(prompt, model, provider_key, api_key, provider_options)
+
+        logger.info(
+            "Final image generation config: provider=%s model=%s prompt=%s controls=%s",
+            provider_key,
+            model,
+            _safe_prompt_summary(prompt),
+            {
+                "width": "width" in kwargs,
+                "height": "height" in kwargs,
+                "steps": "steps" in kwargs,
+                "seed": "seed" in kwargs,
+                "negative_prompt": "negative_prompt" in kwargs,
+                "api_base": "api_base" in kwargs,
+            },
+        )
+
+        # Call LiteLLM first - wrap in to_thread because LiteLLM image_generation is synchronous
+        response = await asyncio.to_thread(
+            MediaEngine._get_litellm().image_generation,
+            **kwargs,
+            request_timeout=settings.VISUAL_TIMEOUT
+        )
+        image_url, b64_json = MediaEngine._extract_image_payload(response)
+
+        image_format = provider_options.get("image_format", "jpeg")
+        image_quality = provider_options.get("image_quality", 85)
+
+        if image_url:
+            return await MediaEngine._save_remote_image(image_url, target_dir, filename, image_format, image_quality)
+        if b64_json:
+            return await MediaEngine._save_b64_image(b64_json, target_dir, filename, image_format, image_quality)
+        if provider_key != "ollama":
+            logger.error("No image data in provider response")
+            return None
+
+        logger.warning("LiteLLM returned no image payload for ollama; trying direct Ollama API fallback.")
+        direct_result = await MediaEngine._generate_image_ollama_from_options(
+            prompt, model, target_dir, filename, provider_options
+        )
+        if direct_result:
+            return direct_result
+        raise RuntimeError("Ollama image generation returned no image payload.")
+
+    @staticmethod
+    async def _generate_image_ollama_from_options(
+        prompt: str,
+        model: str,
+        target_dir: str,
+        filename: Optional[str],
+        provider_options: dict[str, Any],
+    ) -> Optional[str]:
+        return await MediaEngine._generate_image_ollama_direct(
+            prompt=prompt,
+            model=model,
+            ollama_url=provider_options.get("ollama_url") or "http://localhost:11434",
+            target_dir=target_dir,
+            filename=filename,
+            width=provider_options.get("width"),
+            height=provider_options.get("height"),
+            steps=provider_options.get("steps"),
+            seed=provider_options.get("seed"),
+            negative_prompt=provider_options.get("negative_prompt"),
+        )
+
+    @staticmethod
+    async def _generate_image_stable_diffusion_from_options(
+        prompt: str,
+        model: str,
+        api_key: Optional[str],
+        target_dir: str,
+        filename: Optional[str],
+        provider_options: dict[str, Any],
+    ) -> Optional[str]:
+        _ = api_key  # local provider, no key needed
+        return await MediaEngine._generate_image_stable_diffusion_direct(
+            prompt=prompt,
+            model=model,
+            stable_diffusion_url=(provider_options.get("stable_diffusion_url") or "http://127.0.0.1:7860"),
+            target_dir=target_dir,
+            filename=filename,
+            width=provider_options.get("width"),
+            height=provider_options.get("height"),
+            steps=provider_options.get("steps") if provider_options.get("steps") is not None else 4,
+            cfg_scale=provider_options.get("cfg_scale") if provider_options.get("cfg_scale") is not None else 1.0,
+            seed=provider_options.get("seed"),
+            negative_prompt=provider_options.get("negative_prompt"),
+            image_format=provider_options.get("image_format", "jpeg"),
+            image_quality=provider_options.get("image_quality", 85),
+            sampler_name=provider_options.get("sampler_name") or "Euler",
+            scheduler=provider_options.get("scheduler") or "Normal",
+        )
+
+    @staticmethod
     def _extract_image_payload(response: Any) -> tuple[Optional[str], Optional[str]]:
         """Extract URL or base64 image payload from provider responses."""
-        if not response:
-            return None, None
-
-        data = getattr(response, "data", None)
-        if isinstance(data, list) and data:
-            image_data = data[0]
-            image_url = getattr(image_data, "url", None)
-            b64_json = getattr(image_data, "b64_json", None)
-            
-            if image_url and image_url.startswith("data:image/"):
-                b64_json = image_url
-                image_url = None
-
-            if image_url or b64_json:
-                return image_url, b64_json
-
-            if isinstance(image_data, dict):
-                url = image_data.get("url")
-                b64 = image_data.get("b64_json")
-                if url and url.startswith("data:image/"):
-                    return None, url
-                return url, b64
-
-        if isinstance(response, dict):
-            images = response.get("images")
-            if isinstance(images, list) and images:
-                first = images[0]
-                if isinstance(first, str):
-                    return None, first
-            return response.get("url"), response.get("b64_json")
-
-        return None, None
+        return extract_image_payload(response)
 
     @staticmethod
     async def _generate_image_ollama_direct(
@@ -977,30 +771,16 @@ class MediaEngine:
     ) -> Optional[str]:
         """Generate an image through Ollama's local HTTP API."""
         try:
-            base = ollama_url.rstrip("/")
-            if not base.endswith("/api"):
-                base = f"{base}/api"
-            endpoint = f"{base}/generate"
-
-            options: dict[str, Any] = {}
-            if width is not None:
-                options["width"] = width
-            if height is not None:
-                options["height"] = height
-            if steps is not None:
-                options["steps"] = steps
-            if seed is not None:
-                options["seed"] = seed
-            if negative_prompt:
-                options["negative_prompt"] = negative_prompt
-
-            payload: dict[str, Any] = {
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-            }
-            if options:
-                payload["options"] = options
+            endpoint, payload = build_ollama_request(
+                ollama_url,
+                model,
+                prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                seed=seed,
+                negative_prompt=negative_prompt,
+            )
 
             response = await asyncio.to_thread(requests.post, endpoint, json=payload, timeout=120)
             if response.status_code != 200:
@@ -1050,30 +830,18 @@ class MediaEngine:
             base = stable_diffusion_url.rstrip("/")
             endpoint = f"{base}/sdapi/v1/txt2img"
 
-            payload: dict[str, Any] = {
-                "prompt": prompt,
-            }
-            if width is not None:
-                payload["width"] = width
-            if height is not None:
-                payload["height"] = height
-            if steps is not None:
-                payload["steps"] = steps
-            if cfg_scale is not None:
-                payload["cfg_scale"] = cfg_scale
-            if seed is not None:
-                payload["seed"] = seed
-            if negative_prompt:
-                payload["negative_prompt"] = negative_prompt
-            if sampler_name:
-                payload["sampler_name"] = sampler_name
-            if scheduler:
-                payload["scheduler"] = scheduler
-
-            if model and model != "default":
-                payload["override_settings"] = {
-                    "sd_model_checkpoint": model
-                }
+            payload = build_stable_diffusion_payload(
+                prompt,
+                model,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg_scale=cfg_scale,
+                seed=seed,
+                negative_prompt=negative_prompt,
+                sampler_name=sampler_name,
+                scheduler=scheduler,
+            )
 
             response = await asyncio.to_thread(
                 requests.post,
@@ -1415,13 +1183,8 @@ class MediaEngine:
             # Determine format and extension
             # Default to PNG for placeholders to preserve transparency if needed, 
             # though we currently convert to RGB in the strategy.
-            ext = "png"
-            if filename:
-                if filename.lower().endswith((".jpg", ".jpeg")):
-                    ext = "jpg"
-                elif filename.lower().endswith(".png"):
-                    ext = "png"
-            
+            ext = placeholder_extension(filename)
+
             if not filename:
                 filename = f"placeholder_{entity_id}_{uuid.uuid4().hex[:6]}.{ext}"
             filename = _normalize_output_filename(filename, ext)
@@ -1430,13 +1193,8 @@ class MediaEngine:
             
             # Select strategy and theme based on category
             # Map theme string to ColorTheme enum
-            color_theme = ColorTheme.COLORFUL
-            if theme:
-                try:
-                    color_theme = ColorTheme[theme.upper()]
-                except (KeyError, AttributeError):
-                    pass
-            
+            color_theme = resolve_color_theme(theme)
+
             if cat in ["SCENE", "COVER", "LANDSCAPE"]:
                 # Scenes use random generation with subtle blur
                 strategy = OrganicGradientStrategy(theme=color_theme)
@@ -1465,7 +1223,7 @@ class MediaEngine:
             logger.error("Failed to generate high-quality placeholder: %s", e)
             cat = category.upper()
             # Keep NPC/item placeholders on curated static assets and avoid procedural SVG generation.
-            if cat == "NPC" or cat == "ITEM" or cat.startswith("ITEM_"):
+            if is_static_only_placeholder_category(cat):
                 return ""
             # Fallback to SVG for non-item/non-npc categories.
             return await MediaEngine.generate_svg_placeholder(adventure_id, entity_id, safe_target_dir, filename, category)

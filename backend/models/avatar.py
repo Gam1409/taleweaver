@@ -1,6 +1,6 @@
-import uuid6
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
+import uuid6
 from sqlalchemy import JSON, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, synonym
 
@@ -38,11 +38,11 @@ class Avatar(Base, TimestampMixin):
     armor_class: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     
     # JSON fields for flexible data structures
-    stats: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    inventory: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    stats: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    inventory: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     
     # Default equipment slots setup
-    equipment: Mapped[Dict[str, Any]] = mapped_column(JSON, default=lambda: {
+    equipment: Mapped[dict[str, Any]] = mapped_column(JSON, default=lambda: {
         "Head": None,
         "Chest": None,
         "Arms": None,
@@ -56,7 +56,7 @@ class Avatar(Base, TimestampMixin):
         "OffHand": None
     }, nullable=False)
     
-    status_effects: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
+    status_effects: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
 
     # Legacy alias for backward compatibility during migration rollout.
     adventure_id = synonym("template_id")

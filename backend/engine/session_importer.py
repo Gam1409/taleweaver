@@ -1,16 +1,16 @@
+import contextlib
 import io
 import json
 import logging
 import os
 import zipfile
-import uuid6
-from typing import Any, Optional
 from datetime import datetime
+from typing import Any, Optional
 
+import uuid6
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import settings
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -64,6 +64,108 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     return data
 
 
+async def _resolve_template_id(db: AsyncSession, template_id: Optional[str]) -> Optional[str]:
+    """Return template_id if that template still exists in the system, else None."""
+    if not template_id:
+        return None
+    template_res = await db.execute(
+        select(AdventureTemplate.id).where(AdventureTemplate.id == template_id)
+    )
+    return template_id if template_res.scalar_one_or_none() else None
+
+
+def _add_chat_messages(db: AsyncSession, chat_messages_data: list, new_session_id: str) -> None:
+    for msg in chat_messages_data:
+        chat_msg = ChatMessage(
+            id=str(uuid6.uuid7()),
+            session_id=new_session_id,
+            role=msg.get("role"),
+            content=msg.get("content"),
+        )
+        # Restore timestamps if they exist
+        if msg.get("created_at"):
+            with contextlib.suppress(ValueError):
+                chat_msg.created_at = datetime.fromisoformat(msg.get("created_at"))
+        db.add(chat_msg)
+
+
+def _add_world_scenes_and_exits(
+    db: AsyncSession,
+    world_scenes_data: list,
+    world_exits_data: list,
+    template_id: Optional[str],
+    new_session_id: str,
+) -> None:
+    for sc in world_scenes_data:
+        world_sc = WorldScene(
+            id=sc.get("id"),
+            template_id=template_id,
+            session_id=new_session_id,
+            label=sc.get("label"),
+            description=sc.get("description"),
+            image_url=sc.get("image_url"),
+        )
+        db.add(world_sc)
+
+    for ex in world_exits_data:
+        world_ex = WorldExit(
+            id=str(uuid6.uuid7()),
+            template_id=template_id,
+            session_id=new_session_id,
+            from_scene_id=ex.get("from_scene_id"),
+            to_scene_id=ex.get("to_scene_id"),
+            label=ex.get("label"),
+            exit_type=ex.get("exit_type", "one_way"),
+            is_locked=ex.get("is_locked", False),
+            lock_description=ex.get("lock_description"),
+            code_to_unlock=ex.get("code_to_unlock"),
+            item_to_unlock=ex.get("item_to_unlock"),
+            rule_to_unlock=ex.get("rule_to_unlock"),
+        )
+        db.add(world_ex)
+
+
+def _add_world_map(
+    db: AsyncSession, world_map_data: Optional[dict], template_id: Optional[str], new_session_id: str
+) -> None:
+    if not world_map_data:
+        return
+    world_map = WorldMap(
+        id=str(uuid6.uuid7()),
+        template_id=template_id,
+        session_id=new_session_id,
+        nodes=world_map_data.get("nodes", {}),
+        edges=world_map_data.get("edges", []),
+        current_scene_id=world_map_data.get("current_scene_id"),
+    )
+    db.add(world_map)
+
+
+def _resolve_moveable(ent: dict) -> bool:
+    if ent.get("moveable") is not None:
+        return bool(ent.get("moveable"))
+    return str(ent.get("movement_type") or "").upper() == "MOVABLE"
+
+
+def _extract_session_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
+    """Extract assets/ entries of the archive into the new session directory."""
+    new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
+    os.makedirs(new_session_dir, exist_ok=True)
+
+    for zip_info in zip_file.infolist():
+        if not zip_info.filename.startswith("assets/") or zip_info.is_dir():
+            continue
+        # Relativize destination path within the session directory
+        rel_path = zip_info.filename.replace("assets/", "", 1)
+        dest_path = os.path.join(new_session_dir, rel_path)
+        safe_dest_path = _ensure_within_base_dir(dest_path, new_session_dir)
+        safe_dest_path = _ensure_within_data_dir(safe_dest_path)
+
+        os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
+        with open(safe_dest_path, "wb") as f:
+            f.write(zip_file.read(zip_info.filename))
+
+
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
@@ -105,16 +207,9 @@ class SessionImporter:
                     return None
 
                 # Check if template still exists in the system
-                template_id = game_session_data.get("template_id")
-                template_exists = False
-                if template_id:
-                    template_res = await db.execute(
-                        select(AdventureTemplate.id).where(AdventureTemplate.id == template_id)
-                    )
-                    if template_res.scalar_one_or_none():
-                        template_exists = True
-
-                resolved_template_id = template_id if template_exists else None
+                resolved_template_id = await _resolve_template_id(
+                    db, game_session_data.get("template_id")
+                )
 
                 # 3. Create Avatar
                 avatar = Avatar(
@@ -195,50 +290,12 @@ class SessionImporter:
                 db.add(session_state)
 
                 # 6. Create ChatMessages
-                for msg in chat_messages_data:
-                    chat_msg = ChatMessage(
-                        id=str(uuid6.uuid7()),
-                        session_id=new_session_id,
-                        role=msg.get("role"),
-                        content=msg.get("content"),
-                    )
-                    # Restore timestamps if they exist
-                    if msg.get("created_at"):
-                        try:
-                            chat_msg.created_at = datetime.fromisoformat(msg.get("created_at"))
-                        except ValueError:
-                            pass
-                    db.add(chat_msg)
+                _add_chat_messages(db, chat_messages_data, new_session_id)
 
-                # 7. Create WorldScenes
-                for sc in world_scenes_data:
-                    world_sc = WorldScene(
-                        id=sc.get("id"),
-                        template_id=resolved_template_id,
-                        session_id=new_session_id,
-                        label=sc.get("label"),
-                        description=sc.get("description"),
-                        image_url=sc.get("image_url"),
-                    )
-                    db.add(world_sc)
-
-                # 8. Create WorldExits
-                for ex in world_exits_data:
-                    world_ex = WorldExit(
-                        id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
-                        session_id=new_session_id,
-                        from_scene_id=ex.get("from_scene_id"),
-                        to_scene_id=ex.get("to_scene_id"),
-                        label=ex.get("label"),
-                        exit_type=ex.get("exit_type", "one_way"),
-                        is_locked=ex.get("is_locked", False),
-                        lock_description=ex.get("lock_description"),
-                        code_to_unlock=ex.get("code_to_unlock"),
-                        item_to_unlock=ex.get("item_to_unlock"),
-                        rule_to_unlock=ex.get("rule_to_unlock"),
-                    )
-                    db.add(world_ex)
+                # 7./8. Create WorldScenes and WorldExits
+                _add_world_scenes_and_exits(
+                    db, world_scenes_data, world_exits_data, resolved_template_id, new_session_id
+                )
 
                 # 9. Create WorldEntities
                 for ent in world_entities_data:
@@ -265,7 +322,7 @@ class SessionImporter:
                         state_comment=ent.get("state_comment"),
                         npc_type=ent.get("npc_type"),
                         movement_type=ent.get("movement_type"),
-                        moveable=bool(ent.get("moveable")) if ent.get("moveable") is not None else (str(ent.get("movement_type") or "").upper() == "MOVABLE"),
+                        moveable=_resolve_moveable(ent),
                         allowed_scenes=ent.get("allowed_scenes") or [],
                         notes=ent.get("notes"),
                         goal=ent.get("goal"),
@@ -291,37 +348,15 @@ class SessionImporter:
                     db.add(world_ent)
 
                 # 10. Create WorldMap
-                if world_map_data:
-                    world_map = WorldMap(
-                        id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
-                        session_id=new_session_id,
-                        nodes=world_map_data.get("nodes", {}),
-                        edges=world_map_data.get("edges", []),
-                        current_scene_id=world_map_data.get("current_scene_id"),
-                    )
-                    db.add(world_map)
+                _add_world_map(db, world_map_data, resolved_template_id, new_session_id)
 
                 # 11. Extract local session files
-                new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
-                os.makedirs(new_session_dir, exist_ok=True)
-
-                for zip_info in zip_file.infolist():
-                    if zip_info.filename.startswith("assets/") and not zip_info.is_dir():
-                        # Relativize destination path within the session directory
-                        rel_path = zip_info.filename.replace("assets/", "", 1)
-                        dest_path = os.path.join(new_session_dir, rel_path)
-                        safe_dest_path = _ensure_within_base_dir(dest_path, new_session_dir)
-                        safe_dest_path = _ensure_within_data_dir(safe_dest_path)
-
-                        os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
-                        with open(safe_dest_path, "wb") as f:
-                            f.write(zip_file.read(zip_info.filename))
+                _extract_session_assets(zip_file, new_session_id)
 
             await db.commit()
             return new_session_id
 
-        except Exception as e:
+        except Exception:
             logger.exception("Import of ADS session failed")
             await db.rollback()
             return None
