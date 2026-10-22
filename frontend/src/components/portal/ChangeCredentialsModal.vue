@@ -115,10 +115,7 @@ async function handleSubmit() {
         <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-aether-primary/50 via-purple-500/50 to-aether-primary/50"></div>
         
         <!-- Header -->
-        <div class="px-8 pt-8 pb-4 flex items-center gap-3">
-          <div class="p-2.5 rounded-xl bg-white/5 border border-white/10 text-aether-primary">
-            <i class="ra ra-gear text-lg"></i>
-          </div>
+        <div class="px-8 pt-8 pb-4">
           <div>
             <h2 class="text-xl font-black text-white font-display tracking-tight">Change Credentials</h2>
             <p class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Manage Account Security</p>

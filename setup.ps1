@@ -6,8 +6,12 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot
-. (Join-Path $PSScriptRoot "scripts/powershell-environment.ps1")
+
+# Change directory to the repository root directory
+$scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if ($scriptPath) { Set-Location $scriptPath } else { $scriptPath = (Get-Location).Path }
+
+. (Join-Path $scriptPath "scripts/powershell-environment.ps1")
 Write-Host "--- TaleWeaver Setup ---" -ForegroundColor Cyan
 
 # 1. Environment Variables (.env)
@@ -26,21 +30,21 @@ Set-Content ".env" $envFile
 
 # 2. Dependency Management (Poetry)
 Write-Host "[*] Setting up Python dependencies with Poetry..." -ForegroundColor Yellow
-$poetryExe = Get-TaleWeaverPoetry -ProjectRoot $PSScriptRoot
+$poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 if (-not $poetryExe) {
     Write-Host "[*] Poetry not found in PATH. Checking virtual environment (venv)..." -ForegroundColor Yellow
-    $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $PSScriptRoot
+    $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $scriptPath
     if (-not $bootstrapPython) {
         Write-Host "[*] Creating virtual environment (venv)..." -ForegroundColor Yellow
         Invoke-TaleWeaverNative -Command python -Arguments @("-m", "venv", "venv")
-        $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $PSScriptRoot
+        $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $scriptPath
     }
     Write-Host "[*] Installing Poetry in the local virtual environment..." -ForegroundColor Yellow
     Invoke-TaleWeaverNative -Command $bootstrapPython -Arguments @("-m", "pip", "install", "--upgrade", "pip", "poetry>=2.0.0,<3.0.0")
-    $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $PSScriptRoot
+    $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 }
 Invoke-TaleWeaverNative -Command $poetryExe -Arguments @("install", "--no-interaction")
-$pythonExe = Get-TaleWeaverPython -ProjectRoot $PSScriptRoot
+$pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
 if (-not (Test-TaleWeaverBackend -Python $pythonExe)) {
     throw "Backend dependencies are unavailable after installation. Check the Poetry installation output above."
 }
@@ -91,9 +95,19 @@ Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-m", "alembic", "upgra
 
 # 6. Frontend Setup
 Write-Host "[*] Installing frontend dependencies..." -ForegroundColor Yellow
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    throw "npm is not installed or not in PATH. Please install Node.js and npm first."
+}
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $nodeVersion = Invoke-TaleWeaverNative -Command node -Arguments @("--version")
+    Write-Host "[+] Found Node.js version: $nodeVersion" -ForegroundColor Green
+}
 Push-Location frontend
 try {
-    Invoke-TaleWeaverNative -Command npm -Arguments @("install")
+    Invoke-TaleWeaverNative -Command npm -Arguments @("install", "--include=dev")
+    if (-not ((Test-Path "node_modules/.bin/vite.cmd") -or (Test-Path "node_modules/.bin/vite"))) {
+        throw "Vite executable not found in frontend/node_modules/.bin after npm install."
+    }
 } finally {
     Pop-Location
 }
@@ -116,6 +130,6 @@ if (-not $SkipStart) {
     $start = Read-Host "Would you like to start the application now? (y/n)"
     if ($start -eq "y") {
         Write-Host "[*] Starting backend and frontend in new windows..." -ForegroundColor Cyan
-        Start-TaleWeaverProcesses -ProjectRoot $PSScriptRoot -Python $pythonExe
+        Start-TaleWeaverProcesses -ProjectRoot $scriptPath -Python $pythonExe
     }
 }

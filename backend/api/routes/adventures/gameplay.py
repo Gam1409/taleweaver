@@ -14,7 +14,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.api.routes.adventures.agent_turn_stream import ensure_agent_active, stream_agent_turn
 from backend.api.routes.adventures.chat_snapshot import (
     apply_pending_sequence_progress,
     build_awards_for_snapshot,
@@ -260,20 +259,6 @@ async def post_chat_message(
     except Exception:
         logger.exception("Failed to start chat turn for session %s", game_id)
         raise HTTPException(status_code=500, detail=CLIENT_TURN_ERROR_DETAIL) from None
-
-
-@router.post("/{game_id}/agent/turn")
-async def run_agent_turn(
-    game_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    """Computes an agent decision based on walkthrough & game state, then executes the turn."""
-    await ensure_agent_active(game_id, current_user)
-    return StreamingResponse(
-        stream_agent_turn(game_id, current_user),
-        media_type="text/event-stream",
-        headers={"X-Taleweaver-Turn-Id": uuid4().hex},
-    )
 
 
 @router.post("/{game_id}/terminal-epilogue", response_model=TerminalEpilogueResponse)

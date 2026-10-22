@@ -36,6 +36,8 @@ const normalizeLocalForm = (data: any) => ({
   compression_max_tokens: typeof data?.compression_max_tokens === 'number' ? data.compression_max_tokens : 4096,
   play_agent_allow_walkthrough: typeof data?.play_agent_allow_walkthrough === 'boolean' ? data.play_agent_allow_walkthrough : true,
   play_agent_monkey_mode: typeof data?.play_agent_monkey_mode === 'boolean' ? data.play_agent_monkey_mode : false,
+  play_agent_personality: data?.play_agent_personality || 'casual',
+  play_agent_custom_personality: data?.play_agent_custom_personality || '',
 })
 
 const localForm = ref(normalizeLocalForm(props.llmForm))
@@ -99,6 +101,47 @@ const isModelCustom = (model: string, provider: string, role?: OllamaRole): bool
   return !predefined.includes(model)
 }
 
+const customTiers = ref<Record<string, boolean>>({
+  small: false,
+  complex: false,
+  generator: false,
+  play_agent: false,
+  compression: false,
+})
+
+const syncCustomTiers = () => {
+  for (const tier of ['small', 'complex', 'generator', 'play_agent', 'compression'] as const) {
+    const model = (localForm.value as any)[`${tier}_model`]
+    const provider = (localForm.value as any)[`${tier}_model_provider`]
+    customTiers.value[tier] = isModelCustom(model, provider, tier)
+  }
+}
+syncCustomTiers()
+
+watch(() => props.llmForm, () => {
+  syncCustomTiers()
+}, { deep: true })
+
+const isCustomTier = (tier: OllamaRole): boolean => customTiers.value[tier] || isModelCustom(
+  localForm.value[`${tier}_model`], localForm.value[`${tier}_model_provider`], tier
+)
+
+const onModelSelect = (tier: OllamaRole, e: Event): void => {
+  const val = (e.target as HTMLSelectElement).value
+  const modelKey = `${tier}_model` as keyof typeof localForm.value
+  const providerKey = `${tier}_model_provider` as keyof typeof localForm.value
+  if (val === 'custom') {
+    customTiers.value[tier] = true
+    const predefined = roleModels(tier, localForm.value[providerKey])
+    if (predefined?.includes(localForm.value[modelKey])) {
+      localForm.value[modelKey] = ''
+    }
+  } else {
+    customTiers.value[tier] = false
+    localForm.value[modelKey] = val
+  }
+}
+
 const getModelOptionLabel = (_provider: string, model: string) => model
 
 const getProviderName = (id: string) => {
@@ -134,22 +177,27 @@ const resolveModelOnProviderChange = (
 
 watch(() => localForm.value.small_model_provider, (provider, oldProvider) => {
   localForm.value.small_model = resolveModelOnProviderChange(localForm.value.small_model, provider, oldProvider, 'small')
+  customTiers.value.small = isModelCustom(localForm.value.small_model, provider, 'small')
 })
 
 watch(() => localForm.value.complex_model_provider, (provider, oldProvider) => {
   localForm.value.complex_model = resolveModelOnProviderChange(localForm.value.complex_model, provider, oldProvider, 'complex')
+  customTiers.value.complex = isModelCustom(localForm.value.complex_model, provider, 'complex')
 })
 
 watch(() => localForm.value.generator_model_provider, (provider, oldProvider) => {
   localForm.value.generator_model = resolveModelOnProviderChange(localForm.value.generator_model, provider, oldProvider, 'generator')
+  customTiers.value.generator = isModelCustom(localForm.value.generator_model, provider, 'generator')
 })
 
 watch(() => localForm.value.play_agent_model_provider, (provider, oldProvider) => {
   localForm.value.play_agent_model = resolveModelOnProviderChange(localForm.value.play_agent_model, provider, oldProvider, 'play_agent')
+  customTiers.value.play_agent = isModelCustom(localForm.value.play_agent_model, provider, 'play_agent')
 })
 
 watch(() => localForm.value.compression_model_provider, (provider, oldProvider) => {
   localForm.value.compression_model = resolveModelOnProviderChange(localForm.value.compression_model, provider, oldProvider, 'compression')
+  customTiers.value.compression = isModelCustom(localForm.value.compression_model, provider, 'compression')
 })
 
 const hasOllamaProviderSelected = computed(() => (
@@ -458,12 +506,8 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </div>
 
           <select
-            :value="isModelCustom(localForm.small_model, localForm.small_model_provider, 'small') ? 'custom' : localForm.small_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.small_model = val;
-              else if (!isModelCustom(localForm.small_model, localForm.small_model_provider, 'small')) localForm.small_model = '';
-            }"
+            :value="isCustomTier('small') ? 'custom' : localForm.small_model"
+            @change="(e) => onModelSelect('small', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -479,7 +523,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Custom Model Input if custom -->
-      <div v-if="isModelCustom(localForm.small_model, localForm.small_model_provider, 'small')" class="pt-1">
+      <div v-if="isCustomTier('small')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.small_model"
@@ -656,12 +700,8 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </div>
 
           <select
-            :value="isModelCustom(localForm.complex_model, localForm.complex_model_provider, 'complex') ? 'custom' : localForm.complex_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.complex_model = val;
-              else if (!isModelCustom(localForm.complex_model, localForm.complex_model_provider, 'complex')) localForm.complex_model = '';
-            }"
+            :value="isCustomTier('complex') ? 'custom' : localForm.complex_model"
+            @change="(e) => onModelSelect('complex', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -677,7 +717,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Custom Model Input -->
-      <div v-if="isModelCustom(localForm.complex_model, localForm.complex_model_provider, 'complex')" class="pt-1">
+      <div v-if="isCustomTier('complex')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.complex_model"
@@ -848,12 +888,8 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </div>
 
           <select
-            :value="isModelCustom(localForm.generator_model, localForm.generator_model_provider, 'generator') ? 'custom' : localForm.generator_model"
-            @change="(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val !== 'custom') localForm.generator_model = val;
-              else if (!isModelCustom(localForm.generator_model, localForm.generator_model_provider, 'generator')) localForm.generator_model = '';
-            }"
+            :value="isCustomTier('generator') ? 'custom' : localForm.generator_model"
+            @change="(e) => onModelSelect('generator', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
@@ -879,7 +915,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('generator'), 'generator')"
       />
 
-      <div v-if="isModelCustom(localForm.generator_model, localForm.generator_model_provider, 'generator')" class="pt-1">
+      <div v-if="isCustomTier('generator')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.generator_model"
@@ -1008,12 +1044,8 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
               </button>
             </div>
             <select
-              :value="isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider, 'play_agent') ? 'custom' : localForm.play_agent_model"
-              @change="(e) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val !== 'custom') localForm.play_agent_model = val;
-                else if (!isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider, 'play_agent')) localForm.play_agent_model = '';
-              }"
+              :value="isCustomTier('play_agent') ? 'custom' : localForm.play_agent_model"
+              @change="(e) => onModelSelect('play_agent', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               <option v-for="m in roleModels('play_agent', localForm.play_agent_model_provider)" :key="m" :value="m">
@@ -1036,7 +1068,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('play_agent'), 'play_agent')"
       />
 
-      <div v-if="isModelCustom(localForm.play_agent_model, localForm.play_agent_model_provider, 'play_agent')" class="pt-1">
+        <div v-if="isCustomTier('play_agent')" class="pt-1">
           <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
           <input
             v-model="localForm.play_agent_model"
@@ -1055,6 +1087,45 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
             placeholder="e.g. Together, Grok"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white font-mono focus:ring-2 focus:ring-purple-500/50 outline-none"
           />
+        </div>
+
+        <!-- Play Agent Personality -->
+        <div class="pt-2 border-t border-slate-800/80 space-y-3">
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Play Agent Personality
+              </label>
+              <span class="text-[11px] font-mono text-purple-400 font-semibold">
+                {{ localForm.play_agent_personality ? localForm.play_agent_personality.charAt(0).toUpperCase() + localForm.play_agent_personality.slice(1) : 'Casual' }}
+              </span>
+            </div>
+            <select
+              v-model="localForm.play_agent_personality"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              <option value="casual">Casual (Relaxed, curious, informal, plays for fun)</option>
+              <option value="bureaucrat">Bureaucrat (Strictly formal, protocol-obsessed, demands documentation)</option>
+              <option value="powerplayer">Powerplayer (Aggressive min-maxer, optimal path & efficiency)</option>
+              <option value="custom">Custom (User-defined directives)</option>
+            </select>
+          </div>
+
+          <!-- Custom Personality Instructions Field -->
+          <div v-if="localForm.play_agent_personality === 'custom'" class="space-y-1.5">
+            <label class="block text-xs font-bold text-purple-300 uppercase tracking-wider">
+              Custom Personality Directives
+            </label>
+            <textarea
+              v-model="localForm.play_agent_custom_personality"
+              rows="3"
+              placeholder="e.g. You are a paranoid rogue who never trusts chests, checks for traps everywhere, and speaks in cryptic underworld slang."
+              class="w-full bg-slate-950 border border-purple-500/30 focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-slate-600 outline-none focus:ring-2 focus:ring-purple-500/40 resize-y"
+            ></textarea>
+            <p class="text-[11px] text-slate-400">
+              Provide custom roleplay guidelines and gameplay habits for the autonomous Play-Agent.
+            </p>
+          </div>
         </div>
 
         <!-- Play Agent Behaviors / Defaults -->
@@ -1183,12 +1254,8 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           <div>
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
             <select
-              :value="isModelCustom(localForm.compression_model, localForm.compression_model_provider, 'compression') ? 'custom' : localForm.compression_model"
-              @change="(e) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val !== 'custom') localForm.compression_model = val;
-                else if (!isModelCustom(localForm.compression_model, localForm.compression_model_provider, 'compression')) localForm.compression_model = '';
-              }"
+              :value="isCustomTier('compression') ? 'custom' : localForm.compression_model"
+              @change="(e) => onModelSelect('compression', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               <option value="">-- No Dedicated Model (Fall back to Pass 1) --</option>
@@ -1211,7 +1278,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('compression'), 'compression')"
       />
 
-        <label v-if="isModelCustom(localForm.compression_model, localForm.compression_model_provider, 'compression')" class="block text-xs text-slate-300">
+        <label v-if="isCustomTier('compression')" class="block text-xs text-slate-300">
           Custom Model Identifier
           <input v-model="localForm.compression_model" type="text" placeholder="Exact model ID, including vendor/name" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono" />
         </label>

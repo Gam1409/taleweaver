@@ -53,14 +53,9 @@ const handleGenerate = () => {
       <div class="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-fade-in">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-lg">
-              <i class="ra ra-quill-ink"></i>
-            </div>
-            <div>
-              <h2 class="text-lg font-bold text-white">Custom Tile Artwork</h2>
-              <p class="text-xs text-slate-400">Generate tailored cover art for <strong>{{ data?.item.name }}</strong>.</p>
-            </div>
+          <div>
+            <h2 class="text-lg font-bold text-white">Custom Tile Artwork</h2>
+            <p class="text-xs text-slate-400">Generate tailored cover art for <strong>{{ data?.item.name }}</strong>.</p>
           </div>
           <button @click="emit('close')" class="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
             <i class="ra ra-cancel text-sm"></i>

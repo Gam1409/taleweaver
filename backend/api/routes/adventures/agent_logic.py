@@ -1,12 +1,18 @@
 import logging
 import os
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.agent_actions import (
+    container_lock_hint,
+    format_exits_for_agent,
+    load_scene_exits,
+)
+from backend.api.routes.adventures.agent_persona import format_protagonist_profile
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.turn_context_helpers import (
     _find_active_sequence,
@@ -14,7 +20,10 @@ from backend.api.routes.adventures.turn_context_helpers import (
 )
 from backend.api.routes.adventures.turn_llm_pipeline import TurnLlmContextBuilder
 from backend.core.llm_router import GameMasterLLM
-from backend.core.prompts import AGENT_PLAYER_TURN_SYSTEM_PROMPT
+from backend.core.prompts import (
+    AGENT_PLAYER_TURN_SYSTEM_PROMPT,
+    get_play_agent_personality_prompt,
+)
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -83,26 +92,9 @@ def _format_npcs_context(entities: list[Any]) -> str:
     return "PRESENT CHARACTERS (NPCs):\n" + "\n".join(lines)
 
 
-def _format_exits_context(exits: list[Any]) -> str:
-    visible_exits = [e for e in exits if not getattr(e, "is_hidden", False)]
-    if not visible_exits:
-        return "VISIBLE EXITS: No visible exits."
-
-    exit_lines: list[str] = []
-    for e in visible_exits:
-        label = getattr(e, "label", "Door")
-        is_locked = getattr(e, "is_locked", False)
-        lock_desc = getattr(e, "lock_description", None)
-        if is_locked and lock_desc:
-            exit_lines.append(f"- {label} [LOCKED: {lock_desc}]")
-        elif is_locked:
-            exit_lines.append(f"- {label} [LOCKED]")
-        else:
-            exit_lines.append(f"- {label} [OPEN]")
-    return "VISIBLE EXITS:\n" + "\n".join(exit_lines)
-
-
-def build_player_perception_context(adventure: Any, state: Any, ctx: Any) -> str:
+def build_player_perception_context(
+    adventure: Any, state: Any, ctx: Any, exits_text: str = ""
+) -> str:
     """Builds legitimate, player-facing world context for the PlayAgent.
 
     Enforces fair play: a normal player only sees:
@@ -129,10 +121,10 @@ def build_player_perception_context(adventure: Any, state: Any, ctx: Any) -> str
     entities = getattr(ctx, "entities", []) or []
     parts.append(_format_npcs_context(entities))
 
-    exits = getattr(ctx, "exits", []) or []
-    parts.append(_format_exits_context(exits))
+    if exits_text:
+        parts.append(exits_text)
 
-    if not entities and not exits and not current_scene:
+    if not entities and not exits_text and not current_scene:
         fallback = getattr(ctx, "mechanics_system_prompt", "")
         if fallback:
             parts.append(f"SCENARIO CONTEXT:\n{fallback}")
@@ -169,8 +161,11 @@ def _collect_visible_scene_item_names(
             continue
         if str(entity.id or "") in contained_ids:
             continue
-        if entity.name:
-            visible_names.append(entity.name)
+        if not entity.name:
+            continue
+        is_container = str(entity.item_type or "").upper() == "CONTAINER"
+        hint = container_lock_hint(entity, states) if is_container else ""
+        visible_names.append(f"{entity.name}{hint}")
     return visible_names
 
 
@@ -234,6 +229,33 @@ def _build_agent_objective_and_walkthrough(
     return objective, walkthrough_text
 
 
+_HISTORY_ROLE_LABELS = {
+    "user": "YOU",
+    "player": "YOU",
+    "assistant": "GAME MASTER",
+    "system": "SYSTEM",
+}
+_HISTORY_MAX_CHARS = 600
+
+
+def format_agent_history(history: list[dict[str, str]]) -> str:
+    """Renders recent chat messages so the agent remembers what it already tried."""
+    lines = []
+    for msg in history:
+        label = _HISTORY_ROLE_LABELS.get(str(msg.get("role") or "").lower())
+        content = " ".join(str(msg.get("content") or "").split())
+        if not label or not content:
+            continue
+        if len(content) > _HISTORY_MAX_CHARS:
+            content = content[:_HISTORY_MAX_CHARS] + "..."
+        line = f"{label}: {content}"
+        # Agent actions are stored as both "player" and "user" messages; show them once.
+        if lines and lines[-1] == line:
+            continue
+        lines.append(line)
+    return "\n".join(lines) if lines else "(no history yet - the adventure just started)"
+
+
 class AgentService:
     @staticmethod
     def get_agent_state(state: SessionState) -> dict[str, Any]:
@@ -247,6 +269,8 @@ class AgentService:
                 "monkey_mode": False,
                 "allow_walkthrough": True,
                 "step_by_step": False,
+                "personality": "casual",
+                "custom_personality": "",
             }
         agent_state = state.entity_states["__agent__"]
         modified = False
@@ -254,10 +278,16 @@ class AgentService:
             ("monkey_mode", False),
             ("allow_walkthrough", True),
             ("step_by_step", False),
+            ("personality", "casual"),
+            ("custom_personality", ""),
         ):
             if key not in agent_state:
                 agent_state[key] = default
                 modified = True
+        # Migrate the legacy German personality key.
+        if agent_state.get("personality") in ("buerokrat", "bürokrat"):
+            agent_state["personality"] = "bureaucrat"
+            modified = True
         if modified:
             state.entity_states["__agent__"] = agent_state
             flag_modified(state, "entity_states")
@@ -270,6 +300,21 @@ class AgentService:
         agent_state["active"] = active
         if active:
             agent_state["failure_count"] = 0
+        state.entity_states["__agent__"] = agent_state
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def set_personality(
+        state: SessionState, personality: str, custom_text: Optional[str] = None
+    ) -> None:
+        """Set the play-agent personality (casual, bureaucrat, powerplayer, custom)."""
+        agent_state = AgentService.get_agent_state(state)
+        normalized = (personality or "casual").strip().lower()
+        if normalized in ("bürokrat", "buerokrat"):
+            normalized = "bureaucrat"
+        agent_state["personality"] = normalized
+        if custom_text is not None:
+            agent_state["custom_personality"] = custom_text
         state.entity_states["__agent__"] = agent_state
         flag_modified(state, "entity_states")
 
@@ -382,11 +427,28 @@ class AgentService:
         objective_block, walkthrough_text = _build_agent_objective_and_walkthrough(
             adventure, state, agent_state
         )
-        player_world_context = build_player_perception_context(adventure, state, ctx)
+        scene_exits = await load_scene_exits(db, game_id, state.current_scene_id)
+        player_world_context = build_player_perception_context(
+            adventure, state, ctx, format_exits_for_agent(scene_exits)
+        )
 
         inventory_names = [
             i.get("name") if isinstance(i, dict) else str(i) for i in (avatar.inventory or [])
         ]
+
+        llm_settings = getattr(user, "llm_settings", None) or {}
+        agent_personality = (
+            agent_state.get("personality") or llm_settings.get("play_agent_personality") or "casual"
+        )
+        agent_custom_personality = (
+            agent_state.get("custom_personality")
+            or llm_settings.get("play_agent_custom_personality")
+            or ""
+        )
+        personality_prompt = get_play_agent_personality_prompt(
+            agent_personality, agent_custom_personality
+        )
+
         system_prompt = AGENT_PLAYER_TURN_SYSTEM_PROMPT.format(
             name=avatar.name,
             role=avatar.role or "Adventurer",
@@ -400,6 +462,8 @@ class AgentService:
             max_mana=avatar.max_mana,
             inventory=", ".join(inventory_names) if inventory_names else "Empty",
             equipment=avatar.equipment or "None",
+            protagonist_profile=format_protagonist_profile(avatar),
+            personality_prompt=personality_prompt,
             mechanics_system_prompt=player_world_context,
             visible_scene_items_text=visible_scene_items_text,
             walkthrough_text=walkthrough_text,
@@ -407,8 +471,12 @@ class AgentService:
         )
 
         user_prompt = (
-            "Based on the recent chat history and your current location, what is the single next "
-            "action or command you want to perform? If you are stuck or encountered an error/bug, report it."
+            "RECENT GAME HISTORY (oldest first):\n"
+            f"{format_agent_history(getattr(ctx, 'history', None) or [])}\n\n"
+            "Based on this history and your current location, what is the single next action or "
+            "command you want to perform? Do not repeat an action that already failed or produced "
+            "no progress; try something different instead. If you are truly stuck or encountered "
+            "an error/bug, report it."
         )
 
         gm_llm = GameMasterLLM.for_role(user, "play_agent")

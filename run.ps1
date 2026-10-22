@@ -4,11 +4,9 @@
 $ErrorActionPreference = "Stop"
 
 # Change directory to the repository root directory
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-if ($scriptPath) {
-    Set-Location $scriptPath
-}
-. (Join-Path $PSScriptRoot "scripts/powershell-environment.ps1")
+$scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if ($scriptPath) { Set-Location $scriptPath } else { $scriptPath = (Get-Location).Path }
+. (Join-Path $scriptPath "scripts/powershell-environment.ps1")
 
 Write-Host "==============================" -ForegroundColor Green
 Write-Host "      TaleWeaver Runner       " -ForegroundColor Green
@@ -31,10 +29,11 @@ if (Test-Path ".git") {
 
 # 2. Check setup status
 $setupNeeded = $false
-$pythonExe = Get-TaleWeaverPython -ProjectRoot $PSScriptRoot
+$pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
 if (-not (Test-Path ".env")) { $setupNeeded = $true }
 if (-not (Test-TaleWeaverBackend -Python $pythonExe)) { $setupNeeded = $true }
 if (-not (Test-Path "frontend/node_modules")) { $setupNeeded = $true }
+if (-not ((Test-Path "frontend/node_modules/.bin/vite.cmd") -or (Test-Path "frontend/node_modules/.bin/vite"))) { $setupNeeded = $true }
 
 if ($setupNeeded) {
     Write-Host "[!] Project setup is incomplete (.env, Python dependencies, or node_modules missing)." -ForegroundColor Yellow
@@ -43,8 +42,9 @@ if ($setupNeeded) {
         Write-Host "[*] Running setup.ps1..." -ForegroundColor Cyan
         & .\setup.ps1 -SkipStart
         # Re-check after setup runs
-        $pythonExe = Get-TaleWeaverPython -ProjectRoot $PSScriptRoot
-        if (-not (Test-Path ".env") -or -not (Test-TaleWeaverBackend -Python $pythonExe) -or -not (Test-Path "frontend/node_modules")) {
+        $pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
+        $viteExists = (Test-Path "frontend/node_modules/.bin/vite.cmd") -or (Test-Path "frontend/node_modules/.bin/vite")
+        if (-not (Test-Path ".env") -or -not (Test-TaleWeaverBackend -Python $pythonExe) -or -not (Test-Path "frontend/node_modules") -or -not $viteExists) {
             Write-Host "[!] Setup failed or is still incomplete. Exiting." -ForegroundColor Red
             Exit 1
         }
@@ -57,4 +57,4 @@ if ($setupNeeded) {
 # 3. Start the application locally
 Write-Host "[*] Starting backend and frontend..." -ForegroundColor Green
 Write-Host "[*] Backend Python: $pythonExe" -ForegroundColor Cyan
-Start-TaleWeaverProcesses -ProjectRoot $PSScriptRoot -Python $pythonExe
+Start-TaleWeaverProcesses -ProjectRoot $scriptPath -Python $pythonExe

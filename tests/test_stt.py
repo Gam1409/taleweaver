@@ -1,5 +1,6 @@
 import io
 import wave
+
 import numpy as np
 import pytest
 from httpx import AsyncClient
@@ -18,9 +19,7 @@ async def _create_test_user(*, username: str, role: str = "user") -> None:
                 username=username,
                 hashed_password=get_password_hash("pw"),
                 role=role,
-                game_settings={
-                    "whisper_model": "tiny"
-                }
+                game_settings={"whisper_model": "tiny"},
             )
         )
         await session.commit()
@@ -32,7 +31,7 @@ def create_dummy_wav(sample_rate=16000, channels=1, sampwidth=2, duration_sec=1.
         wf.setnchannels(channels)
         wf.setsampwidth(sampwidth)
         wf.setframerate(sample_rate)
-        
+
         n_samples = int(sample_rate * duration_sec)
         samples = np.zeros(n_samples, dtype=np.int16)
         wf.writeframes(samples.tobytes())
@@ -44,23 +43,24 @@ async def test_stt_transcribe_success(monkeypatch: pytest.MonkeyPatch, client: A
 
     captured_args = {}
 
+    class MockSegment:
+        def __init__(self, text: str):
+            self.text = text
+
     class MockWhisperModel:
         def transcribe(self, audio_data, **kwargs):
             captured_args["audio_data"] = audio_data
-            return {"text": "Hello, world! This is a test."}
+            return [MockSegment("Hello, world! This is a test.")], {}
 
     def fake_load_model(model_name, *args, **kwargs):
         captured_args["model_name"] = model_name
         return MockWhisperModel()
 
-    monkeypatch.setattr(
-        "backend.api.routes.stt_api.get_whisper_model",
-        fake_load_model
-    )
+    monkeypatch.setattr("backend.api.routes.stt_api.get_whisper_model", fake_load_model)
 
     wav_bytes = create_dummy_wav(sample_rate=16000, channels=1, sampwidth=2)
     files = {"file": ("test.wav", wav_bytes, "audio/wav")}
-    
+
     headers = {"Authorization": f"Bearer {create_access_token({'sub': 'stt_user'})}"}
     response = await client.post("/api/stt/transcribe", headers=headers, files=files)
 
@@ -76,7 +76,7 @@ async def test_stt_transcribe_invalid_samplerate(client: AsyncClient) -> None:
 
     wav_bytes = create_dummy_wav(sample_rate=8000, channels=1, sampwidth=2)
     files = {"file": ("test.wav", wav_bytes, "audio/wav")}
-    
+
     headers = {"Authorization": f"Bearer {create_access_token({'sub': 'stt_user_err'})}"}
     response = await client.post("/api/stt/transcribe", headers=headers, files=files)
 
@@ -86,23 +86,26 @@ async def test_stt_transcribe_invalid_samplerate(client: AsyncClient) -> None:
 
 async def test_stt_status_and_preload(monkeypatch: pytest.MonkeyPatch, client: AsyncClient) -> None:
     await _create_test_user(username="stt_user_status")
-    
+
     from backend.api.routes.stt_api import _whisper_model_states, _whisper_models
+
     _whisper_model_states.clear()
     _whisper_models.clear()
 
     loaded_models = []
-    
+
     def fake_get_whisper_model(model_name, *args, **kwargs):
         loaded_models.append(model_name)
+
         class FakeModel:
             pass
+
         return FakeModel()
 
     monkeypatch.setattr("backend.api.routes.stt_api.get_whisper_model", fake_get_whisper_model)
 
     headers = {"Authorization": f"Bearer {create_access_token({'sub': 'stt_user_status'})}"}
-    
+
     # 1. Check initial status (should be "not_loaded")
     status_response = await client.get("/api/stt/status", headers=headers)
     assert status_response.status_code == 200

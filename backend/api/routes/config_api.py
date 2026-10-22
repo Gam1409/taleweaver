@@ -11,34 +11,23 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.ollama_role_config import (
-    OLLAMA_ROLE_DEFAULTS,
-    OllamaConnectionSettings,
-    OllamaRoleSettings,
-    preserve_explicit_ollama_models,
-    temporary_ollama_settings,
-    validate_role_urls,
+from backend.api.routes.settings_normalization import (
+    DEFAULT_COMPLEX_MAX_TOKENS,
+    DEFAULT_GENERATOR_MAX_TOKENS,
+    DEFAULT_SMALL_MAX_TOKENS,
+    TTS_MODEL_ALIASES,
 )
-
-logger = logging.getLogger(__name__)
-
-_MODEL_FETCH_LOG_COOLDOWN_SECONDS = 300.0
-_MODEL_FETCH_LAST_LOGGED_AT: dict[str, float] = {}
-
-SUPPORTED_TTS_MODELS = {
-    "gemini-3.8-flash-tts",
-    "gemini-3.8-flash-lite-tts",
-}
-
-TTS_MODEL_ALIASES = {
-    # Legacy aliases for backward compatibility
-    "gemini-2.5-flash-preview-tts": "gemini-3.8-flash-tts",
-    "gemini-2.5-flash-tts-preview": "gemini-3.8-flash-tts",
-    "gemini-2.5-flash-tts": "gemini-3.8-flash-tts",
-    "gemini-3.1-flash-tts-preview": "gemini-3.8-flash-tts",
-}
-
+from backend.api.routes.settings_normalization import (
+    normalize_llm_settings as _normalize_llm_settings,
+)
+from backend.api.routes.settings_normalization import (
+    normalize_t2i_settings as _normalize_t2i_settings,
+)
+from backend.api.routes.settings_normalization import (
+    normalize_tts_settings as _normalize_tts_settings,
+)
 from backend.core.auth import get_current_admin, get_current_user
+from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
@@ -51,8 +40,13 @@ from backend.core.models_config import (
     PREDEFINED_TTS_MODELS,
     TTS_PROVIDERS,
 )
+from backend.core.ollama_role_config import (
+    OllamaConnectionSettings,
+    OllamaRoleSettings,
+    temporary_ollama_settings,
+    validate_role_urls,
+)
 from backend.core.security import encryption_util
-from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 from backend.engine.media_engine import MediaEngine
 from backend.engine.tts_engine import TTSEngine, TTSModelSwitchSuggestionError
 from backend.models.user import User
@@ -64,12 +58,14 @@ from backend.utils.path_security import (
     validate_provider_url,
 )
 
+logger = logging.getLogger(__name__)
+
+_MODEL_FETCH_LOG_COOLDOWN_SECONDS = 300.0
+_MODEL_FETCH_LAST_LOGGED_AT: dict[str, float] = {}
+
 router = APIRouter(prefix="/settings", tags=["Settings"])
 print(f"DEBUG: Loading config_api module, router prefix: {router.prefix}")
 
-DEFAULT_SMALL_MAX_TOKENS = 12288
-DEFAULT_COMPLEX_MAX_TOKENS = 24576
-DEFAULT_GENERATOR_MAX_TOKENS = 32768
 _SAFE_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 _ALLOWED_CATALOG_TYPES = {"styles", "tones"}
 _CATALOG_EXT_BY_CONTENT_TYPE = {
@@ -176,9 +172,6 @@ def _build_catalog_upload_path(
     return _ensure_within_data_dir(os.path.join(catalog_dir, filename))
 
 
-from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
-
-
 def _default_image_styles_catalog() -> list[dict[str, Any]]:
     return [dict(item) for item in DEFAULT_IMAGE_STYLES]
 
@@ -212,21 +205,6 @@ def _normalize_catalog(
         )
 
     return normalized or fallback
-
-
-def _normalize_openrouter_model(model: Optional[str]) -> Optional[str]:
-    """Strip provider prefixes from models stored for OpenRouter."""
-    if not isinstance(model, str):
-        return model
-
-    normalized = model.strip()
-    if not normalized:
-        return normalized
-
-    if normalized.lower().startswith("openrouter/"):
-        return normalized[len("openrouter/") :].strip()
-
-    return normalized
 
 
 async def _fetch_ollama_models(ollama_url: Optional[str]) -> list[str]:
@@ -282,6 +260,36 @@ async def _fetch_stable_diffusion_models(stable_diffusion_url: Optional[str]) ->
         return ["default"]
 
 
+def _parse_model_ids(payload: Any, dict_item_keys: tuple[str, ...]) -> list[str]:
+    """Extracts model ids from `{"data": [...]}` or plain list payloads."""
+    if isinstance(payload, dict):
+        items, keys = payload.get("data") or [], dict_item_keys
+    elif isinstance(payload, list):
+        items, keys = payload, ("id", "name")
+    else:
+        return []
+    model_ids = (
+        str(next((item.get(k) for k in keys if item.get(k)), "") or "").strip()
+        for item in items
+        if isinstance(item, dict)
+    )
+    return sorted({model_id for model_id in model_ids if model_id})
+
+
+async def _fetch_bearer_models(
+    provider: str, endpoint: str, api_key: str, dict_item_keys: tuple[str, ...]
+) -> list[str]:
+    """GETs a /models endpoint with bearer auth; returns [] (logged) on failure."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(endpoint, headers={"Authorization": f"Bearer {api_key}"})
+        response.raise_for_status()
+        return _parse_model_ids(response.json(), dict_item_keys)
+    except (httpx.HTTPError, ValueError, TypeError):
+        _log_model_fetch_failure_once_per_interval(provider, endpoint)
+        return []
+
+
 async def _fetch_minimax_models(
     api_key: Optional[str], api_base: Optional[str] = None
 ) -> list[str]:
@@ -291,33 +299,7 @@ async def _fetch_minimax_models(
         return []
 
     base_url = (api_base or "https://api.minimax.chat/v1").rstrip("/")
-    endpoint = f"{base_url}/models"
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(endpoint, headers={"Authorization": f"Bearer {api_key}"})
-        response.raise_for_status()
-        payload = response.json()
-
-        models: list[str] = []
-        if isinstance(payload, dict):
-            for item in payload.get("data") or []:
-                if not isinstance(item, dict):
-                    continue
-                model_id = str(item.get("id") or "").strip()
-                if model_id:
-                    models.append(model_id)
-        elif isinstance(payload, list):
-            for item in payload:
-                if not isinstance(item, dict):
-                    continue
-                model_id = str(item.get("id") or item.get("name") or "").strip()
-                if model_id:
-                    models.append(model_id)
-
-        return sorted(set(models))
-    except (httpx.HTTPError, ValueError, TypeError):
-        _log_model_fetch_failure_once_per_interval("minimax", endpoint)
-        return []
+    return await _fetch_bearer_models("minimax", f"{base_url}/models", api_key, ("id",))
 
 
 _OPENAI_COMPATIBLE_PROVIDERS = {
@@ -341,41 +323,13 @@ async def _fetch_openai_compatible_models(
     """Return model names from any OpenAI-compatible /v1/models endpoint."""
     if provider not in _OPENAI_COMPATIBLE_PROVIDERS:
         return []
-    if not api_key:
-        _log_model_fetch_failure_once_per_interval(
-            provider, _OPENAI_COMPATIBLE_PROVIDERS[provider]["default_base"]
-        )
-        return []
-
     default_base = _OPENAI_COMPATIBLE_PROVIDERS[provider]["default_base"]
-    base_url = (api_base or default_base).rstrip("/")
-    endpoint = f"{base_url}/models"
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(endpoint, headers={"Authorization": f"Bearer {api_key}"})
-        response.raise_for_status()
-        payload = response.json()
-
-        models: list[str] = []
-        if isinstance(payload, dict):
-            for item in payload.get("data") or []:
-                if not isinstance(item, dict):
-                    continue
-                model_id = str(item.get("id") or item.get("name") or "").strip()
-                if model_id:
-                    models.append(model_id)
-        elif isinstance(payload, list):
-            for item in payload:
-                if not isinstance(item, dict):
-                    continue
-                model_id = str(item.get("id") or item.get("name") or "").strip()
-                if model_id:
-                    models.append(model_id)
-
-        return sorted(set(models))
-    except (httpx.HTTPError, ValueError, TypeError):
-        _log_model_fetch_failure_once_per_interval(provider, endpoint)
+    if not api_key:
+        _log_model_fetch_failure_once_per_interval(provider, default_base)
         return []
+
+    base_url = (api_base or default_base).rstrip("/")
+    return await _fetch_bearer_models(provider, f"{base_url}/models", api_key, ("id", "name"))
 
 
 def _safe_provider_url(url: Optional[str], *, default: Optional[str] = None) -> str:
@@ -452,377 +406,6 @@ async def _build_available_constants(
         "predefined_llm_models": predefined_llm_models,
         "predefined_image_models": predefined_image_models,
     }
-
-
-def _normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
-    """Return LLM settings with separate providers, tokens and thinking modes."""
-    fallback = {
-        **OLLAMA_ROLE_DEFAULTS,
-        "ollama_api_mode": "generate",
-        "small_model": "",
-        "small_model_provider": "openai",
-        "small_max_tokens": DEFAULT_SMALL_MAX_TOKENS,
-        "small_enable_thinking": False,
-        "small_max_thinking_tokens": 1024,
-        "small_openrouter_provider": "",
-        "complex_model": "",
-        "complex_model_provider": "openai",
-        "complex_max_tokens": DEFAULT_COMPLEX_MAX_TOKENS,
-        "complex_enable_thinking": False,
-        "complex_max_thinking_tokens": 2048,
-        "complex_openrouter_provider": "",
-        "generator_model": "",
-        "generator_model_provider": "openai",
-        "generator_max_tokens": DEFAULT_GENERATOR_MAX_TOKENS,
-        "generator_enable_thinking": False,
-        "generator_max_thinking_tokens": 2048,
-        "generator_openrouter_provider": "",
-        "play_agent_model": "",
-        "play_agent_model_provider": "openai",
-        "play_agent_monkey_mode": False,
-        "play_agent_allow_walkthrough": True,
-        "play_agent_step_by_step": False,
-        "play_agent_openrouter_provider": "",
-        "compression_model": "",
-        "compression_model_provider": "openai",
-        "compression_max_tokens": 4096,
-        "compression_openrouter_provider": "",
-        "turns_before_compacting": 10,
-        "enable_history_compression": True,
-        "preferred_provider": "openai",  # Legacy/Default
-        "openrouter_provider": "",
-        "ollama_url": "http://localhost:11434",
-        "minimax_url": "https://api.minimax.chat/v1",
-        "custom_openai_url": "",
-        "custom_openai_timeout": 300,
-        "custom_openai_response_format": "prompt",
-    }
-    if not llm_settings:
-        return fallback
-
-    normalized = {
-        **OLLAMA_ROLE_DEFAULTS,
-        "ollama_api_mode": "generate",
-        "custom_openai_url": "",
-        "custom_openai_timeout": 300,
-        "custom_openai_response_format": "prompt",
-        **llm_settings,
-    }
-
-    # Provider normalization
-    if "small_model_provider" not in normalized:
-        normalized["small_model_provider"] = normalized.get("preferred_provider") or "openai"
-    if "complex_model_provider" not in normalized:
-        normalized["complex_model_provider"] = normalized.get("preferred_provider") or "openai"
-    if "generator_model_provider" not in normalized:
-        normalized["generator_model_provider"] = (
-            normalized.get("complex_model_provider") or "openai"
-        )
-    if "play_agent_model_provider" not in normalized:
-        normalized["play_agent_model_provider"] = (
-            normalized.get("small_model_provider")
-            or normalized.get("complex_model_provider")
-            or normalized.get("preferred_provider")
-            or "openai"
-        )
-
-    # OpenRouter routing preferences normalization
-    if "small_openrouter_provider" not in normalized:
-        normalized["small_openrouter_provider"] = normalized.get("openrouter_provider") or ""
-    if "complex_openrouter_provider" not in normalized:
-        normalized["complex_openrouter_provider"] = (
-            normalized.get("small_openrouter_provider")
-            or normalized.get("openrouter_provider")
-            or ""
-        )
-    if "generator_openrouter_provider" not in normalized:
-        normalized["generator_openrouter_provider"] = (
-            normalized.get("complex_openrouter_provider")
-            or normalized.get("openrouter_provider")
-            or ""
-        )
-    if "play_agent_openrouter_provider" not in normalized:
-        normalized["play_agent_openrouter_provider"] = (
-            normalized.get("small_openrouter_provider")
-            or normalized.get("openrouter_provider")
-            or ""
-        )
-    if "openrouter_provider" not in normalized:
-        normalized["openrouter_provider"] = normalized.get("small_openrouter_provider") or ""
-
-    # Per-model Max Tokens
-    if "small_max_tokens" not in normalized:
-        normalized["small_max_tokens"] = normalized.get("max_tokens") or DEFAULT_SMALL_MAX_TOKENS
-    if "complex_max_tokens" not in normalized:
-        normalized["complex_max_tokens"] = (
-            normalized.get("max_tokens") or DEFAULT_COMPLEX_MAX_TOKENS
-        )
-    if "generator_max_tokens" not in normalized:
-        normalized["generator_max_tokens"] = (
-            normalized.get("max_tokens") or DEFAULT_GENERATOR_MAX_TOKENS
-        )
-
-    # Per-model Thinking Mode
-    if "small_enable_thinking" not in normalized:
-        normalized["small_enable_thinking"] = normalized.get("enable_thinking") or False
-    if "small_max_thinking_tokens" not in normalized:
-        normalized["small_max_thinking_tokens"] = normalized.get("max_thinking_tokens") or 1024
-
-    if "complex_enable_thinking" not in normalized:
-        normalized["complex_enable_thinking"] = normalized.get("enable_thinking") or False
-    if "complex_max_thinking_tokens" not in normalized:
-        normalized["complex_max_thinking_tokens"] = normalized.get("max_thinking_tokens") or 1024
-
-    if "generator_enable_thinking" not in normalized:
-        normalized["generator_enable_thinking"] = normalized.get("enable_thinking") or False
-    if "generator_max_thinking_tokens" not in normalized:
-        normalized["generator_max_thinking_tokens"] = normalized.get("max_thinking_tokens") or 1024
-
-    # Fallback between small and complex if one is missing
-    s_model = normalized.get("small_model")
-    c_model = normalized.get("complex_model")
-
-    if s_model and not c_model:
-        normalized["complex_model"] = s_model
-        normalized["complex_model_provider"] = normalized.get("small_model_provider")
-        normalized["complex_max_tokens"] = normalized.get("small_max_tokens")
-        normalized["complex_enable_thinking"] = normalized.get("small_enable_thinking")
-        normalized["complex_max_thinking_tokens"] = normalized.get("small_max_thinking_tokens")
-    elif c_model and not s_model:
-        normalized["small_model"] = c_model
-        normalized["small_model_provider"] = normalized.get("complex_model_provider")
-        normalized["small_max_tokens"] = normalized.get("complex_max_tokens")
-        normalized["small_enable_thinking"] = normalized.get("complex_enable_thinking")
-        normalized["small_max_thinking_tokens"] = normalized.get("small_max_thinking_tokens")
-
-    # If generator is missing, fallback to complex
-    if not normalized.get("generator_model") and normalized.get("complex_model"):
-        normalized["generator_model"] = normalized.get("complex_model")
-        normalized["generator_model_provider"] = normalized.get("complex_model_provider")
-        normalized["generator_max_tokens"] = normalized.get("complex_max_tokens")
-        normalized["generator_enable_thinking"] = normalized.get("complex_enable_thinking")
-        normalized["generator_max_thinking_tokens"] = normalized.get("complex_max_thinking_tokens")
-
-    # If play-agent model is missing, fallback to small for autonomous gameplay mode.
-    if not normalized.get("play_agent_model") and normalized.get("small_model"):
-        normalized["play_agent_model"] = normalized.get("small_model")
-        normalized["play_agent_model_provider"] = normalized.get("small_model_provider")
-
-    if "play_agent_monkey_mode" not in normalized:
-        normalized["play_agent_monkey_mode"] = False
-
-    if "play_agent_allow_walkthrough" not in normalized:
-        normalized["play_agent_allow_walkthrough"] = True
-    normalized["play_agent_allow_walkthrough"] = bool(normalized["play_agent_allow_walkthrough"])
-
-    if "play_agent_step_by_step" not in normalized:
-        normalized["play_agent_step_by_step"] = False
-    normalized["play_agent_step_by_step"] = bool(normalized["play_agent_step_by_step"])
-
-    # Compression model normalization (fallback to small model if not set)
-    if "compression_model_provider" not in normalized:
-        normalized["compression_model_provider"] = (
-            normalized.get("small_model_provider") or "openai"
-        )
-    if "compression_openrouter_provider" not in normalized:
-        normalized["compression_openrouter_provider"] = (
-            normalized.get("small_openrouter_provider") or ""
-        )
-    if "compression_max_tokens" not in normalized:
-        normalized["compression_max_tokens"] = 4096
-    # If compression model is empty, silently fall back to small_model at call time
-    if "compression_model" not in normalized:
-        normalized["compression_model"] = ""
-
-    # Compacting / memory turns defaults
-    if "turns_before_compacting" not in normalized:
-        normalized["turns_before_compacting"] = normalized.get("default_max_memory_turns", 10)
-    try:
-        normalized["turns_before_compacting"] = max(
-            1, min(100, int(normalized["turns_before_compacting"]))
-        )
-    except (ValueError, TypeError):
-        normalized["turns_before_compacting"] = 10
-
-    if "enable_history_compression" not in normalized:
-        normalized["enable_history_compression"] = normalized.get("enable_compacting", True)
-    normalized["enable_history_compression"] = bool(normalized["enable_history_compression"])
-
-    # OpenRouter normalization
-    if normalized.get("small_model_provider") == "openrouter":
-        normalized["small_model"] = _normalize_openrouter_model(normalized.get("small_model"))
-    if normalized.get("complex_model_provider") == "openrouter":
-        normalized["complex_model"] = _normalize_openrouter_model(normalized.get("complex_model"))
-    if normalized.get("generator_model_provider") == "openrouter":
-        normalized["generator_model"] = _normalize_openrouter_model(
-            normalized.get("generator_model")
-        )
-    if normalized.get("play_agent_model_provider") == "openrouter":
-        normalized["play_agent_model"] = _normalize_openrouter_model(
-            normalized.get("play_agent_model")
-        )
-    if normalized.get("compression_model_provider") == "openrouter":
-        normalized["compression_model"] = _normalize_openrouter_model(
-            normalized.get("compression_model")
-        )
-
-    preserve_explicit_ollama_models(normalized, llm_settings or {})
-    return normalized
-
-
-def _normalize_tts_settings(tts_settings: Optional[dict]) -> dict:
-    """Return TTS settings with voice list, selected voice and style context."""
-    full_voice_list = list(GOOGLE_TTS_VOICE_LIST)
-    full_voice_catalog = [dict(entry) for entry in GOOGLE_TTS_VOICE_CATALOG]
-    fallback = {
-        "enabled": False,
-        "provider": "google",
-        "selected_model": "gemini-3.8-flash-tts",
-        "voice_list": full_voice_list,
-        "voice_catalog": full_voice_catalog,
-        "selected_voice": "Puck",
-        "elevenlabs_voice_id": "",
-        "use_vocal_tags": True,
-        "use_text_chunking": True,
-        "use_streaming": False,
-        "speech_rate": 1.0,
-    }
-    if not tts_settings:
-        return fallback
-
-    normalized = dict(tts_settings)
-
-    # Accept historical/alternate keys to avoid silently resetting model selection.
-    if "selected_model" not in normalized:
-        selected_model_legacy = (
-            normalized.get("model")
-            or normalized.get("tts_model")
-            or normalized.get("single_voice_model")
-            or normalized.get("single_voice_tts_model")
-        )
-        if selected_model_legacy:
-            normalized["selected_model"] = selected_model_legacy
-
-    selected_model = str(normalized.get("selected_model") or "").strip()
-    if selected_model in TTS_MODEL_ALIASES:
-        normalized["selected_model"] = TTS_MODEL_ALIASES[selected_model]
-
-    # Ensure new fields exist
-    # Ensure new fields exist with safe defaults
-    normalized["provider"] = normalized.get("provider") or "google"
-    normalized["elevenlabs_voice_id"] = normalized.get("elevenlabs_voice_id", "")
-
-    # Handle booleans carefully: only set to True if the key is missing entirely
-    if "use_vocal_tags" not in normalized:
-        normalized["use_vocal_tags"] = True
-    if "use_text_chunking" not in normalized:
-        normalized["use_text_chunking"] = True
-    if "use_streaming" not in normalized:
-        normalized["use_streaming"] = False
-
-    if "enabled" not in normalized:
-        normalized["enabled"] = fallback["enabled"]
-    if "selected_model" not in normalized:
-        normalized["selected_model"] = fallback["selected_model"]
-    elif (
-        normalized.get("provider") == "google"
-        and normalized.get("selected_model") not in SUPPORTED_TTS_MODELS
-    ):
-        normalized["selected_model"] = fallback["selected_model"]
-
-    # Always ensure the full list is available
-    normalized["voice_list"] = full_voice_list
-    normalized["voice_catalog"] = full_voice_catalog
-
-    if "selected_voice" not in normalized:
-        normalized["selected_voice"] = fallback["selected_voice"]
-    if "speech_rate" not in normalized:
-        normalized["speech_rate"] = fallback["speech_rate"]
-    return normalized
-
-
-def _normalize_t2i_settings(t2i_settings: Optional[dict]) -> dict:
-    """Return T2I settings with separate providers."""
-    fallback = {
-        "simple_model": "",
-        "simple_model_provider": "openai",
-        "advanced_model": "",
-        "advanced_model_provider": "openai",
-        "provider": "openai",  # Legacy/Default
-        "ollama_url": "http://localhost:11434",
-        "stable_diffusion_url": "http://127.0.0.1:7860",
-        "width": None,
-        "height": None,
-        "steps": None,
-        "cfg_scale": None,
-        "simple_steps": None,
-        "simple_cfg_scale": None,
-        "advanced_steps": None,
-        "advanced_cfg_scale": None,
-        "simple_sampler_name": None,
-        "simple_scheduler": None,
-        "advanced_sampler_name": None,
-        "advanced_scheduler": None,
-        "simple_min_long_edge": None,
-        "advanced_min_long_edge": None,
-        "seed": None,
-        "image_format": "jpeg",
-        "image_quality": 85,
-        "negative_prompt": None,
-        # Model usage quality per content type
-        "scene_model_quality": "advanced",
-        "profile_model_quality": "advanced",
-        "protagonist_model_quality": "advanced",
-        "asset_model_quality": "simple",
-    }
-    if not t2i_settings:
-        return fallback
-
-    normalized = dict(t2i_settings)
-    if "simple_model_provider" not in normalized:
-        normalized["simple_model_provider"] = normalized.get("provider") or "openai"
-    if "advanced_model_provider" not in normalized:
-        normalized["advanced_model_provider"] = normalized.get("provider") or "openai"
-
-    if "stable_diffusion_url" not in normalized:
-        normalized["stable_diffusion_url"] = "http://127.0.0.1:7860"
-    if "ollama_url" not in normalized:
-        normalized["ollama_url"] = "http://localhost:11434"
-    if "cfg_scale" not in normalized:
-        normalized["cfg_scale"] = None
-
-    for field in (
-        "simple_steps",
-        "simple_cfg_scale",
-        "advanced_steps",
-        "advanced_cfg_scale",
-        "simple_sampler_name",
-        "simple_scheduler",
-        "advanced_sampler_name",
-        "advanced_scheduler",
-        "simple_min_long_edge",
-        "advanced_min_long_edge",
-    ):
-        if field not in normalized:
-            normalized[field] = None
-
-    # Model usage quality defaults
-    for field, default in (
-        ("scene_model_quality", "advanced"),
-        ("profile_model_quality", "advanced"),
-        ("protagonist_model_quality", "advanced"),
-        ("asset_model_quality", "simple"),
-    ):
-        if field not in normalized:
-            normalized[field] = default
-
-    # OpenRouter normalization
-    if normalized.get("simple_model_provider") == "openrouter":
-        normalized["simple_model"] = _normalize_openrouter_model(normalized.get("simple_model"))
-    if normalized.get("advanced_model_provider") == "openrouter":
-        normalized["advanced_model"] = _normalize_openrouter_model(normalized.get("advanced_model"))
-
-    return normalized
 
 
 def _normalize_game_settings(game_settings: Optional[dict]) -> dict:
@@ -924,6 +507,8 @@ class SettingsPayload(OllamaRoleSettings):
     play_agent_allow_walkthrough: bool = True
     play_agent_step_by_step: bool = False
     play_agent_openrouter_provider: Optional[str] = ""
+    play_agent_personality: Optional[str] = "casual"
+    play_agent_custom_personality: Optional[str] = ""
 
     compression_model: Optional[str] = ""
     compression_model_provider: Optional[str] = "openai"
@@ -1422,6 +1007,51 @@ class TestVisionPayload(BaseModel):
     min_long_edge: Optional[int] = None
 
 
+_LOCAL_IMAGE_PROVIDERS = ("ollama", "stable_diffusion")
+
+
+def _resolve_vision_api_key(
+    user: User, provider_key: str, provider_name: str
+) -> tuple[Optional[str], Optional[dict]]:
+    """Returns (api_key, error_response); local providers need no key."""
+    if provider_key in _LOCAL_IMAGE_PROVIDERS:
+        return None, None
+    api_key = settings.get_env_api_key(provider_key)
+    if api_key:
+        return api_key, None
+    encrypted_keys = user.encrypted_api_keys
+    if not encrypted_keys or provider_key not in encrypted_keys:
+        return None, {"status": "error", "message": f"No API key configured for {provider_name}."}
+    try:
+        return encryption_util.decrypt_key(encrypted_keys[provider_key]), None
+    except Exception as dec_exc:
+        diag = diagnose_provider_error(dec_exc, provider=provider_name, context="vision")
+        return None, {"status": "error", "message": diag}
+
+
+def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: str) -> dict:
+    options: dict[str, Any] = {}
+    for key in ("ollama_url", "stable_diffusion_url", "sampler_name", "scheduler"):
+        if getattr(payload, key):
+            options[key] = getattr(payload, key)
+    for key in ("steps", "cfg_scale"):
+        if getattr(payload, key) is not None:
+            options[key] = getattr(payload, key)
+
+    # Test vision generates a wizard portrait (CHARACTER/4:5 aspect ratio)
+    if provider_key in _LOCAL_IMAGE_PROVIDERS and not payload.width and not payload.height:
+        min_long_edge = payload.min_long_edge or 1024
+        width, height = MediaEngine._resolve_sd_dimensions("CHARACTER", min_long_edge)
+        options["width"] = width
+        options["height"] = height
+        return options
+
+    for key in ("width", "height"):
+        if getattr(payload, key) is not None:
+            options[key] = getattr(payload, key)
+    return options
+
+
 @router.post("/test-vision")
 async def test_vision_connection(
     payload: TestVisionPayload,
@@ -1431,64 +1061,20 @@ async def test_vision_connection(
     """Tests the connection to an image provider by generating a wizard portrait."""
     user = await _resolve_global_settings_owner(db, current_user)
     provider_key = payload.provider.lower()
-
-    api_key = None
-    if provider_key not in ("ollama", "stable_diffusion"):
-        api_key = settings.get_env_api_key(provider_key)
-        if not api_key:
-            if not user.encrypted_api_keys or provider_key not in user.encrypted_api_keys:
-                return {
-                    "status": "error",
-                    "message": f"No API key configured for {payload.provider}.",
-                }
-            try:
-                api_key = encryption_util.decrypt_key(user.encrypted_api_keys[provider_key])
-            except Exception as dec_exc:
-                diag = diagnose_provider_error(dec_exc, provider=payload.provider, context="vision")
-                return {"status": "error", "message": diag}
+    api_key, error_response = _resolve_vision_api_key(user, provider_key, payload.provider)
+    if error_response:
+        return error_response
 
     try:
         test_dir = _safe_data_path("scratch", "test_connection")
         os.makedirs(test_dir, exist_ok=True)
-        provider_options = {}
-        if payload.ollama_url:
-            provider_options["ollama_url"] = payload.ollama_url
-        if payload.stable_diffusion_url:
-            provider_options["stable_diffusion_url"] = payload.stable_diffusion_url
-        if payload.steps is not None:
-            provider_options["steps"] = payload.steps
-        if payload.cfg_scale is not None:
-            provider_options["cfg_scale"] = payload.cfg_scale
-        if payload.sampler_name:
-            provider_options["sampler_name"] = payload.sampler_name
-        if payload.scheduler:
-            provider_options["scheduler"] = payload.scheduler
-
-        # Test vision generates a wizard portrait (CHARACTER/4:5 aspect ratio)
-        if provider_key in ("stable_diffusion", "ollama"):
-            min_long_edge = payload.min_long_edge or 1024
-            if not payload.width and not payload.height:
-                width, height = MediaEngine._resolve_sd_dimensions("CHARACTER", min_long_edge)
-                provider_options["width"] = width
-                provider_options["height"] = height
-            else:
-                if payload.width is not None:
-                    provider_options["width"] = payload.width
-                if payload.height is not None:
-                    provider_options["height"] = payload.height
-        else:
-            if payload.width is not None:
-                provider_options["width"] = payload.width
-            if payload.height is not None:
-                provider_options["height"] = payload.height
-
         img_url = await MediaEngine.generate_image(
             prompt="A Wizard portrait",
             model=payload.model,
             api_key=api_key,
             provider=payload.provider,
             target_dir=test_dir,
-            provider_options=provider_options,
+            provider_options=_build_vision_provider_options(payload, provider_key),
         )
         if img_url:
             return {
@@ -1496,8 +1082,7 @@ async def test_vision_connection(
                 "message": "Image generation successful!",
                 "image_url": img_url,
             }
-        else:
-            return {"status": "error", "message": "Image generation failed."}
+        return {"status": "error", "message": "Image generation failed."}
     except Exception as exc:
         diag = diagnose_provider_error(
             exc, provider=payload.provider, model=payload.model, context="vision"

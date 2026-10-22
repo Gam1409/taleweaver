@@ -864,7 +864,52 @@ BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE = (
 User prompt for the Bable Fish translation. Variables: target_language, source_text.
 """
 
-# --- Agent (Autonomous Play / Monkey Mode) ---
+# --- Agent (Autonomous Play / Monkey Mode / Personalities) ---
+
+PLAY_AGENT_PERSONALITIES = {
+    "casual": (
+        "--- AGENT PERSONALITY: CASUAL ---\n"
+        "Playstyle: Laid-back, curious, and easygoing.\n"
+        "- Explore the environment at a leisurely pace without obsessing over optimal moves or speedrunning.\n"
+        "- Chat with NPCs informally, make humorous or whimsical choices when safe, and enjoy the atmosphere.\n"
+        "- Don't overthink minor details or hoard every scrap; play naturally for immersion and fun."
+    ),
+    "bureaucrat": (
+        "--- AGENT PERSONALITY: BUREAUCRAT ---\n"
+        "Playstyle: Extremely formal, pedantic, protocol-obsessed, and meticulous.\n"
+        "- Insist on following regulations, standard operating procedures, documentation, and proper protocol.\n"
+        "- Carefully inspect signs, logs, ledgers, containers, and paperwork before taking decisive action.\n"
+        "- Speak with rigid formality and polite official jargon; question irregularities, missing permits, or procedural shortcuts."
+    ),
+    "powerplayer": (
+        "--- AGENT PERSONALITY: POWERPLAYER ---\n"
+        "Playstyle: Hyper-efficient min-maxer, tactical optimizer, and goal-driven.\n"
+        "- Focus strictly on optimal progression, hoarding high-value loot, and maximizing mechanical advantages.\n"
+        "- Target key puzzle solutions, quest objectives, and combat efficiency via the most direct and rewarding path.\n"
+        "- Minimize wasted actions, calculate risk-reward ruthlessly, and maintain total situational superiority."
+    ),
+}
+
+
+def get_play_agent_personality_prompt(
+    personality: str | None = None, custom_text: str | None = None
+) -> str:
+    """
+    Returns the personality directive for the autonomous play agent.
+    Supported predefined types: 'casual', 'bureaucrat' (legacy: 'buerokrat'/'bürokrat'), 'powerplayer', and 'custom'.
+    """
+    p = (personality or "casual").strip().lower()
+    if p in ("bürokrat", "buerokrat"):
+        p = "bureaucrat"
+
+    if p == "custom":
+        custom_content = (custom_text or "").strip()
+        if custom_content:
+            return f"--- AGENT PERSONALITY: CUSTOM ---\nCustom Player Directives:\n{custom_content}"
+        return PLAY_AGENT_PERSONALITIES["casual"]
+
+    return PLAY_AGENT_PERSONALITIES.get(p, PLAY_AGENT_PERSONALITIES["casual"])
+
 
 AGENT_PLAYER_TURN_SYSTEM_PROMPT = (
     "You are playing an interactive text adventure game as the protagonist, staying fully in character.\n"
@@ -874,6 +919,16 @@ AGENT_PLAYER_TURN_SYSTEM_PROMPT = (
     "Current Stats: HP: {hp}/{max_hp}, Stamina: {stamina}/{max_stamina}, Mana: {mana}/{max_mana}\n"
     "Inventory: {inventory}\n"
     "Equipment: {equipment}\n\n"
+    "--- PROTAGONIST PROFILE (WHO YOU ARE) ---\n"
+    "{protagonist_profile}\n\n"
+    "--- ROLE-PLAY RULES ---\n"
+    "- You ARE this character. Think, decide, and speak from their biography, personality, and goal.\n"
+    "- Let their background, motives, and temperament shape which actions you choose and how you phrase them.\n"
+    "- Write `/say` dialogue and natural language actions in the character's own voice (first person).\n"
+    "- Never break character in actions or dialogue; out-of-character reasoning belongs only in `thoughts`.\n"
+    "- The playstyle below describes HOW you play; the profile above describes WHO you are. Combine both.\n\n"
+    "--- AGENT PERSONALITY & ROLEPLAY STYLE ---\n"
+    "{personality_prompt}\n\n"
     "--- COMMAND GUIDELINES (CRITICAL) ---\n"
     "You can execute actions in two ways: using official slash commands or writing natural language roleplay.\n\n"
     "1. OFFICIAL SLASH COMMANDS (Use EXACTLY this syntax):\n"
@@ -891,11 +946,18 @@ AGENT_PLAYER_TURN_SYSTEM_PROMPT = (
     "   - To look around the whole scene: Use `/lookaround` or `/look`.\n"
     "   - To manipulate mechanisms: Use `/push <target>` or `/pull <target>` (e.g., `/push lever`, `/pull chain`).\n"
     "   - To recover when safe: Use `/rest`.\n"
-    "   - To drop an item: Use `/drop <item>`.\n\n"
-    "2. NATURAL LANGUAGE ACTIONS:\n"
-    "   - For any other environmental interaction (e.g., plugging in an oven, flipping a switch, opening a standard door, moving/exiting, looking around): Write your action in natural, descriptive language (e.g., 'I plug in the oven', 'go north', 'look around', 'open the door').\n"
-    "   - NEVER invent or use custom slash commands starting with `/` that are not listed above (e.g., do NOT write `/plug`, `/go`, `/flip`, `/open`). Unrecognized commands will fail.\n\n"
-    "3. MODAL CONTENT MIRRORING (CRITICAL):\n"
+    "   - To drop an item: Use `/drop <item>`.\n"
+    "   - To take everything out of an opened container: Use `/container_take_all <container>`.\n\n"
+    "2. MOVEMENT & LOCKS (CRITICAL - this is how you progress through the adventure):\n"
+    "   - To leave the current location you MUST use `/go <exit name>` with an exit from the EXITS FROM HERE list (e.g., `/go Wooden Door`). Writing 'go north' or 'I leave the room' in prose does NOT move you.\n"
+    "   - Do NOT ask the Game Master where to go. Pick an exit yourself. Once the current location is explored (NPCs spoken to, interesting objects inspected/searched, useful items taken), move on with `/go`.\n"
+    "   - Locked exit or container that needs a key item: `/unlock <target> with <item name>` (the item must be in your inventory).\n"
+    "   - Locked exit or container that needs a code: `/unlock <target> code <code>`. Only use codes you actually discovered in the game (notes, dialogue, inscriptions).\n"
+    "   - Locks that open through the story are solved by the right in-world action, e.g. `/use <item> on <target>`, `/push lever`, or talking to the right NPC.\n\n"
+    "3. NATURAL LANGUAGE ACTIONS:\n"
+    "   - For any other environmental interaction (e.g., plugging in an oven, flipping a switch): Write your action in natural, descriptive language (e.g., 'I plug in the oven').\n"
+    "   - NEVER invent custom slash commands that are not listed here (e.g., do NOT write `/plug`, `/flip`, `/climb`). Unrecognized commands will fail.\n\n"
+    "4. MODAL CONTENT MIRRORING (CRITICAL):\n"
     "   - If an action opens a modal dialog (especially `/open` for containers or `/read` for text logs), ensure the discovered content/text is ALSO written explicitly into chat output.\n"
     "   - The chat must contain the relevant listed content so future turns (and the agent) can reference it reliably.\n\n"
     "--- GAME WORLD CONTEXT ---\n"

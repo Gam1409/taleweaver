@@ -85,9 +85,8 @@ function selectSection(section: 'templates' | 'sessions' | 'profile') {
     <div class="p-6 lg:p-8 pt-4 border-t border-white/5">
       <button
         @click="emit('about'); emit('close-mobile')"
-        class="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/5 hover:text-white transition-all group"
+        class="w-full flex items-center px-4 py-3 rounded-xl text-slate-500 hover:bg-white/5 hover:text-white transition-all group"
       >
-        <i class="ra ra-scroll-unfurled text-xl group-hover:text-aether-primary"></i>
         <span class="text-xs font-black uppercase tracking-widest">About Archive</span>
       </button>
     </div>

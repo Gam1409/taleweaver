@@ -30,14 +30,9 @@ const emit = defineEmits<{
         <div class="p-8 relative">
           <!-- Header -->
           <div class="flex items-center justify-between mb-8">
-            <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shadow-inner">
-                <ShieldAlert class="w-7 h-7" />
-              </div>
-              <div>
-                <h2 class="text-xl font-black text-white uppercase tracking-tighter leading-none mb-1">Configuration Needed</h2>
-                <p class="text-amber-500/60 text-[10px] font-bold uppercase tracking-[0.2em]">TaleWeaver Core Setup</p>
-              </div>
+            <div>
+              <h2 class="text-xl font-black text-white uppercase tracking-tighter leading-none mb-1">Configuration Needed</h2>
+              <p class="text-amber-500/60 text-[10px] font-bold uppercase tracking-[0.2em]">TaleWeaver Core Setup</p>
             </div>
             <button 
               @click="emit('close')"

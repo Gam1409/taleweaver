@@ -34,16 +34,11 @@ const handleSubmit = () => {
       <div class="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-fade-in">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center text-lg">
-              <i class="ra ra-hood"></i>
-            </div>
-            <div>
-              <h2 class="text-xl font-bold text-white">
-                {{ isEditingExisting ? 'Edit Realm Dweller' : 'Summon New Dweller' }}
-              </h2>
-              <p class="text-xs text-slate-400">Manage account credentials and role authorization.</p>
-            </div>
+          <div>
+            <h2 class="text-xl font-bold text-white">
+              {{ isEditingExisting ? 'Edit Realm Dweller' : 'Summon New Dweller' }}
+            </h2>
+            <p class="text-xs text-slate-400">Manage account credentials and role authorization.</p>
           </div>
           <button @click="emit('close')" class="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
             <i class="ra ra-cancel text-sm"></i>

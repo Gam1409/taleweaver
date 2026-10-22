@@ -56,7 +56,8 @@ try {
 
     # Exercise the actual runner without opening windows, running setup, or using the network.
     Copy-Item (Join-Path $repo "run.ps1") $testRoot
-    New-Item -ItemType Directory -Path (Join-Path $testRoot "scripts"), (Join-Path $testRoot "frontend/node_modules") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $testRoot "scripts"), (Join-Path $testRoot "frontend/node_modules/.bin") -Force | Out-Null
+    Set-Content (Join-Path $testRoot "frontend/node_modules/.bin/vite") "placeholder"
     Set-Content (Join-Path $testRoot ".env") "PROJECT_NAME=TaleWeaver"
     $helper = Join-Path $testRoot "scripts/powershell-environment.ps1"
     Copy-Item (Join-Path $repo "scripts/powershell-environment.ps1") $helper
@@ -76,6 +77,12 @@ function Read-Host { throw 'A ready Poetry installation must not trigger setup p
     Assert-Equal $launch.Python $Python "Runner launches the Poetry interpreter with FastAPI installed"
     Assert-Equal $launch.Root $testRoot "Runner handles a checkout path containing spaces and an apostrophe"
 
+    Remove-Item (Join-Path $testRoot "frontend/node_modules/.bin/vite")
+    Remove-Item (Join-Path $testRoot "launch.json")
+    & $shellExe -NoProfile -File (Join-Path $testRoot "run.ps1") *> $null
+    Assert-Equal ($LASTEXITCODE -ne 0) $true "Missing Vite triggers the runner's setup check"
+    Assert-Equal (Test-Path (Join-Path $testRoot "launch.json")) $false "Runner does not launch without Vite"
+
     # A failed install must not reach key generation, migrations, or frontend setup.
     Copy-Item (Join-Path $repo "setup.ps1") $testRoot
     Set-Content $script:PoetryForTest "exit 17"
@@ -88,6 +95,28 @@ function Read-Host { throw 'A ready Poetry installation must not trigger setup p
     & $shellExe -NoProfile -File (Join-Path $testRoot "setup.ps1") -SkipStart *> $null
     Assert-Equal ($LASTEXITCODE -ne 0) $true "Setup rejects a successful installer with missing dependencies"
     Assert-Equal (Test-Path (Join-Path $testRoot "data")) $false "Missing dependencies stop before migrations"
+
+    # Exercise frontend installation without installing packages or running migrations.
+    Set-Content $script:PoetryForTest "Write-Output '$pythonLiteral'; exit 0"
+    Add-Content $helper @'
+function Invoke-TaleWeaverNative {
+    param([string]$Command, [string[]]$Arguments)
+    if ($Command -eq 'node') { return 'v24.0.0' }
+    if ($Command -ne 'npm') { return }
+    $Arguments -join ' ' | Set-Content (Join-Path $PSScriptRoot '../npm-arguments.txt')
+    if (Test-Path (Join-Path $PSScriptRoot '../install-vite')) {
+        Set-Content 'node_modules/.bin/vite' 'placeholder'
+    }
+}
+'@
+    Set-Content (Join-Path $testRoot ".env") ("PROJECT_NAME=TaleWeaver`nENCRYPTION_KEY=" + ('a' * 44) + "`nSECRET_KEY=" + ('b' * 64))
+    & $shellExe -NoProfile -File (Join-Path $testRoot "setup.ps1") -SkipStart *> $null
+    Assert-Equal ($LASTEXITCODE -ne 0) $true "Setup rejects npm success without a Vite binary"
+    Assert-Equal (Get-Content (Join-Path $testRoot "npm-arguments.txt")) "install --include=dev" "Setup explicitly installs frontend development dependencies"
+    Set-Content (Join-Path $testRoot "install-vite") "enabled"
+    & $shellExe -NoProfile -File (Join-Path $testRoot "setup.ps1") -SkipStart *> $null
+    Assert-Equal $LASTEXITCODE 0 "Setup succeeds with Poetry dependencies and Vite available"
+    Assert-Equal (Test-Path (Join-Path $testRoot "launch.json")) $false "SkipStart does not launch application processes"
 } finally {
     $env:PATH = $originalPath
     Set-Location $originalLocation

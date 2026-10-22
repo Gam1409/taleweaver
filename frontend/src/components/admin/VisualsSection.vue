@@ -65,6 +65,55 @@ const isModelCustom = (model: string, provider: string) => {
   return !predefined.includes(model)
 }
 
+const isCustomSimple = ref(false)
+const isCustomAdvanced = ref(false)
+
+const syncCustomFlags = () => {
+  const checkCustom = (model: string | undefined, provider: string | undefined) => {
+    if (!model) return false
+    if (!provider) return false
+    const predefined = props.availableConstants?.predefined_image_models?.[provider]
+    if (!predefined || predefined.length === 0) return true
+    return !predefined.includes(model)
+  }
+  isCustomSimple.value = checkCustom(localForm.value.simple_model, localForm.value.simple_model_provider)
+  isCustomAdvanced.value = checkCustom(localForm.value.advanced_model, localForm.value.advanced_model_provider)
+}
+
+syncCustomFlags()
+
+watch(() => props.t2iForm, () => {
+  syncCustomFlags()
+}, { deep: true })
+
+const onSimpleModelChange = (e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  if (val === 'custom') {
+    isCustomSimple.value = true
+    const predefined = props.availableConstants?.predefined_image_models?.[localForm.value.simple_model_provider]
+    if (predefined?.includes(localForm.value.simple_model)) {
+      localForm.value.simple_model = ''
+    }
+  } else {
+    isCustomSimple.value = false
+    localForm.value.simple_model = val
+  }
+}
+
+const onAdvancedModelChange = (e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  if (val === 'custom') {
+    isCustomAdvanced.value = true
+    const predefined = props.availableConstants?.predefined_image_models?.[localForm.value.advanced_model_provider]
+    if (predefined?.includes(localForm.value.advanced_model)) {
+      localForm.value.advanced_model = ''
+    }
+  } else {
+    isCustomAdvanced.value = false
+    localForm.value.advanced_model = val
+  }
+}
+
 const MODEL_OPTION_LABELS: Record<string, Record<string, string>> = {
   black_forest_labs: {
     'flux-3-image': 'FLUX 3 Image',
@@ -115,6 +164,8 @@ const SD_PRESET_SCHEDULER = 'Normal'
 
 watch(() => localForm.value.simple_model_provider, (provider, oldProvider) => {
   localForm.value.simple_model = resolveModelOnProviderChange(localForm.value.simple_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_image_models?.[provider]
+  isCustomSimple.value = Boolean(localForm.value.simple_model && predefined && !predefined.includes(localForm.value.simple_model))
   if (provider === 'stable_diffusion') {
     if (!localForm.value.simple_steps) localForm.value.simple_steps = SD_PRESET_STEPS
     if (!localForm.value.simple_cfg_scale) localForm.value.simple_cfg_scale = SD_PRESET_CFG
@@ -125,6 +176,8 @@ watch(() => localForm.value.simple_model_provider, (provider, oldProvider) => {
 
 watch(() => localForm.value.advanced_model_provider, (provider, oldProvider) => {
   localForm.value.advanced_model = resolveModelOnProviderChange(localForm.value.advanced_model, provider, oldProvider)
+  const predefined = props.availableConstants?.predefined_image_models?.[provider]
+  isCustomAdvanced.value = Boolean(localForm.value.advanced_model && predefined && !predefined.includes(localForm.value.advanced_model))
   if (provider === 'stable_diffusion') {
     if (!localForm.value.advanced_steps) localForm.value.advanced_steps = SD_PRESET_STEPS
     if (!localForm.value.advanced_cfg_scale) localForm.value.advanced_cfg_scale = SD_PRESET_CFG
@@ -388,12 +441,8 @@ const testAdvanced = () => {
         <div>
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
-            :value="isModelCustom(localForm.simple_model, localForm.simple_model_provider) ? 'custom' : localForm.simple_model"
-            @change="(e) => { 
-              const val = (e.target as HTMLSelectElement).value; 
-              if (val !== 'custom') localForm.simple_model = val;
-              else if (!isModelCustom(localForm.simple_model, localForm.simple_model_provider)) localForm.simple_model = '';
-            }"
+            :value="isCustomSimple ? 'custom' : localForm.simple_model"
+            @change="onSimpleModelChange"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-500/50 font-mono"
           >
             <option value="" disabled>-- Select Model --</option>
@@ -406,7 +455,7 @@ const testAdvanced = () => {
       </div>
 
       <!-- Custom Model ID -->
-      <div v-if="isModelCustom(localForm.simple_model, localForm.simple_model_provider)" class="pt-1">
+      <div v-if="isCustomSimple" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input 
           v-model="localForm.simple_model" 
@@ -439,14 +488,17 @@ const testAdvanced = () => {
         />
       </div>
 
-      <!-- Advanced Tuning Toggle -->
-      <div class="pt-2 border-t border-slate-800/60">
+      <!-- Advanced Tuning Toggle (Stable Diffusion / Ollama only) -->
+      <div 
+        v-if="localForm.simple_model_provider === 'stable_diffusion' || localForm.simple_model_provider === 'ollama'"
+        class="pt-2 border-t border-slate-800/60"
+      >
         <button
           type="button"
           @click="showSimpleAdvanced = !showSimpleAdvanced"
           class="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
         >
-          <span>{{ showSimpleAdvanced ? '▲ Hide Advanced Generation Parameters' : '▼ Advanced Generation Parameters (Steps, CFG, Sampler, Edge)' }}</span>
+          <span>{{ showSimpleAdvanced ? '▲ Hide Diffusion Parameters' : '▼ Local Diffusion Parameters (Steps, CFG, Sampler, Edge)' }}</span>
         </button>
 
         <div v-if="showSimpleAdvanced" class="mt-4 pt-3 border-t border-slate-800/40 space-y-4 animate-fade-in">
@@ -557,12 +609,8 @@ const testAdvanced = () => {
         <div>
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
-            :value="isModelCustom(localForm.advanced_model, localForm.advanced_model_provider) ? 'custom' : localForm.advanced_model"
-            @change="(e) => { 
-              const val = (e.target as HTMLSelectElement).value; 
-              if (val !== 'custom') localForm.advanced_model = val;
-              else if (!isModelCustom(localForm.advanced_model, localForm.advanced_model_provider)) localForm.advanced_model = '';
-            }"
+            :value="isCustomAdvanced ? 'custom' : localForm.advanced_model"
+            @change="onAdvancedModelChange"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-violet-500/50 font-mono"
           >
             <option value="" disabled>-- Select Model --</option>
@@ -575,7 +623,7 @@ const testAdvanced = () => {
       </div>
 
       <!-- Custom Model ID -->
-      <div v-if="isModelCustom(localForm.advanced_model, localForm.advanced_model_provider)" class="pt-1">
+      <div v-if="isCustomAdvanced" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input 
           v-model="localForm.advanced_model" 
@@ -608,14 +656,17 @@ const testAdvanced = () => {
         />
       </div>
 
-      <!-- Advanced Tuning Toggle -->
-      <div class="pt-2 border-t border-slate-800/60">
+      <!-- Advanced Tuning Toggle (Stable Diffusion / Ollama only) -->
+      <div 
+        v-if="localForm.advanced_model_provider === 'stable_diffusion' || localForm.advanced_model_provider === 'ollama'"
+        class="pt-2 border-t border-slate-800/60"
+      >
         <button
           type="button"
           @click="showAdvancedTuning = !showAdvancedTuning"
           class="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
         >
-          <span>{{ showAdvancedTuning ? '▲ Hide Advanced Generation Parameters' : '▼ Advanced Generation Parameters (Steps, CFG, Sampler, Edge)' }}</span>
+          <span>{{ showAdvancedTuning ? '▲ Hide Diffusion Parameters' : '▼ Local Diffusion Parameters (Steps, CFG, Sampler, Edge)' }}</span>
         </button>
 
         <div v-if="showAdvancedTuning" class="mt-4 pt-3 border-t border-slate-800/40 space-y-4 animate-fade-in">

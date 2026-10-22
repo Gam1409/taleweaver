@@ -135,16 +135,6 @@ async def test_save_llm_settings_with_ollama_url(client: AsyncClient):
         "complex_model_provider": "ollama",
         "generator_model": "llama3-70b",
         "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
         "preferred_provider": "ollama",
         "ollama_url": "http://localhost:11434",
     }
@@ -171,16 +161,6 @@ async def test_save_llm_settings_normalizes_openrouter_models(client: AsyncClien
         "small_model_provider": "openrouter",
         "complex_model": "openai/gpt-5.4",
         "complex_model_provider": "openrouter",
-        "generator_model": "anthropic/claude-3-opus",
-        "generator_model_provider": "openrouter",
-        "generator_model": "anthropic/claude-3-opus",
-        "generator_model_provider": "openrouter",
-        "generator_model": "anthropic/claude-3-opus",
-        "generator_model_provider": "openrouter",
-        "generator_model": "anthropic/claude-3-opus",
-        "generator_model_provider": "openrouter",
-        "generator_model": "anthropic/claude-3-opus",
-        "generator_model_provider": "openrouter",
         "generator_model": "anthropic/claude-3-opus",
         "generator_model_provider": "openrouter",
         "preferred_provider": "openrouter",
@@ -238,6 +218,8 @@ async def test_save_llm_settings_persists_play_agent_model(client: AsyncClient):
         "play_agent_model": "gpt-5.3",
         "play_agent_model_provider": "openai",
         "play_agent_monkey_mode": True,
+        "play_agent_personality": "Bürokrat",
+        "play_agent_custom_personality": "Ensure all documents are signed.",
         "preferred_provider": "openai",
         "ollama_url": "http://localhost:11434",
     }
@@ -251,6 +233,8 @@ async def test_save_llm_settings_persists_play_agent_model(client: AsyncClient):
     assert llm["play_agent_model"] == "gpt-5.3"
     assert llm["play_agent_model_provider"] == "openai"
     assert llm["play_agent_monkey_mode"] is True
+    assert llm["play_agent_personality"] == "bureaucrat"
+    assert llm["play_agent_custom_personality"] == "Ensure all documents are signed."
 
 
 async def test_get_settings_uses_installed_ollama_models(client: AsyncClient, monkeypatch):
@@ -264,8 +248,6 @@ async def test_get_settings_uses_installed_ollama_models(client: AsyncClient, mo
         "small_max_thinking_tokens": 1024,
         "complex_model": "qwen2.5",
         "complex_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
         "complex_max_tokens": 4096,
         "complex_enable_thinking": False,
         "complex_max_thinking_tokens": 1024,
@@ -422,33 +404,11 @@ async def test_settings_are_global_for_all_users(client: AsyncClient):
         "small_max_thinking_tokens": 256,
         "complex_model": "qwen2.5",
         "complex_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3-70b",
         "generator_model_provider": "ollama",
         "complex_max_tokens": 4096,
         "complex_enable_thinking": False,
         "complex_max_thinking_tokens": 512,
         "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
-        "generator_model": "llama3.2",
-        "generator_model_provider": "ollama",
         "preferred_provider": "ollama",
         "ollama_url": "http://localhost:11434",
     }
@@ -533,7 +493,15 @@ async def test_test_llm_connection_handles_generic_errors_without_500(
     assert "Connection test failed" in data["message"]
 
 
-async def test_ollama_role_settings_round_trip_and_legacy_defaults(client):
+async def test_ollama_role_settings_round_trip_and_legacy_defaults(client, monkeypatch):
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "ALLOW_PRIVATE_NETWORK_MODELS", True)
+    monkeypatch.setattr(
+        settings,
+        "__pydantic_fields_set__",
+        settings.model_fields_set | {"ALLOW_PRIVATE_NETWORK_MODELS"},
+    )
     payload = (await client.get("/api/settings")).json()["llm_settings"]
     assert payload["small_ollama_url"] == ""
     assert payload["complex_ollama_timeout"] is None
@@ -544,6 +512,13 @@ async def test_ollama_role_settings_round_trip_and_legacy_defaults(client):
         complex_ollama_url="http://127.0.0.1:11436",
         complex_ollama_timeout=150,
         complex_ollama_num_ctx=32768,
+        play_agent_model_provider="ollama",
+        play_agent_model="qwen:latest",
+        play_agent_personality="Bürokrat",
+        play_agent_custom_personality="Check every inventory transfer.",
+        custom_openai_url="http://127.0.0.1:8002/v1",
+        custom_openai_timeout=120,
+        custom_openai_response_format="json_schema",
     )
     for index, role in enumerate(("generator", "compression", "play_agent"), 1):
         payload.update(
@@ -558,6 +533,12 @@ async def test_ollama_role_settings_round_trip_and_legacy_defaults(client):
     assert result.status_code == 200
     saved = (await client.get("/api/settings")).json()["llm_settings"]
     assert saved["ollama_api_mode"] == "chat"
+    assert saved["play_agent_personality"] == "bureaucrat"
+    assert saved["play_agent_custom_personality"] == payload["play_agent_custom_personality"]
+    assert saved["play_agent_model_provider"] == "ollama"
+    assert saved["play_agent_model"] == "qwen:latest"
+    for key in ("custom_openai_url", "custom_openai_timeout", "custom_openai_response_format"):
+        assert saved[key] == payload[key]
     for role in ("small", "complex", "generator", "compression", "play_agent"):
         for option in ("url", "timeout", "num_ctx"):
             key = f"{role}_ollama_{option}"

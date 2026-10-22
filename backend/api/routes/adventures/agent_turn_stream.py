@@ -12,7 +12,10 @@ from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 
+from backend.api.routes.adventures.agent_actions import execute_agent_action
+from backend.api.routes.adventures.agent_combat import decide_combat_turn
 from backend.api.routes.adventures.agent_logic import AgentService
+from backend.api.routes.adventures.agent_settings import build_agent_snapshot
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import database as core_database
@@ -41,8 +44,13 @@ async def ensure_agent_active(game_id: str, current_user: User) -> None:
 
 
 async def _decide(db, game_id: str, current_user: User, manager: GameTurnManager):
-    """Returns (decision or None, whether the decision call failed)."""
+    """Returns (decision or None, whether the decision call failed).
+
+    Fights and loot phases are played by the deterministic combat tactician.
+    """
     try:
+        if manager._has_combat_phase():
+            return await decide_combat_turn(manager), False
         decision = await AgentService.get_decision(
             db, game_id, current_user, manager.state, manager.avatar, manager.adventure, manager
         )
@@ -94,7 +102,11 @@ async def _agent_issue_events(
         msg += " - Agent mode has been deactivated."
     await manager._save_chat_message("system", msg)
     yield _sse("system", {"role": "system", "content": msg})
+    yield await _final_event(db, manager)
 
+
+async def _final_event(db, manager: GameTurnManager) -> str:
+    state = manager.state
     final_data = jsonable_encoder(
         {
             "sheet": await AdventureLogic.build_sheet_snapshot(manager.avatar, state, db),
@@ -107,7 +119,7 @@ async def _agent_issue_events(
             "status": "success",
         }
     )
-    yield _sse("final", final_data)
+    return _sse("final", final_data)
 
 
 async def _agent_action_events(
@@ -124,13 +136,40 @@ async def _agent_action_events(
     AgentService.reset_failures(manager.state)
     await db.commit()
 
+    outcome = await execute_agent_action(manager, decision.action)
+    if outcome.turn_command is None:
+        # Movement/unlock attempts resolved without a narration turn.
+        await db.commit()
+        await manager._save_chat_message("system", outcome.message or "")
+        yield _sse("system", {"role": "system", "content": outcome.message or ""})
+        yield await _final_event(db, manager)
+        return
+
     try:
-        async for chunk in manager.process_turn(decision.action):
+        async for chunk in manager.process_turn(outcome.turn_command):
             yield chunk
     except asyncio.CancelledError:
         logger.info("Agent turn stream cancelled during gameplay process_turn.")
         await db.rollback()
         raise
+
+    async for event in _agent_finish_events(db, manager):
+        yield event
+
+
+async def _agent_finish_events(db, manager: GameTurnManager) -> AsyncGenerator[str, None]:
+    """Deactivates the agent once the adventure has been won or lost."""
+    flags = manager._build_terminal_flags_payload()
+    if not (flags.get("game_over") or flags.get("game_completed")):
+        return
+
+    AgentService.set_agent_active(manager.state, False)
+    await db.commit()
+    outcome = "lost" if flags.get("game_over") else "won"
+    msg = f"Play-Agent finished: the adventure was {outcome}. You are back in control."
+    await manager._save_chat_message("system", msg)
+    yield _sse("system", {"role": "system", "content": msg})
+    yield _sse("agent_state", build_agent_snapshot(manager.state))
 
 
 async def stream_agent_turn(game_id: str, current_user: User) -> AsyncGenerator[str, None]:

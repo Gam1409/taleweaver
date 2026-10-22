@@ -19,6 +19,19 @@ Implemented all five roles, the shared provider/model resolver, migrated callers
 - Real inference reached both user-provided models. The original network restriction was resolved. Detailed live results follow below.
 
 
+## Integration with main (`518f0d4`)
+
+The five merge conflicts were resolved while retaining main's extracted settings normalization, Play Agent personality controls, manual model-selection state and frontend dependency/Vite checks. Ollama and custom OpenAI defaults now live in `settings_normalization.py`; explicit empty Ollama models and per-role overrides remain preserved.
+
+Manual model selection uses each role's endpoint-specific model list. A JavaScript automatic-semicolon-insertion error in the incoming selection handler was also corrected: selecting a discovered model after custom input no longer attempts to call `false` as a function.
+
+- Initial targeted backend run: 257 passed, 2 failed because new Play Agent tests still mocked the old constructor. Both mocks were migrated to the role-aware factory. Those two tests and the expanded settings round-trip test subsequently passed (3 passed). All 259 cases from that targeted suite are covered by these runs.
+- Broader settings, agent, game-loop, compression, security and adventure-lifecycle run: 193 passed, 4 failed. One was the expanded test fixture missing explicit private-endpoint opt-in; the corrected fixture passed in the rerun above. The remaining three game-loop failures were independently reproduced on an untouched export of main at `518f0d4`: deterministic quest-completion messages, NPC stamina logic and quest XP accumulation. The full suite is still not claimed green.
+- Ruff and formatting checks passed for all eight manually resolved or automatically merged Python files inspected in this integration.
+- PowerShell: 22 assertions passed, including missing Vite detection, explicit `npm install --include=dev`, successful setup and `SkipStart`. Native Windows process-window launch remains unverified.
+- Final frontend build passed; ESLint reported no errors and two existing unused-variable warnings. Chromium checks passed for all five role model lists and Test payloads, custom/discovered model selection, URL copying, independent overrides, save/reload, collapsed accordions and keyboard toggling.
+- No additional live inference, world generation or SSH tests were performed during conflict resolution. Earlier live-model limitations below remain applicable.
+
 ## Live-model observations
 
 Models: `hf.co/mradermacher/Qwen3-14B-Uncensored-GGUF:Q6_K` for small, generator, compression and play_agent; `hf.co/mradermacher/Artemis-31B-v1.2-abliterix-v2-GGUF:Q6_K` for complex narration. Live tests used isolated local users and a temporary database. Image generation and voices were disabled.
