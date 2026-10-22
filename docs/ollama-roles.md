@@ -2,7 +2,7 @@
 
 Ollama support remains experimental. This change configures and routes models; it does not establish their reliability for strict JSON or improve model quality by itself.
 
-Each Intelligence role has its own existing model selection and three optional settings:
+Each Intelligence role has its own existing model selection and three optional settings in an **Ollama settings (experimental)** accordion, collapsed by default:
 
 | Role | Use | Settings prefix | Default timeout |
 | --- | --- | --- | --- |
@@ -15,6 +15,8 @@ Each Intelligence role has its own existing model selection and three optional s
 Append `ollama_url`, `ollama_timeout`, or `ollama_num_ctx` to the prefix. These 15 fields live in the existing JSON settings column and need no database migration. Settings are global and are broadcast to other users through the existing settings workflow.
 
 A blank role URL inherits `ollama_url`, then `http://localhost:11434`. Timeout accepts 30–600 seconds; blank uses the environment default. Context size accepts 512–1048576 tokens; blank leaves the model/server default. Clearing a numeric input sends `null`. Servers and model names can be shared or different for any pair of roles.
+
+Editing the global Ollama API Host in Intelligence settings copies that URL into all five role URL fields, including roles currently using another provider, replacing previous overrides. You can then edit individual role URLs in their advanced settings. Save applies the resulting values. Loading or reopening saved settings preserves individual URLs; it does not copy the global URL again.
 
 Model discovery is cached by effective URL. Refresh in a role queries that URL. Manual model names remain available, including for compression. Test sends the selected role and its unsaved URL, model, timeout, context size and API mode; the server restores the original settings after the request and performs no commit. New role URLs and submitted test URLs pass the existing provider URL validation, including the private-network policy.
 

@@ -9,6 +9,14 @@ export interface OllamaTestOptions {
   numCtx: number | null
 }
 
+/** Copy an explicitly edited global URL to every role, including inactive roles. */
+export const setGlobalOllamaUrl = (form: Record<string, unknown>, url: string): void => {
+  form.ollama_url = url
+  for (const role of ['small', 'complex', 'generator', 'compression', 'play_agent']) {
+    form[`${role}_ollama_url`] = url
+  }
+}
+
 export const normalizeOllamaNumber = (value: unknown): number | null => {
   if (value == null || (typeof value === 'string' && !value.trim())) return null
   return Number(value)

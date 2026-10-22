@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import OllamaRoleSettings from './OllamaRoleSettings.vue'
-import { normalizeOllamaRoleNumbers, normalizeOllamaNumber } from '@/services/ollamaRoleSettings'
+import { normalizeOllamaRoleNumbers, normalizeOllamaNumber, setGlobalOllamaUrl } from '@/services/ollamaRoleSettings'
 import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import CustomOpenAIEndpoint from './CustomOpenAIEndpoint.vue'
 
@@ -1266,12 +1266,14 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
             </button>
           </div>
           <input
-            v-model="localForm.ollama_url"
+            :value="localForm.ollama_url"
+            @input="setGlobalOllamaUrl(localForm, ($event.target as HTMLInputElement).value)"
             type="text"
             placeholder="http://localhost:11434"
-            title="Default for roles without their own Ollama URL"
+            title="Changing this URL copies it to all Ollama role URLs"
             class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:ring-2 focus:ring-cyan-500/50"
           />
+          <p class="text-xs text-slate-400">Changing this URL copies it to all five role URLs, replacing previous overrides. You can then edit each role URL separately in its advanced settings. Save to apply your changes.</p>
           <label class="block text-xs text-slate-300">
             Ollama API mode
             <select v-model="localForm.ollama_api_mode" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white">
