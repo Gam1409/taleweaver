@@ -2,7 +2,7 @@
 
 The generation view renders entries of type ``validation`` as a short result
 card, so the payload stays deliberately small: counts plus a handful of the
-findings that are still open.
+findings that were auto-fixed and that are still open.
 """
 
 import datetime
@@ -12,8 +12,9 @@ from backend.models.adventure_template import AdventureTemplate
 
 if TYPE_CHECKING:
     from backend.api.routes.adventures.editing.auto_fix import AutoFixReport
+    from backend.schemas.validation import ValidationFinding
 
-# Only the top unresolved findings are listed; the rest live in the editor's Validation tab.
+# Only the top fixed/open findings are listed; the rest live in the editor's Validation tab.
 MAX_LOGGED_FINDINGS = 5
 _MAX_MESSAGE_LENGTH = 140
 
@@ -60,16 +61,21 @@ def build_validation_log_entry(
         "fixed": report.fixed,
         "remaining": report.remaining,
         "ai_skipped_reason": report.ai_skipped_reason,
-        "open_findings": [
-            {
-                "severity": finding.severity,
-                "message": _shorten(finding.message),
-                "location": finding.location,
-            }
-            for finding in report.unresolved[:MAX_LOGGED_FINDINGS]
-        ],
+        "fixed_findings": _compact(report.resolved),
+        "open_findings": _compact(report.unresolved),
     }
     return entry
+
+
+def _compact(findings: list["ValidationFinding"]) -> list[dict[str, Any]]:
+    return [
+        {
+            "severity": finding.severity,
+            "message": _shorten(finding.message),
+            "location": finding.location,
+        }
+        for finding in findings[:MAX_LOGGED_FINDINGS]
+    ]
 
 
 def append_validation_log(adventure: AdventureTemplate, entry: dict[str, Any]) -> None:

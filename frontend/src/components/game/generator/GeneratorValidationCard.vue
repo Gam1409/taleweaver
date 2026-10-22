@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ShieldAlert, ShieldCheck, ShieldX } from 'lucide-vue-next'
 
-export interface ValidationOpenFinding {
+export interface ValidationLoggedFinding {
   severity: 'error' | 'warn'
   message: string
   location?: string | null
@@ -16,7 +16,8 @@ export interface ValidationLogDetails {
   fixed?: number
   remaining?: number
   ai_skipped_reason?: string | null
-  open_findings?: ValidationOpenFinding[]
+  fixed_findings?: ValidationLoggedFinding[]
+  open_findings?: ValidationLoggedFinding[]
 }
 
 const props = defineProps<{
@@ -38,8 +39,18 @@ const toneStyles: Record<Tone, { box: string; title: string; label: string; icon
 }
 
 const style = computed(() => toneStyles[tone.value])
-const openFindings = computed(() => props.details?.open_findings ?? [])
-const hiddenCount = computed(() => Math.max(0, (props.details?.remaining ?? 0) - openFindings.value.length))
+
+// Each section lists a few findings; the badge marks fixed vs. still-open issues.
+const sections = computed(() => {
+  const d = props.details
+  if (!d) return []
+  const fixed = d.fixed_findings ?? []
+  const open = d.open_findings ?? []
+  return [
+    { key: 'fixed', label: 'Fixed', badge: 'text-emerald-400 border-emerald-500/40', items: fixed, hidden: Math.max(0, (d.fixed ?? 0) - fixed.length) },
+    { key: 'open', label: 'Open', badge: 'text-amber-400 border-amber-500/40', items: open, hidden: Math.max(0, (d.remaining ?? 0) - open.length) },
+  ].filter((section) => section.items.length > 0)
+})
 </script>
 
 <template>
@@ -51,26 +62,26 @@ const hiddenCount = computed(() => Math.max(0, (props.details?.remaining ?? 0) -
       </div>
       <p class="text-xs text-slate-300 text-center">{{ props.content }}</p>
 
-      <ul v-if="openFindings.length" class="flex flex-col gap-1 mt-1">
-        <li
-          v-for="(finding, idx) in openFindings"
-          :key="idx"
-          class="flex items-start gap-2 text-[11px] leading-snug text-slate-400 bg-black/30 rounded-lg px-2.5 py-1.5 border border-white/5"
-        >
-          <span
-            :class="[
-              'shrink-0 mt-0.5 px-1.5 rounded text-[9px] font-black uppercase tracking-wider border',
-              finding.severity === 'error' ? 'text-rose-400 border-rose-500/40' : 'text-amber-400 border-amber-500/40',
-            ]"
+      <ul v-if="sections.length" class="flex flex-col gap-1 mt-1">
+        <template v-for="section in sections" :key="section.key">
+          <li
+            v-for="(finding, idx) in section.items"
+            :key="section.key + idx"
+            class="flex items-start gap-2 text-[11px] leading-snug text-slate-400 bg-black/30 rounded-lg px-2.5 py-1.5 border border-white/5"
           >
-            {{ finding.severity === 'error' ? 'Error' : 'Warn' }}
-          </span>
-          <span class="break-words">{{ finding.message }}</span>
-        </li>
+            <span :class="['shrink-0 mt-0.5 px-1.5 rounded text-[9px] font-black uppercase tracking-wider border', section.badge]">
+              {{ section.label }}
+            </span>
+            <span class="break-words">{{ finding.message }}</span>
+          </li>
+          <li v-if="section.hidden > 0" class="text-[10px] text-slate-500 text-center">
+            +{{ section.hidden }} more {{ section.label.toLowerCase() }}
+          </li>
+        </template>
       </ul>
 
-      <p v-if="hiddenCount > 0 || openFindings.length" class="text-[10px] text-slate-500 text-center">
-        <template v-if="hiddenCount > 0">+{{ hiddenCount }} more · </template>Details in the editor's Validation tab
+      <p v-if="(props.details?.remaining ?? 0) > 0" class="text-[10px] text-slate-500 text-center">
+        Details in the editor's Validation tab
       </p>
       <p v-if="props.details?.ai_skipped_reason" class="text-[10px] text-slate-500 text-center italic">
         AI check skipped: {{ props.details.ai_skipped_reason }}

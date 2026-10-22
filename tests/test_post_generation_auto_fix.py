@@ -96,6 +96,8 @@ async def test_auto_fix_applies_first_proposal_errors_first(monkeypatch) -> None
     assert report.attempted == 3
     assert report.fixed == 2
     assert report.remaining == 1
+    assert [f.code for f in report.resolved] == ["E1", "W1"]
+    assert [f.code for f in report.unresolved] == ["AI1"]
     assert commit_fix.await_count == 2
 
 
@@ -151,6 +153,7 @@ async def test_safe_wrapper_logs_compact_validation_summary(monkeypatch) -> None
         fixed=2,
         errors=1,
         warnings=2,
+        resolved=[_finding("E1", "error"), _finding("W1", "warn")],
         unresolved=[_finding("W9", "warn")],
     )
     monkeypatch.setattr(auto_fix, "run_post_generation_auto_fix", AsyncMock(return_value=report))
@@ -165,6 +168,7 @@ async def test_safe_wrapper_logs_compact_validation_summary(monkeypatch) -> None
     assert entry["type"] == "validation"
     assert entry["content"] == "3 findings (1 error, 2 warnings) · 2 auto-fixed · 1 open"
     assert entry["details"]["remaining"] == 1
+    assert [f["message"] for f in entry["details"]["fixed_findings"]] == ["E1 broken", "W1 broken"]
     assert entry["details"]["open_findings"] == [
         {"severity": "warn", "message": "W9 broken", "location": "scene:START"}
     ]

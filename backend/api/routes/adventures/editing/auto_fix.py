@@ -40,6 +40,7 @@ class AutoFixReport:
     errors: int = 0
     warnings: int = 0
     ai_skipped_reason: Optional[str] = None
+    resolved: list[ValidationFinding] = field(default_factory=list)
     unresolved: list[ValidationFinding] = field(default_factory=list)
 
     @property
@@ -116,8 +117,7 @@ async def run_post_generation_auto_fix(
             await db.refresh(adventure)
             fixed = False
         report.fixed += int(fixed)
-        if not fixed:
-            report.unresolved.append(finding)
+        (report.resolved if fixed else report.unresolved).append(finding)
 
     # Findings beyond the cap are never attempted and stay unresolved.
     report.unresolved.extend(findings[MAX_AUTO_FIX_FINDINGS:])

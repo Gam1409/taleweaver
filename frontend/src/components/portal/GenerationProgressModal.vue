@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { api, GENERATION_SAYINGS } from '@/composables/useApi'
 import { ChevronDown, ChevronUp, Image as ImageIcon, Brain, BarChart3 } from 'lucide-vue-next'
+import GeneratorValidationCard, { type ValidationLogDetails } from '@/components/game/generator/GeneratorValidationCard.vue'
 
 const props = defineProps<{
   adventureId: string
@@ -14,9 +15,10 @@ const emit = defineEmits<{
 
 interface LogEntry {
   timestamp: string
-  type: 'status' | 'thinking' | 'image_generation'
+  type: 'status' | 'thinking' | 'image_generation' | 'validation'
   content: string
   image_url?: string
+  details?: ValidationLogDetails
 }
 
 const logs = ref<LogEntry[]>([])
@@ -266,7 +268,14 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- 3. Image Generation / Reused Log -->
+            <!-- 3. Post-generation Validation / Auto-fix Summary -->
+            <GeneratorValidationCard
+              v-else-if="log.type === 'validation'"
+              :content="log.content"
+              :details="log.details"
+            />
+
+            <!-- 4. Image Generation / Reused Log -->
             <div v-else-if="log.type === 'image_generation'" class="flex justify-center w-full max-w-[85%] self-center my-1 animate-fade-in">
               <div class="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 flex flex-col gap-3 items-center w-full">
                 <div class="flex items-center justify-center gap-2 text-xs font-black text-sky-400 uppercase tracking-widest">
