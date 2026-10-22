@@ -15,6 +15,7 @@ from backend.api.routes.adventures.editing.payload import _build_adventure_edito
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.generation_error_log import record_generation_error
 from backend.core.llm_router import GameMasterLLM
 from backend.core.validators_prompts import (
     AI_VALIDATION_SYSTEM_PROMPT,
@@ -136,6 +137,9 @@ async def _run_ai_validation(
         )
     except Exception as exc:
         logger.exception("AI validation failed for %s: %s", template_id, exc)
+        record_generation_error(
+            exc, stage="ai_validation", template_id=template_id, user_id=user.id
+        )
         return [], "ai_error"
 
     findings = [

@@ -57,6 +57,16 @@ async def setup_test_db():
 
 
 @pytest.fixture(autouse=True)
+def isolated_generation_error_log(monkeypatch, tmp_path):
+    """Keeps generation error log entries written by tests out of the real data dir."""
+    from backend.core import generation_error_log
+
+    monkeypatch.setattr(generation_error_log, "_log_dir", lambda: str(tmp_path / "logs"))
+    monkeypatch.setattr(generation_error_log, "_state", {})
+    return tmp_path / "logs" / generation_error_log.LOG_FILE_NAME
+
+
+@pytest.fixture(autouse=True)
 def stub_world_generator(monkeypatch):
     """Global stub for WorldGenerator.generate_world.
 
@@ -72,7 +82,9 @@ def stub_world_generator(monkeypatch):
     from backend.models.adventure_template import AdventureTemplate
     from backend.models.world_entity import WorldScene
 
-    async def _fake_generate_world(db, user=None, template_id=None, adventure_id=None, *args, **kwargs):
+    async def _fake_generate_world(
+        db, user=None, template_id=None, adventure_id=None, *args, **kwargs
+    ):
         adv_id = template_id or adventure_id
         if not adv_id:
             return
@@ -80,13 +92,15 @@ def stub_world_generator(monkeypatch):
         # Create a minimal START scene so session-start logic has a scene to clone.
         existing = await db.get(WorldScene, "START")
         if not existing:
-            db.add(WorldScene(
-                id="START",
-                template_id=adv_id,
-                label="Starting Room",
-                description="A minimal scene created by the test stub.",
-                image_url=None,
-            ))
+            db.add(
+                WorldScene(
+                    id="START",
+                    template_id=adv_id,
+                    label="Starting Room",
+                    description="A minimal scene created by the test stub.",
+                    image_url=None,
+                )
+            )
 
         # Mark template as ready.
         adv = await db.get(AdventureTemplate, adv_id)
@@ -139,7 +153,7 @@ async def auth_client(client: AsyncClient) -> AsyncClient:
                 "simple_model_provider": "local",
                 "advanced_model": "sdxl",
                 "advanced_model_provider": "local",
-            }
+            },
         )
         session.add(user)
         await session.commit()

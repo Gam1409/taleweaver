@@ -17,6 +17,11 @@ from backend.api.routes.adventures.session_materializer import (
     materialize_initial_session_from_template,
 )
 from backend.core.config import settings
+from backend.core.generation_error_log import (
+    append_generation_log_entry,
+    format_creation_error,
+    record_generation_error,
+)
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -412,17 +417,25 @@ async def _generate_world(db: AsyncSession, user: Optional[User], job: Generatio
     )
 
 
-async def _record_generation_failure(db: AsyncSession, template_id: str, exc: Exception) -> None:
+async def _record_generation_failure(
+    db: AsyncSession, template_id: str, user_id: Optional[str], exc: Exception
+) -> None:
+    error_entry = None
+    if not is_image_moderation_error(exc):
+        error_entry = record_generation_error(
+            exc, stage="world_generation", template_id=template_id, user_id=user_id
+        )
     adv = await _load_template(db, template_id)
     if not adv:
         return
-    if is_image_moderation_error(exc):
+    if error_entry is None:
         adv.is_ready = True
         adv.creation_status = "Ready"
         adv.creation_error = _IMAGE_MODERATION_NOTICE
     else:
         adv.creation_status = "Failed"
-        adv.creation_error = str(exc)
+        adv.creation_error = format_creation_error(error_entry)
+        append_generation_log_entry(adv, error_entry)
     await db.commit()
 
 
@@ -463,4 +476,5 @@ async def run_background_generation(job: GenerationJob) -> None:
             await _generate_and_finalize(db, job)
         except Exception as exc:
             logger.exception("Background generation failed for %s: %s", job.template_id, exc)
-            await _record_generation_failure(db, job.template_id, exc)
+            await db.rollback()
+            await _record_generation_failure(db, job.template_id, job.user_id, exc)

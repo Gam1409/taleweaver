@@ -10,6 +10,7 @@ from typing import Any, Optional, TypeVar
 import litellm
 from pydantic import BaseModel, ValidationError
 
+from backend.core.llm_errors import LLMTruncatedResponseError, build_truncation_error
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
     is_truncated_json,
@@ -1226,12 +1227,17 @@ class GameMasterLLM:
         content = response.choices[0].message.content
         return content is None or not str(content).strip()
 
-    @staticmethod
-    def _empty_content_error(finish_reason: Any) -> ValueError:
+    def _truncation_error(self, response: Any) -> LLMTruncatedResponseError:
+        return build_truncation_error(
+            response,
+            model_category=getattr(self, "model_category", "small"),
+            provider=self.provider,
+            max_tokens=self.max_tokens,
+        )
+
+    def _empty_content_error(self, response: Any, finish_reason: Any) -> ValueError:
         if finish_reason == "length":
-            return ValueError(
-                "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
-            )
+            return self._truncation_error(response)
         return ValueError("No content returned from LLM for complex task.")
 
     @staticmethod
@@ -1250,7 +1256,7 @@ class GameMasterLLM:
                     finish_reason,
                     content,
                 )
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+                raise LLMTruncatedResponseError(_TRUNCATED_RESPONSE_MESSAGE) from exc
             repaired = self._attempt_repair_truncated_json(content)
             data = None
             if repaired != content:
@@ -1293,7 +1299,7 @@ class GameMasterLLM:
         finish_reason = response.choices[0].finish_reason
         if not content:
             logger.error(f"LLM returned empty content. Raw response: {response.model_dump()}")
-            raise self._empty_content_error(finish_reason)
+            raise self._empty_content_error(response, finish_reason)
 
         try:
             content = self._clean_json_string(self.clean_thinking_tags(content))
@@ -1302,12 +1308,16 @@ class GameMasterLLM:
                     "LLM returned content that was empty after JSON cleanup. Raw response: %s",
                     response.model_dump(),
                 )
-                raise self._empty_content_error(finish_reason)
+                raise self._empty_content_error(response, finish_reason)
             data = self._parse_json_payload(self._repair_json(content), finish_reason)
             return response_model(**self._as_mapping(data, response_model))
+        except LLMTruncatedResponseError as exc:
+            if exc.diagnostics:
+                raise
+            raise self._truncation_error(response) from exc
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+                raise self._truncation_error(response) from exc
             raise ValueError(
                 f"Failed to parse LLM response as JSON. Preview: {self._content_preview(content)}"
             ) from exc

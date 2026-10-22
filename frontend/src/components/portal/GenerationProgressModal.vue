@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { api, GENERATION_SAYINGS } from '@/composables/useApi'
 import { ChevronDown, ChevronUp, Image as ImageIcon, Brain, BarChart3 } from 'lucide-vue-next'
 import GeneratorValidationCard, { type ValidationLogDetails } from '@/components/game/generator/GeneratorValidationCard.vue'
+import GeneratorErrorCard, { type GenerationErrorDetails } from '@/components/game/generator/GeneratorErrorCard.vue'
 
 const props = defineProps<{
   adventureId: string
@@ -15,10 +16,10 @@ const emit = defineEmits<{
 
 interface LogEntry {
   timestamp: string
-  type: 'status' | 'thinking' | 'image_generation' | 'validation'
+  type: 'status' | 'thinking' | 'image_generation' | 'validation' | 'error'
   content: string
   image_url?: string
-  details?: ValidationLogDetails
+  details?: ValidationLogDetails | GenerationErrorDetails
 }
 
 const logs = ref<LogEntry[]>([])
@@ -48,6 +49,12 @@ async function fetchLogs() {
 // Check if generation is still active
 const isReady = ref(false)
 const hasError = ref(false)
+const statusError = ref('')
+
+// Failures recorded before the server logged an `error` entry still get a copyable card.
+const showFallbackError = computed(
+  () => hasError.value && !!statusError.value && !logs.value.some((log) => log.type === 'error')
+)
 
 const backendStats = ref<any>(null)
 async function checkStatus() {
@@ -56,6 +63,7 @@ async function checkStatus() {
     isReady.value = statusData.is_ready
     if (statusData.error || statusData.status === 'Failed' || statusData.status === 'Cancelled') {
       hasError.value = true
+      statusError.value = statusData.error || ''
     }
     if (statusData.stats) {
       backendStats.value = statusData.stats
@@ -272,7 +280,17 @@ onUnmounted(() => {
             <GeneratorValidationCard
               v-else-if="log.type === 'validation'"
               :content="log.content"
-              :details="log.details"
+              :details="log.details as ValidationLogDetails"
+            />
+
+            <!-- Generation Error (copyable / downloadable) -->
+            <GeneratorErrorCard
+              v-else-if="log.type === 'error'"
+              :content="log.content"
+              :details="log.details as GenerationErrorDetails"
+              :timestamp="log.timestamp"
+              :adventure-id="props.adventureId"
+              :adventure-title="props.adventureTitle"
             />
 
             <!-- 4. Image Generation / Reused Log -->
@@ -295,6 +313,13 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+
+          <GeneratorErrorCard
+            v-if="showFallbackError"
+            :content="statusError"
+            :adventure-id="props.adventureId"
+            :adventure-title="props.adventureTitle"
+          />
 
           <!-- Statistics Summary (shown when generation is complete) -->
           <div v-if="isReady || hasError" class="mt-6 p-5 rounded-2xl border border-sky-500/20 bg-sky-500/5 backdrop-blur-md flex flex-col gap-4 self-center w-full max-w-[85%] shadow-[0_0_20px_rgba(56,189,248,0.05)] animate-fade-in">

@@ -883,6 +883,7 @@ onBeforeUnmount(() => {
               :is-ready="isReady"
               :has-error="hasError"
               :last-status-index="lastStatusIndex"
+              :error-message="errorMessage"
               @preview-image="previewImageUrl = $event"
             />
 

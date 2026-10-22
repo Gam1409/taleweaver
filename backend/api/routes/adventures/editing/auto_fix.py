@@ -21,6 +21,7 @@ from backend.api.routes.adventures.editing.auto_fix_log import (
     build_validation_log_entry,
 )
 from backend.api.routes.adventures.editing.validation import execute_validation_run
+from backend.core.generation_error_log import record_generation_error
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.schemas.validation import AIFixSuggestionsRequest, ValidationFinding
@@ -106,12 +107,16 @@ async def run_post_generation_auto_fix(
         report.unresolved = findings
         return report
 
+    user_id = user.id
     for finding in findings[:MAX_AUTO_FIX_FINDINGS]:
         report.attempted += 1
         try:
             fixed = await _auto_fix_finding(db, template_id, user, adventure, finding)
-        except Exception:
+        except Exception as exc:
             logger.exception("Auto-fix failed for %s on %s", finding.code, template_id)
+            record_generation_error(
+                exc, stage=f"auto_fix:{finding.code}", template_id=template_id, user_id=user_id
+            )
             await db.rollback()
             await db.refresh(user)
             await db.refresh(adventure)
@@ -142,6 +147,7 @@ async def run_auto_fix_pass_safely(db: AsyncSession, template_id: str, user: Use
     if adventure is None or adventure.creation_status == "Cancelled":
         return
     adventure.creation_status = "Validating and auto-fixing"
+    user_id = user.id
     await db.commit()
     report: Optional[AutoFixReport] = None
     failure: Optional[str] = None
@@ -149,8 +155,11 @@ async def run_auto_fix_pass_safely(db: AsyncSession, template_id: str, user: Use
         report = await run_post_generation_auto_fix(db, template_id, user)
     except Exception as exc:
         logger.exception("Post-generation auto-fix failed for %s", template_id)
+        entry = record_generation_error(
+            exc, stage="post_generation_auto_fix", template_id=template_id, user_id=user_id
+        )
         await db.rollback()
-        failure = str(exc) or type(exc).__name__
+        failure = f"{entry['content']} (Error ID {entry['details']['error_id']})"
     await _log_validation_result(db, template_id, build_validation_log_entry(report, failure))
 
 

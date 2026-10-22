@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { Brain, ChevronDown, ChevronUp, Image as ImageIcon, ZoomIn } from 'lucide-vue-next'
 import GeneratorValidationCard, { type ValidationLogDetails } from './GeneratorValidationCard.vue'
+import GeneratorErrorCard, { type GenerationErrorDetails } from './GeneratorErrorCard.vue'
 
 export interface LogEntry {
   timestamp: string
-  type: 'status' | 'thinking' | 'image_generation' | 'validation'
+  type: 'status' | 'thinking' | 'image_generation' | 'validation' | 'error'
   content: string
   image_url?: string
-  details?: ValidationLogDetails
+  details?: ValidationLogDetails | GenerationErrorDetails
 }
 
 const props = defineProps<{
@@ -17,7 +18,13 @@ const props = defineProps<{
   isReady: boolean
   hasError: boolean
   lastStatusIndex: number
+  errorMessage?: string
 }>()
+
+// Failures recorded before the server logged an `error` entry still get a copyable card.
+const showFallbackError = computed(
+  () => props.hasError && !!props.errorMessage && !props.logs.some((log) => log.type === 'error')
+)
 
 const emit = defineEmits<{
   (e: 'previewImage', url: string): void
@@ -115,7 +122,15 @@ defineExpose({
         <GeneratorValidationCard
           v-else-if="log.type === 'validation'"
           :content="log.content"
-          :details="log.details"
+          :details="log.details as ValidationLogDetails"
+        />
+
+        <!-- Generation Error (copyable / downloadable) -->
+        <GeneratorErrorCard
+          v-else-if="log.type === 'error'"
+          :content="log.content"
+          :details="log.details as GenerationErrorDetails"
+          :timestamp="log.timestamp"
         />
 
         <!-- 4. Image Generation / Reused Log -->
@@ -149,6 +164,8 @@ defineExpose({
         </div>
       </div>
     </div>
+
+    <GeneratorErrorCard v-if="showFallbackError" :content="props.errorMessage!" />
   </div>
 </template>
 

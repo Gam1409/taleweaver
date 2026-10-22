@@ -5,6 +5,11 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.generation_error_log import (
+    append_generation_log_entry,
+    format_creation_error,
+    record_generation_error,
+)
 from backend.core.style_catalog import default_image_styles_catalog
 from backend.engine.rule_engine import AdventureGenerationRequest
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
@@ -178,13 +183,17 @@ class AdventureGeneratorService:
                     await progress_callback("Adventure generation complete with image warnings.")
                 return new_id
 
+            error_entry = record_generation_error(
+                e, stage="world_generation", template_id=new_id, user_id=user.id
+            )
             if progress_callback:
                 await progress_callback(f"Adventure generation failed: {e}")
             # Ensure we update the template status so the user doesn't see it hanging
             try:
                 await db.refresh(new_template)
                 new_template.creation_status = "Failed"
-                new_template.creation_error = str(e)
+                new_template.creation_error = format_creation_error(error_entry)
+                append_generation_log_entry(new_template, error_entry)
                 await db.flush()
             except Exception as update_err:
                 logger.warning(

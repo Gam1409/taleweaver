@@ -189,7 +189,7 @@ async def test_safe_wrapper_logs_failed_validation(monkeypatch) -> None:
 
     # Assert
     assert entry["details"] == {"failed": True}
-    assert entry["content"] == "Validation could not complete: llm down"
+    assert entry["content"].startswith("Validation could not complete: llm down (Error ID ")
 
 
 async def test_unresolved_findings_include_failed_and_uncapped(monkeypatch) -> None:

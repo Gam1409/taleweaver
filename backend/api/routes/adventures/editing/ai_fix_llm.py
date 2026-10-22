@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
+from backend.core.generation_error_log import record_generation_error
 from backend.core.llm_router import GameMasterLLM
 from backend.models.ai_fix_cache import AIFixCache
 from backend.models.user import User
@@ -59,37 +60,45 @@ def _summarize_outcomes(outcomes: list[_AIAttemptOutcome]) -> str:
     return "The AI service is currently unavailable. Please retry in a moment."
 
 
-def _candidate_attempts(current_user: User, allow_fallback: bool) -> list[tuple[str, str]]:
-    """Distinct (provider, model) pairs: complex model, small model, then the admin fallback."""
+def _candidate_attempts(current_user: User, allow_fallback: bool) -> list[tuple[str, str, str]]:
+    """Distinct (provider, model, category) triples: complex, small, then the admin fallback.
+
+    The category selects the token budget, so the small-model fallback runs with the
+    small model's own max tokens instead of the complex model's.
+    """
     llm_settings = current_user.llm_settings or {}
     candidates = [
         (
             llm_settings.get("complex_model_provider"),
             llm_settings.get("complex_model") or "gpt-4o",
+            "complex",
         ),
         (
             llm_settings.get("small_model_provider"),
             llm_settings.get("small_model") or "gpt-4o-mini",
+            "small",
         ),
     ]
     if allow_fallback:
         candidates.append(
-            (settings.AI_FIX_FALLBACK_PROVIDER, settings.AI_FIX_FALLBACK_MODEL or None)
+            (settings.AI_FIX_FALLBACK_PROVIDER, settings.AI_FIX_FALLBACK_MODEL or None, "complex")
         )
-    attempts: list[tuple[str, str]] = []
-    for provider, model in candidates:
-        candidate = (str(provider), str(model) if model else "")
-        if provider and candidate not in attempts:
-            attempts.append(candidate)
-    return attempts or [("openai", "gpt-4o")]
+    attempts: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for provider, model, category in candidates:
+        key = (str(provider), str(model) if model else "")
+        if provider and key not in seen:
+            seen.add(key)
+            attempts.append((*key, category))
+    return attempts or [("openai", "gpt-4o", "complex")]
 
 
 def _init_provider(
-    current_user: User, provider: str, model: str
+    current_user: User, provider: str, model: str, category: str = "complex"
 ) -> tuple[Optional[GameMasterLLM], Optional[_AIAttemptOutcome], Optional[Exception]]:
     """Build the provider client; on failure return the skip outcome instead."""
     try:
-        gm = GameMasterLLM(user=current_user, provider=provider, model_category="complex")
+        gm = GameMasterLLM(user=current_user, provider=provider, model_category=category)
     except ValueError as exc:
         logger.info(
             "Skipping AI provider '%s' (model '%s'): %s", provider, model or "<default>", exc
@@ -178,8 +187,8 @@ async def _generate_llm_proposals(
     attempts = _candidate_attempts(current_user, allow_fallback)
     outcomes: list[_AIAttemptOutcome] = []
     last_error: Optional[Exception] = None
-    for idx, (provider, model) in enumerate(attempts):
-        gm, skipped, init_error = _init_provider(current_user, provider, model)
+    for idx, (provider, model, category) in enumerate(attempts):
+        gm, skipped, init_error = _init_provider(current_user, provider, model, category)
         if gm is None or skipped is not None:
             outcomes.append(skipped)  # type: ignore[arg-type]
             last_error = init_error
@@ -196,6 +205,9 @@ async def _generate_llm_proposals(
             )
         except Exception as exc:
             last_error = exc
+            record_generation_error(
+                exc, stage=f"ai_fix:{category}:{provider}/{model}", user_id=current_user.id
+            )
             outcomes.append(_call_failure_outcome(exc, provider, model, timeout_seconds))
             if idx == len(attempts) - 1:
                 raise
