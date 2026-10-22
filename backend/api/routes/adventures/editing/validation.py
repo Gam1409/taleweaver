@@ -119,15 +119,9 @@ async def _run_ai_validation(
 
     from backend.api.routes.adventures.schemas import AIValidationResponse
 
-    llm_settings = user.llm_settings or {}
-    provider = (
-        llm_settings.get("complex_model_provider")
-        or llm_settings.get("small_model_provider")
-        or "openai"
-    )
-    model = llm_settings.get("complex_model") or "gpt-4o"
     try:
-        gm = GameMasterLLM(user=user, provider=provider, model_category="complex")
+        gm = GameMasterLLM.for_role(user, "complex")
+        model = gm.model
         response = await gm.aexecute_complex_task(
             system_prompt=AI_VALIDATION_SYSTEM_PROMPT,
             user_prompt=_build_ai_validation_prompt(debug_payload),

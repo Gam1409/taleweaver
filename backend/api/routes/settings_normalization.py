@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 
 DEFAULT_SMALL_MAX_TOKENS = 12288
@@ -30,7 +31,16 @@ TTS_MODEL_ALIASES = {
 PLAY_AGENT_PERSONALITIES = ("casual", "bureaucrat", "powerplayer", "custom")
 _LEGACY_PERSONALITIES = {"bürokrat": "bureaucrat", "buerokrat": "bureaucrat"}
 
+_LLM_ENDPOINT_DEFAULTS: dict[str, Any] = {
+    **OLLAMA_ROLE_DEFAULTS,
+    "ollama_api_mode": "generate",
+    "custom_openai_url": "",
+    "custom_openai_timeout": 300,
+    "custom_openai_response_format": "prompt",
+}
+
 _LLM_FALLBACK: dict[str, Any] = {
+    **_LLM_ENDPOINT_DEFAULTS,
     "small_model": "",
     "small_model_provider": "openai",
     "small_max_tokens": DEFAULT_SMALL_MAX_TOKENS,
@@ -211,13 +221,14 @@ def normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
     if not llm_settings:
         return dict(_LLM_FALLBACK)
 
-    normalized = dict(llm_settings)
+    normalized = {**_LLM_ENDPOINT_DEFAULTS, **llm_settings}
     _apply_derived_defaults(normalized, _LLM_DERIVED_DEFAULTS)
     _apply_model_fallbacks(normalized)
     _apply_play_agent_options(normalized)
     _apply_derived_defaults(normalized, _COMPRESSION_DERIVED_DEFAULTS)
     _apply_history_options(normalized)
     _apply_openrouter_models(normalized, _OPENROUTER_MODEL_PREFIXES)
+    preserve_explicit_ollama_models(normalized, llm_settings)
     return normalized
 
 

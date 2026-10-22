@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.core.llm_roles import resolve_llm_role
 from backend.models.world_entity import WorldEntity, WorldExit
 
 # Session override key -> WorldEntity attribute it replaces for this turn.
@@ -127,24 +128,13 @@ def resolve_sequence_guidance(adventure: Any, state: Any) -> tuple[str, str]:
 
 def resolve_model_settings(llm_settings: dict[str, Any]) -> dict[str, Any]:
     """Resolves providers/models for the small, complex, and compression categories."""
-    get = llm_settings.get
-    return {
-        "small_model_provider": get("small_model_provider")
-        or get("complex_model_provider")
-        or get("preferred_provider")
-        or "openai",
-        "complex_model_provider": get("complex_model_provider")
-        or get("small_model_provider")
-        or get("preferred_provider")
-        or "openai",
-        "small_model": get("small_model") or "gpt-4o-mini",
-        "complex_model": get("complex_model") or "gpt-4o",
-        "compression_model_provider": get("compression_model_provider")
-        or get("small_model_provider")
-        or "openai",
-        "compression_model": get("compression_model") or get("small_model") or "gpt-4o-mini",
-        "compression_max_tokens": int(get("compression_max_tokens") or 4096),
-    }
+    result: dict[str, Any] = {}
+    for role in ("small", "complex", "compression"):
+        config = resolve_llm_role(llm_settings, role)
+        result[f"{role}_model_provider"] = config.provider
+        result[f"{role}_model"] = config.model
+    result["compression_max_tokens"] = int(llm_settings.get("compression_max_tokens") or 4096)
+    return result
 
 
 def bable_fish_instruction(language: str) -> str:

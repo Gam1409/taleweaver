@@ -6,6 +6,7 @@ import type { CatalogTile } from '@/types'
 import { settingsService } from '@/services/settingsService'
 import { userService } from '@/services/userService'
 import { catalogService } from '@/services/catalogService'
+import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import { testService } from '@/services/testService'
 
 const router = useRouter()
@@ -67,8 +68,8 @@ const handleSaveLlmSettings = async (payload: any) => {
   await settingsService.saveLlmSettings(payload)
 }
 
-const handleRefreshOllamaModels = async (ollamaUrl?: string) => {
-  await settingsService.fetchOllamaModels(ollamaUrl)
+const handleRefreshOllamaModels = async (ollamaUrl?: string, role?: OllamaRole) => {
+  await settingsService.fetchOllamaModels(ollamaUrl, role)
 }
 
 const handleRefreshMinimaxModels = async (minimaxUrl?: string) => {
@@ -97,8 +98,8 @@ const handleSaveGameSettings = async (payload: any) => {
 
 // ============ TEST HANDLERS ============
 
-const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string) => {
-  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider)
+const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions) => {
+  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider, ollamaOptions)
 }
 
 const handleTestVision = async (payload: any) => {
@@ -394,11 +395,12 @@ const navCategories: NavCategory[] = [
           :configured-keys="settingsService.configuredKeys.value"
           :is-submitting="settingsService.isSubmitting.value"
           :is-loading-ollama-models="settingsService.isLoadingOllamaModels.value"
+          :ollama-models-by-url="settingsService.ollamaModelsByUrl.value"
           :is-loading-minimax-models="settingsService.isLoadingMinimaxModels.value"
           :is-loading-llm-models="settingsService.isLoadingLlmModels.value"
           :test-results="testService.testResults.value"
           @save="handleSaveLlmSettings"
-          @test="({ key, model, provider, openrouterProvider }) => handleTestLlm(key, model, provider, openrouterProvider)"
+          @test="({ key, model, provider, openrouterProvider, ollamaOptions }) => handleTestLlm(key, model, provider, openrouterProvider, ollamaOptions)"
           @refresh-ollama-models="handleRefreshOllamaModels"
           @refresh-minimax-models="handleRefreshMinimaxModels"
           @refresh-llm-models="handleRefreshLlmModels"

@@ -24,6 +24,14 @@ interface ProviderMeta {
 
 const PROVIDERS: ProviderMeta[] = [
   {
+    id: 'custom_openai',
+    name: 'OpenAI-Compatible API',
+    icon: 'ra-network',
+    category: 'local',
+    capabilities: ['LLM'],
+    description: 'Optional key for your self-hosted endpoint or protected gateway. Leave unset for unauthenticated servers.'
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     icon: 'ra-sun',

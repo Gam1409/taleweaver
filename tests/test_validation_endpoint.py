@@ -9,6 +9,7 @@ from backend.main import app
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
+from tests.llm_fakes import RoleLLMFactory
 
 
 async def _seed_adventure(db: AsyncSession, *, owner: User) -> str:
@@ -80,7 +81,7 @@ async def test_structural_only_runs_no_ai_call(client, setup_test_db, monkeypatc
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",
@@ -151,7 +152,7 @@ async def test_full_validation_runs_ai(client, setup_test_db, monkeypatch):
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",
@@ -195,7 +196,7 @@ async def test_ai_validation_handles_empty_findings(client, setup_test_db, monke
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",
@@ -238,7 +239,7 @@ async def test_ai_skipped_when_scene_count_exceeds_limit(client, setup_test_db, 
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",
@@ -273,7 +274,7 @@ async def test_ai_skipped_when_llm_call_fails(client, setup_test_db, monkeypatch
 
     from backend.api.routes.adventures.editing import validation as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate",

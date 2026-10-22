@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 if ($scriptPath) { Set-Location $scriptPath } else { $scriptPath = (Get-Location).Path }
 
+. (Join-Path $scriptPath "scripts/powershell-environment.ps1")
 Write-Host "--- TaleWeaver Setup ---" -ForegroundColor Cyan
 
 # 1. Environment Variables (.env)
@@ -29,30 +30,25 @@ Set-Content ".env" $envFile
 
 # 2. Dependency Management (Poetry)
 Write-Host "[*] Setting up Python dependencies with Poetry..." -ForegroundColor Yellow
-if (Get-Command poetry -ErrorAction SilentlyContinue) {
-    Write-Host "[+] Using system Poetry..." -ForegroundColor Green
-    poetry install
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[!] Error: 'poetry install' failed with exit code $LASTEXITCODE." -ForegroundColor Red
-        exit 1
-    }
-    $RUN_CMD = "poetry run"
-} else {
+$poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
+if (-not $poetryExe) {
     Write-Host "[*] Poetry not found in PATH. Checking virtual environment (venv)..." -ForegroundColor Yellow
-    if (-not (Test-Path "venv")) {
+    $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $scriptPath
+    if (-not $bootstrapPython) {
         Write-Host "[*] Creating virtual environment (venv)..." -ForegroundColor Yellow
-        python -m venv venv
+        Invoke-TaleWeaverNative -Command python -Arguments @("-m", "venv", "venv")
+        $bootstrapPython = Get-TaleWeaverPython -ProjectRoot $scriptPath
     }
-    Write-Host "[*] Installing Poetry and dependencies in venv..." -ForegroundColor Yellow
-    .\venv\Scripts\python.exe -m pip install --upgrade pip
-    .\venv\Scripts\pip.exe install "poetry>=2.0.0"
-    .\venv\Scripts\poetry.exe install
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[!] Error: 'poetry install' in venv failed with exit code $LASTEXITCODE." -ForegroundColor Red
-        exit 1
-    }
-    $RUN_CMD = ".\venv\Scripts\poetry.exe run"
+    Write-Host "[*] Installing Poetry in the local virtual environment..." -ForegroundColor Yellow
+    Invoke-TaleWeaverNative -Command $bootstrapPython -Arguments @("-m", "pip", "install", "--upgrade", "pip", "poetry>=2.0.0,<3.0.0")
+    $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 }
+Invoke-TaleWeaverNative -Command $poetryExe -Arguments @("install", "--no-interaction")
+$pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
+if (-not (Test-TaleWeaverBackend -Python $pythonExe)) {
+    throw "Backend dependencies are unavailable after installation. Check the Poetry installation output above."
+}
+Write-Host "[+] Backend Python: $pythonExe" -ForegroundColor Green
 
 # 4. Security Keys
 if (-not (Test-Path "data")) {
@@ -78,7 +74,7 @@ $envFile = Get-Content ".env" -Raw
 # ENCRYPTION_KEY
 if ($envFile -notmatch "(?m)^ENCRYPTION_KEY=[a-zA-Z0-9+/=_-]{20,}") {
     Write-Host "[*] Generating ENCRYPTION_KEY..." -ForegroundColor Yellow
-    $key = Invoke-Expression "$RUN_CMD python -c `"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())`""
+    $key = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
     Set-EnvKey "ENCRYPTION_KEY" $key
     Write-Host "[+] ENCRYPTION_KEY written to .env" -ForegroundColor Green
 }
@@ -87,7 +83,7 @@ if ($envFile -notmatch "(?m)^ENCRYPTION_KEY=[a-zA-Z0-9+/=_-]{20,}") {
 $envFile = Get-Content ".env" -Raw
 if ($envFile -notmatch "(?m)^SECRET_KEY=[a-fA-F0-9]{64}") {
     Write-Host "[*] Generating SECRET_KEY..." -ForegroundColor Yellow
-    $skey = Invoke-Expression "$RUN_CMD python -c `"import secrets; print(secrets.token_hex(32))`""
+    $skey = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "import secrets; print(secrets.token_hex(32))")
     Set-EnvKey "SECRET_KEY" $skey
     Write-Host "[+] SECRET_KEY written to .env" -ForegroundColor Green
 }
@@ -95,46 +91,38 @@ if ($envFile -notmatch "(?m)^SECRET_KEY=[a-fA-F0-9]{64}") {
 
 # 5. Database Setup (Migrations)
 Write-Host "[*] Running database migrations..." -ForegroundColor Yellow
-Invoke-Expression "$RUN_CMD alembic upgrade head"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[!] Error: Database migrations ('alembic upgrade head') failed with exit code $LASTEXITCODE." -ForegroundColor Red
-    exit 1
-}
+Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-m", "alembic", "upgrade", "head")
 
 # 6. Frontend Setup
 Write-Host "[*] Installing frontend dependencies..." -ForegroundColor Yellow
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Host "[!] Error: 'npm' is not installed or not in PATH. Please install Node.js and npm first." -ForegroundColor Red
-    exit 1
+    throw "npm is not installed or not in PATH. Please install Node.js and npm first."
 }
 if (Get-Command node -ErrorAction SilentlyContinue) {
-    $nodeVersion = node --version
+    $nodeVersion = Invoke-TaleWeaverNative -Command node -Arguments @("--version")
     Write-Host "[+] Found Node.js version: $nodeVersion" -ForegroundColor Green
 }
-Set-Location frontend
-npm install --include=dev
-if ($LASTEXITCODE -ne 0) {
-    Set-Location ..
-    Write-Host "[!] Error: 'npm install --include=dev' failed with exit code $LASTEXITCODE." -ForegroundColor Red
-    exit 1
+Push-Location frontend
+try {
+    Invoke-TaleWeaverNative -Command npm -Arguments @("install", "--include=dev")
+    if (-not ((Test-Path "node_modules/.bin/vite.cmd") -or (Test-Path "node_modules/.bin/vite"))) {
+        throw "Vite executable not found in frontend/node_modules/.bin after npm install."
+    }
+} finally {
+    Pop-Location
 }
-if (-not ((Test-Path "node_modules/.bin/vite.cmd") -or (Test-Path "node_modules/.bin/vite"))) {
-    Set-Location ..
-    Write-Host "[!] Error: Vite executable not found in frontend/node_modules/.bin after npm install." -ForegroundColor Red
-    exit 1
-}
-Set-Location ..
 
 # 7. Git Hooks Setup
 if (Test-Path ".git") {
     Write-Host "[*] Configuring Git pre-commit hooks..." -ForegroundColor Yellow
-    git config core.hooksPath .githooks
+    Invoke-TaleWeaverNative -Command git -Arguments @("config", "core.hooksPath", ".githooks")
     Write-Host "[+] Git hooks linked to .githooks" -ForegroundColor Green
 }
 
 Write-Host "`n--- Setup Complete! ---" -ForegroundColor Green
 Write-Host "To start the application:"
-Write-Host "Backend: $RUN_CMD python -m backend.main  (or: $RUN_CMD taleweaver)"
+Write-Host "Run .\run.ps1 to start both services with the installed Python environment."
+Write-Host ("Backend only: & '{0}' -m backend.main" -f $pythonExe.Replace("'", "''"))
 Write-Host "Frontend: cd frontend; npm run dev`n"
 
 # 7. Start (Optional / Interactive)
@@ -142,7 +130,6 @@ if (-not $SkipStart) {
     $start = Read-Host "Would you like to start the application now? (y/n)"
     if ($start -eq "y") {
         Write-Host "[*] Starting backend and frontend in new windows..." -ForegroundColor Cyan
-        Start-Process powershell -WorkingDirectory $scriptPath -ArgumentList "-NoExit", "-Command", "$RUN_CMD python -m backend.main"
-        Start-Process powershell -WorkingDirectory (Join-Path $scriptPath 'frontend') -ArgumentList "-NoExit", "-Command", "npm run dev"
+        Start-TaleWeaverProcesses -ProjectRoot $scriptPath -Python $pythonExe
     }
 }

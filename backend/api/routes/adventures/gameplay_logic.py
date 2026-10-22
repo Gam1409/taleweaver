@@ -1154,8 +1154,8 @@ class GameTurnManager:
         all_scenes = ctx.all_scenes
         mechanics_awards = ctx.mechanics_awards
         small_model_provider = ctx.small_model_provider
-        complex_model_provider = ctx.complex_model_provider
         small_model = ctx.small_model
+        complex_model_provider = ctx.complex_model_provider
         complex_model = ctx.complex_model
         global_unlock_rules_prompt_block = ctx.global_unlock_rules_prompt_block
 
@@ -1224,9 +1224,8 @@ class GameTurnManager:
         if run_mechanics_pass:
             yield f"event: status\ndata: {json.dumps({'content': 'Validating rules...'})}\n\n"
             try:
-                llm = GameMasterLLM(
-                    self.user, provider=small_model_provider, model_category="small"
-                )
+                llm = GameMasterLLM.for_role(self.user, "small")
+                small_model = llm.model
             except ValueError:
                 yield f"event: error\ndata: {json.dumps({'detail': 'Mechanics model configuration is invalid. Please check your settings and try again.'})}\n\n"
                 return
@@ -1464,9 +1463,8 @@ class GameTurnManager:
         elif run_generator_tool_intent_pass and not handled_generator_confirmation:
             yield f"event: status\ndata: {json.dumps({'content': 'Checking generator tools...'})}\n\n"
             try:
-                llm = GameMasterLLM(
-                    self.user, provider=small_model_provider, model_category="small"
-                )
+                llm = GameMasterLLM.for_role(self.user, "small")
+                small_model = llm.model
             except ValueError:
                 logger.exception(
                     "Generator tool model configuration is invalid for user %s", self.user.id
@@ -1562,9 +1560,8 @@ class GameTurnManager:
         elif run_chat_progression_pass:
             yield f"event: status\ndata: {json.dumps({'content': 'Checking progression...'})}\n\n"
             try:
-                llm = GameMasterLLM(
-                    self.user, provider=small_model_provider, model_category="small"
-                )
+                llm = GameMasterLLM.for_role(self.user, "small")
+                small_model = llm.model
             except ValueError:
                 logger.exception(
                     "Progression model configuration is invalid for user %s", self.user.id
@@ -1739,9 +1736,8 @@ class GameTurnManager:
         # Pass 2: Narration
         yield f"event: status\ndata: {json.dumps({'content': 'Generating narrative...'})}\n\n"
         try:
-            llm = GameMasterLLM(
-                self.user, provider=complex_model_provider, model_category="complex"
-            )
+            llm = GameMasterLLM.for_role(self.user, "complex")
+            complex_model = llm.model
         except ValueError:
             logger.exception("Narration model configuration is invalid for user %s", self.user.id)
             yield f"event: error\ndata: {json.dumps({'detail': 'Narration model configuration is invalid. Please check your settings and try again.'})}\n\n"
@@ -2259,18 +2255,6 @@ class GameTurnManager:
 
         formatted_events = "\n\n".join(formatted_lines)
 
-        llm_settings = self.user.llm_settings or {}
-        compression_provider = (
-            llm_settings.get("compression_model_provider")
-            or llm_settings.get("small_model_provider")
-            or "openai"
-        )
-        compression_model = (
-            llm_settings.get("compression_model")
-            or llm_settings.get("small_model")
-            or "gpt-4o-mini"
-        )
-
         compression_system_prompt = (
             "You are an expert narrative archivist for an interactive RPG adventure. "
             "Your task is to maintain a concise, chronological, and coherent summary of past events that have fallen outside the active memory window.\n\n"
@@ -2294,11 +2278,8 @@ class GameTurnManager:
             )
 
         try:
-            router = GameMasterLLM(
-                self.user,
-                provider=compression_provider,
-                model_category="compression",
-            )
+            router = GameMasterLLM.for_role(self.user, "compression")
+            compression_model = router.model
             updated_summary = await router.aexecute_simple_task(
                 system_prompt=compression_system_prompt,
                 user_prompt=compression_user_prompt,

@@ -293,17 +293,9 @@ async def translate_text(
     if not target_language:
         raise HTTPException(status_code=400, detail="Target language is required.")
 
-    llm_settings = current_user.llm_settings or {}
-    small_model_provider = (
-        llm_settings.get("small_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    small_model = llm_settings.get("small_model") or "gpt-4o-mini"
-
     try:
-        llm = GameMasterLLM(current_user, provider=small_model_provider, model_category="small")
+        llm = GameMasterLLM.for_role(current_user, "small")
+        small_model = llm.model
     except ValueError:
         logger.warning("Invalid LLM configuration for translation (user %s)", current_user.id)
         raise HTTPException(

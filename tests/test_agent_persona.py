@@ -10,6 +10,7 @@ from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.user import User
+from tests.llm_fakes import RoleLLMFactory
 
 
 def test_format_protagonist_profile_includes_all_fields():
@@ -71,7 +72,8 @@ async def test_agent_prompt_contains_protagonist_bio(setup_test_db, monkeypatch)
         fake_build_context,
     )
     monkeypatch.setattr(
-        "backend.api.routes.adventures.agent_logic.GameMasterLLM", lambda *args, **kwargs: FakeLLM()
+        "backend.api.routes.adventures.agent_logic.GameMasterLLM",
+        RoleLLMFactory(lambda *args, **kwargs: FakeLLM()),
     )
 
     async with TestSessionLocal() as db:

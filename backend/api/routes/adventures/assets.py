@@ -3,9 +3,11 @@ import logging
 import os
 import re
 import uuid
-from typing import Literal, Optional
+from io import BytesIO
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,9 +28,6 @@ from backend.utils.path_security import (
     safe_data_path,
     sanitize_path_component,
 )
-from typing import Any
-from io import BytesIO
-from PIL import Image
 
 # Mirror frontend visual limits here so server-side validation matches client hints
 _VISUAL_UPLOAD_LIMITS = {
@@ -138,7 +137,9 @@ def _build_uploaded_visual_path(
         storage_path = base_storage_path
         filename = f"cover_{uuid.uuid4().hex}.{safe_file_ext}"
     else:
-        storage_path = safe_data_path("adventures", "library", safe_template_id, "visuals", safe_target_type)
+        storage_path = safe_data_path(
+            "adventures", "library", safe_template_id, "visuals", safe_target_type
+        )
         safe_token = _sanitize_filename_token(trusted_target_token)
         filename_prefix = safe_token or safe_target_type
         filename = f"{filename_prefix}_{uuid.uuid4().hex}.{safe_file_ext}"
@@ -148,11 +149,13 @@ def _build_uploaded_visual_path(
     candidate_path = ensure_within_data_dir(os.path.join(safe_storage_path, filename))
     return ensure_within_base_dir(candidate_path, safe_storage_path)
 
+
 class RegenerateVisualRequest(BaseModel):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
     target_id: str
     prompt: Optional[str] = None
     use_advanced_model: bool = False
+
 
 @router.post("/regenerate")
 async def regenerate_visual(
@@ -164,7 +167,7 @@ async def regenerate_visual(
     """Regenerate a specific visual asset (cover, scene, character)."""
     from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
-    
+
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Adventure template not found")
@@ -190,13 +193,17 @@ async def regenerate_visual(
         if payload.target_type == "cover":
             image_url = await asyncio.wait_for(
                 MediaEngine.generate_adventure_cover(
-                    title=adv.title, original_prompt=payload.prompt or adv.original_prompt or "",
-                    adventure_id=template_id, user_config=user_config, api_keys=api_keys,
-                    style_instruction=style_instruction
+                    title=adv.title,
+                    original_prompt=payload.prompt or adv.original_prompt or "",
+                    adventure_id=template_id,
+                    user_config=user_config,
+                    api_keys=api_keys,
+                    style_instruction=style_instruction,
                 ),
-                timeout=float(settings.VISUAL_TIMEOUT)
+                timeout=float(settings.VISUAL_TIMEOUT),
             )
-            if image_url: adv.image_url = image_url
+            if image_url:
+                adv.image_url = image_url
 
         elif payload.target_type == "protagonist":
             av_res = await db.execute(
@@ -206,8 +213,9 @@ async def regenerate_visual(
                 .limit(1)
             )
             avatar = av_res.scalars().first()
-            if not avatar: raise HTTPException(status_code=404, detail="Protagonist not found")
-            
+            if not avatar:
+                raise HTTPException(status_code=404, detail="Protagonist not found")
+
             prompt = _build_visual_prompt(
                 payload.target_type,
                 avatar,
@@ -218,20 +226,31 @@ async def regenerate_visual(
             image_url = await asyncio.wait_for(
                 MediaEngine.generate_entity_image(
                     prompt=prompt,
-                    adventure_id=template_id, entity_id=avatar.id, entity_type="PROTAGONIST",
-                    user_config=user_config, api_keys=api_keys,
+                    adventure_id=template_id,
+                    entity_id=avatar.id,
+                    entity_type="PROTAGONIST",
+                    user_config=user_config,
+                    api_keys=api_keys,
                     style_instruction=style_instruction,
-                    use_advanced_model=(t2i.get("protagonist_model_quality", "advanced") == "advanced")
+                    use_advanced_model=(
+                        t2i.get("protagonist_model_quality", "advanced") == "advanced"
+                    ),
                 ),
-                timeout=float(settings.VISUAL_TIMEOUT)
+                timeout=float(settings.VISUAL_TIMEOUT),
             )
-            if image_url: avatar.profile_image = image_url
+            if image_url:
+                avatar.profile_image = image_url
 
         elif payload.target_type == "scene":
-            res = await db.execute(select(WorldScene).where(WorldScene.id == payload.target_id, WorldScene.template_id == template_id))
+            res = await db.execute(
+                select(WorldScene).where(
+                    WorldScene.id == payload.target_id, WorldScene.template_id == template_id
+                )
+            )
             scene = res.scalars().first()
-            if not scene: raise HTTPException(status_code=404, detail="Scene not found")
-            
+            if not scene:
+                raise HTTPException(status_code=404, detail="Scene not found")
+
             prompt = _build_visual_prompt(
                 payload.target_type,
                 scene,
@@ -242,19 +261,27 @@ async def regenerate_visual(
             image_url = await asyncio.wait_for(
                 MediaEngine.generate_scene_image(
                     prompt=prompt,
-                    adventure_id=template_id, user_config=user_config, api_keys=api_keys,
+                    adventure_id=template_id,
+                    user_config=user_config,
+                    api_keys=api_keys,
                     style_instruction=style_instruction,
-                    use_advanced_model=(t2i.get("scene_model_quality", "advanced") == "advanced")
+                    use_advanced_model=(t2i.get("scene_model_quality", "advanced") == "advanced"),
                 ),
-                timeout=float(settings.VISUAL_TIMEOUT)
+                timeout=float(settings.VISUAL_TIMEOUT),
             )
-            if image_url: scene.image_url = image_url
+            if image_url:
+                scene.image_url = image_url
 
         elif payload.target_type in ["npc", "object"]:
-            res = await db.execute(select(WorldEntity).where(WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id))
+            res = await db.execute(
+                select(WorldEntity).where(
+                    WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id
+                )
+            )
             entity = res.scalars().first()
-            if not entity: raise HTTPException(status_code=404, detail="Entity not found")
-            
+            if not entity:
+                raise HTTPException(status_code=404, detail="Entity not found")
+
             prompt = _build_visual_prompt(
                 payload.target_type,
                 entity,
@@ -265,18 +292,22 @@ async def regenerate_visual(
             image_url = await asyncio.wait_for(
                 MediaEngine.generate_entity_image(
                     prompt=prompt,
-                    adventure_id=template_id, entity_id=entity.id, entity_type=payload.target_type.upper(),
-                    user_config=user_config, api_keys=api_keys,
+                    adventure_id=template_id,
+                    entity_id=entity.id,
+                    entity_type=payload.target_type.upper(),
+                    user_config=user_config,
+                    api_keys=api_keys,
                     style_instruction=style_instruction,
                     use_advanced_model=(
                         t2i.get("profile_model_quality", "advanced") == "advanced"
                         if payload.target_type == "npc"
                         else t2i.get("asset_model_quality", "simple") == "advanced"
-                    )
+                    ),
                 ),
-                timeout=float(settings.VISUAL_TIMEOUT)
+                timeout=float(settings.VISUAL_TIMEOUT),
             )
-            if image_url: entity.image_url = image_url
+            if image_url:
+                entity.image_url = image_url
 
         await db.commit()
         return {"status": "success", "image_url": image_url}
@@ -284,10 +315,13 @@ async def regenerate_visual(
         raise HTTPException(status_code=504, detail="Visual generation timed out.") from None
     except ValueError as exc:
         logger.warning("Visual regeneration blocked/invalid: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid visual regeneration request.") from None
+        raise HTTPException(
+            status_code=400, detail="Invalid visual regeneration request."
+        ) from None
     except Exception as exc:
         logger.exception("Visual regeneration failed")
         raise HTTPException(status_code=500, detail="Visual generation failed.") from None
+
 
 @router.post("/suggest-prompt", response_model=SuggestPromptResponse)
 async def suggest_prompt(
@@ -299,7 +333,7 @@ async def suggest_prompt(
     """Generate an AI prompt suggestion based on the asset's description."""
     from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
-    
+
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Adventure template not found")
@@ -307,7 +341,12 @@ async def suggest_prompt(
     name = ""
     description = ""
 
-    logger.info("Suggesting prompt for %s (%s) in adventure %s", payload.target_type, payload.target_id, template_id)
+    logger.info(
+        "Suggesting prompt for %s (%s) in adventure %s",
+        payload.target_type,
+        payload.target_id,
+        template_id,
+    )
 
     if payload.target_type == "cover":
         name = adv.title
@@ -324,48 +363,50 @@ async def suggest_prompt(
             name = avatar.name
             description = avatar.description
     elif payload.target_type == "scene":
-        res = await db.execute(select(WorldScene).where(WorldScene.id == payload.target_id, WorldScene.template_id == template_id))
+        res = await db.execute(
+            select(WorldScene).where(
+                WorldScene.id == payload.target_id, WorldScene.template_id == template_id
+            )
+        )
         scene = res.scalars().first()
         if scene:
             name = scene.label
             description = scene.description
     elif payload.target_type in ["npc", "object"]:
-        res = await db.execute(select(WorldEntity).where(WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id))
+        res = await db.execute(
+            select(WorldEntity).where(
+                WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id
+            )
+        )
         entity = res.scalars().first()
         if entity:
             name = entity.name
             description = entity.description
 
-    logger.info("Resolved name '%s', description length: %d", name, len(description) if description else 0)
+    logger.info(
+        "Resolved name '%s', description length: %d", name, len(description) if description else 0
+    )
 
     if not description:
         logger.warning("No description found for %s %s", payload.target_type, payload.target_id)
         return SuggestPromptResponse(suggested_prompt="")
 
     # Enforce small model for prompt optimization
-    llm_settings = current_user.llm_settings or {}
-    provider = (
-        llm_settings.get("small_model_provider")
-        or llm_settings.get("complex_model_provider")
-        or llm_settings.get("preferred_provider")
-        or "openai"
-    )
-    model = llm_settings.get("small_model") or "gpt-4o-mini"
-    
-    llm = GameMasterLLM(user=current_user, provider=provider, model_category="small")
-    
+
+    llm = GameMasterLLM.for_role(current_user, "small")
+    model = llm.model
+
     user_prompt = prompts.IMAGE_PROMPT_SUGGESTION_USER_PROMPT_TEMPLATE.format(
-        target_type=payload.target_type.upper(),
-        name=name,
-        description=description
+        target_type=payload.target_type.upper(), name=name, description=description
     )
-    
+
     suggested = await llm.aexecute_simple_task(
         system_prompt=prompts.IMAGE_PROMPT_SUGGESTION_SYSTEM_PROMPT,
         user_prompt=user_prompt,
-        model=model
+        model=model,
     )
     return SuggestPromptResponse(suggested_prompt=suggested.strip())
+
 
 @router.post("/upload")
 async def upload_visual(
@@ -394,7 +435,9 @@ async def upload_visual(
 
         # Validate mime type
         if file.content_type and file.content_type not in _ALLOWED_MIME_TYPES:
-            raise HTTPException(status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP.")
+            raise HTTPException(
+                status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP."
+            )
 
         limits = _VISUAL_UPLOAD_LIMITS.get(target_type)
         if not limits:
@@ -437,7 +480,9 @@ async def upload_visual(
             )
             avatar = av_res.scalars().first()
             if not avatar:
-                raise HTTPException(status_code=404, detail="Protagonist not found for this adventure")
+                raise HTTPException(
+                    status_code=404, detail="Protagonist not found for this adventure"
+                )
             trusted_target_token = avatar.id
         elif target_type == "scene":
             sc_res = await db.execute(
@@ -481,12 +526,14 @@ async def upload_visual(
 
         rel_path = os.path.relpath(full_path, settings.DATA_DIR).replace("\\", "/")
         relative_url = f"/data/{rel_path}"
-        
+
         if target_type == "cover":
             adv.image_url = relative_url
         elif target_type == "protagonist":
             if not avatar:
-                raise HTTPException(status_code=404, detail="Protagonist not found for this adventure")
+                raise HTTPException(
+                    status_code=404, detail="Protagonist not found for this adventure"
+                )
             avatar.profile_image = relative_url
         elif target_type == "scene":
             if not scene:
@@ -496,7 +543,7 @@ async def upload_visual(
             if not entity:
                 raise HTTPException(status_code=404, detail="Entity not found for this adventure")
             entity.image_url = relative_url
-            
+
         await db.commit()
         return {"status": "uploaded", "target_type": target_type, "image_url": relative_url}
     except HTTPException:
@@ -504,4 +551,3 @@ async def upload_visual(
     except Exception as exc:
         logger.exception("Failed to upload visual for %s", template_id)
         raise HTTPException(status_code=500, detail="Visual upload failed.") from None
-

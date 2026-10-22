@@ -57,10 +57,8 @@ _TRAIT_FOCUS = {
 
 def _small_llm(current_user: User) -> tuple[GameMasterLLM, str]:
     """The user's configured small model, used for all editor text helpers."""
-    llm_settings = current_user.llm_settings or {}
-    provider = llm_settings.get("small_model_provider") or "openai"
-    model = llm_settings.get("small_model") or "gpt-4o-mini"
-    return GameMasterLLM(user=current_user, provider=provider, model_category="small"), model
+    gm = GameMasterLLM.for_role(current_user, "small")
+    return gm, gm.model
 
 
 async def _run_structured(

@@ -9,6 +9,7 @@ from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from tests.llm_fakes import RoleLLMFactory
 
 pytestmark = pytest.mark.asyncio
 
@@ -134,7 +135,9 @@ async def test_player_only_context_filters_hidden_and_locked(setup_test_db):
         assert context["inventory_items"] == ["Rope"]
 
 
-async def test_generate_prompt_suggestions_returns_and_persists_three_items(setup_test_db, monkeypatch):
+async def test_generate_prompt_suggestions_returns_and_persists_three_items(
+    setup_test_db, monkeypatch
+):
     from tests.conftest import TestSessionLocal
 
     async with TestSessionLocal() as db:
@@ -148,10 +151,12 @@ async def test_generate_prompt_suggestions_returns_and_persists_three_items(setu
         )
         monkeypatch.setattr(
             "backend.api.routes.adventures.turn_suggestions.GameMasterLLM",
-            lambda *args, **kwargs: llm_mock,
+            RoleLLMFactory(lambda *args, **kwargs: llm_mock),
         )
 
-        suggestions = await manager._generate_prompt_suggestions("You hear a faint scrape in the hall.")
+        suggestions = await manager._generate_prompt_suggestions(
+            "You hear a faint scrape in the hall."
+        )
 
         assert len(suggestions) == 3
         assert all(len(text.split()) <= 6 for text in suggestions)
@@ -173,10 +178,12 @@ async def test_generate_prompt_suggestions_supports_up_to_five_items(setup_test_
         )
         monkeypatch.setattr(
             "backend.api.routes.adventures.turn_suggestions.GameMasterLLM",
-            lambda *args, **kwargs: llm_mock,
+            RoleLLMFactory(lambda *args, **kwargs: llm_mock),
         )
 
-        suggestions = await manager._generate_prompt_suggestions("You hear a faint scrape in the hall.")
+        suggestions = await manager._generate_prompt_suggestions(
+            "You hear a faint scrape in the hall."
+        )
 
         assert len(suggestions) == 5
         assert all(len(text.split()) <= 6 for text in suggestions)

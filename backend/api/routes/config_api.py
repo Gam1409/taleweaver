@@ -40,6 +40,12 @@ from backend.core.models_config import (
     PREDEFINED_TTS_MODELS,
     TTS_PROVIDERS,
 )
+from backend.core.ollama_role_config import (
+    OllamaConnectionSettings,
+    OllamaRoleSettings,
+    temporary_ollama_settings,
+    validate_role_urls,
+)
 from backend.core.security import encryption_util
 from backend.engine.media_engine import MediaEngine
 from backend.engine.tts_engine import TTSEngine, TTSModelSwitchSuggestionError
@@ -428,6 +434,8 @@ def _is_llm_configured(user: User, db_keys: dict) -> bool:
     complex_model = llm.get("complex_model")
 
     def has_key(provider):
+        if provider == "custom_openai":
+            return bool(llm.get("custom_openai_url"))
         if provider == "ollama":
             return True
         return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
@@ -471,7 +479,7 @@ class ApiKeyPayload(BaseModel):
     api_key: str
 
 
-class SettingsPayload(BaseModel):
+class SettingsPayload(OllamaRoleSettings):
     small_model: str
     small_model_provider: str
     small_max_tokens: int = DEFAULT_SMALL_MAX_TOKENS
@@ -514,6 +522,11 @@ class SettingsPayload(BaseModel):
     openrouter_provider: Optional[str] = ""
     ollama_url: Optional[str] = None
     minimax_url: Optional[str] = None
+    custom_openai_url: str = ""
+    custom_openai_timeout: int = Field(default=300, ge=1, le=3600)
+    custom_openai_response_format: str = Field(
+        default="prompt", pattern="^(prompt|json_object|json_schema)$"
+    )
 
 
 class T2ISettingsPayload(BaseModel):
@@ -753,6 +766,15 @@ async def get_llm_models(
 ):
     """Return available model names for any OpenAI-compatible LLM provider."""
     provider_lower = provider.lower()
+    if provider_lower == "custom_openai":
+        from backend.core.custom_openai import discover_models
+
+        if current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required.")
+        user = await _resolve_global_settings_owner(db, current_user)
+        base = api_base or (user.llm_settings or {}).get("custom_openai_url", "")
+        key = await _resolve_provider_api_key_for_models(db, current_user, "custom_openai")
+        return {"models": await discover_models(base, key)}
     if provider_lower == "minimax":
         api_key = await _resolve_provider_api_key_for_models(db, current_user, "minimax")
         try:
@@ -863,6 +885,11 @@ async def update_llm_settings(
     """Updates the LLM model preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
+    from backend.core.custom_openai import validate_custom_url
+
+    validate_role_urls(payload, _safe_provider_url)
+    if payload.custom_openai_url:
+        payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
     user.llm_settings = _normalize_llm_settings(payload.model_dump())
     await _broadcast_global_settings(db, user)
     await db.commit()
@@ -901,7 +928,7 @@ async def update_tts_settings(
     return {"status": "success", "message": "TTS settings updated."}
 
 
-class TestLLMPayload(BaseModel):
+class TestLLMPayload(OllamaConnectionSettings):
     model: str
     provider: str
     ollama_url: Optional[str] = None
@@ -920,24 +947,35 @@ async def test_llm_connection(
     # Inject temporary ollama_url or openrouter_provider if provided
     old_settings = user.llm_settings or {}
     temp_settings = dict(old_settings)
-    if payload.provider == "ollama" and payload.ollama_url:
-        temp_settings["ollama_url"] = payload.ollama_url
+    if payload.provider == "ollama":
+        temp_settings = temporary_ollama_settings(
+            old_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
+        )
     if payload.provider == "openrouter" and payload.openrouter_provider is not None:
         temp_settings["small_openrouter_provider"] = payload.openrouter_provider
         temp_settings["complex_openrouter_provider"] = payload.openrouter_provider
         temp_settings["openrouter_provider"] = payload.openrouter_provider
+    temp_settings[f"{payload.role}_model_provider"] = payload.provider
+    temp_settings[f"{payload.role}_model"] = payload.model
+    if payload.openrouter_provider is not None:
+        temp_settings[f"{payload.role}_openrouter_provider"] = payload.openrouter_provider
     user.llm_settings = temp_settings
 
     import time
 
     try:
-        gm = GameMasterLLM(user, provider=payload.provider)
+        gm = GameMasterLLM.for_role(user, payload.role)
         start_time = time.perf_counter()
-        response = await gm.aexecute_simple_task(
-            system_prompt="You are a helpful RPG assistant.",
-            user_prompt="Say 'TaleWeaver connection test successful!' in a fantasy style.",
-            model=payload.model,
-        )
+        if payload.provider == "custom_openai":
+            from backend.core.custom_openai import test_connection
+
+            response = await test_connection(gm, payload.model)
+        else:
+            response = await gm.aexecute_simple_task(
+                system_prompt="You are a helpful RPG assistant.",
+                user_prompt="Say 'TaleWeaver connection test successful!' in a fantasy style.",
+                model=payload.model,
+            )
         end_time = time.perf_counter()
         latency = round(end_time - start_time, 2)
         return {"status": "success", "message": response, "response_time": latency}
@@ -951,6 +989,8 @@ async def test_llm_connection(
             exc,
         )
         return {"status": "error", "message": diag}
+    finally:
+        user.llm_settings = old_settings
 
 
 class TestVisionPayload(BaseModel):

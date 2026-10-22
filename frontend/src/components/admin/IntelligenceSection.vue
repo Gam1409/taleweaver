@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import OllamaRoleSettings from './OllamaRoleSettings.vue'
+import { normalizeOllamaRoleNumbers, normalizeOllamaNumber, setGlobalOllamaUrl } from '@/services/ollamaRoleSettings'
+import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
+import CustomOpenAIEndpoint from './CustomOpenAIEndpoint.vue'
 
 const props = defineProps<{
   llmForm: any
@@ -7,6 +11,7 @@ const props = defineProps<{
   configuredKeys: Record<string, { masked: string; is_env: boolean }>
   isSubmitting: boolean
   isLoadingOllamaModels: boolean
+  ollamaModelsByUrl?: Record<string, string[]>
   isLoadingMinimaxModels: boolean
   isLoadingLlmModels?: Record<string, boolean>
   testResults: Record<string, { status: string; message: string }>
@@ -14,8 +19,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'save', payload: any): void
-  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string }): void
-  (e: 'refreshOllamaModels', ollamaUrl?: string): void
+  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string; ollamaOptions?: OllamaTestOptions }): void
+  (e: 'refreshOllamaModels', ollamaUrl?: string, role?: OllamaRole): void
   (e: 'refreshMinimaxModels', minimaxUrl?: string): void
   (e: 'refreshLlmModels', provider: string, apiBase?: string): void
   (e: 'switchSection', section: string): void
@@ -69,16 +74,29 @@ const missingProviders = computed(() => {
   ])
   const missing: string[] = []
   for (const p of providers) {
-    if (p && p !== 'ollama' && !props.configuredKeys?.[p]) {
+    if (p && !['ollama', 'custom_openai'].includes(p) && !props.configuredKeys?.[p]) {
       missing.push(p)
     }
   }
   return missing
 })
 
-const isModelCustom = (model: string, provider: string) => {
-  if (!model) return false
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
+const effectiveOllamaUrl = (role: OllamaRole): string => (
+  localForm.value[`${role}_ollama_url`]?.trim() || localForm.value.ollama_url || 'http://localhost:11434'
+).trim().replace(/\/+$/, '')
+
+const roleModels = (role: OllamaRole, provider: string): string[] => {
+  if (provider !== 'ollama') return props.availableConstants?.predefined_llm_models?.[provider] || []
+  const url = effectiveOllamaUrl(role)
+  const cached = props.ollamaModelsByUrl?.[url]
+  if (cached) return cached
+  const globalUrl = (localForm.value.ollama_url || 'http://localhost:11434').trim().replace(/\/+$/, '')
+  return url === globalUrl ? props.availableConstants?.predefined_llm_models?.ollama || [] : []
+}
+
+const isModelCustom = (model: string, provider: string, role?: OllamaRole): boolean => {
+  if (!model) return provider === 'custom_openai' || (provider === 'ollama' && !!role)
+  const predefined = role ? roleModels(role, provider) : props.availableConstants?.predefined_llm_models?.[provider]
   if (!predefined) return true
   return !predefined.includes(model)
 }
@@ -92,10 +110,10 @@ const customTiers = ref<Record<string, boolean>>({
 })
 
 const syncCustomTiers = () => {
-  for (const tier of ['small', 'complex', 'generator', 'play_agent', 'compression']) {
+  for (const tier of ['small', 'complex', 'generator', 'play_agent', 'compression'] as const) {
     const model = (localForm.value as any)[`${tier}_model`]
     const provider = (localForm.value as any)[`${tier}_model_provider`]
-    customTiers.value[tier] = isModelCustom(model, provider)
+    customTiers.value[tier] = isModelCustom(model, provider, tier)
   }
 }
 syncCustomTiers()
@@ -104,19 +122,23 @@ watch(() => props.llmForm, () => {
   syncCustomTiers()
 }, { deep: true })
 
-const onModelSelect = (tier: string, e: Event) => {
+const isCustomTier = (tier: OllamaRole): boolean => customTiers.value[tier] || isModelCustom(
+  localForm.value[`${tier}_model`], localForm.value[`${tier}_model_provider`], tier
+)
+
+const onModelSelect = (tier: OllamaRole, e: Event): void => {
   const val = (e.target as HTMLSelectElement).value
   const modelKey = `${tier}_model` as keyof typeof localForm.value
   const providerKey = `${tier}_model_provider` as keyof typeof localForm.value
   if (val === 'custom') {
     customTiers.value[tier] = true
-    const predefined = props.availableConstants?.predefined_llm_models?.[localForm.value[providerKey]]
+    const predefined = roleModels(tier, localForm.value[providerKey])
     if (predefined?.includes(localForm.value[modelKey])) {
-      (localForm.value as any)[modelKey] = ''
+      localForm.value[modelKey] = ''
     }
   } else {
     customTiers.value[tier] = false
-    (localForm.value as any)[modelKey] = val
+    localForm.value[modelKey] = val
   }
 }
 
@@ -127,18 +149,19 @@ const getProviderName = (id: string) => {
 }
 
 const isProviderConfigured = (providerId: string) => {
-  if (providerId === 'ollama') return true
+  if (['ollama', 'custom_openai'].includes(providerId)) return true
   return Boolean(props.configuredKeys?.[providerId])
 }
 
 const resolveModelOnProviderChange = (
   currentModel: string,
   newProvider: string,
-  oldProvider: string | undefined
+  oldProvider: string | undefined,
+  role?: OllamaRole
 ) => {
   const getPredefined = (provider: string | undefined) => {
     if (!provider) return [] as string[]
-    return (props.availableConstants?.predefined_llm_models?.[provider] || [])
+    return role ? roleModels(role, provider) : (props.availableConstants?.predefined_llm_models?.[provider] || [])
   }
 
   const nextPredefined = getPredefined(newProvider)
@@ -153,33 +176,28 @@ const resolveModelOnProviderChange = (
 }
 
 watch(() => localForm.value.small_model_provider, (provider, oldProvider) => {
-  localForm.value.small_model = resolveModelOnProviderChange(localForm.value.small_model, provider, oldProvider)
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
-  customTiers.value.small = Boolean(localForm.value.small_model && predefined && !predefined.includes(localForm.value.small_model))
+  localForm.value.small_model = resolveModelOnProviderChange(localForm.value.small_model, provider, oldProvider, 'small')
+  customTiers.value.small = isModelCustom(localForm.value.small_model, provider, 'small')
 })
 
 watch(() => localForm.value.complex_model_provider, (provider, oldProvider) => {
-  localForm.value.complex_model = resolveModelOnProviderChange(localForm.value.complex_model, provider, oldProvider)
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
-  customTiers.value.complex = Boolean(localForm.value.complex_model && predefined && !predefined.includes(localForm.value.complex_model))
+  localForm.value.complex_model = resolveModelOnProviderChange(localForm.value.complex_model, provider, oldProvider, 'complex')
+  customTiers.value.complex = isModelCustom(localForm.value.complex_model, provider, 'complex')
 })
 
 watch(() => localForm.value.generator_model_provider, (provider, oldProvider) => {
-  localForm.value.generator_model = resolveModelOnProviderChange(localForm.value.generator_model, provider, oldProvider)
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
-  customTiers.value.generator = Boolean(localForm.value.generator_model && predefined && !predefined.includes(localForm.value.generator_model))
+  localForm.value.generator_model = resolveModelOnProviderChange(localForm.value.generator_model, provider, oldProvider, 'generator')
+  customTiers.value.generator = isModelCustom(localForm.value.generator_model, provider, 'generator')
 })
 
 watch(() => localForm.value.play_agent_model_provider, (provider, oldProvider) => {
-  localForm.value.play_agent_model = resolveModelOnProviderChange(localForm.value.play_agent_model, provider, oldProvider)
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
-  customTiers.value.play_agent = Boolean(localForm.value.play_agent_model && predefined && !predefined.includes(localForm.value.play_agent_model))
+  localForm.value.play_agent_model = resolveModelOnProviderChange(localForm.value.play_agent_model, provider, oldProvider, 'play_agent')
+  customTiers.value.play_agent = isModelCustom(localForm.value.play_agent_model, provider, 'play_agent')
 })
 
 watch(() => localForm.value.compression_model_provider, (provider, oldProvider) => {
-  localForm.value.compression_model = resolveModelOnProviderChange(localForm.value.compression_model, provider, oldProvider)
-  const predefined = props.availableConstants?.predefined_llm_models?.[provider]
-  customTiers.value.compression = Boolean(localForm.value.compression_model && predefined && !predefined.includes(localForm.value.compression_model))
+  localForm.value.compression_model = resolveModelOnProviderChange(localForm.value.compression_model, provider, oldProvider, 'compression')
+  customTiers.value.compression = isModelCustom(localForm.value.compression_model, provider, 'compression')
 })
 
 const hasOllamaProviderSelected = computed(() => (
@@ -222,7 +240,7 @@ const refreshMinimaxModels = () => {
   emit('refreshMinimaxModels', localForm.value.minimax_url)
 }
 
-const LLM_MODEL_DISCOVERY_PROVIDERS = ['openai', 'anthropic', 'google', 'openrouter', 'deepseek', 'kimi', 'minimax']
+const LLM_MODEL_DISCOVERY_PROVIDERS = ['custom_openai', 'openai', 'anthropic', 'google', 'openrouter', 'deepseek', 'kimi', 'minimax']
 
 const isLlmDiscoveryProvider = (provider: string | undefined | null) => {
   return !!provider && LLM_MODEL_DISCOVERY_PROVIDERS.includes(provider)
@@ -238,7 +256,7 @@ const refreshLlmProviderModels = (provider: string) => {
   if (provider === 'minimax') {
     emit('refreshMinimaxModels', localForm.value.minimax_url)
   } else {
-    emit('refreshLlmModels', provider, localForm.value.minimax_url)
+    emit('refreshLlmModels', provider, provider === 'custom_openai' ? localForm.value.custom_openai_url : undefined)
   }
 }
 
@@ -268,16 +286,23 @@ const syncFromPass1 = () => {
 }
 
 const handleSave = () => {
-  emit('save', localForm.value)
+  emit('save', normalizeOllamaRoleNumbers(localForm.value))
 }
 
 // Trigger test with proper args
-const triggerTest = (passKey: string, model: string, provider: string, openrouterProvider?: string) => {
+const triggerTest = (passKey: OllamaRole, model: string, provider: string, openrouterProvider?: string) => {
   emit('test', {
     key: passKey,
     model,
     provider,
-    openrouterProvider
+    openrouterProvider,
+    ollamaOptions: {
+      role: passKey,
+      apiMode: localForm.value.ollama_api_mode || 'generate',
+      url: effectiveOllamaUrl(passKey),
+      timeout: normalizeOllamaNumber(localForm.value[`${passKey}_ollama_timeout`]),
+      numCtx: normalizeOllamaNumber(localForm.value[`${passKey}_ollama_num_ctx`]),
+    }
   })
 }
 </script>
@@ -481,12 +506,12 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="customTiers.small ? 'custom' : localForm.small_model"
+            :value="isCustomTier('small') ? 'custom' : localForm.small_model"
             @change="(e) => onModelSelect('small', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
-              v-for="m in availableConstants.predefined_llm_models?.[localForm.small_model_provider]"
+              v-for="m in roleModels('small', localForm.small_model_provider)"
               :key="m"
               :value="m"
             >
@@ -498,7 +523,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Custom Model Input if custom -->
-      <div v-if="customTiers.small" class="pt-1">
+      <div v-if="isCustomTier('small')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.small_model"
@@ -509,6 +534,17 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Test Result Alert -->
+      <OllamaRoleSettings
+        v-if="localForm.small_model_provider === 'ollama'"
+        role="small"
+        v-model:url="localForm.small_ollama_url"
+        v-model:timeout="localForm.small_ollama_timeout"
+        v-model:num-ctx="localForm.small_ollama_num_ctx"
+        :global-url="localForm.ollama_url"
+        :loading="isLoadingOllamaModels"
+        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('small'), 'small')"
+      />
+
       <div
         v-if="testResults.small"
         class="p-3 rounded-xl text-xs font-mono flex items-center gap-2 border"
@@ -664,12 +700,12 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="customTiers.complex ? 'custom' : localForm.complex_model"
+            :value="isCustomTier('complex') ? 'custom' : localForm.complex_model"
             @change="(e) => onModelSelect('complex', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
-              v-for="m in availableConstants.predefined_llm_models?.[localForm.complex_model_provider]"
+              v-for="m in roleModels('complex', localForm.complex_model_provider)"
               :key="m"
               :value="m"
             >
@@ -681,7 +717,7 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Custom Model Input -->
-      <div v-if="customTiers.complex" class="pt-1">
+      <div v-if="isCustomTier('complex')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.complex_model"
@@ -692,6 +728,17 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <!-- Test Result Alert -->
+      <OllamaRoleSettings
+        v-if="localForm.complex_model_provider === 'ollama'"
+        role="complex"
+        v-model:url="localForm.complex_ollama_url"
+        v-model:timeout="localForm.complex_ollama_timeout"
+        v-model:num-ctx="localForm.complex_ollama_num_ctx"
+        :global-url="localForm.ollama_url"
+        :loading="isLoadingOllamaModels"
+        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('complex'), 'complex')"
+      />
+
       <div
         v-if="testResults.complex"
         class="p-3 rounded-xl text-xs font-mono flex items-center gap-2 border"
@@ -841,12 +888,12 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           </div>
 
           <select
-            :value="customTiers.generator ? 'custom' : localForm.generator_model"
+            :value="isCustomTier('generator') ? 'custom' : localForm.generator_model"
             @change="(e) => onModelSelect('generator', e)"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
           >
             <option
-              v-for="m in availableConstants.predefined_llm_models?.[localForm.generator_model_provider]"
+              v-for="m in roleModels('generator', localForm.generator_model_provider)"
               :key="m"
               :value="m"
             >
@@ -857,7 +904,18 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
         </div>
       </div>
 
-      <div v-if="customTiers.generator" class="pt-1">
+      <OllamaRoleSettings
+        v-if="localForm.generator_model_provider === 'ollama'"
+        role="generator"
+        v-model:url="localForm.generator_ollama_url"
+        v-model:timeout="localForm.generator_ollama_timeout"
+        v-model:num-ctx="localForm.generator_ollama_num_ctx"
+        :global-url="localForm.ollama_url"
+        :loading="isLoadingOllamaModels"
+        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('generator'), 'generator')"
+      />
+
+      <div v-if="isCustomTier('generator')" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input
           v-model="localForm.generator_model"
@@ -986,11 +1044,11 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
               </button>
             </div>
             <select
-              :value="customTiers.play_agent ? 'custom' : localForm.play_agent_model"
+              :value="isCustomTier('play_agent') ? 'custom' : localForm.play_agent_model"
               @change="(e) => onModelSelect('play_agent', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
-              <option v-for="m in availableConstants.predefined_llm_models?.[localForm.play_agent_model_provider]" :key="m" :value="m">
+              <option v-for="m in roleModels('play_agent', localForm.play_agent_model_provider)" :key="m" :value="m">
                 {{ getModelOptionLabel(localForm.play_agent_model_provider, m) }}
               </option>
               <option value="custom">-- Custom Model ID --</option>
@@ -999,7 +1057,18 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
         </div>
 
         <!-- Custom Model Input if custom -->
-        <div v-if="customTiers.play_agent" class="pt-1">
+        <OllamaRoleSettings
+        v-if="localForm.play_agent_model_provider === 'ollama'"
+        role="play_agent"
+        v-model:url="localForm.play_agent_ollama_url"
+        v-model:timeout="localForm.play_agent_ollama_timeout"
+        v-model:num-ctx="localForm.play_agent_ollama_num_ctx"
+        :global-url="localForm.ollama_url"
+        :loading="isLoadingOllamaModels"
+        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('play_agent'), 'play_agent')"
+      />
+
+        <div v-if="isCustomTier('play_agent')" class="pt-1">
           <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
           <input
             v-model="localForm.play_agent_model"
@@ -1185,18 +1254,34 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
           <div>
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
             <select
-              :value="customTiers.compression ? 'custom' : localForm.compression_model"
+              :value="isCustomTier('compression') ? 'custom' : localForm.compression_model"
               @change="(e) => onModelSelect('compression', e)"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               <option value="">-- No Dedicated Model (Fall back to Pass 1) --</option>
-              <option v-for="m in availableConstants.predefined_llm_models?.[localForm.compression_model_provider]" :key="m" :value="m">
+              <option v-for="m in roleModels('compression', localForm.compression_model_provider)" :key="m" :value="m">
                 {{ getModelOptionLabel(localForm.compression_model_provider, m) }}
               </option>
               <option value="custom">-- Custom Model ID --</option>
             </select>
           </div>
         </div>
+
+      <OllamaRoleSettings
+        v-if="localForm.compression_model_provider === 'ollama'"
+        role="compression"
+        v-model:url="localForm.compression_ollama_url"
+        v-model:timeout="localForm.compression_ollama_timeout"
+        v-model:num-ctx="localForm.compression_ollama_num_ctx"
+        :global-url="localForm.ollama_url"
+        :loading="isLoadingOllamaModels"
+        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('compression'), 'compression')"
+      />
+
+        <label v-if="isCustomTier('compression')" class="block text-xs text-slate-300">
+          Custom Model Identifier
+          <input v-model="localForm.compression_model" type="text" placeholder="Exact model ID, including vendor/name" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono" />
+        </label>
 
         <div v-if="testResults.compression" class="p-3 rounded-xl text-xs font-mono flex items-center gap-2 border bg-slate-950 border-slate-800">
           <i :class="testResults.compression.status === 'success' ? 'ra ra-check text-emerald-400' : 'ra ra-warning text-rose-400'"></i>
@@ -1221,12 +1306,22 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <CustomOpenAIEndpoint
+          v-model:url="localForm.custom_openai_url"
+          v-model:timeout="localForm.custom_openai_timeout"
+          v-model:response-format="localForm.custom_openai_response_format"
+          :loading="isLlmProviderLoading('custom_openai')"
+          :model-count="availableConstants?.predefined_llm_models?.custom_openai?.length || 0"
+          :has-key="!!configuredKeys?.custom_openai"
+          @detect="refreshLlmProviderModels('custom_openai')"
+          @vault="emit('switchSection', 'keys')"
+        />
         <!-- Ollama Endpoint -->
         <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-white flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-              Ollama API Host
+              Ollama API Host (default)
             </span>
             <button
               type="button"
@@ -1238,11 +1333,22 @@ const triggerTest = (passKey: string, model: string, provider: string, openroute
             </button>
           </div>
           <input
-            v-model="localForm.ollama_url"
+            :value="localForm.ollama_url"
+            @input="setGlobalOllamaUrl(localForm, ($event.target as HTMLInputElement).value)"
             type="text"
             placeholder="http://localhost:11434"
+            title="Changing this URL copies it to all Ollama role URLs"
             class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:ring-2 focus:ring-cyan-500/50"
           />
+          <p class="text-xs text-slate-400">Changing this URL copies it to all five role URLs, replacing previous overrides. You can then edit each role URL separately in its advanced settings. Save to apply your changes.</p>
+          <label class="block text-xs text-slate-300">
+            Ollama API mode
+            <select v-model="localForm.ollama_api_mode" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white">
+              <option value="generate">Generate API (/api/generate)</option>
+              <option value="chat">Chat API (/api/chat)</option>
+            </select>
+          </label>
+          <p class="text-xs text-slate-400">Chat preserves system, user and assistant message roles. Generate uses the legacy prompt format. Both modes remain experimental; test your models after changing this setting.</p>
           <div class="flex items-center justify-between text-[11px] text-slate-500 font-mono">
             <span>Detected: {{ ollamaModelCount }} local models</span>
             <span v-if="ollamaModelCount > 0" class="text-emerald-400">Ready</span>

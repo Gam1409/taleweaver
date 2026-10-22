@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import { audioService } from '@/services/audioService'
 import { catalogService } from '@/services/catalogService'
+import type { OllamaRole } from '@/services/ollamaRoleSettings'
 import { refreshConfig } from '@/store/config'
 
 /**
@@ -28,6 +29,9 @@ class SettingsService {
     small_enable_thinking: false,
     small_max_thinking_tokens: 1024,
     small_openrouter_provider: '',
+    small_ollama_url: '',
+    small_ollama_timeout: null as number | null,
+    small_ollama_num_ctx: null as number | null,
 
     complex_model: '',
     complex_model_provider: 'openai',
@@ -35,6 +39,19 @@ class SettingsService {
     complex_enable_thinking: false,
     complex_max_thinking_tokens: 1024,
     complex_openrouter_provider: '',
+    complex_ollama_url: '',
+    complex_ollama_timeout: null as number | null,
+    complex_ollama_num_ctx: null as number | null,
+
+    generator_ollama_url: '',
+    generator_ollama_timeout: null as number | null,
+    generator_ollama_num_ctx: null as number | null,
+    compression_ollama_url: '',
+    compression_ollama_timeout: null as number | null,
+    compression_ollama_num_ctx: null as number | null,
+    play_agent_ollama_url: '',
+    play_agent_ollama_timeout: null as number | null,
+    play_agent_ollama_num_ctx: null as number | null,
 
     generator_model: '',
     generator_model_provider: 'openai',
@@ -62,7 +79,11 @@ class SettingsService {
 
     preferred_provider: 'openai',
     ollama_url: 'http://localhost:11434',
+    ollama_api_mode: 'generate',
     minimax_url: 'https://api.minimax.chat/v1',
+    custom_openai_url: '',
+    custom_openai_timeout: 300,
+    custom_openai_response_format: 'prompt',
   })
 
   t2iForm = ref({
@@ -193,11 +214,16 @@ class SettingsService {
     }
   }
 
-  async fetchOllamaModels(ollamaUrl?: string) {
+  ollamaModelsByUrl = ref<Record<string, string[]>>({})
+
+  async fetchOllamaModels(ollamaUrl?: string, role?: OllamaRole): Promise<string[]> {
+    const url = (ollamaUrl || 'http://localhost:11434').trim().replace(/\/+$/, '')
     this.isLoadingOllamaModels.value = true
     try {
-      const data = await api.getOllamaModels(ollamaUrl)
+      const data = await api.getOllamaModels(url)
       const models = Array.isArray(data.models) ? data.models : []
+      this.ollamaModelsByUrl.value = { ...this.ollamaModelsByUrl.value, [url]: models }
+      if (role) return models
       this.availableConstants.value = {
         ...this.availableConstants.value,
         predefined_llm_models: {
@@ -208,6 +234,8 @@ class SettingsService {
       return models
     } catch (error) {
       console.error('[SettingsService] Failed to fetch Ollama models:', error)
+      this.ollamaModelsByUrl.value = { ...this.ollamaModelsByUrl.value, [url]: [] }
+      if (role) return []
       this.availableConstants.value = {
         ...this.availableConstants.value,
         predefined_llm_models: {
@@ -266,7 +294,7 @@ class SettingsService {
       }
       return this.availableConstants.value.predefined_llm_models?.[provider] || []
     } catch (error) {
-      console.error(`[SettingsService] Failed to fetch ${provider} models:`, error)
+      this.statusMessage.value = { type: 'error', text: error instanceof Error ? error.message : 'Model detection failed. Enter a Model ID manually.' }
       return this.availableConstants.value.predefined_llm_models?.[provider] || []
     } finally {
       this.isLoadingLlmModels.value = { ...this.isLoadingLlmModels.value, [provider]: false }

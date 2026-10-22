@@ -13,6 +13,7 @@ from backend.models.user import User
 from backend.models.validation_run import ValidationRun
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.conftest import TestSessionLocal
+from tests.llm_fakes import RoleLLMFactory
 
 
 def _auth_headers(username: str) -> dict:
@@ -168,7 +169,7 @@ async def test_suggest_fix_returns_proposals(client, setup_test_db, monkeypatch)
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate/findings/suggest-fix",
@@ -231,7 +232,7 @@ async def test_suggest_fix_rejects_more_than_three(client, setup_test_db, monkey
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate/findings/suggest-fix",
@@ -297,7 +298,7 @@ async def test_suggest_fix_timeout_returns_200_with_error(client, setup_test_db,
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
     monkeypatch.setattr(
         "backend.core.config.settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS",
         0.05,
@@ -350,7 +351,7 @@ async def test_suggest_fix_runtime_error_returns_200_with_error(client, setup_te
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate/findings/suggest-fix",
@@ -395,7 +396,7 @@ async def test_suggest_fix_all_missing_keys_returns_config_message(
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _NoKeyLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_NoKeyLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate/findings/suggest-fix",
@@ -453,7 +454,7 @@ async def test_suggest_fix_all_timeouts_returns_timeout_message(
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _SlowLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_SlowLLM))
     import backend.core.config as _config_module
 
     monkeypatch.setattr(_config_module.settings, "AI_FIX_SUGGEST_TIMEOUT_SECONDS", 0.05)
@@ -525,7 +526,7 @@ async def test_suggest_fix_uses_focused_prompt(client, setup_test_db, monkeypatc
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         f"/api/adventures/{tpl_id}/editor/validate/findings/suggest-fix",
@@ -614,7 +615,7 @@ async def test_suggest_fix_falls_back_on_timeout(client, setup_test_db, monkeypa
         fallback_calls["n"] += 1
         return _FakeFallbackLLM(*args, **kwargs)
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _factory)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_factory))
     import backend.core.config as _config_module
 
     monkeypatch.setattr(_config_module.settings, "AI_FIX_SUGGEST_TIMEOUT_SECONDS", 0.05)
@@ -709,7 +710,7 @@ async def test_suggest_fix_falls_back_to_user_small_provider(client, setup_test_
             return _PrimaryLLM(*args, **kwargs)
         return _SecondaryLLM(*args, **kwargs)
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _factory)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_factory))
     import backend.core.config as _config_module
 
     monkeypatch.setattr(_config_module.settings, "AI_FIX_SUGGEST_TIMEOUT_SECONDS", 0.05)
@@ -792,7 +793,7 @@ async def test_suggest_fix_skips_provider_with_missing_api_key(client, setup_tes
             return _DeepseekLLM(*args, **kwargs)
         return _OpenaiLLM(*args, **kwargs)
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _factory)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_factory))
     import backend.core.config as _config_module
 
     monkeypatch.setattr(_config_module.settings, "AI_FIX_FALLBACK_PROVIDER", "anthropic")
@@ -842,7 +843,7 @@ async def test_suggest_fix_clean_error_when_all_providers_unavailable(
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _UnavailLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_UnavailLLM))
     import backend.core.config as _config_module
 
     monkeypatch.setattr(_config_module.settings, "AI_FIX_FALLBACK_PROVIDER", "openai")
@@ -911,7 +912,7 @@ async def test_suggest_fix_cache_hit_skips_llm(client, setup_test_db, monkeypatc
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     body = {
         "finding_code": "orphaned_container_code",
@@ -978,7 +979,7 @@ async def test_apply_fix_evicts_cache(client, setup_test_db, monkeypatch):
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     body_req = {
         "finding_code": "orphaned_container_code",
@@ -1575,7 +1576,7 @@ async def test_apply_fix_does_not_call_llm(client, setup_test_db, monkeypatch):
 
     from backend.api.routes.adventures.editing import ai_fix_llm as editor_module
 
-    monkeypatch.setattr(editor_module, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(editor_module, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     proposal = {
         "title": "Bump hp",

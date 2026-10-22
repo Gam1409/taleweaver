@@ -479,10 +479,8 @@ class AgentService:
             "an error/bug, report it."
         )
 
-        llm_settings = user.llm_settings or {}
-        provider = llm_settings.get("play_agent_model_provider") or ctx.small_model_provider
-        model = llm_settings.get("play_agent_model") or ctx.small_model
-        gm_llm = GameMasterLLM(user=user, provider=provider, model_category="small")
+        gm_llm = GameMasterLLM.for_role(user, "play_agent")
+        model = gm_llm.model
 
         try:
             return await gm_llm.aexecute_complex_task(

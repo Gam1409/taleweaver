@@ -914,3 +914,165 @@ def test_openrouter_model_normalization_adds_author_prefix(monkeypatch):
     assert router._normalize_model("anthropic/claude-3-haiku") == "anthropic/claude-3-haiku"
     assert router._normalize_model("gemini-2.5-flash") == "google/gemini-2.5-flash"
     assert router._normalize_model("deepseek-chat") == "deepseek/deepseek-chat"
+
+
+@pytest.mark.parametrize(
+    ("role_url", "global_url", "expected"),
+    [
+        ("http://mechanics:11434/", "http://shared:11434", "http://mechanics:11434"),
+        ("", "http://shared:11434/", "http://shared:11434"),
+        (None, None, "http://localhost:11434"),
+    ],
+)
+def test_ollama_role_url_precedence(role_url, global_url, expected):
+    router = GameMasterLLM(
+        _make_user(
+            {
+                "small_model_provider": "ollama",
+                "small_ollama_url": role_url,
+                "ollama_url": global_url,
+            }
+        ),
+        provider="ollama",
+    )
+    assert router.api_base == expected
+
+
+@pytest.mark.parametrize("category", ["small", "complex", "generator", "compression"])
+def test_ollama_roles_are_isolated_and_preserve_other_categories(category):
+    from backend.core.config import settings
+
+    user = _make_user(
+        {
+            "ollama_url": "http://shared:11434",
+            "small_model_provider": "ollama",
+            "small_ollama_url": "http://mechanics:11434",
+            "small_ollama_timeout": 90,
+            "small_ollama_num_ctx": 8192,
+            "complex_model_provider": "ollama",
+            "complex_ollama_url": "http://narration:11434",
+            "complex_ollama_timeout": 150,
+            "complex_ollama_num_ctx": 32768,
+        }
+    )
+    router = GameMasterLLM(user, provider="ollama", model_category=category)
+    expected = {
+        "small": ("http://mechanics:11434", 90, 8192),
+        "complex": ("http://narration:11434", 150, 32768),
+    }
+    if category in expected:
+        assert (router.api_base, router.request_timeout, router.ollama_num_ctx) == expected[
+            category
+        ]
+        return
+    assert router.api_base == "http://shared:11434"
+    assert router.ollama_num_ctx is None
+    assert router.request_timeout == (
+        settings.WORLDBUILDING_TIMEOUT if category == "generator" else settings.INTELLIGENCE_TIMEOUT
+    )
+
+
+def test_agent_ollama_does_not_inherit_another_small_provider(monkeypatch):
+    from backend.core.config import settings
+
+    user = _make_user(
+        {
+            "ollama_url": "http://shared:11434",
+            "small_model_provider": "openai",
+            "small_ollama_url": "http://wrong:11434",
+            "small_ollama_timeout": 60,
+            "small_ollama_num_ctx": 8192,
+        }
+    )
+    router = GameMasterLLM(user, provider="ollama", model_category="small")
+    assert router.api_base == "http://shared:11434"
+    assert router.request_timeout == settings.INTELLIGENCE_TIMEOUT
+    assert router.ollama_num_ctx is None
+    monkeypatch.setattr(GameMasterLLM, "_get_decrypted_key", lambda self, provider: "fake")
+    cloud = GameMasterLLM(user, provider="openai", model_category="small")
+    assert cloud.api_base is None
+    assert cloud.request_timeout == settings.INTELLIGENCE_TIMEOUT
+    assert cloud.ollama_num_ctx is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("num_ctx", [None, 8192])
+async def test_all_ollama_request_paths_use_shared_options(monkeypatch, num_ctx):
+    from types import SimpleNamespace
+
+    class Answer(BaseModel):
+        value: int
+
+    router = GameMasterLLM(
+        _make_user(
+            {
+                "small_model_provider": "ollama",
+                "small_ollama_url": "http://role:11434",
+                "small_ollama_timeout": 60,
+                "small_ollama_num_ctx": num_ctx,
+                "small_max_tokens": 777,
+            }
+        ),
+        provider="ollama",
+    )
+    calls = []
+    helper_calls = []
+    apply_options = router._apply_ollama_options
+
+    def spy(kwargs, model):
+        helper_calls.append(model)
+        apply_options(kwargs, model)
+
+    def response(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content='{"value": 42}'), finish_reason="stop"
+                )
+            ],
+            model_dump=lambda: {},
+        )
+
+    async def chunks():
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="hello"))])
+
+    async def async_response(**kwargs):
+        if kwargs.get("stream"):
+            calls.append(kwargs)
+            return chunks()
+        return response(**kwargs)
+
+    monkeypatch.setattr(router, "_apply_ollama_options", spy)
+    monkeypatch.setattr("backend.core.llm_router.litellm.completion", response)
+    monkeypatch.setattr("backend.core.llm_router.litellm.acompletion", async_response)
+    router.execute_simple_task("sys", "hi", "role-model:latest")
+    await router.aexecute_simple_task("sys", "hi", "role-model:latest")
+    stream = await router.stream_simple_task("sys", "hi", "role-model:latest")
+    assert [chunk async for chunk in stream]
+    assert router.execute_complex_task("sys", "hi", Answer, "role-model:latest").value == 42
+    assert (
+        await router.aexecute_complex_task("sys", "hi", Answer, "role-model:latest")
+    ).value == 42
+    assert len(calls) == len(helper_calls) == 5
+    for call in calls:
+        assert call["api_base"] == "http://role:11434"
+        assert call["custom_llm_provider"] == "ollama"
+        assert call["think"] is False
+        assert call["request_timeout"] == 60
+        assert call["max_tokens"] == 777
+        assert "extra_body" not in call
+        assert call.get("num_ctx") == num_ctx
+        assert ("num_ctx" in call) == (num_ctx is not None)
+
+
+@pytest.mark.parametrize(
+    "content,expected",
+    [
+        ("Internal planning.\n</think>\nMira found a key.", "Mira found a key."),
+        ("<think>Internal planning.</think>Mira found a key.", "Mira found a key."),
+        ("Mira found a key.", "Mira found a key."),
+    ],
+)
+def test_thinking_cleanup_handles_an_opening_tag_supplied_by_the_template(content, expected):
+    assert GameMasterLLM.clean_thinking_tags(content) == expected

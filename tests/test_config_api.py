@@ -14,6 +14,7 @@ from backend.api.routes import config_api
 from backend.core.auth import create_access_token, get_password_hash
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
+from tests.llm_fakes import RoleLLMFactory
 
 pytestmark = pytest.mark.asyncio
 
@@ -412,6 +413,14 @@ async def test_settings_are_global_for_all_users(client: AsyncClient):
         "ollama_url": "http://localhost:11434",
     }
 
+    for index, role in enumerate(("small", "complex", "generator", "compression", "play_agent"), 1):
+        payload_a.update(
+            {
+                f"{role}_ollama_url": f"http://127.0.0.1:{11440 + index}",
+                f"{role}_ollama_timeout": 100 + index,
+                f"{role}_ollama_num_ctx": 4096 * index,
+            }
+        )
     save_resp = await client.post("/api/settings/llm", json=payload_a, headers=headers_a)
     assert save_resp.status_code == 200
 
@@ -422,6 +431,10 @@ async def test_settings_are_global_for_all_users(client: AsyncClient):
     b_settings = await client.get("/api/settings", headers=headers_b)
     assert b_settings.status_code == 200
     assert b_settings.json()["llm_settings"]["small_model"] == "llama3.2"
+    for role in ("small", "complex", "generator", "compression", "play_agent"):
+        for option in ("url", "timeout", "num_ctx"):
+            key = f"{role}_ollama_{option}"
+            assert b_settings.json()["llm_settings"][key] == payload_a[key]
 
 
 async def test_test_llm_connection_handles_authentication_errors_gracefully(
@@ -436,7 +449,7 @@ async def test_test_llm_connection_handles_authentication_errors_gracefully(
         async def aexecute_simple_task(self, **kwargs):
             raise Exception("litellm.AuthenticationError: Invalid Authentication")
 
-    monkeypatch.setattr(config_api, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         "/api/settings/test-llm",
@@ -464,7 +477,7 @@ async def test_test_llm_connection_handles_generic_errors_without_500(
         async def aexecute_simple_task(self, **kwargs):
             raise RuntimeError("upstream timeout")
 
-    monkeypatch.setattr(config_api, "GameMasterLLM", _FakeLLM)
+    monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
 
     resp = await client.post(
         "/api/settings/test-llm",
@@ -478,3 +491,174 @@ async def test_test_llm_connection_handles_generic_errors_without_500(
     data = resp.json()
     assert data["status"] == "error"
     assert "Connection test failed" in data["message"]
+
+
+async def test_ollama_role_settings_round_trip_and_legacy_defaults(client, monkeypatch):
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "ALLOW_PRIVATE_NETWORK_MODELS", True)
+    monkeypatch.setattr(
+        settings,
+        "__pydantic_fields_set__",
+        settings.model_fields_set | {"ALLOW_PRIVATE_NETWORK_MODELS"},
+    )
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    assert payload["small_ollama_url"] == ""
+    assert payload["complex_ollama_timeout"] is None
+    payload.update(
+        small_ollama_url=" http://127.0.0.1:11435/ ",
+        small_ollama_timeout=60,
+        small_ollama_num_ctx=8192,
+        complex_ollama_url="http://127.0.0.1:11436",
+        complex_ollama_timeout=150,
+        complex_ollama_num_ctx=32768,
+        play_agent_model_provider="ollama",
+        play_agent_model="qwen:latest",
+        play_agent_personality="Bürokrat",
+        play_agent_custom_personality="Check every inventory transfer.",
+        custom_openai_url="http://127.0.0.1:8002/v1",
+        custom_openai_timeout=120,
+        custom_openai_response_format="json_schema",
+    )
+    for index, role in enumerate(("generator", "compression", "play_agent"), 1):
+        payload.update(
+            {
+                f"{role}_ollama_url": f"http://127.0.0.1:{11440 + index}/",
+                f"{role}_ollama_timeout": 100 + index,
+                f"{role}_ollama_num_ctx": 4096 * index,
+            }
+        )
+    payload["ollama_api_mode"] = "chat"
+    result = await client.post("/api/settings/llm", json=payload)
+    assert result.status_code == 200
+    saved = (await client.get("/api/settings")).json()["llm_settings"]
+    assert saved["ollama_api_mode"] == "chat"
+    assert saved["play_agent_personality"] == "bureaucrat"
+    assert saved["play_agent_custom_personality"] == payload["play_agent_custom_personality"]
+    assert saved["play_agent_model_provider"] == "ollama"
+    assert saved["play_agent_model"] == "qwen:latest"
+    for key in ("custom_openai_url", "custom_openai_timeout", "custom_openai_response_format"):
+        assert saved[key] == payload[key]
+    for role in ("small", "complex", "generator", "compression", "play_agent"):
+        for option in ("url", "timeout", "num_ctx"):
+            key = f"{role}_ollama_{option}"
+            assert saved[key] == (
+                payload[key].strip().rstrip("/") if option == "url" else payload[key]
+            )
+
+
+@pytest.mark.parametrize("empty", ["", "   ", None])
+async def test_empty_ollama_role_numbers_are_unset(client, empty):
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    for role in ("small", "complex", "generator", "compression", "play_agent"):
+        payload[f"{role}_ollama_timeout"] = empty
+        payload[f"{role}_ollama_num_ctx"] = empty
+    assert (await client.post("/api/settings/llm", json=payload)).status_code == 200
+    saved = (await client.get("/api/settings")).json()["llm_settings"]
+    assert all(
+        saved[f"{role}_ollama_{option}"] is None
+        for role in ("small", "complex", "generator", "compression", "play_agent")
+        for option in ("timeout", "num_ctx")
+    )
+
+
+@pytest.mark.parametrize(
+    ("option", "invalid"),
+    [("timeout", 29), ("timeout", 601), ("num_ctx", 511), ("num_ctx", 1048577)],
+)
+@pytest.mark.parametrize("role", ["small", "complex", "generator", "compression", "play_agent"])
+async def test_invalid_ollama_role_numbers_are_rejected(client, option, invalid, role):
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    payload[f"{role}_ollama_{option}"] = invalid
+    assert (await client.post("/api/settings/llm", json=payload)).status_code == 422
+
+
+@pytest.mark.parametrize("role", ["small", "complex", "generator", "compression", "play_agent"])
+async def test_unsafe_ollama_role_url_rejected(client, monkeypatch, role):
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "ALLOW_PRIVATE_NETWORK_MODELS", False)
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    payload[f"{role}_ollama_url"] = "http://169.254.169.254/latest/meta-data"
+    response = await client.post("/api/settings/llm", json=payload)
+    assert response.status_code == 400
+    assert "private/loopback" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("role", ["small", "complex", "generator", "compression", "play_agent"])
+async def test_llm_test_uses_selected_ollama_role_without_persisting(client, monkeypatch, role):
+    before = (await client.get("/api/settings")).json()["llm_settings"]
+    captured = {}
+
+    class FakeLLM:
+        def __init__(self, user, provider, model_category):
+            captured.update(
+                provider=provider, category=model_category, settings=dict(user.llm_settings)
+            )
+
+        async def aexecute_simple_task(self, **kwargs):
+            return "connected"
+
+    monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(FakeLLM))
+    response = await client.post(
+        "/api/settings/test-llm",
+        json={
+            "provider": "ollama",
+            "ollama_api_mode": "chat",
+            "model": "role-model:latest",
+            "role": role,
+            "ollama_url": "http://127.0.0.1:11439/",
+            "ollama_timeout": 60,
+            "ollama_num_ctx": 8192,
+        },
+    )
+    assert response.json()["status"] == "success"
+    assert captured["category"] == role
+    assert captured["settings"]["ollama_api_mode"] == "chat"
+    assert captured["settings"][f"{role}_ollama_url"] == "http://127.0.0.1:11439"
+    assert captured["settings"][f"{role}_ollama_timeout"] == 60
+    assert captured["settings"][f"{role}_ollama_num_ctx"] == 8192
+    after = (await client.get("/api/settings")).json()["llm_settings"]
+    assert after == before
+
+
+@pytest.mark.parametrize("role", ["small", "complex", "generator", "compression", "play_agent"])
+async def test_ollama_connection_rejects_unsafe_url(client, monkeypatch, role):
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "ALLOW_PRIVATE_NETWORK_MODELS", False)
+    before = (await client.get("/api/settings")).json()["llm_settings"]
+    response = await client.post(
+        "/api/settings/test-llm",
+        json={
+            "provider": "ollama",
+            "model": "local",
+            "role": role,
+            "ollama_url": "http://169.254.169.254/",
+        },
+    )
+    assert response.status_code == 400
+    assert (await client.get("/api/settings")).json()["llm_settings"] == before
+
+
+@pytest.mark.parametrize("role", ["small", "complex", "generator", "compression", "play_agent"])
+async def test_explicit_ollama_role_without_model_is_not_replaced(client, role):
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    payload.update(
+        small_model="gpt-4o-mini",
+        small_model_provider="openai",
+        complex_model="gpt-4o",
+        complex_model_provider="openai",
+    )
+    payload[f"{role}_model_provider"] = "ollama"
+    payload[f"{role}_model"] = ""
+    assert (await client.post("/api/settings/llm", json=payload)).status_code == 200
+    saved = (await client.get("/api/settings")).json()["llm_settings"]
+    assert saved[f"{role}_model_provider"] == "ollama"
+    assert saved[f"{role}_model"] == ""
+
+
+async def test_invalid_ollama_api_mode_is_rejected(client):
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    payload["ollama_api_mode"] = "unknown"
+    assert (await client.post("/api/settings/llm", json=payload)).status_code == 422
