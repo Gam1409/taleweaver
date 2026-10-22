@@ -19,6 +19,7 @@ from backend.engine.rule_engine import (
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -57,6 +58,18 @@ async def _seed_game_context(db):
         stats={"strength": 10, "dexterity": 10},
     )
     db.add(avatar)
+    await db.flush()
+
+    db.add(
+        GameSession(
+            id="session-1",
+            template_id=adv.id,
+            avatar_id=avatar.id,
+            user_id=user.id,
+            adventure_title=adv.title,
+            status="active",
+        )
+    )
     await db.flush()
 
     state = SessionState(
@@ -1622,8 +1635,9 @@ async def test_deterministic_quest_completion_marks_inactive_quest_and_emits_sys
         )
 
         manager = GameTurnManager(db, "session-1", user)
-        async for _ in manager.process_turn("I put on my helmet"):
-            pass
+        events = [chunk async for chunk in manager.process_turn("I put on my helmet")]
+        assert not any("event: error" in chunk for chunk in events)
+        assert any("event: checkpoint" in chunk for chunk in events)
 
         await db.refresh(state)
         assert (state.quests or [])[0].get("status") == "completed"
@@ -1640,7 +1654,7 @@ async def test_deterministic_quest_completion_marks_inactive_quest_and_emits_sys
             .scalars()
             .all()
         )
-        assert any((m.content or "").strip() == "Quest completed: Suit Up" for m in sys_msgs)
+        assert [m.content for m in sys_msgs].count("Side-quest completed: Suit Up") == 1
 
 
 async def test_chat_mode_progression_persists_and_reuses_notes(setup_test_db, monkeypatch):
@@ -3298,8 +3312,9 @@ async def test_quest_completion_accumulates_xp(setup_test_db, monkeypatch):
         )
 
         manager = GameTurnManager(db, "session-1", user)
-        async for _ in manager.process_turn("I complete the quest"):
-            pass
+        events = [chunk async for chunk in manager.process_turn("I complete the quest")]
+        assert not any("event: error" in chunk for chunk in events)
+        assert any("event: checkpoint" in chunk for chunk in events)
 
         await db.refresh(avatar)
         await db.refresh(state)
@@ -3321,8 +3336,19 @@ async def test_quest_completion_accumulates_xp(setup_test_db, monkeypatch):
             .scalars()
             .all()
         )
-        assert any("Quest completed: XP Quest" in m.content for m in sys_msgs)
-        assert any("you gained 250 XP" in m.content for m in sys_msgs)
+        assert [m.content for m in sys_msgs].count("Side-quest completed: XP Quest (+250 XP)") == 1
+
+        # Repeating the same model suggestion must not award XP or announce completion twice.
+        events = [chunk async for chunk in manager.process_turn("I complete the quest again")]
+        assert not any("event: error" in chunk for chunk in events)
+        await db.refresh(avatar)
+        assert avatar.exp == 300
+        messages = await db.scalars(
+            select(ChatMessage.content).where(
+                ChatMessage.session_id == "session-1", ChatMessage.role == "system"
+            )
+        )
+        assert list(messages).count("Side-quest completed: XP Quest (+250 XP)") == 1
 
 
 async def test_combat_defeat_adds_xp(setup_test_db, monkeypatch):

@@ -32,6 +32,15 @@ Manual model selection uses each role's endpoint-specific model list. A JavaScri
 - Final frontend build passed; ESLint reported no errors and two existing unused-variable warnings. Chromium checks passed for all five role model lists and Test payloads, custom/discovered model selection, URL copying, independent overrides, save/reload, collapsed accordions and keyboard toggling.
 - No additional live inference, world generation or SSH tests were performed during conflict resolution. Earlier live-model limitations below remain applicable.
 
+## Follow-up: the three game-loop failures are resolved
+
+These failures were reproduced with mocked LLM output; they were not evidence of model context loss.
+
+- The two quest tests expected obsolete `Quest completed:` / `you gained ... XP` text, while the application stores `Side-quest completed: ... (+... XP)`. Their shared fixture also omitted the `GameSession` row, causing checkpoint persistence to raise `Session not found`. The fixture now creates a complete session, and the tests verify current notifications, checkpoint events and absence of pipeline errors. The XP test repeats the model's completion suggestion and verifies that neither the reward nor the notification is duplicated.
+- The combat test exposed a code defect: refreshing `SessionState` expires its `session` relationship, but a reused turn manager skipped loading it again. Reading it synchronously raised SQLAlchemy `MissingGreenlet`. Initialization now explicitly awaits loading that relationship when it is unloaded. Regression cases cover active, completed and game-over sessions, including input locking after the epilogue.
+- The repository state inspector confirmed the missing session in the original test snapshot. After correction, inspected snapshots contain the completed quest and its notification, and the exhausted NPC's stamina has recovered to 20.
+- Validation: **142 passed** across the full game-loop suite, session-loading regressions, win/loss guards, agent mode, security hardening, quest awards and sequence rules. Ruff and formatting passed for all three modified Python files. The complete repository suite was not rerun; unrelated historical failures and live-model limitations remain outside this result.
+
 ## Live-model observations
 
 Models: `hf.co/mradermacher/Qwen3-14B-Uncensored-GGUF:Q6_K` for small, generator, compression and play_agent; `hf.co/mradermacher/Artemis-31B-v1.2-abliterix-v2-GGUF:Q6_K` for complex narration. Live tests used isolated local users and a temporary database. Image generation and voices were disabled.
