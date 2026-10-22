@@ -1140,6 +1140,7 @@ async def copy_session(
         status=original_session.status,
         status_note=original_session.status_note,
         copied_from_id=original_session.id,
+        content_language=original_session.content_language,
     )
     db.add(copied_session)
     await db.flush()

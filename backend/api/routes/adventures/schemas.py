@@ -3,6 +3,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from backend.core.content_language import normalize_language
 from backend.schemas.adventure import AdventureTemplateDebugResponse
 
 
@@ -504,13 +505,22 @@ class ImportCheckResponse(BaseModel):
     available_imports: list[ImportCheckItem]
 
 
-class ChatRequest(BaseModel):
+class ContentLanguageRequest(BaseModel):
+    language: Optional[str] = None
+
+    @field_validator("language")
+    @classmethod
+    def valid_content_language(cls, value: str | None) -> str | None:
+        return normalize_language(value)
+
+
+class ChatRequest(ContentLanguageRequest):
     content: str
     auto_visualize: bool = False
     language: Optional[str] = None
 
 
-class TerminalEpilogueRequest(BaseModel):
+class TerminalEpilogueRequest(ContentLanguageRequest):
     language: Optional[str] = None
 
 
@@ -534,6 +544,7 @@ class TranslateTextResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    language: str = "English"
     messages: list[dict[str, Any]]
     sheet: dict[str, Any]
     combat: Optional[dict[str, Any]] = None
