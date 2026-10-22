@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from backend.api.routes.adventures.agent_commands import (
@@ -667,6 +667,9 @@ class GameTurnManager:
             self.state = await AdventureLogic.resolve_session_state(
                 self.db, self.game_id, user_id=self.user.id
             )
+        elif "session" in inspect(self.state).unloaded:
+            # Refreshing state can expire this relationship between turns.
+            await self.db.refresh(self.state, attribute_names=["session"])
         if not self.state:
             logger.warning(f"[Turn {self.game_id}] Initialization failed: Session state not found.")
             return False
