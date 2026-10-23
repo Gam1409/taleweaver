@@ -36,6 +36,7 @@ from backend.api.routes.adventures.schemas import (
     TranslateTextResponse,
 )
 from backend.api.routes.adventures.session_debug_payload import build_session_debug_payload
+from backend.api.routes.adventures.session_language import initialize_content_language
 from backend.api.routes.adventures.unlock_service import (
     SwitchFlipRunner,
     add_system_message,
@@ -152,7 +153,7 @@ async def get_chat_history(
 ):
     """Retrieves full chat history and current UI state for a game session."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
-    if not state:
+    if not state or (state.session and state.session.user_id != current_user.id):
         raise HTTPException(status_code=404, detail="Session not found.")
 
     adv_res = await db.execute(
@@ -168,12 +169,15 @@ async def get_chat_history(
     scene_image = await AdventureLogic.resolve_scene_image(db, state, state.current_scene_id)
     pending_terminal_epilogue, input_locked = _terminal_flags_from_state(state)
     full_world_debug = await load_full_world_debug(db, state, include_full_world)
+    language = initialize_content_language(state, current_user, adventure)
+    await db.commit()
     prompt_suggestions = await resolve_prompt_suggestions(db, state, current_user)
     await apply_pending_sequence_progress(db, state, adventure, avatar)
     history = await load_chat_history(db, state.session_id)
     session_status = state.session.status if state.session else None
 
     return ChatResponse(
+        language=language,
         messages=history,
         sheet=await AdventureLogic.build_sheet_snapshot(avatar, state, db),
         combat=AdventureLogic.get_combat_snapshot(state),
