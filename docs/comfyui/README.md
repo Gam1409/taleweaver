@@ -187,8 +187,8 @@ was reached. A remote job may still finish after a client timeout; submission is
 never automatically retried.
 
 During play, use the small image button at the top left of an NPC's portrait card,
-then **Generate portrait** or **Regenerate portrait**. This also works for NPCs
-created during the session. It uses the NPC's current description, the session's
+then **Generate portrait** or **Regenerate portrait**. This works for NPCs recorded
+in the session even when they have no initial image. It uses the NPC's current description, the session's
 story preset and the configured NPC image quality. No manual prompt or game turn
 is required. The saved image belongs to this session, survives leaving/resuming
 and is included in session exports. Failed generation keeps the previous image.
@@ -198,6 +198,13 @@ To change an NPC in the adventure blueprint, use its editor scene's **Quick Rege
 or **Regen (Prompt)** action. **Generate Missing** creates missing blueprint portraits.
 Those actions do not edit NPCs created inside a saved session. In the immersive game
 view, portraits are shown in the separate character panel, not inside each dialogue bubble.
+
+A missing image does not hide an NPC's card: it shows a placeholder with the same
+generation button. The panel lists visible NPCs in the current scene. A name in
+narrated dialogue alone does not create a stored NPC or a card. If the card itself
+is missing, check the session's NPC record, current location and visibility first.
+Session IDs and image paths support Unicode names, including Cyrillic; renaming
+an adventure or restarting its save is not required to generate a portrait.
 
 The Library now offers **Resume** alongside **New session** when a saved session
 exists. Resume opens the newest unfinished save; if all saves are finished, it opens
