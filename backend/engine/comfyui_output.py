@@ -9,7 +9,7 @@ from backend.core.visual_limits import visual_limits
 MAX_DECODE_PIXELS = 16 * 1024 * 1024
 
 
-def bounded_dimensions(options: dict) -> dict[str, int]:
+def bounded_dimensions(options: dict, multiple: int = 8) -> dict[str, int]:
     """Limit requested dimensions; only graph inputs explicitly mapped will change."""
     bounds = visual_limits(options.get("visual_target_type"))
     dimensions = {}
@@ -21,10 +21,10 @@ def bounded_dimensions(options: dict) -> dict[str, int]:
             raise ValueError("ComfyUI image dimensions must be integers of at least 8 pixels.")
         dimensions[key] = value
     scale = min([1.0] + [bounds[f"max{key.title()}"] / value for key, value in dimensions.items()])
-    if scale < 1:
-        # Latent image nodes normally require multiples of eight.
-        return {key: max(8, int(value * scale) // 8 * 8) for key, value in dimensions.items()}
-    return dimensions
+    return {
+        key: max(multiple, int(value * scale) // multiple * multiple)
+        for key, value in dimensions.items()
+    }
 
 
 def prepare_generated_image(

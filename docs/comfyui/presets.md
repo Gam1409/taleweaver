@@ -33,6 +33,7 @@ validates settings and prepares generation, rather than trusting stale UI result
 | Pony Diffusion V6 XL | Visual tags with V6 score prefix |
 | Illustrious XL | Visual tags, without forced Pony scores |
 | Animagine XL 4.0 | Ordered tags and the author's 4.0 quality suffix |
+| Anima / Prefect Anima | Illustration tags and descriptive sentences; separate from Animagine XL |
 | Qwen-Image | Detailed description with counts and spatial relationships |
 
 These are editable starting points. A derivative can have different requirements.
@@ -63,7 +64,8 @@ Manually supplied text skips automatic adaptation at generation time; prefix and
 suffix are still appended once. Enter only the body in that field. Preview shows
 the assembled text but is not a test of the model's text encoder or image quality.
 Disabling LLM adaptation also disables automatic translation and formatting; the
-source text is used directly with the required prefix/suffix.
+visible description is used directly with the required prefix/suffix. Structured
+asset metadata and plot context are not forwarded as raw JSON when adaptation is off.
 
 A word budget is not a tokenizer/context-window guarantee, especially for languages
 without spaces. Use the actual encoder's limits. Template language defaults to
@@ -137,3 +139,14 @@ including [SDXL](https://comfyui-wiki.com/en/workflows/sdxl),
 [LoRA](https://comfyui-wiki.com/en/workflows/lora), was also reviewed as a **community,
 non-official** source. These references describe workflow behavior; they do not
 establish one universal prompting convention for all checkpoints.
+
+## Non-graphic mature themes
+
+The pink **Взрослая тематика** checkbox in a preset's Prompt tab is off by default.
+With Small / Utility LLM adaptation enabled, it permits romantic tension, flirting
+and implied intimacy between clearly adult characters when consistent with the
+scene. It does not introduce sexual context, explicit acts, intimate anatomy or
+graphic details, and excludes minors and age-ambiguous characters. The preference
+is stored separately from automatic template selection, so detecting another model
+does not reset it. It affects LLM prompt adaptation only; manual prompts and workflow
+JSON/sampling controls remain unchanged.

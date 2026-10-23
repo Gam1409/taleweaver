@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.auth import get_current_admin
 from backend.core.comfyui_config import ComfyPreset, ComfyWorkflow
+from backend.core.comfyui_starters import model_choices, starter_catalog
 from backend.core.image_model_detection import detect_preset_template
 from backend.core.image_prompt_templates import TEMPLATES
 from backend.engine.comfyui_client import ComfyClient
@@ -36,6 +37,25 @@ class PromptPreview(BaseModel):
 @router.get("/prompt-templates")
 async def prompt_templates(_user: User = Depends(get_current_admin)):
     return TEMPLATES
+
+
+@router.get("/starter-workflows")
+async def starter_workflows(_user: User = Depends(get_current_admin)):
+    return starter_catalog()
+
+
+@router.post("/model-options")
+async def workflow_model_options(payload: CheckWorkflow, _user: User = Depends(get_current_admin)):
+    try:
+        async with ComfyClient(payload.url) as client:
+            registry = await client.json("GET", "/object_info")
+        if not isinstance(registry, dict):
+            raise ValueError("Invalid node registry.")
+        return model_choices(payload.workflow, registry)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            400, "Could not load model filenames. Check the ComfyUI URL and connectivity."
+        ) from exc
 
 
 @router.post("/detect-template")

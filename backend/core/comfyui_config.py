@@ -24,6 +24,7 @@ class ComfyWorkflow(BaseModel):
     graph: dict[str, Any]
     bindings: dict[BindingName, WorkflowBinding]
     output_node: str
+    dimension_multiple: Literal[8, 16, 32, 64] = 8
 
     @model_validator(mode="after")
     def validate_graph(self) -> "ComfyWorkflow":
@@ -83,6 +84,7 @@ class ComfyPreset(ComfyProfile):
     name: str = Field(min_length=1, max_length=120)
     prompt_rules: ImagePromptRules | None = None
     auto_prompt_template: bool = False
+    mature_themes: bool = False
 
     @model_validator(mode="after")
     def choose_template(self) -> "ComfyPreset":

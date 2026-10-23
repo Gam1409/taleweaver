@@ -9,6 +9,7 @@ export interface ComfyWorkflow {
   graph: Record<string, ComfyNode>
   bindings: Partial<Record<BindingName, { node_id: string; input_name: string }>>
   output_node: string
+  dimension_multiple?: 8 | 16 | 32 | 64
 }
 export interface ComfyProfile {
   generate: ComfyWorkflow | null
@@ -36,6 +37,7 @@ export interface ComfyPreset extends ComfyProfile {
   name: string
   prompt_rules: ImagePromptRules | null
   auto_prompt_template: boolean
+  mature_themes?: boolean
 }
 export interface ComfyOptions {
   comfyui_url: string

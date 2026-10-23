@@ -52,7 +52,17 @@ async def generate_comfy_image(
     reference = options.get("reference_image_url")
     workflow = select_workflow(options, reference=bool(reference))
     prepared_prompt = await prepare_prompt(prompt, options)
-    values = {**bounded_dimensions(options), "negative_prompt": prepared_prompt["negative"]}
+    render_options = dict(options)
+    if options.get("width") is None and options.get("height") is None:
+        role = options.get("comfyui_profile", "simple")
+        width, height = MediaEngine._resolve_sd_dimensions(
+            options.get("visual_target_type") or "object", options.get(f"{role}_min_long_edge")
+        )
+        render_options.update(width=width, height=height)
+    values = {
+        **bounded_dimensions(render_options, workflow.dimension_multiple),
+        "negative_prompt": prepared_prompt["negative"],
+    }
     values["prompt"] = prepared_prompt["positive"]
     seed = options.get("seed")
     values["seed"] = seed if isinstance(seed, int) and seed >= 0 else secrets.randbits(48)

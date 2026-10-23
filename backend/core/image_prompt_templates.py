@@ -35,6 +35,17 @@ def _template(
 
 TEMPLATES = [
     _template(
+        "anima",
+        "Anima — tags and description",
+        "hybrid",
+        "Use lowercase visual tags with spaces rather than underscores, followed by at least two descriptive sentences. Preserve subject counts and appearance. Do not invent artist, franchise or character tags. Anima is an illustration model, not an SDXL derivative.",
+        words=140,
+        prefix="masterpiece, best quality",
+        negative="worst quality, low quality, artist name, blurry, jpeg artifacts, chromatic aberration",
+        source="https://huggingface.co/circlestone-labs/Anima",
+        notes="Conservative shared rules for Anima variants and derivatives such as Prefect Anima. Score tags are omitted because Base and Aesthetic differ. Turbo needs different sampler settings. Animagine XL is a separate family.",
+    ),
+    _template(
         "natural",
         "Natural description",
         "description",

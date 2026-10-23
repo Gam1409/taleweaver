@@ -5,12 +5,18 @@ import json
 import re
 
 from backend.core import prompts
-from backend.core.comfyui_config import prompt_rules, select_workflow
+from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.image_profiles import advanced_for
 
 PROMPT_TIMEOUT = 90
+MATURE_THEMES_INSTRUCTION = (
+    "When consistent with the supplied scene, allow romantic tension, flirting and implied "
+    "intimacy between clearly adult characters. Do not add sexual context on your own. "
+    "Do not describe sexual acts, intimate anatomy or graphic sexual details. "
+    "Do not sexualize minors or age-ambiguous characters."
+)
 
 
 def cover_source(title: str, original_prompt: str, provider: str, options: dict) -> str:
@@ -33,12 +39,18 @@ def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
     profile = "advanced" if advanced_for(t2i, kind) else "simple"
     if t2i.get(f"{profile}_model_provider") != "comfyui":
         return legacy
-    if not prompt_rules({**t2i, "comfyui_profile": profile}):
+    rules = prompt_rules({**t2i, "comfyui_profile": profile})
+    if not rules:
         return legacy
+    if not rules.adapt_with_llm:
+        # Raw metadata keys/names can become unwanted captions in image models.
+        return str(facts.get("description") or legacy).strip()
     return json.dumps({"asset_type": kind, **facts}, ensure_ascii=False)
 
 
-async def adapt_body(description: str, rules: ImagePromptRules, user) -> str:
+async def adapt_body(
+    description: str, rules: ImagePromptRules, user, *, mature_themes: bool = False
+) -> str:
     if not rules.adapt_with_llm:
         return description.strip()
     if user is None:
@@ -56,6 +68,8 @@ async def adapt_body(description: str, rules: ImagePromptRules, user) -> str:
         "analysis, technical settings, weights, LoRA syntax or trigger/quality tokens; "
         "mandatory tokens are added separately. Avoid lettering unless explicitly requested."
     )
+    if mature_themes:
+        system += "\n" + MATURE_THEMES_INSTRUCTION
     body = await asyncio.wait_for(
         llm.aexecute_simple_task(system_prompt=system, user_prompt=description, model=llm.model),
         timeout=PROMPT_TIMEOUT,
@@ -91,7 +105,12 @@ async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
         return {"body": description, "positive": description, "negative": negative_prompt(options)}
     body = description
     if not options.get("_prompt_prepared"):
-        body = await adapt_body(description, rules, options.get("_prompt_user"))
+        body = await adapt_body(
+            description,
+            rules,
+            options.get("_prompt_user"),
+            mature_themes=getattr(select_profile(options), "mature_themes", False),
+        )
     return {
         "body": body,
         "positive": assemble_prompt(body, rules),

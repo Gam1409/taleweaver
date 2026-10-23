@@ -8,26 +8,40 @@ providers. SSH tunnels remain external to TaleWeaver.
 
 ## Configure a preset and assign it to a profile
 
-1. Choose **New preset** in the Standard or High-Fidelity card. In its Workflow tab,
-   import a **ComfyUI API-format JSON** into the base workflow slot. Export it with
-   **File → Export (API)** in ComfyUI (older interfaces require developer mode). Editor-format
-   JSON with `nodes`/`links` is not supported. Maximum: 256 nodes / 256 KiB per graph.
-2. Map the prompt input and final image output node. Optionally map negative prompt,
-   seed and dimensions. Choose literal inputs, not connected sockets.
-3. Click **Check server compatibility**. This reads `/object_info`; it does not
-   generate an image or install nodes/models. Missing node types, known model
-   choices, required inputs and mapped inputs are checked. Custom dependencies
-   still need a real execution test.
-4. Open the **Prompt** tab. Automatic selection recognizes a limited set of model
-   filenames; verify the result or choose a template manually. Edit additional rules
-   only when needed. **Preview the final prompt** uses the Small / Utility LLM when
-   enabled, without submitting an image. See [prompt presets](presets.md).
-5. **Apply to form**, then use **Test Generation** for that profile. It uses the unsaved form, including
-   the URL and workflow bindings. The selected output must publish an `images`
-   result (normally SaveImage). The first image of that output is used.
-6. Save Visual Preferences. Presets and workflows are stored in existing settings JSON and
-   shared through the existing administrator settings mechanism. No database
-   migration is needed. This first version duplicates those settings per user.
+1. Enter the ComfyUI API URL, then choose **New preset** in the Standard or
+   High-Fidelity card. Select a model family under **Start from a template** and
+   click **Use starter workflow**. The app fills bindings, resolves unique matching
+   filenames to their server folders, and checks compatibility automatically.
+2. Verify the model files once. If a filename is unknown or ambiguous, select the
+   installed file. **Generation parameters** holds steps, CFG, guidance, denoise,
+   sampler and scheduler; normal generation reuses these saved values.
+3. Automatic prompt-template selection supplies the model family's rules. The
+   configured Small / Utility LLM adapts each asset description automatically.
+   Fine-tuning the rules is optional; see [prompt presets](presets.md).
+4. Optionally expand **Use a previous image** and choose a matching starter. The
+   suggested family and compatible loader filenames come from the base workflow.
+5. **Apply to form**, use **Test Generation**, then **Save Visuals Settings**.
+   This is a one-time setup per preset; covers, scenes, portraits, items, account
+   avatars and catalog tiles receive their prompt and dimensions automatically.
+
+For a custom graph, import a **ComfyUI API-format JSON** exported with **File →
+Export (API)** in ComfyUI (older interfaces require developer mode). Editor-format
+JSON with `nodes`/`links` is not supported. Maximum: 256 nodes / 256 KiB per graph.
+Map the prompt and final image output under **Advanced: workflow inputs and
+output**; incomplete mappings open this section automatically. Optional bindings
+include negative prompt, seed and dimensions. Bind literal inputs, not sockets.
+
+**Advanced: edit or export workflow JSON** supports direct graph edits and download.
+Invalid JSON leaves the draft unchanged. Removed/connected inputs lose their
+bindings and must be remapped. Export includes the API graph; TaleWeaver bindings
+and prompt rules remain in the saved preset. Use ComfyUI for visual node editing.
+
+**Check server compatibility** reads `/object_info`; it does not execute or install
+anything. It checks node types, known model choices, required inputs and bindings.
+A real image test is still needed to verify runtime dependencies and VRAM. The
+selected output must publish `images` (normally SaveImage); its first image is used.
+
+See [starter families and validation](starters.md) for dependencies and test coverage.
 
 Models, encoders, VAE files and custom nodes must already be installed on ComfyUI.
 Workflow import does not download dependencies. Model/sampler/steps/CFG/denoise
@@ -51,7 +65,8 @@ ComfyUI outputs use the same limits as TaleWeaver's existing adventure uploads:
 | Protagonist / NPC | 1024 × 1280 | 2 MiB |
 | Item | 1024 × 1024 | 2 MiB |
 
-Mapped width/height receive the profile's requested resolution, limited to these
+Mapped width/height receive the profile's requested resolution and workflow-specific
+alignment (8/16/32/64 pixels), limited to these
 bounds (rounded down to multiples of eight when reduced). Unmapped dimensions
 remain in the workflow. An upscaler or other downstream node can still change the
 result, so the final downloaded image is checked separately and reduced to fit.
@@ -168,7 +183,7 @@ Branch validation results:
 
 - Broad selection: 226 passed, three pre-existing failures in `test_adventures_api.py`
   (legacy consumable import, readable inventory snapshot, and manifest start scene).
-- Preset update: 118 tests passed across ComfyUI, prompt presets, existing media
+- Earlier preset update: 118 tests passed across ComfyUI, prompt presets, existing media
   behavior and adventure lifecycle suites. This includes timeout before image
   submission, automatic/manual rules, profile overrides, settings persistence and
   preset IDs surviving cloning/export/import.
@@ -186,7 +201,7 @@ Branch validation results:
 - Two further GPU jobs passed: generation through the browser's background-job flow
   and a reference comparison at denoise 0.25 (about 13 seconds end to end). The latter
   retained the original lighthouse/boat/pier much better than denoise 0.55, which
-  changed major structures. Eight live jobs succeeded in total. This is transport
+  changed major structures. Eight live jobs succeeded in that earlier round. This is transport
   and workflow validation, not a guarantee of exact semantic/identity preservation.
 - Chromium saved a story-specific preset, verified it after reload and restored its
   original choice; desktop and mobile drawer layouts were inspected.
@@ -195,3 +210,14 @@ Branch validation results:
 - Full-file Ruff reports 39 existing diagnostics in modified legacy files, compared
   with 40 on the same files at the previous commit; no new diagnostic locations.
   Two legacy files still fail the full-file format check. New modules pass both.
+
+The final starter-workflow regression selection passed **166 tests**. All nine
+Python modules/tests changed in this update pass Ruff check and format check. The
+frontend production build passes with no additional TypeScript diagnostics relative
+to the preceding commit.
+
+The starter-workflow update adds 24 successful live jobs (eight each for SDXL,
+FLUX.1 Dev FP8 and Prefect Anima), plus an initial Anima smoke image. The family
+matrix and current limitations are documented in [starters.md](starters.md).
+
+The current setup flow and accessibility limits are recorded in the [UI review](ux-review.md).
