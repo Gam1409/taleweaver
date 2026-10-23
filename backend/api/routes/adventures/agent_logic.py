@@ -14,11 +14,13 @@ from backend.api.routes.adventures.agent_actions import (
 )
 from backend.api.routes.adventures.agent_persona import format_protagonist_profile
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.session_language import resolve_content_language
 from backend.api.routes.adventures.turn_context_helpers import (
     _find_active_sequence,
     resolve_sequence_guidance,
 )
 from backend.api.routes.adventures.turn_llm_pipeline import TurnLlmContextBuilder
+from backend.core.content_language import prose_language_instruction
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
     AGENT_PLAYER_TURN_SYSTEM_PROMPT,
@@ -479,6 +481,11 @@ class AgentService:
             "an error/bug, report it."
         )
 
+        await db.refresh(state, attribute_names=["session"])
+        language = resolve_content_language(state, user, adventure)
+        system_prompt += prose_language_instruction(
+            language, "thoughts, issue_description and natural-language action prose"
+        )
         gm_llm = GameMasterLLM.for_role(user, "play_agent")
         model = gm_llm.model
 

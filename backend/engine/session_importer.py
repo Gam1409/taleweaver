@@ -157,6 +157,7 @@ class SessionImporter:
                     adventure_image_url=game_session_data.get("adventure_image_url"),
                     status=game_session_data.get("status", "active"),
                     status_note=game_session_data.get("status_note"),
+                    content_language=game_session_data.get("content_language"),
                 )
                 db.add(game_session)
 
