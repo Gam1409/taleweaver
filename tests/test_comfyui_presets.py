@@ -60,6 +60,8 @@ def preset_options(comfy_options, workflow, **kwargs):
     ("name", "expected"),
     [
         ("models/animagine-xl-4.0-opt.safetensors", "animagine4"),
+        ("models/novaAnimeAM_v6029B.safetensors", "anima"),
+        ("models/novaAnimeXL_ilV190.safetensors", None),
         ("ponyDiffusionV6XL_v6StartWithThisOne.safetensors", "pony6"),
         ("illustriousXL_v01.safetensors", "illustrious"),
         ("flux1-dev-Q6_K.gguf", "flux1"),

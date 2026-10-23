@@ -26,6 +26,14 @@ Default files are `prefectAnima_v10.safetensors`, `qwen_3_06b_base.safetensors` 
 `qwen_image_vae.safetensors`. The public Prefect Anima v1.0 metadata identifies its
 base family as Anima; its derivative card did not provide separate sampler advice.
 
+Nova Anime AM (`novaAnimeAM_v6029B.safetensors`) also uses Anima, as identified by
+its [author's model metadata](https://civitai.com/models/2604424). Put the diffusion
+model in `ComfyUI/models/diffusion_models/`, not `models/checkpoints/`. Its separate
+dependencies are [qwen_3_06b_base.safetensors](https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors)
+in `models/text_encoders/` and [qwen_image_vae.safetensors](https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/vae/qwen_image_vae.safetensors)
+in `models/vae/`. Nova Anime XL is a different family; the AM filename hint does
+not apply to it.
+
 References:
 
 - [Official ComfyUI Anima tutorial](https://docs.comfy.org/tutorials/image/anima/anima)
@@ -41,6 +49,13 @@ basename only when it is unique; it never silently substitutes another checkpoin
 An unknown or ambiguous model needs one explicit selection. The compatibility
 report identifies missing nodes/files before an image test. Model installation and
 custom-node dependency management remain outside TaleWeaver.
+
+After refreshing, each model dropdown shows all files reported by its loader.
+Missing selections stay visible with a warning; an empty loader list includes a
+folder hint. A manual filename entry remains available for custom search paths.
+Refreshing the list does not mean the workflow passed compatibility checks.
+Automatic prompt-template detection reads the model in the selected workflow;
+it does not select a starter workflow from all installed files.
 
 The optional image starter inherits matching loader filenames from the base graph.
 Its default denoise is 0.3; a resized source image is encoded through the model's VAE.

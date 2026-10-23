@@ -3,7 +3,7 @@
 import re
 
 PATTERNS = (
-    ("anima", r"(?:^|[._ -])anima(?:[._ -]|$)|prefectanima"),
+    ("anima", r"(?:^|[._ -])anima(?:[._ -]|$)|prefectanima|novaanimeam(?:[._ -]|$)"),
     ("animagine4", r"animagine[^/]*?(?:xl[^/]*?)?4(?:[._ -]|$)"),
     ("pony6", r"pony[^/]*?(?:v6|6xl|6_xl)"),
     ("illustrious", r"illustrious"),
