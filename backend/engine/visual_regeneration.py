@@ -3,9 +3,11 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from backend.core.comfyui_config import prompt_rules
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.media_engine import MediaEngine
+from backend.engine.story_visual_presets import story_t2i
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
 from backend.utils.path_security import (
@@ -54,14 +56,15 @@ async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
     from backend.api.routes.adventures.assets import _build_visual_prompt
 
     target, field = await _target(db, adventure, payload)
-    t2i = dict(user.t2i_settings or {})
+    t2i = story_t2i(user.t2i_settings, adventure)
+    t2i["_prompt_prepared"] = bool(payload.prompt and payload.prompt.strip())
     advanced = advanced_for(t2i, payload.target_type, payload.use_advanced_model)
     if payload.use_current_image:
         t2i = _reference_options(t2i, target, field, adventure.id, advanced)
     style = resolve_style_instruction(adventure.selected_image_styles, user.image_styles_catalog)
     common = {
         "adventure_id": adventure.id,
-        "user_config": {"t2i_settings": t2i},
+        "user_config": {"t2i_settings": t2i, "prompt_user": user},
         "api_keys": user.encrypted_api_keys or {},
         "style_instruction": style,
         "use_advanced_model": advanced,
@@ -80,6 +83,16 @@ async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
             style_instruction=style,
             tone_instruction=resolve_tone_instruction(adventure.selected_tone, user.tone_catalog),
         )
+        role = "advanced" if advanced else "simple"
+        if (
+            not t2i["_prompt_prepared"]
+            and t2i.get(f"{role}_model_provider") == "comfyui"
+            and prompt_rules({**t2i, "comfyui_profile": role})
+        ):
+            prompt = f"{payload.target_type}: {getattr(target, 'name', None) or getattr(target, 'label', '')}. {getattr(target, 'description', '')}"
+            tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
+            if tone:
+                prompt += f" Mood: {tone}"
         image_url = await _generate_target(payload, target, prompt, common)
     if not image_url:
         raise ValueError("The image provider returned no image. The previous image was kept.")

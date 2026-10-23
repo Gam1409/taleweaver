@@ -84,9 +84,12 @@ async def placeholder_image(
 def t2i_config(ctx: ApplyContext) -> tuple[dict, dict]:
     """Returns the (user_config, api_keys) pair every MediaEngine call expects."""
     user = ctx.user
-    return {"t2i_settings": user.t2i_settings if user else None}, dict(
-        (user.encrypted_api_keys if user else None) or {}
-    )
+    from backend.engine.story_visual_presets import story_t2i
+
+    return {
+        "t2i_settings": story_t2i(user.t2i_settings if user else None, ctx.adventure),
+        "prompt_user": user,
+    }, dict((user.encrypted_api_keys if user else None) or {})
 
 
 def uses_advanced_model(ctx: ApplyContext, setting: str, default: str) -> bool:

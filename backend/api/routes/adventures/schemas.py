@@ -583,6 +583,7 @@ class AdventureTemplateImportPayload(BaseModel):
 class SuggestPromptRequest(BaseModel):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
     target_id: str
+    use_advanced_model: Optional[bool] = None
 
 
 class SuggestPromptResponse(BaseModel):

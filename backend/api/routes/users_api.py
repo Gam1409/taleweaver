@@ -359,7 +359,11 @@ async def generate_my_profile_image(
             provider=provider,
             target_dir=target_dir,
             filename=filename,
-            provider_options={**t2i, "visual_target_type": "protagonist"},
+            provider_options={
+                **t2i,
+                "visual_target_type": "protagonist",
+                "_prompt_user": settings_owner,
+            },
         )
         logger.info("Image generation completed. URL: %s", image_url)
 

@@ -90,6 +90,8 @@ class SettingsService {
     comfyui_url: 'http://127.0.0.1:8188',
     comfyui_timeout: 600,
     comfyui_profiles: {},
+    comfyui_presets: {},
+    comfyui_assignments: {},
     simple_model: '',
     simple_model_provider: 'openai',
     advanced_model: '',

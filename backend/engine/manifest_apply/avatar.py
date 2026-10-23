@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from backend.core import prompts
 from backend.engine.image_profiles import image_timeout
+from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -125,6 +126,15 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
     if plot:
         prompt = f"{prompt} Narrative context: {plot[:1200]}"
     user_config, api_keys = t2i_config(ctx)
+    prompt = asset_source(
+        user_config["t2i_settings"],
+        "protagonist",
+        prompt,
+        name=avatar.name,
+        role=avatar.role,
+        description=avatar.description,
+        context=plot[:1200],
+    )
     return await generate_image(
         ctx,
         status=f"Envisioning Portrait for {avatar.name}...",
@@ -139,7 +149,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
             style_instruction=ctx.style_instruction,
             use_advanced_model=uses_advanced_model(ctx, "protagonist_model_quality", "advanced"),
         ),  # fmt: skip
-        timeout=image_timeout(ctx.user.t2i_settings),
+        timeout=image_timeout(user_config["t2i_settings"]),
         failure_label=f"Protagonist image generation for {ctx.template_id}",
     )
 

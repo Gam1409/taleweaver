@@ -99,7 +99,7 @@ async def _run(job: VisualJob) -> None:
             user = await db.get(User, job.owner)
             if not user:
                 raise HTTPException(404, "User no longer exists.")
-            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=3700)
+            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=4000)
         _complete(job, result)
     except asyncio.CancelledError:
         job.state = "abandoned"

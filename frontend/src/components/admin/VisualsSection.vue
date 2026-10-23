@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import ComfySettingsEditor from './ComfySettingsEditor.vue'
+import ComfyPresetSelector from './ComfyPresetSelector.vue'
 import type { ComfyOptions } from '@/types/comfyui'
 
 const props = defineProps<{
@@ -42,6 +43,8 @@ const comfyOptions = computed<ComfyOptions>({
     comfyui_url: localForm.value.comfyui_url ?? 'http://127.0.0.1:8188',
     comfyui_timeout: localForm.value.comfyui_timeout ?? 600,
     comfyui_profiles: localForm.value.comfyui_profiles ?? {},
+    comfyui_presets: localForm.value.comfyui_presets ?? {},
+    comfyui_assignments: localForm.value.comfyui_assignments ?? {},
   }),
   set: value => { localForm.value = { ...localForm.value, ...value } },
 })
@@ -453,6 +456,7 @@ const testAdvanced = () => {
           </select>
         </div>
 
+        <ComfyPresetSelector v-if="localForm.simple_model_provider === 'comfyui'" v-model="comfyOptions" profile="simple" />
         <div v-if="localForm.simple_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -621,6 +625,7 @@ const testAdvanced = () => {
           </select>
         </div>
 
+        <ComfyPresetSelector v-if="localForm.advanced_model_provider === 'comfyui'" v-model="comfyOptions" profile="advanced" />
         <div v-if="localForm.advanced_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -796,8 +801,6 @@ const testAdvanced = () => {
       <ComfySettingsEditor
         v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui'"
         v-model="comfyOptions"
-        :simple="localForm.simple_model_provider === 'comfyui'"
-        :advanced="localForm.advanced_model_provider === 'comfyui'"
       />
 
       <!-- Stable Diffusion Endpoint -->

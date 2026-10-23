@@ -6,23 +6,24 @@ import asyncio
 import base64
 import io
 import logging
-from typing import Optional
 import os
 import re
 import shutil
 import time
 import uuid
+from typing import Any, Optional
 from urllib.parse import urlsplit, urlunsplit
-from typing import Any
 
 import litellm
 import requests
 from PIL import Image
 
 from backend.core import prompts
+from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import build_bfl_payload, resolve_bfl_model_alias
+from backend.engine.image_prompt_adapter import cover_source
 from backend.utils.image_generator import (
     ColorTheme,
     OrganicGradientStrategy,
@@ -30,9 +31,13 @@ from backend.utils.image_generator import (
 )
 from backend.utils.path_security import (
     ensure_within_base_dir,
-    ensure_within_data_dir as ensure_within_data_dir_shared,
     local_path_to_data_url,
     sanitize_relative_segment,
+)
+from backend.utils.path_security import (
+    ensure_within_data_dir as ensure_within_data_dir_shared,
+)
+from backend.utils.path_security import (
     sanitize_path_component as sanitize_path_component_shared,
 )
 from backend.utils.svg_generator import SVGPlaceholderGenerator
@@ -732,7 +737,9 @@ class MediaEngine:
             raise ValueError("Missing prompt or model for image generation.")
         
         # Inject style instruction if provided
-        if style_instruction and style_instruction not in prompt:
+        adapted = provider_key == "comfyui" and prompt_rules(provider_options or {})
+        manual_adapted = adapted and (provider_options or {}).get("_prompt_prepared")
+        if style_instruction and style_instruction not in prompt and not manual_adapted:
             # Ensure we don't have multiple dots
             prompt = prompt.strip()
             while prompt.endswith("."):
@@ -740,7 +747,8 @@ class MediaEngine:
             prompt += f". Style: {style_instruction}."
             logger.info("Style instruction injected")
 
-        prompt = MediaEngine._apply_no_text_instruction(prompt)
+        if not adapted:
+            prompt = MediaEngine._apply_no_text_instruction(prompt)
         logger.info("Image prompt prepared (%s)", _safe_prompt_summary(prompt))
 
         if provider_key not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
@@ -1224,6 +1232,7 @@ class MediaEngine:
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
         options["visual_target_type"] = "scene"
+        options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
         if use_advanced_model:
             options["steps"] = t2i.get("advanced_steps")
@@ -1291,6 +1300,7 @@ class MediaEngine:
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
         options["visual_target_type"] = entity_type.lower()
+        options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
         if use_advanced_model:
             options["steps"] = t2i.get("advanced_steps")
@@ -1355,26 +1365,14 @@ class MediaEngine:
         safe_id = safe_adventure_id
         filename = f"{safe_id}_cover_{uuid.uuid4().hex[:8]}.{ext}"
         
-        # Clean original_prompt for cover generation:
-        # Strip out structured [Sequence: ...], [Scene: ...], [NPC: ...] blocks to prevent multi-panel storyboarding
-        clean_prompt = str(original_prompt or "").strip()
-        tag_match = re.search(r'\[(?:Sequence|Scene|NPC|Item|Quest)\b', clean_prompt, flags=re.IGNORECASE)
-        if tag_match:
-            clean_prompt = clean_prompt[:tag_match.start()].strip()
-        if not clean_prompt:
-            clean_prompt = str(original_prompt or "").strip()
-        if len(clean_prompt) > 400 and "." in clean_prompt[:400]:
-            clean_prompt = clean_prompt[:400].rsplit(".", 1)[0] + "."
-        elif len(clean_prompt) > 400:
-            clean_prompt = clean_prompt[:400]
-
-        prompt = prompts.ADVENTURE_COVER_PROMPT_TEMPLATE.format(
-            title=title, original_prompt=clean_prompt
+        prompt = cover_source(
+            title, original_prompt, provider, {**t2i, "comfyui_profile": profile}
         )
         
         # Resolve steps and cfg_scale for advanced model
         options = dict(t2i)
         options["visual_target_type"] = "cover"
+        options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = profile
         options.setdefault("aspect_ratio", "3:2")
         existing_neg = options.get("negative_prompt") or ""

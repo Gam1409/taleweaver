@@ -296,16 +296,39 @@ async def test_comfy_needs_workflow_not_model_or_key(
     assert result and result.startswith("/data/adventures/library/adventure/entities/")
 
 
+def _use_story_presets(comfy_options, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from backend.core.image_prompt_templates import template_rules
+    from backend.core.llm_router import GameMasterLLM
+
+    llm = SimpleNamespace(model="fake", aexecute_simple_task=AsyncMock(return_value="Visual facts"))
+    monkeypatch.setattr(GameMasterLLM, "for_role", lambda *_args: llm)
+    comfy_options["comfyui_presets"] = {}
+    for role in ("simple", "advanced"):
+        rules = template_rules("sdxl").model_dump()
+        rules["prefix"] = f"{role}_trigger"
+        comfy_options["comfyui_presets"][role] = {
+            **comfy_options["comfyui_profiles"][role],
+            "name": role,
+            "prompt_rules": rules,
+        }
+        # Story choices must override these unrelated global providers.
+        comfy_options[f"{role}_model_provider"] = "openai"
+    return llm
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("edge", "expected_dimensions"),
+    ("edge", "expected_dimensions", "use_presets"),
     [
-        (1024, [(1024, 512), (816, 1024), (1024, 576), (816, 1024), (1024, 1024)]),
-        (4096, [(2048, 1024), (1024, 1272), (1600, 896), (1024, 1272), (1024, 1024)]),
+        (1024, [(1024, 512), (816, 1024), (1024, 576), (816, 1024), (1024, 1024)], False),
+        (4096, [(2048, 1024), (1024, 1272), (1600, 896), (1024, 1272), (1024, 1024)], False),
+        (1024, [(1024, 512), (816, 1024), (1024, 576), (816, 1024), (1024, 1024)], True),
     ],
 )
 async def test_manifest_generates_all_visuals_with_correct_profiles(
-    fake_comfy, comfy_options, tmp_path, monkeypatch, edge, expected_dimensions
+    fake_comfy, comfy_options, tmp_path, monkeypatch, edge, expected_dimensions, use_presets
 ):
     from sqlalchemy import select
 
@@ -331,6 +354,8 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
     comfy_options["comfyui_profiles"]["advanced"] = advanced
     comfy_options["advanced_model_provider"] = "comfyui"
     comfy_options["scene_model_quality"] = "simple"
+    selections = {"simple": "simple", "advanced": "advanced"} if use_presets else {}
+    llm = _use_story_presets(comfy_options, monkeypatch) if use_presets else None
     manifest = {
         "teaser": "A harbour",
         "plot": "Find the key",
@@ -355,7 +380,10 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
         db.add(user)
         await db.flush()
         adventure = AdventureTemplate(
-            title="Harbour", original_prompt="A harbour", owner_id=user.id
+            title="Harbour",
+            original_prompt="A harbour",
+            owner_id=user.id,
+            original_manifest={"visual_presets": selections},
         )
         db.add(adventure)
         await db.commit()
@@ -376,6 +404,7 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
         assert scene.image_url
         entities = (await db.execute(select(WorldEntity))).scalars().all()
         assert len(entities) == 2 and all(entity.image_url for entity in entities)
+        assert adventure.original_manifest["visual_presets"] == selections
     graphs = [json.loads(r.content)["prompt"] for r in fake_comfy if r.url.path == "/prompt"]
     assert len(graphs) == 5
     checkpoints = [graph["model"]["inputs"]["ckpt_name"] for graph in graphs]
@@ -389,3 +418,9 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
 
     dimensions = [(g["size"]["inputs"]["width"], g["size"]["inputs"]["height"]) for g in graphs]
     assert dimensions == expected_dimensions
+    if use_presets:
+        assert llm.aexecute_simple_task.await_count == 5
+        assert [g["text"]["inputs"]["text"] for g in graphs] == [
+            f"{role}_trigger Visual facts"
+            for role in ("advanced", "advanced", "simple", "advanced", "simple")
+        ]

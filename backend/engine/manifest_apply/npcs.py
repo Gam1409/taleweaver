@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from backend.core import prompts
 from backend.engine.image_profiles import image_timeout
+from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -87,6 +88,9 @@ async def _generate_portrait(
         name=npc["name"], description=npc["description"]
     )
     user_config, api_keys = t2i_config(ctx)
+    prompt = asset_source(
+        user_config["t2i_settings"], "npc", prompt, name=npc["name"], description=npc["description"]
+    )
     return await generate_image(
         ctx,
         status=f"Envisioning Portrait {idx}/{total}: {npc['name']}...",
@@ -101,7 +105,7 @@ async def _generate_portrait(
             style_instruction=ctx.style_instruction,
             use_advanced_model=uses_advanced_model(ctx, "profile_model_quality", "advanced"),
         ),  # fmt: skip
-        timeout=image_timeout(ctx.user.t2i_settings),
+        timeout=image_timeout(user_config["t2i_settings"]),
         failure_label=f"NPC image generation for {ctx.template_id}/{npc['id']}",
     )
 

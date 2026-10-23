@@ -1,20 +1,13 @@
 <script setup lang="ts">
-import ComfyWorkflowEditor from './ComfyWorkflowEditor.vue'
-import type { ComfyOptions, ComfyProfile, ComfyWorkflow } from '@/types/comfyui'
+import type { ComfyOptions } from '@/types/comfyui'
 
-const props = defineProps<{ modelValue: ComfyOptions; simple: boolean; advanced: boolean }>()
+const props = defineProps<{ modelValue: ComfyOptions }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyOptions): void }>()
 function setUrl(event: Event): void {
   emit('update:modelValue', { ...props.modelValue, comfyui_url: (event.target as HTMLInputElement).value })
 }
 function setTimeoutValue(event: Event): void {
   emit('update:modelValue', { ...props.modelValue, comfyui_timeout: Number((event.target as HTMLInputElement).value) })
-}
-function setWorkflow(profile: 'simple' | 'advanced', mode: keyof ComfyProfile, workflow: ComfyWorkflow | null): void {
-  const current = props.modelValue.comfyui_profiles?.[profile] ?? { generate: null, reference: null }
-  emit('update:modelValue', { ...props.modelValue, comfyui_profiles: {
-    ...props.modelValue.comfyui_profiles, [profile]: { ...current, [mode]: workflow },
-  } })
 }
 </script>
 
@@ -32,16 +25,6 @@ function setWorkflow(profile: 'simple' | 'advanced', mode: keyof ComfyProfile, w
         <input type="number" min="30" max="3600" :value="modelValue.comfyui_timeout" class="ml-2 rounded bg-slate-950 p-2 w-28" @input="setTimeoutValue" />
       </label>
     </details>
-    <template v-for="profile in (['simple', 'advanced'] as const)" :key="profile">
-      <div v-if="profile === 'simple' ? simple : advanced" class="space-y-3">
-        <h4 class="text-xs uppercase font-bold text-cyan-300">{{ profile }} profile</h4>
-        <ComfyWorkflowEditor :model-value="modelValue.comfyui_profiles?.[profile]?.generate ?? null" :url="modelValue.comfyui_url" @update:model-value="setWorkflow(profile, 'generate', $event)" />
-        <details>
-          <summary class="text-xs text-slate-300 cursor-pointer">Use a previous image (reference / img2img)</summary>
-          <ComfyWorkflowEditor class="mt-3" reference :model-value="modelValue.comfyui_profiles?.[profile]?.reference ?? null" :url="modelValue.comfyui_url" @update:model-value="setWorkflow(profile, 'reference', $event)" />
-        </details>
-      </div>
-    </template>
-    <p class="text-xs text-slate-400">Use Test Generation in each profile to verify execution. Save Visual Preferences to retain these workflows.</p>
+    <p class="text-xs text-slate-400">Use Test Generation in each profile to verify execution. Save Visual Preferences to retain your preset assignments.</p>
   </section>
 </template>

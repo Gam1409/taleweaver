@@ -24,7 +24,7 @@ def image_timeout(t2i: dict | None) -> float:
     data = t2i or {}
     uses_comfy = any(data.get(f"{p}_model_provider") == "comfyui" for p in ("simple", "advanced"))
     return (
-        float(data.get("comfyui_timeout") or 600) + 45
+        float(data.get("comfyui_timeout") or 600) + 135
         if uses_comfy
         else float(settings.VISUAL_TIMEOUT)
     )

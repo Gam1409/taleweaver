@@ -527,6 +527,7 @@ class AdventureExporter:
             "awards": adv.awards or [],
             "sequences": adv.sequences or [],
             "scripts": (adv.original_manifest or {}).get("scripts", []),
+            "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
         }
 
         return manifest

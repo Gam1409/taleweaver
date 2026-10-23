@@ -731,8 +731,12 @@ class WorldGenerator:
                 adventure.language = language  # type: ignore[assignment]
             if not adventure.origin_id:
                 adventure.origin_id = manifest_dict.get("origin_id") or template_id  # type: ignore[assignment]
-            if not adventure.original_manifest:
-                adventure.original_manifest = manifest_dict  # type: ignore[assignment]
+            if not adventure.original_manifest or set(adventure.original_manifest) <= {
+                "visual_presets"
+            }:
+                from backend.engine.story_visual_presets import preserve_story_presets
+
+                adventure.original_manifest = preserve_story_presets(manifest_dict, adventure)  # type: ignore[assignment]
             await db.commit()
 
         # Load source assets for cover-mode image reuse

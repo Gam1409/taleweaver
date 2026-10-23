@@ -1721,7 +1721,8 @@ async function suggestPrompt() {
      const suggested = await visualService.suggestPrompt(
        props.adventureId,
        selectedVisual.value.kind,
-       selectedVisual.value.id
+       selectedVisual.value.id,
+       useAdvancedModel.value
      )
      if (suggested) {
        visualPrompt.value = suggested

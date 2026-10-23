@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import prompts
 from backend.engine.image_profiles import image_timeout
+from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import needs_image
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
 from backend.engine.manifest_apply.visuals import (
@@ -68,6 +69,13 @@ async def _scene_image(
             name=scene["name"], description=scene["description"]
         )
         user_config, api_keys = t2i_config(ctx)
+        prompt = asset_source(
+            user_config["t2i_settings"],
+            "scene",
+            prompt,
+            name=scene["name"],
+            description=scene["description"],
+        )
         image_url = await generate_image(
             ctx,
             status=f"Envisioning Scene {idx}/{total}: {scene['name']}...",
@@ -83,7 +91,7 @@ async def _scene_image(
                     == "advanced"
                 ),
             ),
-            timeout=image_timeout(ctx.user.t2i_settings),
+            timeout=image_timeout(user_config["t2i_settings"]),
             failure_label=f"Scene image generation for {ctx.template_id}/{scene['id']}",
         )
     if not needs_image(image_url):

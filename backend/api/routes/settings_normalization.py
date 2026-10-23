@@ -367,4 +367,6 @@ def normalize_t2i_settings(t2i_settings: Optional[dict]) -> dict:
     for key in _T2I_STATIC_DEFAULT_KEYS:
         normalized.setdefault(key, _T2I_FALLBACK[key])
     _apply_openrouter_models(normalized, ("simple", "advanced"))
-    return normalized
+    from backend.core.comfyui_presets import normalize_comfy_presets
+
+    return normalize_comfy_presets(normalized)

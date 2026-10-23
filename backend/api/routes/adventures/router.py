@@ -16,6 +16,7 @@ from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.session_language import router as language_router
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.templates import router as templates_router
+from backend.api.routes.adventures.visual_presets import router as visual_presets_router
 
 router = APIRouter(prefix="/adventures")
 
@@ -25,6 +26,7 @@ router.include_router(imports_router)
 
 # 2. Assets (specific paths like /{template_id}/visuals/...)
 router.include_router(assets_router)
+router.include_router(visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
 router.include_router(sessions_router)

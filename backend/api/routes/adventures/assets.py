@@ -13,11 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.schemas import SuggestPromptRequest, SuggestPromptResponse
-from backend.core import prompts
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.llm_router import GameMasterLLM
 from backend.core.visual_limits import VISUAL_LIMITS as _VISUAL_UPLOAD_LIMITS
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
@@ -160,15 +158,17 @@ async def regenerate_visual(
 ):
     """Regenerate a specific owned visual, preserving the old image on failure."""
     from backend.engine.image_profiles import image_timeout
+    from backend.engine.story_visual_presets import story_t2i
     from backend.engine.visual_regeneration import regenerate_owned_visual
 
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Adventure template not found")
     try:
+        timeout = image_timeout(story_t2i(current_user.t2i_settings, adv))
         return await asyncio.wait_for(
             regenerate_owned_visual(db, adv, current_user, payload),
-            timeout=image_timeout(current_user.t2i_settings),
+            timeout=timeout,
         )
     except HTTPException:
         raise
@@ -251,21 +251,10 @@ async def suggest_prompt(
         logger.warning("No description found for %s %s", payload.target_type, payload.target_id)
         return SuggestPromptResponse(suggested_prompt="")
 
-    # Enforce small model for prompt optimization
+    from backend.engine.preset_prompt_suggestion import suggest_image_prompt
 
-    llm = GameMasterLLM.for_role(current_user, "small")
-    model = llm.model
-
-    user_prompt = prompts.IMAGE_PROMPT_SUGGESTION_USER_PROMPT_TEMPLATE.format(
-        target_type=payload.target_type.upper(), name=name, description=description
-    )
-
-    suggested = await llm.aexecute_simple_task(
-        system_prompt=prompts.IMAGE_PROMPT_SUGGESTION_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        model=model,
-    )
-    return SuggestPromptResponse(suggested_prompt=suggested.strip())
+    suggested = await suggest_image_prompt(current_user, adv, payload, name, description)
+    return SuggestPromptResponse(suggested_prompt=suggested)
 
 
 @router.post("/upload")

@@ -6,9 +6,11 @@ backend must be able to reach the configured URL, for example
 Local endpoints require `ALLOW_PRIVATE_NETWORK_MODELS=true`, like other local
 providers. SSH tunnels remain external to TaleWeaver.
 
-## Configure a profile
+## Configure a preset and assign it to a profile
 
-1. Import a **ComfyUI API-format JSON** into the base workflow slot. Editor-format
+1. Choose **New preset** in the Standard or High-Fidelity card. In its Workflow tab,
+   import a **ComfyUI API-format JSON** into the base workflow slot. Export it with
+   **File → Export (API)** in ComfyUI (older interfaces require developer mode). Editor-format
    JSON with `nodes`/`links` is not supported. Maximum: 256 nodes / 256 KiB per graph.
 2. Map the prompt input and final image output node. Optionally map negative prompt,
    seed and dimensions. Choose literal inputs, not connected sockets.
@@ -16,20 +18,25 @@ providers. SSH tunnels remain external to TaleWeaver.
    generate an image or install nodes/models. Missing node types, known model
    choices, required inputs and mapped inputs are checked. Custom dependencies
    still need a real execution test.
-4. Use **Test Generation** for that profile. It uses the unsaved form, including
+4. Open the **Prompt** tab. Automatic selection recognizes a limited set of model
+   filenames; verify the result or choose a template manually. Edit additional rules
+   only when needed. **Preview the final prompt** uses the Small / Utility LLM when
+   enabled, without submitting an image. See [prompt presets](presets.md).
+5. **Apply to form**, then use **Test Generation** for that profile. It uses the unsaved form, including
    the URL and workflow bindings. The selected output must publish an `images`
    result (normally SaveImage). The first image of that output is used.
-5. Save Visual Preferences. Workflows are stored in existing settings JSON and
+6. Save Visual Preferences. Presets and workflows are stored in existing settings JSON and
    shared through the existing administrator settings mechanism. No database
    migration is needed. This first version duplicates those settings per user.
 
 Models, encoders, VAE files and custom nodes must already be installed on ComfyUI.
 Workflow import does not download dependencies. Model/sampler/steps/CFG/denoise
 values remain in the graph. Only mapped inputs are replaced; there is no automatic
-translation of provider-specific sampler names or SD/FLUX presets.
+translation of provider-specific sampler names. Prompt templates change text only.
 
-The prompt includes the existing TaleWeaver description/style/no-text instructions.
-This does not add automatic inventory-to-image composition or translate descriptions.
+Existing workflows migrate into named presets with their previous prompt behavior.
+Selecting a prompt template enables model-specific formatting and optional language
+adaptation. This does not add automatic inventory-to-image composition.
 An unmapped seed remains fixed in the workflow. A mapped seed uses the configured
 TaleWeaver seed, or a fresh seed when it is absent/negative.
 
@@ -62,7 +69,8 @@ their output node rather than relying on TaleWeaver to decode them.
 
 `sdxl-text-api.json` is a standard text-to-image graph. It assumes the checkpoint
 is named `sd_xl_base_1.0.safetensors`; adjust it to the actual server filename in
-ComfyUI and export again if needed. These examples have not been GPU-tested here.
+ComfyUI and export again if needed. Both SDXL examples were exercised on an A40
+with ComfyUI 0.42.5; this does not guarantee every server/custom-node combination.
 
 | Binding | Text workflow | Image workflow |
 |---|---|---|
@@ -76,6 +84,25 @@ ComfyUI and export again if needed. These examples have not been GPU-tested here
 `sdxl-image-api.json` is ordinary img2img with denoise 0.55. It is not a face-identity
 adapter. For identity/style references, import a workflow designed for that task
 with its own compatible nodes/models and map its input image.
+
+## FLUX.1 Dev FP8 example
+
+`flux1-fp8-text-api.json` adapts the [official FLUX example](https://docs.comfy.org/tutorials/flux/flux-1-text-to-image)
+to the combined `flux1-dev-fp8.safetensors` checkpoint. It includes model, encoders
+and VAE in that checkpoint; a diffusion-only file requires a different loader graph.
+The graph keeps the example's 20 steps, CFG 1 and guidance 3.5. A shared
+`PrimitiveStringMultiline` feeds both `clip_l` and `t5xxl` of `CLIPTextEncodeFlux`.
+
+| Binding | Input |
+|---|---|
+| prompt | `100.value` |
+| seed | `31.seed` |
+| width / height | `27.width` / `27.height` |
+| Output node | `9` |
+
+There is no negative-text binding: this workflow uses `ConditioningZeroOut`.
+The equivalent graph was tested with the installed checkpoint's folder prefix
+on the live A40 server. Older ComfyUI versions may need an update for the string node.
 
 ## Use the current image
 
@@ -117,12 +144,15 @@ may also leave their remote work running.
 - Jobs are held in memory for one backend process and retained for one hour after
   completion. A backend restart loses job status; there is no durable worker queue
   or multi-worker coordination. Do not automatically resubmit a lost job.
-- Profiles live in existing settings rather than a separate workflow library.
+- The named preset library lives in existing administrator settings JSON. Story
+  editors can override the Standard and High-Fidelity assignments under Visuals →
+  Image generation presets. New stories inherit shared settings.
 - Only the current image of the same adventure asset can be selected as input.
   There are no masks, multiple references, video outputs, or automatic custom-node installation.
 - PNG preserves transparency, including thumbnails; JPEG intentionally flattens it.
-- Images are portable in adventure archives; ComfyUI setup, workflows and model
-  dependencies are administrator settings and are not embedded in those archives.
+- Images and selected preset IDs are portable in adventure archives; ComfyUI setup,
+  workflows and model dependencies are administrator settings and are not embedded
+  in those archives. Re-select missing preset IDs after importing on another server.
 - Compatibility checks are static and cannot guarantee available VRAM or working
   Python/native dependencies inside custom nodes.
 
@@ -138,16 +168,30 @@ Branch validation results:
 
 - Broad selection: 226 passed, three pre-existing failures in `test_adventures_api.py`
   (legacy consumable import, readable inventory snapshot, and manifest start scene).
-- Final ComfyUI suites: 51 passed, including output dimensions/file sizes, oversized
-  workflow output, transport timeout and administrator-only draft execution.
+- Preset update: 118 tests passed across ComfyUI, prompt presets, existing media
+  behavior and adventure lifecycle suites. This includes timeout before image
+  submission, automatic/manual rules, profile overrides, settings persistence and
+  preset IDs surviving cloning/export/import.
 - The latest affected regression selection passed 113 existing media/configuration,
   filesystem security and adventure lifecycle tests.
 - Full manifest application generated all five visual types through the fake ComfyUI
   transport and verified the Simple/Advanced assignments.
 - Chromium verified API JSON import, bindings, compatibility checking, generation
   using unsaved settings, saved settings after reload, and repeated generation.
+- Live ComfyUI 0.42.5 on NVIDIA A40 generated a five-image world with SDXL/FLUX
+  assignments and then processed the previous scene via img2img. The six initial
+  remote jobs completed in approximately 16–29 seconds each. Required nodes/models
+  and filename detection were checked against the real server. LLM adaptation was
+  disabled for these GPU tests; its routing and assembly were tested with mocks.
+- Two further GPU jobs passed: generation through the browser's background-job flow
+  and a reference comparison at denoise 0.25 (about 13 seconds end to end). The latter
+  retained the original lighthouse/boat/pier much better than denoise 0.55, which
+  changed major structures. Eight live jobs succeeded in total. This is transport
+  and workflow validation, not a guarantee of exact semantic/identity preservation.
+- Chromium saved a story-specific preset, verified it after reload and restored its
+  original choice; desktop and mobile drawer layouts were inspected.
 - Frontend production build passed; TypeScript diagnostics match the previous base
   diagnostic set. New Python modules/tests pass Ruff check and format check.
-- Full-file Ruff still reports 36 existing issue locations in legacy image/world-generation
-  and asset modules; two legacy files also fail the full-file format check. Unrelated
-  broad refactoring was not included.
+- Full-file Ruff reports 39 existing diagnostics in modified legacy files, compared
+  with 40 on the same files at the previous commit; no new diagnostic locations.
+  Two legacy files still fail the full-file format check. New modules pass both.

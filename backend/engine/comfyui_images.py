@@ -10,6 +10,7 @@ from PIL import Image
 from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.engine.comfyui_client import ComfyClient
 from backend.engine.comfyui_output import bounded_dimensions, prepare_generated_image
+from backend.engine.image_prompt_adapter import prepare_prompt
 from backend.utils.path_security import (
     data_url_to_local_path,
     ensure_within_data_dir,
@@ -50,8 +51,9 @@ async def generate_comfy_image(
     settings = ComfySettings.model_validate(options)
     reference = options.get("reference_image_url")
     workflow = select_workflow(options, reference=bool(reference))
-    values = {**bounded_dimensions(options), "negative_prompt": options.get("negative_prompt")}
-    values["prompt"] = prompt
+    prepared_prompt = await prepare_prompt(prompt, options)
+    values = {**bounded_dimensions(options), "negative_prompt": prepared_prompt["negative"]}
+    values["prompt"] = prepared_prompt["positive"]
     seed = options.get("seed")
     values["seed"] = seed if isinstance(seed, int) and seed >= 0 else secrets.randbits(48)
     async with ComfyClient(settings.comfyui_url) as client:

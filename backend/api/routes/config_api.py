@@ -1049,7 +1049,14 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
     if provider_key == "comfyui":
         options.update(
             payload.model_dump(
-                include={"comfyui_url", "comfyui_timeout", "comfyui_profiles", "comfyui_profile"}
+                include={
+                    "comfyui_url",
+                    "comfyui_timeout",
+                    "comfyui_profiles",
+                    "comfyui_profile",
+                    "comfyui_presets",
+                    "comfyui_assignments",
+                }
             )
         )
     for key in ("ollama_url", "stable_diffusion_url", "sampler_name", "scheduler"):
@@ -1097,7 +1104,10 @@ async def test_vision_connection(
             api_key=api_key,
             provider=payload.provider,
             target_dir=test_dir,
-            provider_options=_build_vision_provider_options(payload, provider_key),
+            provider_options={
+                **_build_vision_provider_options(payload, provider_key),
+                "_prompt_user": user,
+            },
         )
         if img_url:
             return {
@@ -1253,7 +1263,7 @@ async def generate_catalog_image(
             provider=provider,
             target_dir=catalog_dir,
             filename=f"{safe_target_id}_{uuid.uuid4().hex[:8]}",
-            provider_options={**t2i, "visual_target_type": "object"},
+            provider_options={**t2i, "visual_target_type": "object", "_prompt_user": user},
         )
 
         logger.info("Catalog generate result for '%s': img_url=%r", payload.target_id, img_url)
