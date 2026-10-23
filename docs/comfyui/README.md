@@ -186,10 +186,23 @@ context, alongside the outer image limit, rather than claiming that the outer li
 was reached. A remote job may still finish after a client timeout; submission is
 never automatically retried.
 
-To retry a missing NPC portrait, open the adventure editor's scene, find the NPC
-card and use **Quick Regen** or **Regen (Prompt)**. **Generate Missing** creates
-missing portraits. In the immersive game view, portraits are shown in the separate
-character panel, not inside each dialogue bubble.
+During play, use the small image button at the top left of an NPC's portrait card,
+then **Generate portrait** or **Regenerate portrait**. This also works for NPCs
+created during the session. It uses the NPC's current description, the session's
+story preset and the configured NPC image quality. No manual prompt or game turn
+is required. The saved image belongs to this session, survives leaving/resuming
+and is included in session exports. Failed generation keeps the previous image.
+Closing the dialog while generating stops waiting; a running remote job may continue.
+
+To change an NPC in the adventure blueprint, use its editor scene's **Quick Regen**
+or **Regen (Prompt)** action. **Generate Missing** creates missing blueprint portraits.
+Those actions do not edit NPCs created inside a saved session. In the immersive game
+view, portraits are shown in the separate character panel, not inside each dialogue bubble.
+
+The Library now offers **Resume** alongside **New session** when a saved session
+exists. Resume opens the newest unfinished save; if all saves are finished, it opens
+the newest completed/defeated one. Archived saves are not chosen automatically.
+Use **Sessions** to choose a different save. **New session** keeps existing saves.
 
 ## Validation
 

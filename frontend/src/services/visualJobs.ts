@@ -14,10 +14,11 @@ async function readResponse(response: Response): Promise<JobStatus> {
 }
 
 export async function runVisualJob(
-  operation: 'test' | 'asset' | 'catalog' | 'avatar',
+  operation: 'test' | 'asset' | 'catalog' | 'avatar' | 'session_npc',
   payload: unknown,
   templateId?: string,
   signal?: AbortSignal,
+  sessionId?: string,
 ): Promise<Record<string, unknown>> {
   const id = crypto.randomUUID()
   const path = `/settings/visual-jobs/${id}`
@@ -29,7 +30,7 @@ export async function runVisualJob(
   try {
     let job = await readResponse(await apiFetch('/settings/visual-jobs', {
       method: 'POST', includeJson: true, signal,
-      body: JSON.stringify({ id, operation, template_id: templateId, payload }),
+      body: JSON.stringify({ id, operation, template_id: templateId, session_id: sessionId, payload }),
     }))
     while (job.state === 'queued' || job.state === 'running') {
       await new Promise(resolve => window.setTimeout(resolve, 1000))

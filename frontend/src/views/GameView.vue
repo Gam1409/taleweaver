@@ -8,6 +8,8 @@
 import { ref, watch, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
+import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
+import { useSessionPortrait } from '@/composables/useSessionPortrait'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
 import WalkthroughModal from '@/components/game/WalkthroughModal.vue'
@@ -221,6 +223,11 @@ const {
   cancelTurnError,
   isLegacyFormat,
 } = useGameSocket()
+
+const {
+  portraitTarget, portraitBusy, portraitError, portraitUpdated,
+  openPortrait, closePortrait, regeneratePortrait,
+} = useSessionPortrait(computed(() => props.id), entities, npcMetadata)
 
 const showLegacyFormatWarning = ref(true)
 
@@ -1693,6 +1700,7 @@ usePlayAgentAutoLoop()
       @npc-hover="(ent, event) => typeof ent === 'object' && ent !== null ? handleHover(ent, event) : handleChatNpcHover(ent, event)"
       @npc-leave="hoveredEntity = null"
       @npc-click="(name) => handleEntityClick({ name, entity_type: 'NPC' })"
+      @npc-portrait="(npc) => { hoveredEntity = null; openPortrait(npc) }"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
       @item-leave="hoveredEntity = null"
       @item-click="handleEntityClick"
@@ -1702,6 +1710,16 @@ usePlayAgentAutoLoop()
       @traverse-exit="handleExitClick"
       @switch-flip="openSwitchStateModal"
       @exit-session="showExitModal = true"
+    />
+
+    <NpcPortraitModal
+      v-if="portraitTarget"
+      :npc="portraitTarget"
+      :busy="portraitBusy"
+      :error="portraitError"
+      :updated="portraitUpdated"
+      @close="closePortrait"
+      @generate="regeneratePortrait"
     />
 
     <!-- Modals -->

@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 class VisualJobRequest(BaseModel):
     id: UUID
-    operation: Literal["test", "asset", "catalog", "avatar"]
+    operation: Literal["test", "asset", "catalog", "avatar", "session_npc"]
     template_id: str | None = Field(default=None, max_length=128)
+    session_id: str | None = Field(default=None, max_length=128)
     payload: dict[str, Any]
 
 
@@ -57,15 +58,19 @@ def _typed_payload(request: VisualJobRequest):
     from backend.api.routes.adventures.assets import RegenerateVisualRequest
     from backend.api.routes.config_api import CatalogGeneratePayload, TestVisionPayload
     from backend.api.routes.users_api import ProfileImageGenerateRequest
+    from backend.engine.session_portraits import SessionPortraitRequest
 
     schemas = {
         "test": TestVisionPayload,
         "asset": RegenerateVisualRequest,
         "catalog": CatalogGeneratePayload,
         "avatar": ProfileImageGenerateRequest,
+        "session_npc": SessionPortraitRequest,
     }
     if request.operation == "asset" and not request.template_id:
         raise HTTPException(422, "An adventure template is required.")
+    if request.operation == "session_npc" and not request.session_id:
+        raise HTTPException(422, "A saved session is required.")
     try:
         return schemas[request.operation].model_validate(request.payload)
     except ValidationError as exc:
@@ -76,8 +81,11 @@ async def _dispatch(request: VisualJobRequest, user: User, db):
     from backend.api.routes.adventures.assets import regenerate_visual
     from backend.api.routes.config_api import generate_catalog_image, test_vision_connection
     from backend.api.routes.users_api import UserResponse, generate_my_profile_image
+    from backend.engine.session_portraits import regenerate_session_portrait
 
     payload = _typed_payload(request)
+    if request.operation == "session_npc":
+        return await regenerate_session_portrait(request.session_id, payload, db, user)
     if request.operation == "asset":
         return await regenerate_visual(request.template_id, payload, db, user)
     functions = {
@@ -142,6 +150,8 @@ def _task_finished(job: VisualJob, task: asyncio.Task) -> None:
 
 
 def _resource(request: VisualJobRequest) -> tuple:
+    if request.operation == "session_npc":
+        return (request.operation, request.session_id, request.payload.get("target_id"))
     return (
         request.operation,
         request.template_id,

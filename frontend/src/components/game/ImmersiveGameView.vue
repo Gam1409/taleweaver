@@ -17,6 +17,7 @@ import { getImageUrl } from '@/utils/game_icons'
 import { useComicTurns } from '@/composables/useComicTurns'
 import ImmersiveHeader from './immersive/ImmersiveHeader.vue'
 import ImmersiveCharacterStage from './immersive/ImmersiveCharacterStage.vue'
+import type { PortraitTarget } from '@/composables/useSessionPortrait'
 import ImmersiveSceneHotspots from './immersive/ImmersiveSceneHotspots.vue'
 import ImmersiveStoryFeed from './immersive/ImmersiveStoryFeed.vue'
 import ImmersiveActionBar from './immersive/ImmersiveActionBar.vue'
@@ -91,6 +92,7 @@ const emit = defineEmits<{
   itemContextmenu: [item: any, event: MouseEvent]
   selectAction: [actionId: string | null]
   npcClick: [name: string]
+  npcPortrait: [npc: PortraitTarget]
   itemClick: [item: any]
   traverseExit: [exit: any]
   switchFlip: [entity: any]
@@ -250,6 +252,7 @@ defineExpose({
         :active-speakers="activeSpeakers"
         :active-turn-index="activeTurnIndex"
         @npc-click="handleNpcClick"
+        @portrait="(npc) => emit('npcPortrait', npc)"
         @npc-hover="(npc, event) => emit('npcHover', getEntityForHover(npc), event)"
         @npc-leave="emit('npcLeave')"
         @npc-contextmenu="(npc, event) => emit('npcContextmenu', npc, event)"

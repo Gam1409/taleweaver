@@ -7,6 +7,8 @@
  */
 import { ref, watch, nextTick, computed } from 'vue'
 import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+import { ImagePlus } from 'lucide-vue-next'
+import type { PortraitTarget } from '@/composables/useSessionPortrait'
 
 const props = defineProps<{
   npcs: any[]
@@ -19,6 +21,7 @@ const emit = defineEmits<{
   npcHover: [entity: any, event: MouseEvent]
   npcLeave: []
   npcContextmenu: [npc: any, event: MouseEvent]
+  portrait: [npc: PortraitTarget]
 }>()
 
 const stageContainerRef = ref<HTMLElement | null>(null)
@@ -117,6 +120,20 @@ function isNpcSpeaking(npc: any): boolean {
         </div>
 
         <!-- Active Speaker Badge -->
+        <button
+          v-if="npc.id && npc.id !== 'PLAYER'"
+          type="button"
+          class="absolute top-1 left-1 z-30 p-1.5 rounded-lg bg-slate-950/85 text-slate-200 border border-white/20 hover:bg-slate-700 hover:text-white focus-visible:ring-2 focus-visible:ring-amber-400"
+          :aria-label="`Change portrait of ${npc.name}`"
+          title="Generate or replace this NPC's portrait"
+          @click.stop="emit('portrait', npc)"
+          @mouseenter.stop="emit('npcLeave')"
+          @mousemove.stop
+          @contextmenu.stop.prevent
+        >
+          <ImagePlus class="w-3.5 h-3.5" />
+        </button>
+
         <div v-if="isNpcSpeaking(npc)" class="absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce">
           Speaking
         </div>
