@@ -5,6 +5,7 @@
  * Manages chat history fetching, message posting, and state synchronization.
  */
 import { ref, watch, type Ref } from 'vue'
+import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
 import { authState } from '@/store/auth'
@@ -60,6 +61,10 @@ export interface UseGameSocket {
   inputLocked: Ref<boolean>
   pendingTerminalEpilogue: Ref<boolean>
   promptSuggestions: Ref<string[]>
+  suggestionsLoading: Ref<boolean>
+  suggestionsError: Ref<string>
+  suggestionsNotice: Ref<string>
+  refreshSuggestions: () => Promise<void>
   worldMemories: Ref<any[]>
   worldRumors: Ref<any[]>
   debugLogs: Ref<{ timestamp: string, content: string }[]>
@@ -132,6 +137,13 @@ export function useGameSocket(): UseGameSocket {
     () => status.value !== 'connecting' && status.value !== 'loading' && !sheet.value?.agent_active,
     suggestions => { promptSuggestions.value = suggestions },
   )
+  const { suggestionsLoading, suggestionsError, suggestionsNotice, refreshSuggestions, resetSuggestionsRequest } = usePromptSuggestions(
+    () => currentGameId,
+    () => ['connected', 'completed'].includes(status.value) && !inputLocked.value &&
+      !languageSaving.value && !sheet.value?.agent_active,
+    promptSuggestions,
+  )
+  watch([status, language, languageSaving], () => resetSuggestionsRequest(), { flush: 'sync' })
   let syncTimer: number | null = null
   let activeAgentController: AbortController | null = null
   let activeChatController: AbortController | null = null
@@ -343,6 +355,7 @@ export function useGameSocket(): UseGameSocket {
    * If history is empty, triggers the initial world description.
    */
   async function connect(gameId: string): Promise<void> {
+    resetSuggestionsRequest()
     currentGameId = gameId
     status.value = 'loading'
     messages.value = []
@@ -375,6 +388,7 @@ export function useGameSocket(): UseGameSocket {
   }
 
   function disconnect(): void {
+    resetSuggestionsRequest()
     currentGameId = ''
     language.value = ''
     status.value = 'disconnected'
@@ -410,6 +424,7 @@ export function useGameSocket(): UseGameSocket {
   }
 
   function haltActiveOperations(): void {
+    resetSuggestionsRequest()
     if (activeChatController) {
       activeChatController.abort()
       activeChatController = null
@@ -433,6 +448,11 @@ export function useGameSocket(): UseGameSocket {
       return
     }
     const normalizedContent = normalizeUiActionInput(content)
+    if (['/shuffle', '/suggest', '/suggestions'].includes(normalizedContent.trim().toLowerCase())) {
+      await refreshSuggestions()
+      return
+    }
+    resetSuggestionsRequest()
     const isAgentOff = ['/playagent off', '/play-agent off'].includes(normalizedContent.trim().toLowerCase())
     const hadActiveChat = !!activeChatController
 
@@ -991,6 +1011,10 @@ export function useGameSocket(): UseGameSocket {
     inputLocked,
     pendingTerminalEpilogue,
     promptSuggestions,
+    suggestionsLoading,
+    suggestionsError,
+    suggestionsNotice,
+    refreshSuggestions,
     worldMemories,
     worldRumors,
     debugLogs,

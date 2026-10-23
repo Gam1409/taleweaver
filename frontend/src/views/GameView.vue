@@ -198,6 +198,10 @@ const {
   inputLocked,
   pendingTerminalEpilogue,
   promptSuggestions,
+  suggestionsLoading,
+  suggestionsError,
+  suggestionsNotice,
+  refreshSuggestions,
   worldMemories,
   worldRumors,
   statusText,
@@ -1674,6 +1678,10 @@ usePlayAgentAutoLoop()
       :current-scene-name="currentSceneName"
       :current-scene-description="currentSceneDescription"
       :prompt-suggestions="promptSuggestions"
+      :suggestions-loading="suggestionsLoading"
+      :suggestions-error="suggestionsError"
+      :suggestions-notice="suggestionsNotice"
+      @refresh-suggestions="refreshSuggestions"
       :world-memories="worldMemories"
       :exp="sheet?.exp || 0"
       :game-time="gameTime"

@@ -28,6 +28,9 @@ const props = defineProps<{
   mapGlow?: boolean
   questGlow?: boolean
   promptSuggestions?: string[]
+  suggestionsLoading?: boolean
+  suggestionsError?: string
+  suggestionsNotice?: string
   canSendInput?: boolean
   debugMode?: boolean
 }>()
@@ -46,7 +49,6 @@ const emit = defineEmits<{
 
 const showIdeasPopup = ref(false)
 const ideasWrapperRef = ref<HTMLElement | null>(null)
-const isShuffling = ref(false)
 
 function toggleIdeasPopup() {
   if (showIdeasPopup.value) {
@@ -72,11 +74,8 @@ function closeIdeasPopup() {
 }
 
 function handleShuffleClick() {
-  isShuffling.value = true
+  if (props.suggestionsLoading || !props.canSendInput) return
   emit('shuffleSuggestions')
-  setTimeout(() => {
-    isShuffling.value = false
-  }, 1200)
 }
 
 function handleOutsideClick(event: MouseEvent) {
@@ -230,10 +229,13 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 @click="handleShuffleClick"
-                class="p-1 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                title="Regenerate Ideas (/shuffle)"
+                class="p-1 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Refresh ideas"
+                aria-label="Refresh ideas"
+                :disabled="props.suggestionsLoading || !props.canSendInput"
+                :aria-busy="props.suggestionsLoading"
               >
-                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isShuffling }" />
+                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': props.suggestionsLoading }" />
               </button>
               <button
                 type="button"
@@ -245,6 +247,16 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
+
+          <p v-if="props.suggestionsLoading" role="status" class="text-xs text-amber-200">
+            Generating situation-aware ideas… This may take up to 90 seconds.
+          </p>
+          <p v-else-if="props.suggestionsError" role="alert" class="text-xs text-rose-300">
+            {{ props.suggestionsError }} Existing ideas are kept.
+          </p>
+          <p v-else-if="props.suggestionsNotice" role="status" class="text-xs text-slate-300">
+            {{ props.suggestionsNotice }}
+          </p>
 
           <!-- Suggestions List -->
           <div v-if="props.promptSuggestions?.length" class="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar">
@@ -261,9 +273,8 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Empty / Loading State -->
-          <div v-else class="py-5 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
-            <Sparkles class="w-5 h-5 text-amber-400/80 animate-spin" />
-            <span class="font-medium">Generating situation-aware ideas...</span>
+          <div v-else-if="!props.suggestionsLoading && !props.suggestionsError" class="py-5 text-center text-slate-400 text-xs">
+            {{ props.canSendInput ? 'No ideas yet. Use Refresh ideas to generate some.' : 'Wait for the current turn to finish before generating ideas.' }}
           </div>
         </div>
       </Transition>

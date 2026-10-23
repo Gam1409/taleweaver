@@ -440,53 +440,6 @@ async def get_walkthrough(
     }
 
 
-@router.get("/{game_id}/suggestions")
-async def get_prompt_suggestions(
-    game_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Returns stored or freshly generated spoiler-safe prompt suggestions."""
-    state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Session state not found.")
-
-    manager = GameTurnManager(db, state.session_id, current_user)
-    if not await manager.initialize():
-        raise HTTPException(status_code=404, detail="Failed to initialize session.")
-
-    suggestions = manager.suggestions.extract_prompt_suggestions(manager.state.exit_states or {})
-    if not suggestions:
-        last_response = await manager.suggestions.load_last_assistant_message()
-        suggestions = await manager.suggestions.generate_prompt_suggestions(last_response)
-        await db.commit()
-
-    return {"suggestions": suggestions}
-
-
-@router.post("/{game_id}/suggestions")
-@router.post("/{game_id}/shuffle")
-async def shuffle_prompt_suggestions(
-    game_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Regenerates up to 5 spoiler-safe prompt suggestions for the current session."""
-    state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Session state not found.")
-
-    manager = GameTurnManager(db, state.session_id, current_user)
-    if not await manager.initialize():
-        raise HTTPException(status_code=404, detail="Failed to initialize session.")
-
-    last_response = await manager.suggestions.load_last_assistant_message()
-    suggestions = await manager.suggestions.generate_prompt_suggestions(last_response)
-    await db.commit()
-
-    return {"suggestions": suggestions}
-
-
 @router.post("/{game_id}/text-logs/{entity_id}/read")
 async def mark_text_log_read(
     game_id: str,

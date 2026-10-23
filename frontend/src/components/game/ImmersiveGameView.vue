@@ -52,6 +52,9 @@ const props = defineProps<{
   currentSceneName?: string | null
   currentSceneDescription?: string | null
   promptSuggestions?: string[]
+  suggestionsLoading?: boolean
+  suggestionsError?: string
+  suggestionsNotice?: string
   exp?: number
   gameTime?: { dateShort: string; time: string } | null
   clockTick?: boolean
@@ -73,6 +76,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   send: [content: string]
+  refreshSuggestions: []
   retryTurn: []
   cancelTurnError: []
   openSheet: []
@@ -187,7 +191,7 @@ function handleSuggestionSelect(suggestion: string) {
 }
 
 function handleSuggestionShuffle() {
-  emit('send', '/shuffle')
+  emit('refreshSuggestions')
 }
 
 defineExpose({
@@ -333,6 +337,9 @@ defineExpose({
         :map-glow="props.mapGlow"
         :quest-glow="props.questGlow"
         :prompt-suggestions="props.promptSuggestions"
+        :suggestions-loading="props.suggestionsLoading"
+        :suggestions-error="props.suggestionsError"
+        :suggestions-notice="props.suggestionsNotice"
         :world-memories="props.worldMemories"
         :can-send-input="canSendInput"
         :debug-mode="!!props.sheet?.debug_mode"

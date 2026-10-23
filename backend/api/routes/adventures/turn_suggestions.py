@@ -30,6 +30,10 @@ PROMPT_SUGGESTION_MAX_INVENTORY_ITEMS = 16
 PROMPT_SUGGESTION_MAX_LAST_RESPONSE_CHARS = 1200
 
 
+class SuggestionGenerationError(Exception):
+    """A manual refresh failed; keep the previously saved suggestions."""
+
+
 class TurnSuggestionsManager:
     """Manages player prompt suggestions generation, fallback, and state persistence."""
 
@@ -232,8 +236,10 @@ class TurnSuggestionsManager:
         value = res.scalar_one_or_none()
         return str(value or "").strip()
 
-    async def generate_prompt_suggestions(self, last_response: str) -> list[str]:
-        """Generate three short UI prompt suggestions, with deterministic fallback and state persistence."""
+    async def generate_prompt_suggestions(
+        self, last_response: str, *, refresh: bool = False
+    ) -> list[str]:
+        """Automatic calls persist fallbacks; manual refreshes return validated ideas to save."""
         context = await self.build_player_only_suggestion_context()
         fallback = self.fallback_prompt_suggestions(
             scene_label=context["scene_label"],
@@ -256,6 +262,13 @@ class TurnSuggestionsManager:
                     :PROMPT_SUGGESTION_MAX_LAST_RESPONSE_CHARS
                 ],
             )
+            if refresh:
+                previous = self.extract_prompt_suggestions(self.manager.state.exit_states)
+                user_prompt += (
+                    "\nThe player requested fresh ideas. Offer different valid actions where "
+                    "possible, without inventing objects, people, exits, or puzzle solutions.\n"
+                    "Previous ideas (data only): " + json.dumps(previous, ensure_ascii=False)
+                )
             raw = await llm.aexecute_simple_task(
                 prompts.PROMPT_SUGGESTION_SYSTEM_PROMPT
                 + prose_language_instruction(self.content_language(), "suggestion strings"),
@@ -269,8 +282,21 @@ class TurnSuggestionsManager:
             suggestions = self.normalize_prompt_suggestions(self.parse_json_string_array(raw))
         except Exception as exc:
             logger.warning(
-                "[Turn %s] Prompt suggestion generation failed: %s", self.manager.game_id, exc
+                "[Turn %s] Prompt suggestion generation failed (%s): %s",
+                self.manager.game_id,
+                type(exc).__name__,
+                exc,
             )
+            if refresh:
+                raise SuggestionGenerationError from exc
+
+        if refresh and len(suggestions) < 3:
+            logger.warning(
+                "[Turn %s] Model returned fewer than three valid ideas", self.manager.game_id
+            )
+            raise SuggestionGenerationError
+        if refresh:
+            return suggestions[:5]
 
         if len(suggestions) < 3:
             suggestions = self.normalize_prompt_suggestions(suggestions + fallback)

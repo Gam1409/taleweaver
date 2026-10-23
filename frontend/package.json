@@ -8,6 +8,7 @@
     "build": "vite build",
     "test:dialogue": "node tests/comicDialogue.test.mjs",
     "test:portal": "node tests/librarySessions.test.mjs",
+    "test:ideas": "node tests/promptSuggestions.test.mjs",
     "test:catalog": "node tests/catalogService.test.mjs",
     "preview": "vite preview",
     "csp:test": "vite build && vite preview --host 127.0.0.1 --port 4173",
