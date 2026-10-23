@@ -52,7 +52,6 @@ NO_TEXT_IMAGE_PROMPT_SUFFIX = prompts.NO_TEXT_IMAGE_PROMPT_SUFFIX
 
 
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-_SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 _FRONTEND_SVG_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "src", "assets", "svg")
@@ -312,8 +311,6 @@ class MediaEngine:
             safe_thumb_name = sanitize_relative_segment(f"{source_stem}_thumb{ext}")
             if not safe_thumb_name:
                 raise ValueError("Invalid thumbnail filename.")
-            if not re.match(r"^[A-Za-z0-9._-]+$", safe_thumb_name):
-                raise ValueError("Invalid thumbnail filename pattern")
             thumb_path = _ensure_within_data_dir(
                 os.path.join(os.path.dirname(safe_filepath), safe_thumb_name)
             )

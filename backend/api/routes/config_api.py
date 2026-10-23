@@ -30,6 +30,7 @@ from backend.api.routes.settings_normalization import (
 from backend.api.routes.visual_jobs import router as visual_jobs_router
 from backend.core.auth import get_current_admin, get_current_user
 from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
+from backend.core.catalog_ids import legacy_catalog_id
 from backend.core.comfyui_config import ComfySettings, select_workflow, validate_comfy_settings
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -197,7 +198,7 @@ def _normalize_catalog(
         name = (raw_item.get("name") or "").strip()
         if not name:
             continue
-        item_id = (raw_item.get("id") or "").strip() or _slugify(name)
+        item_id = (raw_item.get("id") or "").strip() or legacy_catalog_id(name)
         normalized.append(
             {
                 "id": item_id,
@@ -1295,7 +1296,7 @@ async def upload_catalog_image(
     _ = current_user
     if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", catalog_type):
         raise HTTPException(status_code=400, detail="Invalid catalog type format.")
-    if not re.match(r"^[a-zA-Z0-9_-]{1,128}$", target_id):
+    if not target_id or sanitize_path_component(target_id) != target_id:
         raise HTTPException(status_code=400, detail="Invalid target ID format.")
     try:
         safe_ext = _extension_from_content_type(file.content_type)

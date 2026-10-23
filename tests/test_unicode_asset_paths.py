@@ -7,15 +7,15 @@ import pytest
 
 from backend.core.config import settings
 from backend.utils import path_security
-from backend.utils.text_utils import generate_session_id
+from backend.utils.text_utils import slugify
 
 
 @pytest.mark.parametrize(
     "title", ["Бегство из леса", "森からの脱出", "رحلة الغابة", "El bosque mágico"]
 )
-def test_generated_id_and_local_image_roundtrip(tmp_path, monkeypatch, title):
+def test_legacy_id_and_local_image_roundtrip(tmp_path, monkeypatch, title):
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
-    session_id = generate_session_id(title)
+    session_id = f"{slugify(title)}-ab12cd34"
     assert path_security.sanitize_path_component(session_id) == session_id
     folder = path_security.safe_data_path("adventures", "sessions", session_id, "visuals")
     Path(folder).mkdir(parents=True)

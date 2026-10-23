@@ -3,6 +3,7 @@
 import io
 import zipfile
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -20,7 +21,7 @@ from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 from backend.utils.path_security import data_url_to_local_path
-from backend.utils.text_utils import generate_session_id
+from backend.utils.text_utils import generate_session_id, slugify
 from tests.conftest import TestSessionLocal
 from tests.test_comfyui import comfy_options, fake_comfy, workflow
 from tests.test_session_portraits import finish_job, portrait_world, start_job
@@ -30,9 +31,10 @@ REAL_GENERATE_IMAGE = MediaEngine.generate_image
 
 
 async def seed_localized_session(
-    title: str, image_url: str | None = "/data/old-portrait.png"
+    title: str, image_url: str | None = "/data/old-portrait.png", *, legacy_id: bool = True
 ) -> str:
-    session_id = generate_session_id(title)
+    # Keep exercising IDs stored before the UUID change, not just the new generator.
+    session_id = f"{slugify(title)}-{uuid4().hex[:8]}" if legacy_id else generate_session_id(title)
     async with TestSessionLocal() as db:
         original = await db.get(GameSession, "portrait-session")
         db.add(

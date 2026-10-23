@@ -206,6 +206,10 @@ is missing, check the session's NPC record, current location and visibility firs
 Session IDs and image paths support Unicode names, including Cyrillic; renaming
 an adventure or restarting its save is not required to generate a portrait.
 
+New adventures and saves now use UUIDs independent of their display titles.
+See the [storage and multilingual-path audit](../storage-identifiers.md) for legacy
+save compatibility and export/upload checks.
+
 The Library now offers **Resume** alongside **New session** when a saved session
 exists. Resume opens the newest unfinished save; if all saves are finished, it opens
 the newest completed/defeated one. Archived saves are not chosen automatically.

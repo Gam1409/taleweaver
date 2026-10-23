@@ -13,6 +13,7 @@ from backend.api.routes.adventures.editor_special_actions import (
 )
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.templates import router as templates_router
@@ -30,6 +31,7 @@ router.include_router(visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
 router.include_router(sessions_router)
+router.include_router(session_exports_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)
