@@ -4,6 +4,8 @@ import { configState } from '@/store/config'
 import { authState } from '@/store/auth'
 import { api } from '@/composables/useApi'
 import { usePortalData } from '@/composables/usePortalData'
+import { indexLibrarySessions } from '@/composables/librarySessions'
+import { usePortalSessionNavigation } from '@/composables/usePortalSessionNavigation'
 import { usePortalSectionRouting } from '@/composables/usePortalSectionRouting'
 import PortalSidebar from '@/components/portal/PortalSidebar.vue'
 import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
@@ -45,7 +47,6 @@ const showSetupWarningModal = ref(false)
 const hasCheckedSetup = ref(false)
 const showDeleteAllAdventuresConfirm = ref(false)
 const showDeleteAllSessionsConfirm = ref(false)
-const isResuming = ref(false)
 const activeProgressAdventure = ref<{ id: string; title: string } | null>(null)
 
 function openProgressModal(pending: any) {
@@ -160,42 +161,11 @@ function handleImport(kind?: 'templates' | 'sessions') {
 
 const isAdmin = computed(() => authState.user?.role === 'admin')
 
-async function playSession(gameId: string) {
-  if (isStartingSession.value) {
-    const template = templates.value.find((t) => t.template_id === startingSessionTemplateId.value)
-    await router.push({
-      name: 'game',
-      params: { id: gameId },
-      query: { title: template?.title || '', is_new: 'true' }
-    })
-    return
-  }
-
-  isStartingSession.value = true
-  isResuming.value = true
-  const session = sessions.value.find((s) => s.game_id === gameId)
-  startingSessionTitle.value = session?.adventure_title || 'Adventure'
-
-  // Smooth loading delay so the transition feels premium
-  await new Promise((resolve) => setTimeout(resolve, 600))
-
-  try {
-    await router.push({
-      name: 'game',
-      params: { id: gameId },
-      query: { title: session?.adventure_title || '', resuming: 'true' }
-    })
-  } finally {
-    isStartingSession.value = false
-    startingSessionTitle.value = ''
-    isResuming.value = false
-  }
-}
-
-async function startSession(templateId: string) {
-  if (isStartingSession.value) return
-  await startSessionForTemplate(templateId, playSession)
-}
+const { isResuming, playSession, startSession } = usePortalSessionNavigation({
+  templates, sessions, isStartingSession, startingSessionTemplateId,
+  startingSessionTitle, startSessionForTemplate
+}, router)
+const librarySessions = computed(() => indexLibrarySessions(sessions.value))
 
 function editAdventure(templateId: string) {
   router.push({ 
@@ -415,6 +385,8 @@ onUnmounted(() => {
             <AdventureLibraryGrid
               v-if="templateFilters.viewMode.value === 'grid'"
               :visible-templates="templateFilters.paginatedItems.value"
+              :resume-sessions="librarySessions"
+              :is-resuming="isResuming"
               :pending-cards="pendingCards"
               :is-seeding="isSeeding"
               :loading-word-index="loadingWordIndex"
@@ -430,6 +402,7 @@ onUnmounted(() => {
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
               @start-session="startSession"
+              @resume="playSession"
               @update-adventure="updateAdventure"
               @migrate="openMigrateModal"
               @cover="openCoverCreate"
@@ -444,6 +417,8 @@ onUnmounted(() => {
             <AdventureLibraryTable
               v-else
               :visible-templates="templateFilters.paginatedItems.value"
+              :resume-sessions="librarySessions"
+              :is-resuming="isResuming"
               :all-filtered-templates="templateFilters.filteredItems.value"
               :pending-cards="pendingCards"
               :is-seeding="isSeeding"
@@ -460,6 +435,7 @@ onUnmounted(() => {
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
               @start-session="startSession"
+              @resume="playSession"
               @update-adventure="updateAdventure"
               @migrate="openMigrateModal"
               @cover="openCoverCreate"

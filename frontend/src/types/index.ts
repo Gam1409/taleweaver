@@ -279,7 +279,7 @@ export interface GameSession {
   award_count?: number
   earned_award_count?: number
   created_at?: string
-  status?: 'active' | 'archived' | 'completed' | 'game_over' | null
+  status?: 'active' | 'paused' | 'archived' | 'completed' | 'game_over' | null
   status_note?: string | null
   copied_from_id?: string | null
   max_memory_turns?: number

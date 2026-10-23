@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
-import type { AdventureTemplateSummary } from '@/types'
+import type { AdventureTemplateSummary, GameSession } from '@/types'
+import AdventurePlayActions from './AdventurePlayActions.vue'
 import { MoreHorizontal, X, ScrollText, Copy } from 'lucide-vue-next'
 import LicenseInfoPopup from '@/components/common/LicenseInfoPopup.vue'
 
 const props = defineProps<{
   template: AdventureTemplateSummary
+  resumeSession?: GameSession
+  isResuming?: boolean
   isStartingSession?: boolean
   isStartingThisTemplate?: boolean
   isUpdating?: boolean
@@ -13,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'startSession', templateId: string): void
+  (e: 'resume', gameId: string): void
   (e: 'updateAdventure', templateId: string): void
   (e: 'migrate', template: AdventureTemplateSummary): void
   (e: 'cover', templateId: string): void
@@ -294,46 +298,18 @@ const hasLicenseInfo = computed(() => {
         </p>
       </div>
 
-      <!-- Action Button -->
-      <!-- Case 1: Legacy format with update available -> Update button -->
-      <button
-        v-if="(props.template.is_legacy_format || !props.template.can_start) && props.template.has_update"
-        class="w-full py-2 sm:py-3.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border flex items-center justify-center gap-1.5 sm:gap-3 shadow-lg bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border-cyan-500/30 shadow-cyan-500/10 cursor-pointer"
-        :disabled="props.isUpdating"
-        @click="emit('updateAdventure', props.template.template_id)"
-      >
-        <i
-          :class="props.isUpdating ? 'ra ra-cycle animate-spin text-xs sm:text-sm' : 'ra ra-clockwise text-xs sm:text-sm'"
-        ></i>
-        <span class="truncate">{{ props.isUpdating ? 'Updating...' : 'Update to Play' }}</span>
-      </button>
-
-      <!-- Case 2: Legacy format without update -> Migrate button -->
-      <button
-        v-else-if="props.template.is_legacy_format || !props.template.can_start"
-        class="w-full py-2 sm:py-3.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border flex items-center justify-center gap-1.5 sm:gap-3 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border-amber-500/35 hover:border-amber-500/50 cursor-pointer shadow-lg shadow-amber-500/10 hover:scale-[1.01] active:scale-[0.99]"
-        title="Migrate this adventure to the current format"
-        @click.stop="emit('migrate', props.template)"
-      >
-        <i class="ra ra-wrench text-xs sm:text-sm"></i>
-        <span class="truncate">Migrate Adventure</span>
-      </button>
-
-      <!-- Case 3: Playable adventure -> Normal Start button -->
-      <button
-        v-else
-        class="w-full py-2 sm:py-3.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border flex items-center justify-center gap-1.5 sm:gap-3 shadow-lg"
-        :class="props.isStartingSession
-          ? 'bg-slate-800/70 text-slate-400 border-slate-700 cursor-not-allowed shadow-slate-900/30'
-          : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20 shadow-emerald-500/5 group/btn'"
-        :disabled="props.isStartingSession"
-        @click="emit('startSession', props.template.template_id)"
-      >
-        <i
-          :class="props.isStartingSession ? 'ra ra-cycle animate-spin text-xs sm:text-sm' : 'ra ra-play text-xs sm:text-sm transition-transform group-hover/btn:scale-110'"
-        ></i>
-        <span class="truncate">{{ props.isStartingThisTemplate ? 'Starting...' : 'Start' }}</span>
-      </button>
+      <AdventurePlayActions
+        :template="props.template"
+        :resume-session="props.resumeSession"
+        :is-resuming="props.isResuming"
+        :is-starting-session="props.isStartingSession"
+        :is-starting-this-template="props.isStartingThisTemplate"
+        :is-updating="props.isUpdating"
+        @resume="(id) => emit('resume', id)"
+        @start-session="(id) => emit('startSession', id)"
+        @update-adventure="(id) => emit('updateAdventure', id)"
+        @migrate="(entry) => emit('migrate', entry)"
+      />
     </div>
 
     <!-- License info popup (teleported to body) -->
