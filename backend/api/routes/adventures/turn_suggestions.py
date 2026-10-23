@@ -8,10 +8,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.api.routes.adventures.session_language import resolve_content_language
 from backend.core import prompts
-from backend.core.content_language import prose_language_instruction
-from backend.core.content_language_fallbacks import SUGGESTIONS
 from backend.core.llm_router import GameMasterLLM
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -22,7 +19,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PROMPT_SUGGESTIONS_STATE_KEY = "__prompt_suggestions__"
-PROMPT_SUGGESTIONS_LANGUAGE_KEY = "__prompt_suggestions_language__"
 PROMPT_SUGGESTION_MAX_VISIBLE_NPCS = 12
 PROMPT_SUGGESTION_MAX_VISIBLE_OBJECTS = 16
 PROMPT_SUGGESTION_MAX_UNLOCKED_EXITS = 8
@@ -35,14 +31,6 @@ class TurnSuggestionsManager:
 
     def __init__(self, manager: GameTurnManager) -> None:
         self.manager = manager
-
-    def content_language(self) -> str:
-        return resolve_content_language(
-            self.manager.state,
-            self.manager.user,
-            self.manager.adventure,
-            self.manager.turn_language,
-        )
 
     @staticmethod
     def extract_prompt_suggestions(exit_states: Any) -> list[str]:
@@ -68,7 +56,7 @@ class TurnSuggestionsManager:
         words = [w for w in text.strip().split() if w]
         if not words:
             return ""
-        return " ".join(words[:max_words])[:120]
+        return " ".join(words[:max_words])
 
     @classmethod
     def normalize_prompt_suggestions(cls, values: list[str]) -> list[str]:
@@ -117,7 +105,6 @@ class TurnSuggestionsManager:
     def set_prompt_suggestions_state(self, suggestions: list[str]) -> None:
         exit_states = dict(self.manager.state.exit_states or {})
         normalized = self.normalize_prompt_suggestions(suggestions)
-        exit_states[PROMPT_SUGGESTIONS_LANGUAGE_KEY] = self.content_language()
         if normalized:
             exit_states[PROMPT_SUGGESTIONS_STATE_KEY] = normalized
         else:
@@ -133,9 +120,6 @@ class TurnSuggestionsManager:
         visible_npcs: list[str],
         inventory_items: list[str],
     ) -> list[str]:
-        language = self.content_language()
-        if language != "English":
-            return list(SUGGESTIONS[language])
         sensory_target = visible_objects[0] if visible_objects else scene_label or "the area"
         interaction_target = (
             visible_npcs[0]
@@ -257,8 +241,7 @@ class TurnSuggestionsManager:
                 ],
             )
             raw = await llm.aexecute_simple_task(
-                prompts.PROMPT_SUGGESTION_SYSTEM_PROMPT
-                + prose_language_instruction(self.content_language(), "suggestion strings"),
+                prompts.PROMPT_SUGGESTION_SYSTEM_PROMPT,
                 user_prompt,
                 model,
                 adventure_id=self.manager.state.template_id,

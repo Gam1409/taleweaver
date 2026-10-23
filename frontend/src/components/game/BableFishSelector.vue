@@ -12,11 +12,10 @@ const dropdownStyle = computed(() => {
   }
 })
 
-const { language, languageSaving, setLanguage, status, sheet } = useGameSocket()
-const selectionDisabled = computed(() => languageSaving.value || status.value === 'connecting' || status.value === 'loading' || !!sheet.value?.agent_active)
+const { language } = useGameSocket()
 
 const languages = [
-  { code: '', name: 'Use default', icon: 'ra-spear-head' },
+  { code: '', name: 'Default', icon: 'ra-spear-head' },
   { code: 'German', name: 'Deutsch', icon: 'ra-castle' },
   { code: 'English', name: 'English', icon: 'ra-tower' },
   { code: 'French', name: 'Français', icon: 'ra-fleur-de-lis' },
@@ -97,8 +96,9 @@ function unregisterOutsideClick() {
   }
 }
 
-const selectLanguage = async (code: string): Promise<void> => {
-  if (await setLanguage(code)) closeDropdown()
+const selectLanguage = (code: string) => {
+  language.value = code
+  closeDropdown()
 }
 
 onMounted(() => {
@@ -116,8 +116,6 @@ onUnmounted(() => {
     <!-- Fish Button -->
     <button
       ref="triggerRef"
-      :disabled="selectionDisabled"
-      :aria-busy="languageSaving"
       @click="toggleDropdown"
       @mouseenter="showWithAutoHide"
       @mouseleave="cancelTooltip"
@@ -168,14 +166,11 @@ onUnmounted(() => {
           class="fixed z-[9999] w-48 bg-[#0f172a] border border-slate-700 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden animate-tooltip-in"
           :style="dropdownStyle"
         >
-          <p class="px-3 pt-3 pb-1 text-xs text-slate-400">Game language · saved for this session</p>
-          <p class="px-3 pb-2 text-xs text-slate-500">Applies to new narration and ideas. Existing world descriptions keep their original language.</p>
           <div class="p-2 grid grid-cols-1 gap-1">
             <button
               v-for="lang in languages"
               :key="lang.code"
               @click="selectLanguage(lang.code)"
-              :disabled="selectionDisabled"
               class="flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group"
               :class="language === lang.code ? 'bg-cyan-500/20 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'"
             >

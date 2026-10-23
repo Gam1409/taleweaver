@@ -5,7 +5,6 @@
  * Manages chat history fetching, message posting, and state synchronization.
  */
 import { ref, watch, type Ref } from 'vue'
-import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
@@ -53,8 +52,6 @@ export interface UseGameSocket {
   isCompleted: Ref<boolean>
   isLegacyFormat: Ref<boolean>
   language: Ref<string>
-  languageSaving: Ref<boolean>
-  setLanguage: (value: string) => Promise<boolean>
   statusText: Ref<string>
   statusNote: Ref<string>
   inputLocked: Ref<boolean>
@@ -115,6 +112,7 @@ export function useGameSocket(): UseGameSocket {
   const awards = ref<any[]>([])
   const isCompleted = ref(false)
   const isLegacyFormat = ref(false)
+  const language = ref<string>(localStorage.getItem('tw_bable_fish_lang') || '')
   const statusText = ref('')
   const statusNote = ref('')
   const inputLocked = ref(false)
@@ -127,11 +125,6 @@ export function useGameSocket(): UseGameSocket {
   const mapGlow = ref(false)
   const questGlow = ref(false)
   let currentGameId = ''
-  const { language, languageSaving, setLanguage } = useSessionContentLanguage(
-    () => currentGameId,
-    () => status.value !== 'connecting' && status.value !== 'loading' && !sheet.value?.agent_active,
-    suggestions => { promptSuggestions.value = suggestions },
-  )
   let syncTimer: number | null = null
   let activeAgentController: AbortController | null = null
   let activeChatController: AbortController | null = null
@@ -188,6 +181,17 @@ export function useGameSocket(): UseGameSocket {
 
     return content
   }
+
+  // Sync with User Profile default if no local preference exists
+  watch(() => authState.user?.default_language, (newDef) => {
+    if (localStorage.getItem('tw_bable_fish_lang') === null && newDef) {
+      language.value = newDef
+    }
+  }, { immediate: true })
+
+  watch(language, (newLang) => {
+    localStorage.setItem('tw_bable_fish_lang', newLang)
+  })
 
   // Scene/sequence the session is currently in (from server snapshots). Live messages are
   // stamped with it so the story feed can group pages per scene before the history reloads.
@@ -350,9 +354,7 @@ export function useGameSocket(): UseGameSocket {
     
     try {
       const data = await fetchSessionSnapshot(gameId)
-      if (currentGameId !== gameId) return
       if (data) {
-        language.value = data.language || 'English'
         applySessionSnapshot(data)
         if ((status.value as any) !== 'game_over' || !inputLocked.value) {
           startSyncTimer()
@@ -376,7 +378,6 @@ export function useGameSocket(): UseGameSocket {
 
   function disconnect(): void {
     currentGameId = ''
-    language.value = ''
     status.value = 'disconnected'
     stopSyncTimer()
     if (checkpointPulseTimer !== null) {
@@ -428,10 +429,6 @@ export function useGameSocket(): UseGameSocket {
    * Posts a player message and processes the GM response.
    */
   async function sendMessage(content: string, isRetry: boolean = false): Promise<void> {
-    if (languageSaving.value) {
-      addNotification('Please wait until the game language is saved.', 'info')
-      return
-    }
     const normalizedContent = normalizeUiActionInput(content)
     const isAgentOff = ['/playagent off', '/play-agent off'].includes(normalizedContent.trim().toLowerCase())
     const hadActiveChat = !!activeChatController
@@ -507,7 +504,8 @@ export function useGameSocket(): UseGameSocket {
         signal: controller.signal,
         body: JSON.stringify({ 
           content: normalizedContent,
-          auto_visualize: autoVisualize.value
+          auto_visualize: autoVisualize.value,
+          language: language.value || undefined
         })
       })
 
@@ -759,7 +757,7 @@ export function useGameSocket(): UseGameSocket {
   async function runAgentTurn(): Promise<boolean> {
     const isBusy = status.value === 'connecting' || status.value === 'loading'
     if (!currentGameId) return false
-    if (isBusy || languageSaving.value) return false
+    if (isBusy) return false
 
     status.value = 'connecting' 
     statusText.value = 'Agent is thinking...'
@@ -926,7 +924,7 @@ export function useGameSocket(): UseGameSocket {
       const res = await fetch(`${BASE}/adventures/${currentGameId}/terminal-epilogue`, {
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({})
+        body: JSON.stringify({ language: language.value || undefined })
       })
 
       if (res.status === 401 && authState.isAuthenticated) {
@@ -984,8 +982,6 @@ export function useGameSocket(): UseGameSocket {
     isCompleted,
     isLegacyFormat,
     language,
-    languageSaving,
-    setLanguage,
     statusText,
     statusNote,
     inputLocked,

@@ -42,10 +42,6 @@ from backend.api.routes.adventures.turn_prompt_layout import (
 from backend.core import prompts
 from backend.core.config import settings
 from backend.core.llm_logger import log_structured_event
-from backend.api.routes.adventures.session_language import (
-    initialize_content_language,
-    resolve_content_language,
-)
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
@@ -795,13 +791,10 @@ class GameTurnManager:
     async def _process_turn_inner(
         self, message: str, auto_visualize: bool = False, language: str | None = None
     ) -> AsyncGenerator[str, None]:
+        self.turn_language = language
         if not await self.initialize():
             yield f"event: error\ndata: {json.dumps({'detail': 'Game session not found.'})}\n\n"
             return
-
-        initialize_content_language(self.state, self.user, self.adventure)
-        language = resolve_content_language(self.state, self.user, self.adventure, language)
-        self.turn_language = language
 
         # Pre-emptive sanitization of avatar JSON fields to avoid datetime serialization issues
         self.avatar.inventory = jsonable_encoder(self.avatar.inventory)

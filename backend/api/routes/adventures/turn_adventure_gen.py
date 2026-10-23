@@ -5,15 +5,11 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable
 
 from fastapi import HTTPException
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.api.routes.adventures.session_language import resolve_content_language
-from backend.core.content_language import prose_language_instruction
-from backend.core.content_language_fallbacks import EPILOGUES
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
     FINAL_REPORT_COMPLETED_FALLBACK,
@@ -497,12 +493,8 @@ class TurnAdventureGenManager:
             system_prompt = FINAL_REPORT_GAMEOVER_SYSTEM_PROMPT
             fallback = FINAL_REPORT_GAMEOVER_FALLBACK
 
-        language = resolve_content_language(
-            self.manager.state, self.manager.user, self.manager.adventure, language
-        )
-        system_prompt += prose_language_instruction(language, "closing narration")
-        if language != "English":
-            fallback = EPILOGUES[language][0 if status == "completed" else 1]
+        if language:
+            system_prompt += f" Respond only in {language.upper()}."
 
         user_prompt = "Create the final narrative from this session report JSON:\n" + json.dumps(
             report_payload

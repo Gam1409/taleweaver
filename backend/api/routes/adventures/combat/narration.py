@@ -9,7 +9,6 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import backend.api.routes.adventures.gameplay_logic as gl
-from backend.core.content_language import prose_language_instruction
 from backend.core.prompts import (
     COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT,
     COMBAT_SPECIAL_EVENT_USER_PROMPT_TEMPLATE,
@@ -60,7 +59,7 @@ class CombatNarrationMixin:
             "Use 2-4 sentences, stay in-world, no mechanics, no bullet points, no command suggestions."
         )
         if self.turn_language:
-            prompt += prose_language_instruction(self.turn_language)
+            prompt += f" Respond only in {self.turn_language.upper()}."
         user_prompt = (
             f"Protagonist: {self.avatar.name}. Enemies: {enemy_names}. "
             f"Combat outcome: {outcome}. "
@@ -117,7 +116,7 @@ class CombatNarrationMixin:
         player_hp = int(player.get("hp") or self.avatar.hp or 0)
         system_prompt = COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT
         if self.turn_language:
-            system_prompt += prose_language_instruction(self.turn_language, "the text field")
+            system_prompt += f" Text must be in {self.turn_language.upper()}."
         user_prompt = COMBAT_SPECIAL_EVENT_USER_PROMPT_TEMPLATE.format(
             round=int(combat.get("round") or 1),
             enemy_name=enemy_name,

@@ -139,6 +139,13 @@ def resolve_model_settings(llm_settings: dict[str, Any]) -> dict[str, Any]:
 
 def bable_fish_instruction(language: str) -> str:
     """Translation protocol appended to the narration system prompt."""
-    from backend.core.content_language import prose_language_instruction
-
-    return prose_language_instruction(language)
+    return (
+        "\n\n--- BABLE FISH TRANSLATION PROTOCOL ---\n"
+        f"TARGET LANGUAGE: {language.upper()}\n"
+        f"INSTRUCTION: You MUST translate ALL your output (narration, dialogue, descriptions) into {language}. "
+        "Do NOT respond in English or the original world language if it differs. "
+        "Note: The chat history may contain messages in various languages due to previous Bable Fish settings. "
+        f"IGNORE those languages and strictly use {language} for the current turn. "
+        f"The player has activated their Bable Fish, so everything they hear/see must be in {language}."
+        "\n----------------------------------------\n"
+    )

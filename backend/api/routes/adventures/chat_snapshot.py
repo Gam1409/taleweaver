@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.api.routes.adventures.logic import AdventureLogic
-from backend.api.routes.adventures.turn_suggestions import PROMPT_SUGGESTIONS_LANGUAGE_KEY
 from backend.core.config import settings
 from backend.engine.map_engine import MapEngine
 from backend.models.adventure_template import AdventureTemplate
@@ -46,14 +45,10 @@ async def build_session_map(db: AsyncSession, state: SessionState) -> dict[str, 
 
     exits_res = await db.execute(
         select(WorldExit).where(
-            or_(
-                WorldExit.session_id == state.session_id, WorldExit.template_id == state.template_id
-            )
+            or_(WorldExit.session_id == state.session_id, WorldExit.template_id == state.template_id)
         )
     )
-    return MapEngine.augment_map_data(
-        map_dict, list(exits_res.scalars().all()), state.current_scene_id
-    )
+    return MapEngine.augment_map_data(map_dict, list(exits_res.scalars().all()), state.current_scene_id)
 
 
 async def load_full_world_debug(db: AsyncSession, state: SessionState, requested: bool) -> Any:
@@ -73,8 +68,7 @@ async def resolve_prompt_suggestions(
 ) -> list[str]:
     """Stored suggestions, or player-only fallback suggestions built on session load."""
     prompt_suggestions = GameTurnManager.extract_prompt_suggestions(state.exit_states or {})
-    stored_language = (state.exit_states or {}).get(PROMPT_SUGGESTIONS_LANGUAGE_KEY)
-    if prompt_suggestions and state.session and stored_language == state.session.content_language:
+    if prompt_suggestions:
         return prompt_suggestions
     try:
         manager = GameTurnManager(db, state.session_id, current_user)
