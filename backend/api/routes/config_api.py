@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.comfyui_api import router as comfyui_router
 from backend.api.routes.settings_normalization import (
     DEFAULT_COMPLEX_MAX_TOKENS,
     DEFAULT_GENERATOR_MAX_TOKENS,
@@ -26,8 +27,10 @@ from backend.api.routes.settings_normalization import (
 from backend.api.routes.settings_normalization import (
     normalize_tts_settings as _normalize_tts_settings,
 )
+from backend.api.routes.visual_jobs import router as visual_jobs_router
 from backend.core.auth import get_current_admin, get_current_user
 from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
+from backend.core.comfyui_config import ComfySettings, select_workflow, validate_comfy_settings
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
@@ -64,7 +67,8 @@ _MODEL_FETCH_LOG_COOLDOWN_SECONDS = 300.0
 _MODEL_FETCH_LAST_LOGGED_AT: dict[str, float] = {}
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
-print(f"DEBUG: Loading config_api module, router prefix: {router.prefix}")
+router.include_router(comfyui_router)
+router.include_router(visual_jobs_router)
 
 _SAFE_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 _ALLOWED_CATALOG_TYPES = {"styles", "tones"}
@@ -451,10 +455,16 @@ def _is_t2i_configured(user: User, db_keys: dict) -> bool:
     simple_model = t2i.get("simple_model")
 
     def has_key(provider):
-        if provider in ("ollama", "stable_diffusion"):
+        if provider in ("ollama", "stable_diffusion", "comfyui"):
             return True
         return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
 
+    if simple_provider == "comfyui":
+        try:
+            select_workflow({**t2i, "comfyui_profile": "simple"})
+        except ValueError:
+            return False
+        return True
     return has_key(simple_provider) and bool(simple_model)
 
 
@@ -529,7 +539,7 @@ class SettingsPayload(OllamaRoleSettings):
     )
 
 
-class T2ISettingsPayload(BaseModel):
+class T2ISettingsPayload(ComfySettings):
     simple_model: str
     simple_model_provider: str
     advanced_model: str
@@ -905,6 +915,10 @@ async def update_t2i_settings(
     """Updates the Text-to-Image model preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
+    try:
+        validate_comfy_settings(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     user.t2i_settings = _normalize_t2i_settings(payload.model_dump())
     await _broadcast_global_settings(db, user)
     await db.commit()
@@ -993,7 +1007,8 @@ async def test_llm_connection(
         user.llm_settings = old_settings
 
 
-class TestVisionPayload(BaseModel):
+class TestVisionPayload(ComfySettings):
+    comfyui_profile: str = "simple"
     model: str
     provider: str
     ollama_url: Optional[str] = None
@@ -1007,7 +1022,7 @@ class TestVisionPayload(BaseModel):
     min_long_edge: Optional[int] = None
 
 
-_LOCAL_IMAGE_PROVIDERS = ("ollama", "stable_diffusion")
+_LOCAL_IMAGE_PROVIDERS = ("ollama", "stable_diffusion", "comfyui")
 
 
 def _resolve_vision_api_key(
@@ -1030,7 +1045,13 @@ def _resolve_vision_api_key(
 
 
 def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: str) -> dict:
-    options: dict[str, Any] = {}
+    options: dict[str, Any] = {"visual_target_type": "npc"}
+    if provider_key == "comfyui":
+        options.update(
+            payload.model_dump(
+                include={"comfyui_url", "comfyui_timeout", "comfyui_profiles", "comfyui_profile"}
+            )
+        )
     for key in ("ollama_url", "stable_diffusion_url", "sampler_name", "scheduler"):
         if getattr(payload, key):
             options[key] = getattr(payload, key)
@@ -1061,6 +1082,8 @@ async def test_vision_connection(
     """Tests the connection to an image provider by generating a wizard portrait."""
     user = await _resolve_global_settings_owner(db, current_user)
     provider_key = payload.provider.lower()
+    if provider_key == "comfyui" and current_user.role != "admin":
+        raise HTTPException(403, "Only administrators can execute workflow drafts.")
     api_key, error_response = _resolve_vision_api_key(user, provider_key, payload.provider)
     if error_response:
         return error_response
@@ -1195,14 +1218,14 @@ async def generate_catalog_image(
     provider = (t2i.get("simple_model_provider") or t2i.get("provider", "openai")).lower()
     model = t2i.get("simple_model")
 
-    if not model:
+    if not model and provider != "comfyui":
         return {
             "status": "error",
             "message": "The 'Simple Model' for image generation is not configured. Please set it in Visual Preferences.",
         }
 
     api_key = _resolve_provider_api_key(provider, user.encrypted_api_keys)
-    if provider not in ("ollama", "stable_diffusion") and not api_key:
+    if provider not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
         return {"status": "error", "message": f"No API key for {provider}"}
 
     try:
@@ -1230,7 +1253,7 @@ async def generate_catalog_image(
             provider=provider,
             target_dir=catalog_dir,
             filename=f"{safe_target_id}_{uuid.uuid4().hex[:8]}",
-            provider_options=t2i,
+            provider_options={**t2i, "visual_target_type": "object"},
         )
 
         logger.info("Catalog generate result for '%s': img_url=%r", payload.target_id, img_url)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from backend.core import prompts
-from backend.core.config import settings
+from backend.engine.image_profiles import image_timeout
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -101,7 +101,7 @@ async def _generate_portrait(
             style_instruction=ctx.style_instruction,
             use_advanced_model=uses_advanced_model(ctx, "profile_model_quality", "advanced"),
         ),  # fmt: skip
-        timeout=float(settings.VISUAL_TIMEOUT),
+        timeout=image_timeout(ctx.user.t2i_settings),
         failure_label=f"NPC image generation for {ctx.template_id}/{npc['id']}",
     )
 

@@ -8,7 +8,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 
 from backend.core import prompts
-from backend.core.config import settings
+from backend.engine.image_profiles import image_timeout
 from backend.engine.manifest_apply.assets import needs_image
 from backend.engine.manifest_apply.context import ApplyContext
 from backend.engine.manifest_apply.visuals import (
@@ -139,7 +139,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
             style_instruction=ctx.style_instruction,
             use_advanced_model=uses_advanced_model(ctx, "protagonist_model_quality", "advanced"),
         ),  # fmt: skip
-        timeout=float(settings.VISUAL_TIMEOUT),
+        timeout=image_timeout(ctx.user.t2i_settings),
         failure_label=f"Protagonist image generation for {ctx.template_id}",
     )
 

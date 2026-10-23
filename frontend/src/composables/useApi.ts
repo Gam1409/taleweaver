@@ -1,3 +1,4 @@
+import { runVisualJob } from '@/services/visualJobs'
 /**
  * useApi — Thin wrapper around fetch() for TaleWeaver REST endpoints.
  *
@@ -726,12 +727,12 @@ export const api = {
   },
 
   testVision(payload: any): Promise<any> {
-    return request('/settings/test-vision', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180000 })
+    return runVisualJob('test', payload)
   },
 
   /** Catalog */
   generateCatalogImage(payload: any): Promise<any> {
-    return request('/settings/catalog/generate', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180000 })
+    return runVisualJob('catalog', payload)
   },
 
   async uploadCatalogImage(formData: FormData): Promise<any> {
@@ -843,7 +844,7 @@ export const api = {
     const body = bio !== undefined ? JSON.stringify({ bio }) : undefined
     
     try {
-      const response = await request('/users/me/profile-image/generate', { method: 'POST', body, timeoutMs: 180000 })
+      const response = await runVisualJob('avatar', body ? JSON.parse(body) : {})
       return response
     } catch (error) {
       console.error('API generateMyProfileImage error:', error)

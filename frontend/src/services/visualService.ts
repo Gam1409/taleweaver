@@ -1,3 +1,4 @@
+import { runVisualJob } from '@/services/visualJobs'
 import { API_BASE, authHeaders } from '@/services/http'
 
 export type VisualKind = 'cover' | 'protagonist' | 'scene' | 'npc' | 'object'
@@ -63,16 +64,7 @@ export const visualService = {
     id: string,
     signal?: AbortSignal
   ): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/visuals/regenerate`, {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({ target_type: kind, target_id: id, prompt: null }),
-      signal,
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Generation failed')
-    }
+    await runVisualJob('asset', { target_type: kind, target_id: id, prompt: null }, adventureId, signal)
   },
 
   async regenerateVisual(
@@ -81,20 +73,13 @@ export const visualService = {
     id: string,
     prompt: string | null,
     useAdvancedModel: boolean,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    useCurrentImage = false,
   ): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/visuals/regenerate`, {
-      method: 'POST',
-      headers: authHeaders(true),
-      body: JSON.stringify({
-        target_type: kind,
-        target_id: id,
-        prompt: prompt?.trim() || null,
-        use_advanced_model: useAdvancedModel,
-      }),
-      signal,
-    })
-    if (!res.ok) throw new Error('Failed to regenerate.')
+    await runVisualJob('asset', {
+      target_type: kind, target_id: id, prompt: prompt?.trim() || null,
+      use_advanced_model: useAdvancedModel, use_current_image: useCurrentImage,
+    }, adventureId, signal)
   },
 
   async suggestPrompt(adventureId: string, kind: VisualKind, id: string): Promise<string> {

@@ -115,7 +115,8 @@ const handleTestVision = async (payload: any) => {
     payload.height,
     payload.sampler_name,
     payload.scheduler,
-    payload.min_long_edge
+    payload.min_long_edge,
+    { comfyui_url: payload.comfyui_url, comfyui_timeout: payload.comfyui_timeout, comfyui_profiles: payload.comfyui_profiles, comfyui_profile: payload.comfyui_profile }
   )
 }
 
