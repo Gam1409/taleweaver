@@ -2,6 +2,9 @@ import { ref, computed, watch, type Ref } from 'vue'
 import DOMPurify from 'dompurify'
 import type { ChatMessage } from '@/types'
 import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
+import { knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
+
+export { normalizeVoiceTag } from './comicDialogue'
 
 export type { ComicExchange, ComicTurn, DialogueSegment } from './comicPages'
 
@@ -63,10 +66,6 @@ export function resolveNpc(name: string, entities: any[] = [], metadataMap?: Rec
   }
   return null
 }
-
-const NON_SPEAKER_LABELS = new Set([
-  'note', 'warning', 'caution', 'info', 'location', 'status', 'time', 'goal', 'quest', 'tip'
-])
 
 export function parseUserMessage(
   msg: ChatMessage | null | undefined,
@@ -152,137 +151,18 @@ export function parseUserMessage(
   return { isDialogue: false, speechText: raw }
 }
 
-/** Voice tags are always English; only normalize casing and whitespace. */
-export function normalizeVoiceTag(tag: string): string {
-  return tag.trim().toLowerCase()
-}
-
 export function parseAssistantContent(
   content: string,
   playerSheet?: any,
   entities: any[] = [],
   metadataMap?: Record<string, any>
 ): { narration: string; dialogues: DialogueSegment[] } {
-  if (!content) return { narration: '', dialogues: [] }
-
-  const dialogues: DialogueSegment[] = []
-  let cleanContent = content.replace(/\\n/g, '\n').trim()
-
-  // 1) Pre-split embedded/inline dialogues onto separate lines:
-  // Detects: (Sentence end, voice tag, or line boundary) -> Speaker: "Dialogue"
-  const inlineSpeechSplitter = /(?:^|\n|(?<=[.!?»”"“]\s+)|(?<=\]\s*))(?:\*\*([^*\n:]{2,60}?):\*\*|\*\*([^*\n:]{2,60}?)\*\*:|([A-Z\p{Lu}][\p{L}\p{N}_\s'’\-,.()]{1,60}?):)\s*(?:(?:\[[^\]\n]+\]|"[^"\n]+")\s*)?(["“„»][\s\S]*?["”«])/gu
-  cleanContent = cleanContent.replace(inlineSpeechSplitter, (m) => '\n\n' + m.trim() + '\n\n')
-
-  const lines = cleanContent.split('\n')
-  const narrationLines: string[] = []
-
-  // Matches:
-  // - [tag] Character Name: "Dialogue"
-  // - Character Name: [tag] "Dialogue"
-  // - Character Name: "[tag]" "Dialogue"
-  // - Character Name: "[tag] "Dialogue"
-  // - Character Name: "Dialogue"
-  const speechRegex = /^(?:\[([^\]\n]+)\]\s*)?(?:(\*\*([^*:\n]+?):\*\*)|(\*\*([^*:\n]+?)\*\*:)|([\p{L}\p{N}_\s'’\-,.()]{2,60}):)\s*(.*)$/u
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) continue
-
-    const match = line.match(speechRegex)
-    if (match) {
-      const isBold = Boolean(match[2] || match[4])
-      let speakerName = (match[3] || match[5] || match[6] || '').trim()
-      const rawSpeech = (match[7] || '').trim()
-      let voiceTag = match[1] ? normalizeVoiceTag(match[1]) : undefined
-      let speechText = rawSpeech
-
-      // Check if rawSpeech starts with a voice tag (e.g. [amused] "Ah...", "[amused]" "Ah...", "[amused] "Ah...")
-      const tagInSpeechMatch = speechText.match(/^"?\[([^\]\n]+)\]"?\s*"?\s*([\s\S]*)$/)
-      if (tagInSpeechMatch) {
-        if (!voiceTag) {
-          voiceTag = normalizeVoiceTag(tagInSpeechMatch[1])
-        }
-        speechText = tagInSpeechMatch[2].trim()
-      }
-
-      const hasQuotes = /^["“„»]/.test(speechText) || /["”«]$/.test(speechText)
-      speechText = speechText.replace(/^["“„»\s]+|["”«\s]+$/g, '').trim()
-      // Clean accidental leftover opening quotes from malformed tags like "[amused] ""
-      speechText = speechText.replace(/^["“„»\s]+/, '').trim()
-
-      // Guard against non-speaker labels (e.g. "Hinweis: ...", "Note: ...") when unquoted and not bold
-      if (!hasQuotes && !isBold && NON_SPEAKER_LABELS.has(speakerName.toLowerCase())) {
-        const last = dialogues[dialogues.length - 1]
-        if (last && last.isNarration) {
-          last.text += '\n\n' + line
-        } else {
-          dialogues.push({ speaker: 'Game Master', text: line, isNarration: true })
-        }
-        continue
-      }
-
-      let targetName: string | undefined = undefined
-      let targetEntity: any = undefined
-
-      const toMatch = speakerName.match(/^(.+?)\s+(?:to|\(to)\s+(.+?)\)?$/i)
-      if (toMatch) {
-        speakerName = toMatch[1].trim()
-        targetName = toMatch[2].trim()
-        targetEntity = resolveNpc(targetName, entities, metadataMap)
-      }
-
-      const resolvedNpc = resolveNpc(speakerName, entities, metadataMap)
-      if (speakerName.toLowerCase() === 'you' || speakerName.toLowerCase() === (playerSheet?.name || '').toLowerCase()) {
-        dialogues.push({
-          speaker: playerSheet?.name || 'You',
-          isPlayer: true,
-          target: targetName,
-          targetEntity,
-          avatarUrl: playerSheet?.profile_image,
-          text: speechText,
-          voiceTag,
-        })
-      } else {
-        dialogues.push({
-          speaker: resolvedNpc?.name || speakerName,
-          speakerEntity: resolvedNpc,
-          target: targetName,
-          targetEntity,
-          avatarUrl: resolvedNpc?.image_url,
-          isPlayer: false,
-          text: speechText,
-          voiceTag,
-        })
-      }
-    } else {
-      let narrationText = line
-      let voiceTag: string | undefined = undefined
-      const tagMatch = narrationText.match(/^\[([^\]\n]+)\]\s*(.*)$/)
-      if (tagMatch) {
-        voiceTag = normalizeVoiceTag(tagMatch[1])
-        narrationText = tagMatch[2].trim()
-      }
-
-      const last = dialogues[dialogues.length - 1]
-      if (last && last.isNarration) {
-        last.text += '\n\n' + narrationText
-        // Use the voice tag from the first paragraph if the new one doesn't have one
-        if (voiceTag && !last.voiceTag) {
-          last.voiceTag = voiceTag
-        }
-      } else {
-        dialogues.push({ speaker: 'Game Master', text: narrationText, isNarration: true, voiceTag })
-      }
-    }
-  }
-
-  // To keep compatibility, extract the first narration block as .narration
-  // though the UI should iterate dialogues.
-  const firstNarration = dialogues.find(d => d.isNarration)
-  return {
-    narration: firstNarration ? firstNarration.text : '',
-    dialogues,
-  }
+  return parseComicDialogue(content, {
+    playerName: playerSheet?.name,
+    playerAvatar: playerSheet?.profile_image,
+    knownNames: knownSpeakerNames(playerSheet?.name, entities, metadataMap),
+    resolveSpeaker: name => resolveNpc(name, entities, metadataMap),
+  })
 }
 
 export function renderFormattedHtml(text: string): string {
