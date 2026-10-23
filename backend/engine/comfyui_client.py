@@ -3,7 +3,8 @@
 import asyncio
 import re
 import time
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from typing import Any
 
 import httpx
@@ -11,6 +12,31 @@ import httpx
 from backend.utils.path_security import validate_provider_url
 
 MAX_IMAGE_BYTES = 32 * 1024 * 1024
+HTTP_TIMEOUT = 30
+REQUEST_STAGES = {
+    "prompt": "workflow submission",
+    "history": "job polling",
+    "upload": "reference upload",
+    "queue": "queue cleanup",
+    "object_info": "model and node discovery",
+}
+
+
+@contextmanager
+def _request_errors(stage: str) -> Iterator[None]:
+    """Keep transport exception types without logging URLs, credentials or payloads."""
+    try:
+        yield
+    except httpx.RequestError as exc:
+        hint = "Check ComfyUI connectivity and server logs."
+        if isinstance(exc, httpx.TimeoutException):
+            hint = (
+                f"The HTTP request timed out (HTTP limit: {HTTP_TIMEOUT}s); "
+                "this is separate from the workflow execution limit."
+            )
+        # Preserve the original subclass and request for callers and queue cleanup.
+        exc.args = (f"ComfyUI {stage} failed ({type(exc).__name__}). {hint}",)
+        raise
 
 
 def _error_summary(response: httpx.Response) -> str:
@@ -29,7 +55,7 @@ def _error_summary(response: httpx.Response) -> str:
 class ComfyClient:
     def __init__(self, url: str):
         self.url = validate_provider_url(url).rstrip("/")
-        self.http = httpx.AsyncClient(timeout=30, follow_redirects=False)
+        self.http = httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=False)
 
     async def __aenter__(self) -> "ComfyClient":
         return self
@@ -38,7 +64,9 @@ class ComfyClient:
         await self.http.aclose()
 
     async def json(self, method: str, path: str, **kwargs: Any) -> Any:
-        response = await self.http.request(method, self.url + path, **kwargs)
+        stage = REQUEST_STAGES.get(path.strip("/").split("/")[0], "API request")
+        with _request_errors(stage):
+            response = await self.http.request(method, self.url + path, **kwargs)
         if response.is_error:
             raise ValueError(
                 f"ComfyUI {path} returned HTTP {response.status_code}. Rejected nodes: {_error_summary(response) or 'see server logs'}."
@@ -106,8 +134,13 @@ class ComfyClient:
 
     async def _download(self, output: dict) -> bytes:
         params = {key: output.get(key, "") for key in ("filename", "subfolder", "type")}
+        with _request_errors("image download"):
+            return await self._download_bytes(params)
+
+    async def _download_bytes(self, params: dict) -> bytes:
         async with self.http.stream("GET", self.url + "/view", params=params) as response:
-            response.raise_for_status()
+            if response.is_error:
+                raise ValueError(f"ComfyUI image download returned HTTP {response.status_code}.")
             data = bytearray()
             async for part in response.aiter_bytes():
                 data.extend(part)

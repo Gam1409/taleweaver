@@ -70,10 +70,18 @@ async def adapt_body(
     )
     if mature_themes:
         system += "\n" + MATURE_THEMES_INSTRUCTION
-    body = await asyncio.wait_for(
-        llm.aexecute_simple_task(system_prompt=system, user_prompt=description, model=llm.model),
-        timeout=PROMPT_TIMEOUT,
-    )
+    try:
+        body = await asyncio.wait_for(
+            llm.aexecute_simple_task(
+                system_prompt=system, user_prompt=description, model=llm.model
+            ),
+            timeout=PROMPT_TIMEOUT,
+        )
+    except TimeoutError as exc:
+        raise TimeoutError(
+            f"Small/Utility LLM image-prompt preparation timed out (limit: {PROMPT_TIMEOUT}s). "
+            "No ComfyUI image job was submitted."
+        ) from exc
     if not isinstance(body, str) or not body.strip() or len(body) > 12000:
         raise ValueError("The prompt adapter returned an empty or invalid description.")
     # This is a word budget, not a model-specific tokenizer/context guarantee.

@@ -218,7 +218,7 @@ async def test_prompt_timeout_does_not_submit_image_job(
     monkeypatch.setattr(image_prompt_adapter, "PROMPT_TIMEOUT", 0.01)
     options = preset_options(comfy_options, workflow)
     options["_prompt_user"] = object()
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(asyncio.TimeoutError, match="Small/Utility LLM image-prompt preparation"):
         await generate_comfy_image("A traveler", options, "unused", "unused")
     assert not fake_comfy
 

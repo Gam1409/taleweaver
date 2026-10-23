@@ -69,10 +69,18 @@ async def generate_comfy_image(
     async with ComfyClient(settings.comfyui_url) as client:
         if reference:
             values["image"] = await client.upload(await asyncio.to_thread(reference_png, reference))
-        data = await asyncio.wait_for(
-            client.execute(workflow.render(values), workflow.output_node, settings.comfyui_timeout),
-            timeout=settings.comfyui_timeout,
-        )
+        try:
+            data = await asyncio.wait_for(
+                client.execute(
+                    workflow.render(values), workflow.output_node, settings.comfyui_timeout
+                ),
+                timeout=settings.comfyui_timeout,
+            )
+        except TimeoutError as exc:
+            raise TimeoutError(
+                f"ComfyUI generation timed out (limit: {settings.comfyui_timeout}s). "
+                "A running remote job may continue."
+            ) from exc
     image_format = options.get("image_format") or "png"
     prepared = await asyncio.to_thread(
         prepare_generated_image,

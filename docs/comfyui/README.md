@@ -171,6 +171,26 @@ may also leave their remote work running.
 - Compatibility checks are static and cannot guarantee available VRAM or working
   Python/native dependencies inside custom nodes.
 
+## Diagnosing a failed image
+
+Generation logs include the exception type even when the underlying exception has
+an empty message. ComfyUI transport failures identify the stage: reference upload,
+workflow submission, job polling or image download. Their messages omit URLs,
+credentials and prompt contents.
+
+Three different limits can apply: Small/Utility LLM prompt preparation (90 seconds),
+individual ComfyUI HTTP operations (30 seconds), and the configured ComfyUI generation
+budget (600 seconds by default). Increasing the generation budget does not change
+the HTTP or prompt-preparation limits. An inner timeout is reported with its own
+context, alongside the outer image limit, rather than claiming that the outer limit
+was reached. A remote job may still finish after a client timeout; submission is
+never automatically retried.
+
+To retry a missing NPC portrait, open the adventure editor's scene, find the NPC
+card and use **Quick Regen** or **Regen (Prompt)**. **Generate Missing** creates
+missing portraits. In the immersive game view, portraits are shown in the separate
+character panel, not inside each dialogue bubble.
+
 ## Validation
 
 Automated tests use a fake ComfyUI HTTP transport and isolated SQLite databases.
