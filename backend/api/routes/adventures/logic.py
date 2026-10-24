@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.core.config import settings
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.map_engine import MapEngine
+from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -543,6 +544,7 @@ class AdventureLogic:
             if ent.get("id")
         }
         contained_item_ids = AdventureLogic.collect_container_item_ids(merged_entities)
+        contained_item_ids.update(npc_possession_ids(merged_entities))
         entities: list[dict[str, Any]] = []
         for ent in merged_entities:
             ent_scene = str(ent.get("current_scene_id") or "").strip().lower().replace("-", "_").replace(" ", "_")
@@ -558,7 +560,7 @@ class AdventureLogic:
             if str(ent.get("item_type") or "").upper() == "CONTAINER":
                 ent = dict(ent)
                 ent["inventory"] = AdventureLogic.hydrate_container_inventory(ent.get("inventory"), entity_lookup)
-            entities.append(ent)
+            entities.append(player_entity_view(ent))
         return entities
 
     @staticmethod

@@ -1,6 +1,11 @@
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { runVisualJob } from '@/services/visualJobs'
 
+export interface PortraitOptions {
+  use_previous_image?: boolean
+  change_description?: string
+}
+
 export interface PortraitNpc {
   id?: string
   name?: string
@@ -25,7 +30,7 @@ export function useSessionPortrait(
   portraitUpdated: Ref<boolean>
   openPortrait: (npc: PortraitTarget) => void
   closePortrait: () => void
-  regeneratePortrait: () => Promise<void>
+  regeneratePortrait: (options?: PortraitOptions) => Promise<void>
 } {
   const portraitTarget = ref<PortraitTarget | null>(null)
   const portraitBusy = ref(false)
@@ -45,7 +50,7 @@ export function useSessionPortrait(
     portraitTarget.value = null
   }
 
-  async function regeneratePortrait(): Promise<void> {
+  async function regeneratePortrait(options: PortraitOptions = {}): Promise<void> {
     const target = portraitTarget.value
     if (!target || portraitBusy.value) return
     const gameId = sessionId.value
@@ -57,7 +62,7 @@ export function useSessionPortrait(
     try {
       const result = await runVisualJob(
         'session_npc',
-        { target_id: target.id },
+        { target_id: target.id, ...options },
         undefined,
         request.signal,
         gameId

@@ -9,6 +9,7 @@ import { ref, watch, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
 import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
+import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
@@ -33,6 +34,7 @@ import CheckpointRestoreConfirmModal from '@/components/game/CheckpointRestoreCo
 import ContextMenu from '@/components/game/ContextMenu.vue'
 import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
 import SessionNoteModal from '@/components/portal/SessionNoteModal.vue'
+import DynamicLocationImage from '@/components/game/DynamicLocationImage.vue'
 import SessionSettingsModal from '@/components/game/SessionSettingsModal.vue'
 import WorldMemoriesModal from '@/components/game/WorldMemoriesModal.vue'
 import DebugModal from '@/components/game/DebugModal.vue'
@@ -144,6 +146,7 @@ const saveSessionNote = async (note: string) => {
 
 const showSettingsModal = ref(false)
 const showMemoriesModal = ref(false)
+const showCharactersModal = ref(false)
 const isSavingSettings = ref(false)
 
 const autoSpeakNarration = ref(localStorage.getItem('tw_autoSpeakNarration') !== 'false')
@@ -1702,6 +1705,7 @@ usePlayAgentAutoLoop()
       @open-quests="showQuests = true"
       @open-chronicles="openChroniclesModal"
       @open-memories="showMemoriesModal = true"
+      @open-characters="showCharactersModal = true"
       @open-settings="showSettingsModal = true"
       @open-debug="openDebugInspector"
       @open-walkthrough="openWalkthroughPanel"
@@ -1720,7 +1724,14 @@ usePlayAgentAutoLoop()
       @exit-session="showExitModal = true"
     />
 
+    <SessionCharactersModal
+      v-if="showCharactersModal"
+      :session-id="props.id"
+      @close="showCharactersModal = false"
+      @select="openPortrait"
+    />
     <NpcPortraitModal
+      :session-id="props.id"
       v-if="portraitTarget"
       :npc="portraitTarget"
       :busy="portraitBusy"
@@ -1774,7 +1785,9 @@ usePlayAgentAutoLoop()
       @close="showNoteModal = false"
       @save="saveSessionNote"
     />
+    <DynamicLocationImage :busy="inputLocked" :session-id="props.id" :scene-id="String(sheet?.scene_id || sheet?.current_scene_id || '')" @ready="currentSceneImage = $event" />
     <SessionSettingsModal
+      :session-id="props.id"
       v-if="showSettingsModal"
       :initial-turns="sheet?.max_memory_turns ?? 10"
       :initial-compression="sheet?.enable_history_compression ?? true"

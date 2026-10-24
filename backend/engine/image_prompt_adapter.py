@@ -44,7 +44,12 @@ def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
         return legacy
     if not rules.adapt_with_llm:
         # Raw metadata keys/names can become unwanted captions in image models.
-        return str(facts.get("description") or legacy).strip()
+        body = str(facts.get("description") or legacy).strip()
+        if kind in ("npc", "protagonist"):
+            body += " " + prompts.PORTRAIT_COMPOSITION_INSTRUCTION
+        return body
+    if kind in ("npc", "protagonist"):
+        facts["composition_instruction"] = prompts.PORTRAIT_COMPOSITION_INSTRUCTION
     return json.dumps({"asset_type": kind, **facts}, ensure_ascii=False)
 
 

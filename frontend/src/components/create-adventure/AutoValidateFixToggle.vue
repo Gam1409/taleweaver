@@ -11,8 +11,8 @@ const enabled = defineModel<boolean>({ default: true })
     <span class="flex flex-col gap-0.5 text-left">
       <span class="text-xs font-bold text-slate-200">Validate &amp; auto-fix after generation</span>
       <span class="text-[11px] leading-snug text-slate-400">
-        Runs a full validation once the world is built and applies the first AI fix proposal to each finding.
-        Adds a few minutes and extra LLM calls. Remaining findings show up in the editor's Validation tab.
+        Runs a full validation once the world is built and applies the first AI fix proposal to up to 12 findings, prioritizing errors.
+        Uses extra LLM calls; local models may take longer. Remaining findings show up in the editor's Validation tab.
       </span>
     </span>
   </label>

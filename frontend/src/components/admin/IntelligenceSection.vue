@@ -542,6 +542,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         v-model:num-ctx="localForm.small_ollama_num_ctx"
         :global-url="localForm.ollama_url"
         :loading="isLoadingOllamaModels"
+        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('small')]"
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('small'), 'small')"
       />
 
@@ -736,6 +737,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         v-model:num-ctx="localForm.complex_ollama_num_ctx"
         :global-url="localForm.ollama_url"
         :loading="isLoadingOllamaModels"
+        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('complex')]"
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('complex'), 'complex')"
       />
 
@@ -912,6 +914,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         v-model:num-ctx="localForm.generator_ollama_num_ctx"
         :global-url="localForm.ollama_url"
         :loading="isLoadingOllamaModels"
+        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('generator')]"
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('generator'), 'generator')"
       />
 
@@ -1065,6 +1068,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         v-model:num-ctx="localForm.play_agent_ollama_num_ctx"
         :global-url="localForm.ollama_url"
         :loading="isLoadingOllamaModels"
+        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('play_agent')]"
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('play_agent'), 'play_agent')"
       />
 
@@ -1275,6 +1279,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         v-model:num-ctx="localForm.compression_ollama_num_ctx"
         :global-url="localForm.ollama_url"
         :loading="isLoadingOllamaModels"
+        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('compression')]"
         @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('compression'), 'compression')"
       />
 

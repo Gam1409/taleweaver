@@ -26,6 +26,8 @@ from backend.models.adventure_template import AdventureTemplate
 from backend.models.base import utc_now
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
+from backend.engine.npc_journal.lifecycle import remap_journal
+from backend.engine.npc_journal.messages import copy_messages
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
@@ -1208,16 +1210,8 @@ async def copy_session(
         )
         db.add(cloned_state)
 
-    # 6. Clone ChatMessage
-    messages_res = await db.execute(select(ChatMessage).where(ChatMessage.session_id == original_session.id))
-    original_messages = messages_res.scalars().all()
-    for msg in original_messages:
-        cloned_msg = ChatMessage(
-            session_id=copied_session.id,
-            role=msg.role,
-            content=msg.content
-        )
-        db.add(cloned_msg)
+    # 6. Clone the conversation and map evidence to its new message IDs.
+    message_ids = await copy_messages(db, original_session.id, copied_session.id)
 
     # 7. Clone WorldScene
     scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == original_session.id))
@@ -1298,7 +1292,7 @@ async def copy_session(
             is_attackable=ent.is_attackable,
             is_killable=ent.is_killable,
             inventory=deepcopy(ent.inventory),
-            metadata_json=deepcopy(ent.metadata_json),
+            metadata_json=remap_journal(ent.metadata_json, message_ids),
             voice=ent.voice
         )
         db.add(cloned_ent)

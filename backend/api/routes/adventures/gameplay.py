@@ -63,6 +63,7 @@ from backend.core.prompts import (
     BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE,
 )
 from backend.engine.adventure_updates import is_legacy_session
+from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.trigger_service import TriggerService
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -174,6 +175,7 @@ async def get_chat_history(
     prompt_suggestions = await resolve_prompt_suggestions(db, state, current_user)
     await apply_pending_sequence_progress(db, state, adventure, avatar)
     history = await load_chat_history(db, state.session_id)
+    schedule_npc_journal(state.session_id, current_user.id)
     session_status = state.session.status if state.session else None
 
     return ChatResponse(

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { Brain, ChevronDown, ChevronUp, Image as ImageIcon, ZoomIn } from 'lucide-vue-next'
+import GeneratorValidationCard, { type ValidationLogDetails } from './GeneratorValidationCard.vue'
 
 export interface LogEntry {
   timestamp: string
-  type: 'status' | 'thinking' | 'image_generation'
+  type: 'status' | 'thinking' | 'image_generation' | 'validation'
   content: string
   image_url?: string
+  details?: ValidationLogDetails
 }
 
 const props = defineProps<{
@@ -109,7 +111,14 @@ defineExpose({
           </div>
         </div>
 
-        <!-- 3. Image Generation / Reused Log -->
+        <!-- 3. Post-generation Validation Summary -->
+        <GeneratorValidationCard
+          v-else-if="log.type === 'validation'"
+          :content="log.content"
+          :details="log.details"
+        />
+
+        <!-- 4. Image Generation / Reused Log -->
         <div v-else-if="log.type === 'image_generation'" class="flex justify-center w-full max-w-[95%] sm:max-w-[90%] self-center my-1 animate-fade-in">
           <div class="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-3.5 sm:p-4 flex flex-col gap-3 items-center w-full">
             <div class="flex items-center justify-center gap-2 text-xs font-black text-cyan-400 uppercase tracking-widest">
