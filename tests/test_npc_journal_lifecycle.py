@@ -93,7 +93,7 @@ async def test_learned_character_stays_known_without_revealing_hidden_items(
     response = await auth_client.get(f"/api/adventures/portrait-session/npcs/{npc_id}")
     assert response.status_code == 200
     assert response.json()["scene_id"] is None
-    assert response.json()["inventory"] == []
+    assert "inventory" not in response.json()
     assert response.json()["entries"][0]["text"] == "Синий плащ"
 
 

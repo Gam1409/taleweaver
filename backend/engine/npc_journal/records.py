@@ -8,6 +8,7 @@ from typing import Any
 from backend.engine.npc_journal.schema import CharacterObservation
 
 JOURNAL_KEY = "npc_journal"
+_PHYSICAL_CATEGORIES = {"appearance", "equipment", "belongings"}
 
 
 def normalized(value: str) -> str:
@@ -61,16 +62,27 @@ def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) ->
     journal = journal_of(npc)
     latest: dict[str, dict] = {}
     for entry in journal.get("entries") or []:
-        if visual_only and (
-            entry.get("category") not in ("appearance", "equipment")
-            or entry.get("source") != "observed"
-        ):
+        if visual_only and entry.get("source") != "observed":
             continue
-        topic = f"{entry.get('category', 'event')}/{entry.get('topic', 'general')}"
+        category = entry.get("category", "event")
+        if visual_only and category not in _PHYSICAL_CATEGORIES:
+            continue
+        # A cloak remains the same topic when it is worn, stored, given away or lost.
+        subject = entry.get("topic", "general")
+        group = (
+            "physical" if category in _PHYSICAL_CATEGORIES and subject != "general" else category
+        )
+        topic = f"{group}/{subject}"
         latest.pop(topic, None)
         latest[topic] = entry
     facts = [
         f"{category} ({e.get('source', 'observed')}): {e.get('text', '')}"
         for category, e in reversed(list(latest.items()))
     ]
-    return (" Learned information: " + "; ".join(facts))[:limit] if facts else ""
+    prefix = " Last learned information (may be outdated; live state takes precedence): "
+    if visual_only:
+        prefix = (
+            " Last observed physical information (overrides older appearance; depict only "
+            "explicitly visible/worn items, never stored, given-away, dropped or consumed items): "
+        )
+    return (prefix + "; ".join(facts))[:limit] if facts else ""

@@ -4,6 +4,7 @@ This module contains all LLM prompts used across the system, centralized for
 better maintainability and documentation.
 """
 
+from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
 
 PUZZLE_JSON_ENFORCEMENT_BLOCK = (
@@ -242,6 +243,7 @@ GAME_MASTER_SYSTEM_PROMPT_TEMPLATE = (
     "OFF-SCENE NPC DIALOGUE RULE (CRITICAL): Only NPCs listed in the current location as PRESENT may speak directly in this turn. "
     "NPCs in other scenes/rooms MUST NOT speak, answer, shout from adjacent rooms, or converse with the protagonist. "
     "If the player addresses an NPC who is not in the current room, narrate that there is no response because that character is not here."
+    + NPC_POSSESSIONS_RULES
 )
 """
 The static part of the GM system prompt (persona, adventure frame, core rules).
@@ -289,7 +291,7 @@ _GM_MECHANICS_SHARED_RULES = (
     "GAME OVER & COMPLETION: Set `game_over: true` with a `status_note` only for fatal or inescapable situations. "
     "Set `game_completed: true` only when the entire adventure reaches its overarching finale, never for intermediate sequence/chapter milestones (the engine handles sequence transitions).\n"
     "DRAFT: `narrative_description` is a short internal draft in English (max 2 sentences). Only NPCs PRESENT in the current scene may act or speak in it.\n"
-    "Leave fields empty/false when uncertain."
+    "Leave fields empty/false when uncertain." + NPC_POSSESSIONS_MECHANICS
 )
 
 GM_MECHANICS_SUFFIX = (
@@ -473,6 +475,8 @@ GM_CHAT_PROGRESSION_RULES_PROMPT = (
     "If the player's message contains the required `code_to_unlock` value listed in AVAILABLE EXITS or LOCKED CONTAINERS, or references a required item they carry, emit `updated_entities` with `locked=false` (containers) or `updated_exits` with `is_locked=false` (exits). "
     "Do NOT require English keywords like 'unlock' or 'open' — the code/item value itself is the signal.\n"
     "DRAFT: keep `narrative_description` to one short English sentence."
+    + NPC_POSSESSIONS_RULES
+    + NPC_POSSESSIONS_MECHANICS
 )
 """
 Static system prompt for the chat-mode progression pass (Pass 1 in Chat Mode).

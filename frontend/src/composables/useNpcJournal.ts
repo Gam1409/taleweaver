@@ -20,7 +20,6 @@ export interface NpcCard {
   scene_id: string | null
   aliases: string[]
   introduction?: string
-  inventory: Array<string | { id?: string; name?: string; quantity?: number }>
   portrait_status?: string
   entry_count: number
   entries?: NpcJournalEntry[]

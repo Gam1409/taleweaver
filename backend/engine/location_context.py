@@ -58,7 +58,11 @@ def _describe_npc(e: Any, detail: str) -> str:
     char_str = f" [Character: {e.character}]" if e.character else ""
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     inv_refs = _format_item_refs(e.inventory)
-    inv_str = f" [Inventory: {', '.join(inv_refs)}]" if inv_refs else ""
+    inv_str = (
+        f" [PRIVATE GM STATE — contents require in-world access] [Inventory: {', '.join(inv_refs)}]"
+        if inv_refs
+        else ""
+    )
     defeated_str = " [DEFEATED]" if getattr(e, "is_defeated", False) else ""
     desc_str = f" - Description: {e.description}" if (e.description and detail != "concise") else ""
     notes_str = f' [Status/Notes: "{e.notes}"]' if getattr(e, "notes", None) else ""
@@ -287,7 +291,7 @@ def build_world_npcs_context(
         goal_str = f", Goal: {npc.goal}" if npc.goal else ""
         char_str = f", Character: {npc.character}" if npc.character else ""
         inv_refs = _format_item_refs(npc.inventory)
-        inv_str = f", Inventory: {', '.join(inv_refs)}" if inv_refs else ""
+        inv_str = f", PRIVATE GM Inventory: {', '.join(inv_refs)}" if inv_refs else ""
         notes_str = f', Status: "{npc.notes}"' if getattr(npc, "notes", None) else ""
         move_str = _movement_label(npc, ", ")
         lines.append(

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.npc_journal.portraits import portrait_status
-from backend.engine.npc_journal.records import journal_of, normalized
+from backend.engine.npc_journal.records import journal_of
 from backend.engine.npc_journal.worker import schedule
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -43,24 +43,6 @@ def _known(npc: WorldEntity, state: SessionState) -> bool:
     )
 
 
-def _known_inventory(items: list, journal: dict) -> list:
-    evidence = normalized(
-        " ".join(
-            str(e.get("text", "")) + " " + str(e.get("evidence", ""))
-            for e in journal.get("entries") or []
-            if e.get("category") in ("belongings", "equipment")
-        )
-    )
-    result = []
-    for item in items:
-        if not isinstance(item, (str, dict)):
-            continue
-        name = item if isinstance(item, str) else item.get("name") or item.get("id", "")
-        if name and normalized(name) in evidence:
-            result.append(item)
-    return result
-
-
 def _card(npc: WorldEntity, state: SessionState) -> dict:
     journal = journal_of(npc)
     override = (state.entity_states or {}).get(npc.id) or {}
@@ -73,7 +55,6 @@ def _card(npc: WorldEntity, state: SessionState) -> dict:
         if override.get("current_scene_id", npc.current_scene_id) == state.current_scene_id
         and not override.get("is_hidden", npc.is_hidden)
         else None,
-        "inventory": _known_inventory(override.get("inventory", npc.inventory) or [], journal),
         "aliases": journal.get("aliases", []),
         "introduction": journal.get("introduction"),
         "portrait_status": "ready"

@@ -24,11 +24,29 @@ and workflow settings. Its failure does not remove the card or learned informati
 Use **Generate portrait** to retry. Later portraits use learned visible appearance
 and equipment. They are not regenerated after every new fact.
 
-The journal remembers described belongings and item gains/losses. It does not create
-transferable loot, invent combat statistics, or assign numerical relationship scores.
-The Inventory section shows existing game inventory items supported by learned
-belongings/equipment information; other described possessions appear in history.
+The journal remembers described belongings and witnessed item gains/losses. It does
+not create transferable loot, invent combat statistics, or assign numerical
+relationship scores. **Cards never show a live inventory**, even for previously
+seen items. A player can remember giving someone a cloak without knowing whether
+they still own it. Hidden inventory changes do not update learned history.
+Ordinary scene payloads also omit NPC inventory, equipment data and private notes;
+NPC-owned objects do not appear as loose scene loot. Authoring, debug and complete
+save exports retain engine data for their existing purposes.
 New characters start without combat stats and are not attackable or killable.
+
+An NPC can agree, refuse or partially comply with an in-world request to show their
+belongings. Covert searches/theft use the game pipeline and, in RPG mode, its skill
+checks. Prompts require respecting consent and resolved outcomes and recording only
+what the player character learned. These are model instructions, not a new deterministic
+authorization/stealing system: the existing skill-check schema has no per-item binding
+between a roll and a transfer. Reliable conditional theft needs that engine extension.
+
+Gifts, storage, use/consumption, wearing, dropping and onward transfers must preserve
+the real inventory state and stable item IDs. Wearing/storing is currently represented
+by NPC notes while the item stays in their inventory; NPC equipment slots and automatic
+equipment-derived stats are not implemented here. The latest learned status of an item
+supersedes older appearance/equipment observations in prompt memory, while the journal
+retains the history. A discarded cloak is therefore not reused as the latest outfit.
 
 ## Persistence and recovery
 
@@ -74,6 +92,13 @@ require manual retry to avoid automatically submitting another paid generation.
 - Final focused journal/lifecycle run: 32 passed, including timeout recovery,
   chronological processing, ownership, aliases, Unicode, hidden items, portrait
   failures, save copy/export/import, and actual checkpoint restoration.
+- Inventory clarification: additional tests exercise card invariance under hidden
+  inventory changes, scene/API redaction, unchanged private engine state, witnessed
+  item history and real engine gift/store/drop transitions. Browser checks confirm
+  even a legacy API payload containing inventory cannot display it in the card.
+  The combined follow-up regression suite passed **175 tests**. Its touched legacy
+  `logic.py` retains the same 37 Ruff diagnostics and existing formatting issues;
+  the focused changed modules pass Ruff check/format.
 - Frontend: six journal tests and 22 dialogue tests passed; production build passed.
 - Chromium checks used actual Vue components with mocked HTTP/image responses:
   directory, character card, retry, source quotes, portrait regeneration, nested

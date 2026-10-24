@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, toRef, watch } from 'vue'
+import { onBeforeUnmount, toRef, watch } from 'vue'
 import { useNpcJournal, type NpcCard } from '@/composables/useNpcJournal'
 
 const props = defineProps<{ sessionId: string; npcId: string }>()
@@ -11,7 +11,6 @@ const timer = setInterval(() => {
 }, 5000)
 onBeforeUnmount(() => clearInterval(timer))
 const categories: Record<string, string> = { appearance: 'Appearance', background: 'Background', relationship: 'Relationships', belongings: 'Known belongings', equipment: 'Clothing and equipment', event: 'Events' }
-const inventory = computed(() => (details.value?.inventory || []).map(item => typeof item === 'string' ? item : item.name || item.id || 'Item'))
 </script>
 
 <template>
@@ -23,13 +22,9 @@ const inventory = computed(() => (details.value?.inventory || []).map(item => ty
       <p v-if="details.aliases.length" class="text-slate-400">Also known as: {{ details.aliases.join(', ') }}</p>
       <p v-if="['pending', 'running'].includes(details.portrait_status || '')" role="status" class="text-amber-200">The first portrait is being prepared. You can continue playing.</p>
       <p v-else-if="['failed', 'interrupted'].includes(details.portrait_status || '')" class="text-slate-400">The automatic portrait could not finish. Character information is saved; use Generate portrait to retry.</p>
-      <details v-if="inventory.length" class="rounded-xl border border-slate-700 p-3">
-        <summary class="cursor-pointer font-semibold">Inventory · {{ inventory.length }}</summary>
-        <ul class="mt-2 list-disc pl-5 text-slate-300"><li v-for="(item, index) in inventory" :key="index">{{ item }}</li></ul>
-      </details>
       <details class="rounded-xl border border-slate-700 p-3" open>
         <summary class="cursor-pointer font-semibold">Learned history · {{ details.entry_count }}</summary>
-        <p class="mt-2 text-xs text-slate-400">Only information learned in this session. Claims record what a character said, without assuming it is true. Known belongings may include items described in the story.</p>
+        <p class="mt-2 text-xs text-slate-400">Only information your character learned in this session. Claims record what someone said, without assuming it is true. Belongings are past observations, not a live inventory. Ask, inspect or attempt a search through play to learn more.</p>
         <p v-if="!details.entries?.length" class="mt-3 text-slate-400">No further information learned yet.</p>
         <ol class="mt-3 space-y-3">
           <li v-for="entry in details.entries" :key="entry.id" class="border-l-2 border-amber-500/30 pl-3">
