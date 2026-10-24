@@ -55,6 +55,9 @@ from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
+from backend.engine.dynamic_locations.prompts import intent_schema, prompt_block
+from backend.engine.dynamic_locations.service import discard_unentered, resolve_proposal
+from backend.engine.dynamic_locations.images import schedule_images
 from backend.engine.llm_intents import ChatProgressionIntent, MechanicsIntent, to_game_event
 from backend.engine.rule_engine import (
     RESOURCE_CAP,
@@ -1250,7 +1253,13 @@ class GameTurnManager:
                 mechanics_suffix = prompts.GM_STORY_MECHANICS_SUFFIX
 
             # Static system prompt (cacheable); quests, awards and live state go to the user message.
-            mechanics_prompt = ctx.mechanics_static_prompt + "\n\n" + mechanics_suffix
+            mechanics_prompt = (
+                ctx.mechanics_static_prompt
+                + "\n\n"
+                + mechanics_suffix
+                + "\n"
+                + prompt_block(self.state)
+            )
             mechanics_user_prompt = build_pass1_user_prompt(
                 ctx.mechanics_state_block,
                 user_msg,
@@ -1269,11 +1278,14 @@ class GameTurnManager:
                 mechanics_intent = await llm.aexecute_complex_task(
                     mechanics_prompt,
                     mechanics_user_prompt,
-                    response_model=MechanicsIntent,
+                    response_model=intent_schema(MechanicsIntent, self.state),
                     model=small_model,
                     operation="chat_turn",
                     phase="mechanics",
                 )
+                if getattr(mechanics_intent, "new_local_place", None):
+                    yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
+                await resolve_proposal(self, mechanics_intent, user_msg, history, language)
                 game_event = to_game_event(mechanics_intent)
             except Exception as e:
                 user_safe_error = _friendly_llm_error_message(e)
@@ -1611,9 +1623,9 @@ class GameTurnManager:
             progression_start = time.perf_counter()
             try:
                 progression_intent = await llm.aexecute_complex_task(
-                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT,
+                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT + "\n" + prompt_block(self.state),
                     progression_user_prompt,
-                    response_model=ChatProgressionIntent,
+                    response_model=intent_schema(ChatProgressionIntent, self.state),
                     model=small_model,
                 )
             except Exception as e:
@@ -1667,6 +1679,9 @@ class GameTurnManager:
                 notes_count=min(len(self._get_gm_notes()), GM_NOTES_PROMPT_MAX_ITEMS),
             )
 
+            if getattr(progression_intent, "new_local_place", None):
+                yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
+            await resolve_proposal(self, progression_intent, user_msg, history, language)
             game_event = self._build_progression_event(progression_intent)
 
             try:
@@ -1687,6 +1702,8 @@ class GameTurnManager:
                 await self._finalize_session("game_over", str(goe))
                 game_event.game_over = True
                 game_event.status_note = str(goe)
+
+        await discard_unentered(self)
 
         # Logic-pass completion scripts (on_logic_pass_done)
         if script_runner.scripts:
@@ -2150,6 +2167,8 @@ class GameTurnManager:
 
         await self.db.commit()
         schedule_npc_journal(self.state.session_id, self.user.id)
+        schedule_images(self.state, self.user.id, getattr(self, "_dynamic_scene_images", []))
+        self._dynamic_scene_images = []
 
         async for comp_event in self._compress_history_if_needed():
             yield comp_event

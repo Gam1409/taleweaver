@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
 from backend.api.routes.adventures.cloning import router as cloning_router
+from backend.api.routes.adventures.dynamic_locations import router as dynamic_locations_router
 from backend.api.routes.adventures.editor import router as editor_router
 from backend.api.routes.adventures.editor_entity_transfer import (
     router as editor_entity_transfer_router,
@@ -53,3 +54,5 @@ router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)
 router.include_router(session_npcs_router)
+
+router.include_router(dynamic_locations_router)

@@ -67,14 +67,16 @@ def _override_key(state: SessionState, target_id: str) -> str:
     )
 
 
-async def _settings(db: AsyncSession, state: SessionState, user: User) -> tuple[dict, str, str]:
+async def _settings(
+    db: AsyncSession, state: SessionState, user: User, kind: str = "npc"
+) -> tuple[dict, str, str]:
     snapshot = AdventureLogic.extract_manifest_snapshot(state)
     story = SimpleNamespace(original_manifest=snapshot.get("original_manifest") or {})
     if not snapshot and state.template_id:
         story = await db.get(AdventureTemplate, state.template_id) or story
     t2i = story_t2i(user.t2i_settings, story)
     validate_image_profiles(
-        SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), ["npc"]
+        SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), [kind]
     )
     meta = snapshot.get("adventure") or {}
     styles = state.selected_image_styles

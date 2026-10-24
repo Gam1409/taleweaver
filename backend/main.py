@@ -105,6 +105,9 @@ async def lifespan(_app: FastAPI):
         from backend.engine.npc_journal.worker import shutdown as stop_npc_journal
 
         await stop_npc_journal()
+        from backend.engine.dynamic_locations.images import shutdown as stop_location_images
+
+        await stop_location_images()
 
 
 app = FastAPI(

@@ -34,6 +34,7 @@ import CheckpointRestoreConfirmModal from '@/components/game/CheckpointRestoreCo
 import ContextMenu from '@/components/game/ContextMenu.vue'
 import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
 import SessionNoteModal from '@/components/portal/SessionNoteModal.vue'
+import DynamicLocationImage from '@/components/game/DynamicLocationImage.vue'
 import SessionSettingsModal from '@/components/game/SessionSettingsModal.vue'
 import WorldMemoriesModal from '@/components/game/WorldMemoriesModal.vue'
 import DebugModal from '@/components/game/DebugModal.vue'
@@ -1784,7 +1785,9 @@ usePlayAgentAutoLoop()
       @close="showNoteModal = false"
       @save="saveSessionNote"
     />
+    <DynamicLocationImage :busy="inputLocked" :session-id="props.id" :scene-id="String(sheet?.scene_id || sheet?.current_scene_id || '')" @ready="currentSceneImage = $event" />
     <SessionSettingsModal
+      :session-id="props.id"
       v-if="showSettingsModal"
       :initial-turns="sheet?.max_memory_turns ?? 10"
       :initial-compression="sheet?.enable_history_compression ?? true"

@@ -7,6 +7,8 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
+from backend.engine.dynamic_locations.schema import registry
 from backend.engine.npc_journal.lifecycle import rewind_journals
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -210,7 +212,9 @@ class SessionCheckpointService:
         state.time_system = str(state_snapshot.get("time_system") or state.time_system)
         state.time_config = deepcopy(state_snapshot.get("time_config") or {})
         state.inventory = deepcopy(state_snapshot.get("inventory") or [])
+        previous_places = deepcopy(registry(state))
         state.entity_states = deepcopy(state_snapshot.get("entity_states") or {})
+        await rewind_places(db, state, previous_places)
         state.exit_states = deepcopy(state_snapshot.get("exit_states") or {})
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])
         state.quests = deepcopy(state_snapshot.get("quests") or [])

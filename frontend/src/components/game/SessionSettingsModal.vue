@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import DynamicLocationSettings from './DynamicLocationSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
+  sessionId?: string
   initialTurns?: number
   initialCompression?: boolean
   initialAutoSpeakNarration?: boolean
@@ -14,6 +16,17 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'save', payload: { turns: number; enableCompression: boolean; autoSpeakNarration: boolean; autoSpeakDialogues: boolean }): void
 }>()
+
+const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
+const savingExploration = ref(false)
+async function saveAll(): Promise<void> {
+  if (savingExploration.value || props.isSaving) return
+  savingExploration.value = true
+  try {
+    if (exploration.value && !await exploration.value.save()) return
+    emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
+  } finally { savingExploration.value = false }
+}
 
 const turns = ref(10)
 const enableCompression = ref(true)
@@ -89,7 +102,8 @@ function handleInput(event: Event) {
       </div>
 
       <!-- Content -->
-      <div class="px-6 py-6 flex flex-col gap-6">
+      <div class="px-6 py-6 flex flex-col gap-6 max-h-[65dvh] overflow-y-auto">
+        <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
         <!-- Memory Turns Slider Panel -->
         <div class="space-y-4">
           <div class="flex justify-between items-start gap-4">
@@ -228,8 +242,8 @@ function handleInput(event: Event) {
         <button
           type="button"
           class="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-black uppercase tracking-widest hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer"
-          :disabled="props.isSaving"
-          @click="emit('save', { turns, enableCompression, autoSpeakNarration, autoSpeakDialogues })"
+          :disabled="props.isSaving || savingExploration"
+          @click="saveAll"
         >
           <span v-if="props.isSaving" class="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin"></span>
           {{ props.isSaving ? 'Saving...' : 'Save Settings' }}
