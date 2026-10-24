@@ -42,7 +42,7 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
                 "message_id": message.id,
                 "scene_id": message.scene_id,
                 "recorded_at": message.created_at.isoformat(),
-                **observation.model_dump(),
+                **observation.model_dump(exclude_none=True),
             }
         )
         existing.add(entry_id)

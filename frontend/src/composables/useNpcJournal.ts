@@ -1,6 +1,16 @@
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
 
+export type NpcAttitude = 'unknown' | 'love' | 'trust' | 'friendly' | 'neutral' | 'suspicion' | 'hostility' | 'fear' | 'mixed'
+
+export interface NpcRelationship {
+  status: NpcAttitude
+  source: 'observed' | 'claimed' | null
+  text: string | null
+  evidence: string | null
+  recorded_at?: string | null
+}
+
 export interface NpcJournalEntry {
   id: string
   category: string
@@ -10,6 +20,7 @@ export interface NpcJournalEntry {
   source: 'observed' | 'claimed'
   scene_id?: string
   recorded_at?: string
+  player_attitude?: NpcAttitude | null
 }
 
 export interface NpcCard {
@@ -20,6 +31,7 @@ export interface NpcCard {
   scene_id: string | null
   aliases: string[]
   introduction?: string
+  relationship?: NpcRelationship
   portrait_status?: string
   entry_count: number
   entries?: NpcJournalEntry[]

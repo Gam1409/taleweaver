@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, toRef, watch } from 'vue'
 import { useNpcJournal, type NpcCard } from '@/composables/useNpcJournal'
+import NpcRelationship from './NpcRelationship.vue'
 
 const props = defineProps<{ sessionId: string; npcId: string }>()
 const { details, loading, error, load } = useNpcJournal(toRef(props, 'sessionId'), toRef(props, 'npcId'))
@@ -20,6 +21,7 @@ const categories: Record<string, string> = { appearance: 'Appearance', backgroun
     <template v-if="details">
       <p v-if="details.introduction" class="text-slate-300"><span class="text-slate-400">Introduced themselves:</span> “{{ details.introduction }}”</p>
       <p v-if="details.aliases.length" class="text-slate-400">Also known as: {{ details.aliases.join(', ') }}</p>
+      <NpcRelationship :relationship="details.relationship" />
       <p v-if="['pending', 'running'].includes(details.portrait_status || '')" role="status" class="text-amber-200">The first portrait is being prepared. You can continue playing.</p>
       <p v-else-if="['failed', 'interrupted'].includes(details.portrait_status || '')" class="text-slate-400">The automatic portrait could not finish. Character information is saved; use Generate portrait to retry.</p>
       <details class="rounded-xl border border-slate-700 p-3" open>

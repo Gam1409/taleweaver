@@ -5,6 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Category = Literal["appearance", "background", "relationship", "belongings", "equipment", "event"]
+PlayerAttitude = Literal[
+    "unknown", "love", "trust", "friendly", "neutral", "suspicion", "hostility", "fear", "mixed"
+]
 
 
 class Observation(BaseModel):
@@ -15,6 +18,7 @@ class Observation(BaseModel):
     text: str = Field(min_length=1, max_length=600)
     evidence: str = Field(min_length=1, max_length=1000)
     source: Literal["observed", "claimed"]
+    player_attitude: PlayerAttitude | None = None
 
 
 class CharacterObservation(BaseModel):
@@ -71,6 +75,19 @@ An inspection request is not successful access: record only what an NPC actually
 shows or what a resolved search/theft actually reveals. Refusal or a failed attempt
 reveals no unobserved contents. Never reconstruct a complete or current inventory
 from earlier sightings. Never invent usable objects or change item ownership.
+
+ATTITUDE TOWARD THE PLAYER: For a supported change in how this NPC relates to the
+PLAYER CHARACTER, use category="relationship", topic="relationship_player", and
+player_attitude: love, trust, friendly, neutral, suspicion, hostility, fear, mixed,
+or unknown. This is the last PERCEIVED attitude, never access to hidden feelings.
+Use observed behavior or an explicit statement with exact evidence; statements
+remain claimed, not verified. Do not infer love from politeness, a gift or helpfulness.
+Neutral requires evidence; no information means unknown, not neutral. Use mixed
+for conflicting signals and explain them in text. Use unknown when new evidence
+explicitly makes the previous assessment unclear. Do not reset it for unrelated
+events. Do not confuse the player's feelings toward the NPC, or the NPC's feelings
+toward somebody else, with the NPC's attitude toward the player. For all other
+observations leave player_attitude null. Record changes only, without numerical scores.
 Names, evidence and aliases retain their original spelling. Observation text uses the
 requested session language. Category/source keys and IDs remain technical English.
 Return {"characters": []} when there is nothing to record.

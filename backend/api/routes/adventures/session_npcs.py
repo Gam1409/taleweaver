@@ -8,6 +8,7 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.npc_journal.portraits import portrait_status
 from backend.engine.npc_journal.records import journal_of
+from backend.engine.npc_journal.relationships import player_relationship
 from backend.engine.npc_journal.worker import schedule
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -57,6 +58,7 @@ def _card(npc: WorldEntity, state: SessionState) -> dict:
         else None,
         "aliases": journal.get("aliases", []),
         "introduction": journal.get("introduction"),
+        "relationship": player_relationship(journal),
         "portrait_status": "ready"
         if npc.image_url
         else portrait_status(state.session_id, npc.id, journal.get("portrait_status")),

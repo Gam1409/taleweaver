@@ -34,6 +34,27 @@ NPC-owned objects do not appear as loose scene loot. Authoring, debug and comple
 save exports retain engine data for their existing purposes.
 New characters start without combat stats and are not attackable or killable.
 
+### Attitude toward the player
+
+Each card shows the NPC's **last known attitude toward your character**: Love, Trust,
+Friendly, Neutral, Suspicion, Hostility, Fear, Mixed or Unknown. Unknown is the default;
+it does not imply neutrality. This is a qualitative reading of learned information,
+not a numerical score or access to the NPC's private feelings. Love requires explicit
+support rather than an inference from a gift, politeness or ordinary cooperation.
+
+The existing Small / Utility extraction can attach `player_attitude` to an evidenced
+`relationship` observation with the technical topic `relationship_player`. The badge
+comes from the latest such entry, independently of history pagination. Relationships
+with other people and the player's feelings toward the NPC do not set this badge.
+Statements remain labeled **Claim — not verified**, and **Why this assessment?**
+opens the explanation and source quote. Changed assessments remain in history.
+Copy/export/import preserve them and checkpoint rewind restores the earlier assessment.
+
+Older freeform relationship observations are not guessed from their language; they
+remain readable in history and show Unknown until an explicit assessment is learned.
+There is no additional model call, numeric relationship mechanic or database migration.
+The quality of the perceived assessment still depends on the extraction model.
+
 An NPC can agree, refuse or partially comply with an in-world request to show their
 belongings. Covert searches/theft use the game pipeline and, in RPG mode, its skill
 checks. Prompts require respecting consent and resolved outcomes and recording only
@@ -100,6 +121,10 @@ require manual retry to avoid automatically submitting another paid generation.
   `logic.py` retains the same 37 Ruff diagnostics and existing formatting issues;
   the focused changed modules pass Ruff check/format.
 - Frontend: six journal tests and 22 dialogue tests passed; production build passed.
+- Attitude follow-up: 69 backend tests passed, including unknown versus neutral,
+  evidence rejection, third-party relationship isolation, changes/rewind and save
+  roundtrips. Frontend tests and build passed again; Chromium covered every badge,
+  claim/observation labels, source quotes, legacy missing-field fallback and mobile layout.
 - Chromium checks used actual Vue components with mocked HTTP/image responses:
   directory, character card, retry, source quotes, portrait regeneration, nested
   dialogs and a 390px mobile viewport.
