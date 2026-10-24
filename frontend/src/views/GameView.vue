@@ -9,6 +9,7 @@ import { ref, watch, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
 import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
+import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
@@ -144,6 +145,7 @@ const saveSessionNote = async (note: string) => {
 
 const showSettingsModal = ref(false)
 const showMemoriesModal = ref(false)
+const showCharactersModal = ref(false)
 const isSavingSettings = ref(false)
 
 const autoSpeakNarration = ref(localStorage.getItem('tw_autoSpeakNarration') !== 'false')
@@ -1702,6 +1704,7 @@ usePlayAgentAutoLoop()
       @open-quests="showQuests = true"
       @open-chronicles="openChroniclesModal"
       @open-memories="showMemoriesModal = true"
+      @open-characters="showCharactersModal = true"
       @open-settings="showSettingsModal = true"
       @open-debug="openDebugInspector"
       @open-walkthrough="openWalkthroughPanel"
@@ -1720,7 +1723,14 @@ usePlayAgentAutoLoop()
       @exit-session="showExitModal = true"
     />
 
+    <SessionCharactersModal
+      v-if="showCharactersModal"
+      :session-id="props.id"
+      @close="showCharactersModal = false"
+      @select="openPortrait"
+    />
     <NpcPortraitModal
+      :session-id="props.id"
       v-if="portraitTarget"
       :npc="portraitTarget"
       :busy="portraitBusy"

@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ImagePlus, Loader2, X } from 'lucide-vue-next'
 import type { PortraitTarget } from '@/composables/useSessionPortrait'
+import NpcJournalDetails from './NpcJournalDetails.vue'
+import type { NpcCard } from '@/composables/useNpcJournal'
 import { getOriginalImageUrl } from '@/utils/game_icons'
 
-defineProps<{
+const props = defineProps<{
+  sessionId?: string
   npc: PortraitTarget
   busy: boolean
   error: string
@@ -13,6 +16,9 @@ defineProps<{
 const emit = defineEmits<{ close: []; generate: [] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const brokenImage = ref('')
+const learnedCard = ref<NpcCard | null>(null)
+const imageUrl = computed(() => props.updated ? props.npc.image_url : learnedCard.value?.image_url || props.npc.image_url)
+const automaticPortrait = computed(() => ['pending', 'running'].includes(learnedCard.value?.portrait_status || ''))
 const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
 onMounted(() => dialog.value?.showModal())
 onBeforeUnmount(() => {
@@ -30,9 +36,9 @@ onBeforeUnmount(() => {
   >
     <div class="flex items-start justify-between gap-3 mb-4">
       <div>
-        <h2 id="npc-portrait-heading" class="font-bold text-lg">{{ npc.name }} — Portrait</h2>
+        <h2 id="npc-portrait-heading" class="font-bold text-lg">{{ npc.name }} — Character</h2>
         <p class="mt-1 text-xs text-slate-400">
-          Uses the NPC's current description and your image settings. Updates this session only.
+          Character information and portrait for this session.
         </p>
       </div>
       <button
@@ -45,11 +51,11 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <img
-      v-if="npc.image_url && brokenImage !== npc.image_url"
-      :src="getOriginalImageUrl(npc.image_url)"
+      v-if="imageUrl && brokenImage !== imageUrl"
+      :src="getOriginalImageUrl(imageUrl)"
       :alt="npc.name"
       class="mx-auto h-64 max-w-full rounded-xl object-contain bg-black/20"
-      @error="brokenImage = npc.image_url || ''"
+      @error="brokenImage = imageUrl || ''"
     />
     <div v-else class="h-40 flex items-center justify-center rounded-xl bg-black/20 text-slate-500">
       No portrait yet
@@ -77,14 +83,15 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        :disabled="busy"
+        :disabled="busy || automaticPortrait"
         class="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-sm flex items-center gap-2 disabled:opacity-50"
         @click="emit('generate')"
       >
         <Loader2 v-if="busy" class="w-4 h-4 animate-spin" />
         <ImagePlus v-else class="w-4 h-4" />
-        {{ busy ? 'Generating…' : npc.image_url ? 'Regenerate portrait' : 'Generate portrait' }}
+        {{ busy || automaticPortrait ? 'Generating…' : imageUrl ? 'Regenerate portrait' : 'Generate portrait' }}
       </button>
     </div>
+    <NpcJournalDetails v-if="sessionId && npc.id" :session-id="sessionId" :npc-id="npc.id" @loaded="learnedCard = $event" />
   </dialog>
 </template>

@@ -84,6 +84,7 @@ const emit = defineEmits<{
   openQuests: []
   openChronicles: []
   openMemories: []
+  openCharacters: []
   openSettings: []
   openDebug: []
   openWalkthrough: []
@@ -242,6 +243,7 @@ defineExpose({
       @open-chronicles="emit('openChronicles')"
       @open-quests="emit('openQuests')"
       @open-memories="emit('openMemories')"
+        @open-characters="emit('openCharacters')"
       @open-settings="emit('openSettings')"
       @open-debug="emit('openDebug')"
       @toggle-mobile-interact="showMobileInteract = !showMobileInteract"
@@ -349,6 +351,7 @@ defineExpose({
         @open-chronicles="emit('openChronicles')"
         @open-walkthrough="emit('openWalkthrough')"
         @open-memories="emit('openMemories')"
+        @open-characters="emit('openCharacters')"
         @open-debug="emit('openDebug')"
         @select-suggestion="handleSuggestionSelect"
         @shuffle-suggestions="handleSuggestionShuffle"

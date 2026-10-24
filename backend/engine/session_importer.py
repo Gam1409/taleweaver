@@ -3,18 +3,17 @@ import json
 import logging
 import os
 import zipfile
-import uuid6
 from typing import Any, Optional
-from datetime import datetime
 
+import uuid6
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import settings
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.npc_journal.lifecycle import remap_journal
+from backend.engine.npc_journal.messages import restore_messages
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
-from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -195,21 +194,7 @@ class SessionImporter:
                 )
                 db.add(session_state)
 
-                # 6. Create ChatMessages
-                for msg in chat_messages_data:
-                    chat_msg = ChatMessage(
-                        id=str(uuid6.uuid7()),
-                        session_id=new_session_id,
-                        role=msg.get("role"),
-                        content=msg.get("content"),
-                    )
-                    # Restore timestamps if they exist
-                    if msg.get("created_at"):
-                        try:
-                            chat_msg.created_at = datetime.fromisoformat(msg.get("created_at"))
-                        except ValueError:
-                            pass
-                    db.add(chat_msg)
+                message_ids = restore_messages(db, new_session_id, chat_messages_data)
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
@@ -287,7 +272,7 @@ class SessionImporter:
                         is_attackable=ent.get("is_attackable", True),
                         is_killable=ent.get("is_killable", True),
                         inventory=ent.get("inventory", []),
-                        metadata_json=ent.get("metadata_json", {}),
+                        metadata_json=remap_journal(ent.get("metadata_json"), message_ids),
                     )
                     db.add(world_ent)
 
@@ -322,7 +307,7 @@ class SessionImporter:
             await db.commit()
             return new_session_id
 
-        except Exception as e:
+        except Exception:
             logger.exception("Import of ADS session failed")
             await db.rollback()
             return None

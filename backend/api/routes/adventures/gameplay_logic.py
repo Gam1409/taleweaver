@@ -49,6 +49,7 @@ from backend.api.routes.adventures.session_language import (
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
+from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.llm_intents import ChatProgressionIntent, MechanicsIntent, to_game_event
 from backend.engine.rule_engine import (
@@ -1944,7 +1945,10 @@ class GameTurnManager:
 
         # Finalize
         assistant_chat = ChatMessage(
-            session_id=self.state.session_id, role="assistant", content=response_text
+            session_id=self.state.session_id,
+            role="assistant",
+            content=response_text,
+            npc_journal={"status": "pending", "attempts": 0},
         )
         self.db.add(assistant_chat)
 
@@ -2140,6 +2144,7 @@ class GameTurnManager:
         # see advance_in_game_turn above.
 
         await self.db.commit()
+        schedule_npc_journal(self.state.session_id, self.user.id)
 
         async for comp_event in self._compress_history_if_needed():
             yield comp_event

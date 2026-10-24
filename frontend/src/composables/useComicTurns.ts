@@ -2,7 +2,7 @@ import { ref, computed, watch, type Ref } from 'vue'
 import DOMPurify from 'dompurify'
 import type { ChatMessage } from '@/types'
 import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
-import { knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
+import { knownSpeakerNames, normalizeVoiceTag, parseComicDialogue, resolveSpeakerAlias } from './comicDialogue'
 
 export { normalizeVoiceTag } from './comicDialogue'
 
@@ -36,6 +36,8 @@ export function resolveNpc(name: string, entities: any[] = [], metadataMap?: Rec
   ) || (entities || []).find(
     (e) => e.name?.toLowerCase() === norm || e.id?.toLowerCase() === norm
   )
+
+  if (!foundEntity) foundEntity = resolveSpeakerAlias(name, entities)
 
   if (!foundEntity) {
     foundEntity = (entities || []).find(

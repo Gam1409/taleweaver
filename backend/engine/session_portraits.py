@@ -16,6 +16,7 @@ from backend.core.style_catalog import resolve_style_instruction, resolve_tone_i
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.media_engine import MediaEngine
+from backend.engine.npc_journal.records import memory_context
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.game_session import GameSession
@@ -149,6 +150,7 @@ async def regenerate_session_portrait(
     raw_override = (state.entity_states or {}).get(_override_key(state, npc.id))
     override = raw_override if isinstance(raw_override, dict) else {}
     facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
+    facts["description"] = (facts.get("description") or "") + memory_context(npc, visual_only=True)
     try:
         t2i, style, tone = await _settings(db, state, user)
         request = _image_request(session_id, facts, t2i, user, style, tone)

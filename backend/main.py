@@ -99,7 +99,12 @@ async def lifespan(_app: FastAPI):
         if removed_dirs:
             logger.info("Startup cleanup removed %s stale empty session directories.", removed_dirs)
 
-    yield
+    try:
+        yield
+    finally:
+        from backend.engine.npc_journal.worker import shutdown as stop_npc_journal
+
+        await stop_npc_journal()
 
 
 app = FastAPI(

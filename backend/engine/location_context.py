@@ -10,6 +10,8 @@ Two detail levels exist:
 
 from typing import Any, Optional
 
+from backend.engine.npc_journal.records import memory_context
+
 
 def _format_item_refs(items: Optional[list]) -> list[str]:
     refs: list[str] = []
@@ -63,7 +65,7 @@ def _describe_npc(e: Any, detail: str) -> str:
     move_str = f" [{_movement_label(e, '').strip()}]"
     return (
         f"{e.name} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
-        f"{defeated_str}{notes_str}{move_str}{inv_str}{desc_str}"
+        f"{defeated_str}{notes_str}{move_str}{inv_str}{desc_str}{memory_context(e)}"
     )
 
 
@@ -290,7 +292,7 @@ def build_world_npcs_context(
         move_str = _movement_label(npc, ", ")
         lines.append(
             f"- {npc.name}: {desc}. Location: {scene_label}{pos_str}{goal_str}{char_str}"
-            f"{hidden_str}{notes_str}{move_str}{inv_str}"
+            f"{hidden_str}{notes_str}{move_str}{inv_str}{memory_context(npc, 800)}"
         )
 
     return "\n".join(lines) + "\n"
