@@ -32,6 +32,10 @@ from backend.api.routes.adventures.turn_pass_flow import (
     run_guardrail_chain,
     turn_anchor,
 )
+from backend.api.routes.adventures.scene_transition_intent import (
+    confirm_scene_transition,
+    location_resolution,
+)
 from backend.api.routes.adventures.turn_prompt_layout import (
     build_exit_description_task,
     build_narration_messages,
@@ -1635,13 +1639,12 @@ class GameTurnManager:
                 }
                 move_is_valid = (
                     progression_intent.new_scene_id in allowed_open_destinations
-                    and await self._is_explicit_scene_transition_request(user_msg)
-                    and self._message_mentions_transition_target(
+                    and await confirm_scene_transition(
+                        self.adventure_gen.classify_short_intent,
                         user_msg=user_msg,
                         target_scene_id=progression_intent.new_scene_id,
-                        exit_label=progression_intent.exit_label,
-                        reduced_scenes=reduced_scenes,
-                        reduced_exits=reduced_exits,
+                        scenes=reduced_scenes,
+                        exits=reduced_exits,
                     )
                 )
                 if not move_is_valid:
@@ -1775,7 +1778,9 @@ class GameTurnManager:
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
 
-        reminders: list[str] = []
+        reminders: list[str] = [
+            location_resolution(scene_id_before_turn, self.state.current_scene_id)
+        ]
         if use_vocal_tags:
             reminders.append(
                 "Use tone tags like [excited] at the start of paragraphs, and inline vocal bursts like <sigh> or <laugh> where appropriate."
@@ -2426,16 +2431,6 @@ class GameTurnManager:
 
     async def _is_generation_retry_request(self, *args, **kwargs) -> bool:
         return await self.adventure_gen.is_generation_retry_request(*args, **kwargs)
-
-    @staticmethod
-    def _contains_transition_movement_cue(text: str) -> bool:
-        return TurnAdventureGenManager.contains_transition_movement_cue(text)
-
-    def _message_mentions_transition_target(self, *args, **kwargs) -> bool:
-        return self.adventure_gen.message_mentions_transition_target(*args, **kwargs)
-
-    async def _is_explicit_scene_transition_request(self, *args, **kwargs) -> bool:
-        return await self.adventure_gen.is_explicit_scene_transition_request(*args, **kwargs)
 
     def _set_last_ag_generation_request(self, *args, **kwargs) -> None:
         self.adventure_gen.set_last_ag_generation_request(*args, **kwargs)

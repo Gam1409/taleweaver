@@ -44,11 +44,6 @@ class TurnAdventureGenManager:
         self.manager = manager
 
     @staticmethod
-    def _normalize_target_token(token: str) -> str:
-        cleaned = re.sub(r"[^a-zA-Z0-9_\-\s]", " ", token or "")
-        return re.sub(r"\s+", " ", cleaned).strip().lower()
-
-    @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any] | None:
         raw = (text or "").strip()
         if not raw:
@@ -191,113 +186,6 @@ class TurnAdventureGenManager:
             r"\bplease retry\b",
         )
         return any(re.search(p, text) for p in retry_patterns)
-
-    @staticmethod
-    def contains_transition_movement_cue(text: str) -> bool:
-        lowered = (text or "").strip().lower()
-        if not lowered:
-            return False
-
-        movement_patterns = (
-            r"\b(go|going|move|moving|walk|walking|run|running|head|enter|proceed|travel|leave)\b",
-            r"\b(go to|walk to|move to|head to|enter the|step into)\b",
-            r"\b(gehe|geh|laufe|renne|betrete|bewege|reise|verlasse)\b",
-            r"\b(gehe in|gehe zu|betrete den|betrete die|ins|in den|in die)\b",
-        )
-        return any(re.search(p, lowered) for p in movement_patterns)
-
-    def message_mentions_transition_target(
-        self,
-        *,
-        user_msg: str,
-        target_scene_id: str,
-        exit_label: str | None,
-        reduced_scenes: list[dict],
-        reduced_exits: list[dict],
-    ) -> bool:
-        lowered = (user_msg or "").strip().lower()
-        if not lowered:
-            return False
-
-        normalized_message = self._normalize_target_token(lowered)
-        if not normalized_message:
-            return False
-
-        aliases: set[str] = set()
-
-        def _add_alias(raw: Any) -> None:
-            token = self._normalize_target_token(str(raw or ""))
-            if token and len(token) >= 3:
-                aliases.add(token)
-
-        target_scene_id = str(target_scene_id or "").strip()
-        _add_alias(target_scene_id)
-        _add_alias(exit_label)
-
-        for scene in reduced_scenes or []:
-            if str(scene.get("id") or "").strip() == target_scene_id:
-                _add_alias(scene.get("label"))
-                break
-
-        for ex in reduced_exits or []:
-            if str(ex.get("to_scene_id") or "").strip() == target_scene_id:
-                _add_alias(ex.get("label"))
-
-        if any(alias in normalized_message for alias in aliases):
-            return True
-
-        # With exactly one open destination, allow directional movement phrasing without explicit label mention.
-        open_destinations = {
-            str(ex.get("to_scene_id") or "").strip()
-            for ex in (reduced_exits or [])
-            if not bool(ex.get("is_locked")) and str(ex.get("to_scene_id") or "").strip()
-        }
-        directional_patterns = (
-            r"\b(into|inside|outside|out|downstairs|upstairs|north|south|east|west|left|right)\b",
-            r"\b(rein|hinein|hinaus|raus|runter|hinunter|hoch|hinauf)\b",
-            r"\bnach\s+(links|rechts|oben|unten)\b",
-        )
-        if len(open_destinations) == 1 and target_scene_id in open_destinations:
-            return any(re.search(p, lowered) for p in directional_patterns)
-
-        return False
-
-    async def is_explicit_scene_transition_request(self, user_msg: str) -> bool:
-        text = (user_msg or "").strip().lower()
-        if not text:
-            return False
-
-        intent_prompt = (
-            "Decide whether the user is explicitly requesting immediate physical movement to another scene now "
-            "(not hypothetical/planning talk). "
-            'Return ONLY strict JSON with schema: {"explicit_transition": true|false}.'
-        )
-        parsed = await self.classify_short_intent(
-            user_msg, intent_prompt, "scene_transition_intent"
-        )
-        transition_val = (parsed or {}).get("explicit_transition")
-        if isinstance(transition_val, bool):
-            return transition_val and self.contains_transition_movement_cue(text)
-
-        # Ignore hypothetical/planning phrasing that should not immediately move the player.
-        hypothetical_patterns = (
-            r"\bif\b",
-            r"\bwould\b",
-            r"\bcould\b",
-            r"\bmight\b",
-            r"\bmaybe\b",
-            r"\bplan\b",
-            r"\bint(en)?d\b",
-            r"\bwenn\b",
-            r"\bfalls\b",
-            r"\bvielleicht\b",
-            r"\bwürde\b",
-            r"\bkönnte\b",
-        )
-        if any(re.search(p, text) for p in hypothetical_patterns):
-            return False
-
-        return self.contains_transition_movement_cue(text)
 
     def set_last_ag_generation_request(self, request: AdventureGenerationRequest) -> None:
         exit_states = dict(self.manager.state.exit_states or {})
