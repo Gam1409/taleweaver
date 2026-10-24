@@ -1,0 +1,171 @@
+"""Regenerate portraits for session-owned NPCs without restarting their adventure."""
+
+import asyncio
+from copy import deepcopy
+from types import SimpleNamespace
+from uuid import uuid4
+
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.api.routes.adventures.logic import AdventureLogic
+from backend.core import prompts
+from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
+from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
+from backend.engine.image_prompt_adapter import asset_source
+from backend.engine.media_engine import MediaEngine
+from backend.engine.story_visual_presets import story_t2i
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.game_session import GameSession
+from backend.models.session_state import SessionState
+from backend.models.user import User
+from backend.models.world_entity import WorldEntity
+from backend.utils.path_security import safe_data_path, sanitize_path_component
+
+
+class SessionPortraitRequest(BaseModel):
+    target_id: str = Field(min_length=1, max_length=128)
+
+
+async def _context(
+    db: AsyncSession, session_id: str, target_id: str, user_id: str
+) -> tuple[SessionState, WorldEntity]:
+    query = (
+        select(SessionState)
+        .join(GameSession, GameSession.id == SessionState.session_id)
+        .where(GameSession.id == session_id, GameSession.user_id == user_id)
+        .execution_options(populate_existing=True)
+    )
+    state = (await db.execute(query)).scalar_one_or_none()
+    if not state:
+        raise HTTPException(404, "Session not found.")
+    query = (
+        select(WorldEntity)
+        .where(
+            WorldEntity.session_id == session_id,
+            WorldEntity.id == target_id,
+            WorldEntity.entity_type.in_(["NPC", "npc"]),
+        )
+        .execution_options(populate_existing=True)
+    )
+    npc = (await db.execute(query)).scalar_one_or_none()
+    if not npc:
+        raise HTTPException(404, "NPC not found in this session.")
+    return state, npc
+
+
+def _override_key(state: SessionState, target_id: str) -> str:
+    return next(
+        (key for key in (state.entity_states or {}) if key.strip().upper() == target_id.upper()),
+        target_id,
+    )
+
+
+async def _settings(db: AsyncSession, state: SessionState, user: User) -> tuple[dict, str, str]:
+    snapshot = AdventureLogic.extract_manifest_snapshot(state)
+    story = SimpleNamespace(original_manifest=snapshot.get("original_manifest") or {})
+    if not snapshot and state.template_id:
+        story = await db.get(AdventureTemplate, state.template_id) or story
+    t2i = story_t2i(user.t2i_settings, story)
+    validate_image_profiles(
+        SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), ["npc"]
+    )
+    meta = snapshot.get("adventure") or {}
+    styles = state.selected_image_styles
+    tone = state.selected_tone
+    return (
+        t2i,
+        resolve_style_instruction(
+            styles if styles is not None else meta.get("selected_image_styles"),
+            user.image_styles_catalog,
+        ),
+        resolve_tone_instruction(
+            tone if tone is not None else meta.get("selected_tone"), user.tone_catalog
+        ),
+    )
+
+
+def _image_request(
+    session_id: str, npc: dict, t2i: dict, user: User, style: str, tone: str
+) -> dict:
+    profile = "advanced" if advanced_for(t2i, "npc") else "simple"
+    provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
+    options = {
+        **t2i,
+        "visual_target_type": "npc",
+        "_prompt_user": user,
+        "comfyui_profile": profile,
+        "_prompt_prepared": False,
+        **{
+            key: t2i.get(f"{profile}_{key}")
+            for key in ("steps", "cfg_scale", "sampler_name", "scheduler")
+        },
+    }
+    if provider in ("stable_diffusion", "ollama", "comfyui"):
+        width, height = MediaEngine._resolve_sd_dimensions(
+            "NPC", t2i.get(f"{profile}_min_long_edge")
+        )
+        options.update(width=width, height=height)
+    prompt = asset_source(t2i, "npc", prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(**npc), **npc)
+    if tone:
+        prompt += f" Mood: {tone}"
+    ext = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
+    return {
+        "prompt": prompt,
+        "model": t2i.get(f"{profile}_model"),
+        "provider": provider,
+        "api_key": MediaEngine._resolve_api_key(provider, user.encrypted_api_keys or {}),
+        "adventure_id": session_id,
+        "target_dir": safe_data_path("adventures", "sessions", session_id, "visuals", "entities"),
+        "filename": f"npc_{uuid4().hex}.{ext}",
+        "provider_options": options,
+        "style_instruction": style,
+    }
+
+
+async def _save_portrait(
+    db: AsyncSession, session_id: str, target_id: str, user_id: str, image_url: str
+) -> None:
+    # Re-read after the slow generation; only the portrait changes, never stale HP or location.
+    state, npc = await _context(db, session_id, target_id, user_id)
+    npc.image_url = image_url
+    key = _override_key(state, target_id)
+    override = (state.entity_states or {}).get(key)
+    if isinstance(override, dict) and "image_url" in override:
+        overrides = deepcopy(state.entity_states)
+        overrides[key]["image_url"] = image_url
+        state.entity_states = overrides
+    await db.commit()
+
+
+async def regenerate_session_portrait(
+    session_id: str, payload: SessionPortraitRequest, db: AsyncSession, user: User
+) -> dict:
+    if sanitize_path_component(session_id) != session_id:
+        raise HTTPException(404, "Session not found.")
+    state, npc = await _context(db, session_id, payload.target_id, user.id)
+    raw_override = (state.entity_states or {}).get(_override_key(state, npc.id))
+    override = raw_override if isinstance(raw_override, dict) else {}
+    facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
+    try:
+        t2i, style, tone = await _settings(db, state, user)
+        request = _image_request(session_id, facts, t2i, user, style, tone)
+        user_id = user.id
+        # Release the read transaction while the provider is working.
+        await db.commit()
+        image_url = await asyncio.wait_for(
+            MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
+        )
+        if not image_url:
+            raise HTTPException(502, "No portrait was returned. The previous image was kept.")
+        await _save_portrait(db, session_id, payload.target_id, user_id, image_url)
+    except TimeoutError as exc:
+        raise HTTPException(
+            504,
+            "Portrait generation timed out. The previous image was kept; a remote job may still be running.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"status": "success", "image_url": image_url, "target_id": payload.target_id}

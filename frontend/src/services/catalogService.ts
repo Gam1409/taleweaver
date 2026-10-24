@@ -40,19 +40,11 @@ class CatalogService {
 
   // ============ UTILITIES ============
 
-  /**
-   * Convert a string to a URL-safe slug.
-   * Used to generate IDs from item names.
-   * Example: "My Test Item" → "my-test-item"
-   */
-  private slugify(value: string): string {
-    return (
-      value
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '') || 'item'
-    )
+  /** Allocate once so saving, renaming and image uploads address the same tile. */
+  private ensureId(item: CatalogTile): string {
+    const id = item.id?.trim() || crypto.randomUUID()
+    item.id = id
+    return id
   }
 
   // ============ CATALOG ITEM MANAGEMENT ============
@@ -71,7 +63,7 @@ class CatalogService {
     // Normalize item data
     const normalizedItem: CatalogTile = {
       ...item,
-      id: item.id?.trim() || this.slugify(item.name),
+      id: this.ensureId(item),
       name: item.name.trim(),
       description: (item.description || '').trim(),
       instruction: (item.instruction || '').trim(),
@@ -176,11 +168,11 @@ class CatalogService {
     }
 
     // Validate: item needs a name or ID
-    const targetId = item.id || this.slugify(item.name)
-    if (!targetId) {
+    if (!item.id?.trim() && !item.name?.trim()) {
       this.statusMessage.value = { type: 'error', text: 'Please provide a name before generating an image.' }
       return
     }
+    const targetId = this.ensureId(item)
 
     // Set loading state
     const loadingKey = index !== null ? `${type}_${index}` : 'modal_generating'
@@ -233,7 +225,7 @@ class CatalogService {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('catalog_type', type)
-    formData.append('target_id', item.id || this.slugify(item.name))
+    formData.append('target_id', this.ensureId(item))
 
     try {
       const data = await api.uploadCatalogImage(formData)

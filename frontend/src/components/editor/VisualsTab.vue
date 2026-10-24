@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StoryVisualPresets from './StoryVisualPresets.vue'
 const props = defineProps<{
   form: any
   adventure: any
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="space-y-8 animate-page-in">
+    <StoryVisualPresets v-if="adventure?.id" :adventure-id="adventure.id" />
     <section v-if="imageStylesCatalog.length" class="space-y-6 bg-slate-900/40 p-8 rounded-[2rem] border border-white/5 backdrop-blur-md shadow-xl">
      <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">

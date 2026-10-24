@@ -39,6 +39,7 @@ from backend.engine.world_schemas import (  # noqa: F401
 )
 from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.user import User
+from backend.utils.path_security import sanitize_path_component
 from backend.utils.text_utils import slugify
 
 logger = logging.getLogger(__name__)
@@ -91,50 +92,17 @@ def _validate_t2i_prerequisites(
     need_item_images: bool,
     need_protagonist_image: bool,
 ) -> None:
-    if not user:
-        return
-    needs_any_images = (
-        need_scene_images or need_npc_images or need_item_images or need_protagonist_image
-    )
-    if not needs_any_images:
-        return
+    from backend.engine.image_profiles import validate_image_profiles
 
-    t2i_settings = user.t2i_settings or {}
-    if not t2i_settings:
-        raise ValueError(
-            "Image generation is enabled, but no image settings are configured. "
-            "Open Settings and configure Text-to-Image provider and models."
-        )
-
-    if need_scene_images:
-        model = (t2i_settings.get("advanced_model") or "").strip()
-        if not model:
-            raise ValueError(
-                "Image generation is enabled for scenes, but advanced_model is missing."
-            )
-        provider = (
-            t2i_settings.get("advanced_model_provider") or t2i_settings.get("provider", "openai")
-        ).lower()
-        if provider not in ("ollama", "stable_diffusion"):
-            if not settings.get_env_api_key(provider):
-                encrypted_api_keys = user.encrypted_api_keys or {}
-                if provider not in encrypted_api_keys:
-                    raise ValueError(f"API key missing for advanced image provider '{provider}'.")
-
-    if need_npc_images or need_item_images or need_protagonist_image:
-        model = (t2i_settings.get("simple_model") or "").strip()
-        if not model:
-            raise ValueError(
-                "Image generation is enabled for portraits/items, but simple_model is missing."
-            )
-        provider = (
-            t2i_settings.get("simple_model_provider") or t2i_settings.get("provider", "openai")
-        ).lower()
-        if provider not in ("ollama", "stable_diffusion"):
-            if not settings.get_env_api_key(provider):
-                encrypted_api_keys = user.encrypted_api_keys or {}
-                if provider not in encrypted_api_keys:
-                    raise ValueError(f"API key missing for simple image provider '{provider}'.")
+    requested = {
+        "scene": need_scene_images,
+        "npc": need_npc_images,
+        "object": need_item_images,
+        "protagonist": need_protagonist_image,
+    }
+    kinds = [kind for kind, enabled in requested.items() if enabled]
+    if kinds:
+        validate_image_profiles(user, [*kinds, "cover"])
 
 
 async def _publish_generation_status(
@@ -603,10 +571,11 @@ class WorldGenerator:
         )
         from backend.models.avatar import Avatar  # noqa: PLC0415
 
-        if not re.match(r"^[a-zA-Z0-9_-]{1,128}$", template_id):
+        if not template_id or sanitize_path_component(template_id) != template_id:
             raise ValueError("Invalid template_id")
-        if cover_source_adventure_id and not re.match(
-            r"^[a-zA-Z0-9_-]{1,128}$", cover_source_adventure_id
+        if (
+            cover_source_adventure_id
+            and sanitize_path_component(cover_source_adventure_id) != cover_source_adventure_id
         ):
             raise ValueError("Invalid cover_source_adventure_id")
 
@@ -764,8 +733,12 @@ class WorldGenerator:
                 adventure.language = language  # type: ignore[assignment]
             if not adventure.origin_id:
                 adventure.origin_id = manifest_dict.get("origin_id") or template_id  # type: ignore[assignment]
-            if not adventure.original_manifest:
-                adventure.original_manifest = manifest_dict  # type: ignore[assignment]
+            if not adventure.original_manifest or set(adventure.original_manifest) <= {
+                "visual_presets"
+            }:
+                from backend.engine.story_visual_presets import preserve_story_presets
+
+                adventure.original_manifest = preserve_story_presets(manifest_dict, adventure)  # type: ignore[assignment]
             await db.commit()
 
         # Load source assets for cover-mode image reuse

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { AdventureTemplateSummary } from '@/types'
+import type { LibrarySessions } from '@/composables/librarySessions'
 import { Loader2, BookOpen } from 'lucide-vue-next'
 import PortalCreateAdventureCard from './PortalCreateAdventureCard.vue'
 import GenerateWorldCard from './GenerateWorldCard.vue'
@@ -10,6 +11,8 @@ import AdventureTemplateCard from './AdventureTemplateCard.vue'
 
 const props = defineProps<{
   visibleTemplates: AdventureTemplateSummary[]
+  resumeSessions?: LibrarySessions
+  isResuming?: boolean
   pendingCards: any[]
   isSeeding: boolean
   loadingWordIndex: number
@@ -27,6 +30,7 @@ const emit = defineEmits<{
   (e: 'remove-failed-pending', adventureId: string, kind: 'creation' | 'import'): void
   (e: 'cancel-pending', adventureId: string): void
   (e: 'start-session', templateId: string): void
+  (e: 'resume', gameId: string): void
   (e: 'update-adventure', templateId: string): void
   (e: 'migrate', template: any): void
   (e: 'cover', templateId: string): void
@@ -112,10 +116,13 @@ onUnmounted(() => {
         v-for="entry in visibleTemplates"
         :key="entry.template_id"
         :template="entry"
+        :resume-session="props.resumeSessions?.get(entry.template_id)"
+        :is-resuming="props.isResuming"
         :is-starting-session="isStartingSession"
         :is-starting-this-template="startingSessionTemplateId === entry.template_id"
         :is-updating="props.updatingTemplateIds ? props.updatingTemplateIds.has(entry.template_id) : false"
         @start-session="(id) => $emit('start-session', id)"
+        @resume="(id) => $emit('resume', id)"
         @update-adventure="(id) => $emit('update-adventure', id)"
         @migrate="(tpl) => $emit('migrate', tpl)"
         @cover="(id) => $emit('cover', id)"

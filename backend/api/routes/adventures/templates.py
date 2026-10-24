@@ -1111,13 +1111,14 @@ async def export_adventure_adz(
     import io
 
     from backend.engine.adventure_exporter import AdventureExporter
+    from backend.utils.download_headers import attachment_disposition
 
     try:
         zip_data = await AdventureExporter.export_adz(db, template_id)
         return StreamingResponse(
             io.BytesIO(zip_data),
             media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename=adventure_{template_id}.adz"},
+            headers={"Content-Disposition": attachment_disposition(f"adventure_{template_id}.adz")},
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

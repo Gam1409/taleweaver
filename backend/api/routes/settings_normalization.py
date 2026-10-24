@@ -292,6 +292,9 @@ def normalize_tts_settings(tts_settings: Optional[dict]) -> dict:
 
 
 _T2I_FALLBACK: dict[str, Any] = {
+    "comfyui_url": "http://127.0.0.1:8188",
+    "comfyui_timeout": 600,
+    "comfyui_profiles": {},
     "simple_model": "",
     "simple_model_provider": "openai",
     "advanced_model": "",
@@ -331,6 +334,9 @@ _T2I_DERIVED_DEFAULTS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
 
 # Keys filled with their fallback value when missing from stored settings.
 _T2I_STATIC_DEFAULT_KEYS = (
+    "comfyui_url",
+    "comfyui_timeout",
+    "comfyui_profiles",
     "stable_diffusion_url",
     "ollama_url",
     "cfg_scale",
@@ -361,4 +367,6 @@ def normalize_t2i_settings(t2i_settings: Optional[dict]) -> dict:
     for key in _T2I_STATIC_DEFAULT_KEYS:
         normalized.setdefault(key, _T2I_FALLBACK[key])
     _apply_openrouter_models(normalized, ("simple", "advanced"))
-    return normalized
+    from backend.core.comfyui_presets import normalize_comfy_presets
+
+    return normalize_comfy_presets(normalized)

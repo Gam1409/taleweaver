@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import shutil
 import time
 import uuid
@@ -10,14 +9,12 @@ from copy import deepcopy
 from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import GameSessionResponse
 from backend.schemas.session import GameSessionUpdate
-from backend.engine.session_exporter import SessionExporter
 from backend.engine.session_importer import SessionImporter
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.item_logic import normalize_equipment_keys
@@ -62,7 +59,6 @@ ITEM_INTEGRITY_FIELDS = [
     "mana_change",
 ]
 
-_SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 
 
@@ -1600,35 +1596,6 @@ async def restore_session_checkpoint(
         checkpoint_id=checkpoint_id,
         deleted_messages=deleted_messages,
     )
-
-
-@router.get("/sessions/{game_id}/export")
-async def export_session_ads(
-    game_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Exports the session as a portable .ads (ZIP) bundle including assets."""
-    import io
-    try:
-        # Verify ownership
-        result = await db.execute(
-            select(GameSession).where((GameSession.id == game_id) & (GameSession.user_id == current_user.id))
-        )
-        if not result.scalars().first():
-            raise HTTPException(status_code=404, detail="Session not found.")
-            
-        zip_data = await SessionExporter.export_ads(db, game_id)
-        return StreamingResponse(
-            io.BytesIO(zip_data),
-            media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename=session_{game_id}.ads"}
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.exception("ADS Export failed")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/sessions/import")

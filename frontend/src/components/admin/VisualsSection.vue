@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import ComfySettingsEditor from './ComfySettingsEditor.vue'
+import ComfyPresetSelector from './ComfyPresetSelector.vue'
+import type { ComfyOptions } from '@/types/comfyui'
 
 const props = defineProps<{
   t2iForm: any
@@ -35,6 +38,17 @@ watch(() => props.t2iForm, (newVal) => {
   }
 }, { deep: true })
 
+const comfyOptions = computed<ComfyOptions>({
+  get: () => ({
+    comfyui_url: localForm.value.comfyui_url ?? 'http://127.0.0.1:8188',
+    comfyui_timeout: localForm.value.comfyui_timeout ?? 600,
+    comfyui_profiles: localForm.value.comfyui_profiles ?? {},
+    comfyui_presets: localForm.value.comfyui_presets ?? {},
+    comfyui_assignments: localForm.value.comfyui_assignments ?? {},
+  }),
+  set: value => { localForm.value = { ...localForm.value, ...value } },
+})
+
 // Advanced tuning accordion state
 const showSimpleAdvanced = ref(false)
 const showAdvancedTuning = ref(false)
@@ -46,7 +60,7 @@ const missingProviders = computed(() => {
   ])
   const missing: string[] = []
   for (const p of providers) {
-    if (p && p !== 'ollama' && p !== 'stable_diffusion' && !props.configuredKeys?.[p]) {
+    if (p && p !== 'ollama' && p !== 'stable_diffusion' && p !== 'comfyui' && !props.configuredKeys?.[p]) {
       missing.push(p)
     }
   }
@@ -54,7 +68,7 @@ const missingProviders = computed(() => {
 })
 
 const isProviderConfigured = (providerId: string) => {
-  if (providerId === 'ollama' || providerId === 'stable_diffusion') return true
+  if (providerId === 'ollama' || providerId === 'stable_diffusion' || providerId === 'comfyui') return true
   return Boolean(props.configuredKeys?.[providerId])
 }
 
@@ -196,7 +210,9 @@ const handleSave = () => {
 
 const testSimple = () => {
   emit('test', { 
-    key: 'simple_v', 
+    key: 'simple_v',
+    ...comfyOptions.value,
+    comfyui_profile: 'simple',
     model: localForm.value.simple_model, 
     provider: localForm.value.simple_model_provider,
     ollama_url: localForm.value.ollama_url,
@@ -211,7 +227,9 @@ const testSimple = () => {
 
 const testAdvanced = () => {
   emit('test', { 
-    key: 'advanced_v', 
+    key: 'advanced_v',
+    ...comfyOptions.value,
+    comfyui_profile: 'advanced',
     model: localForm.value.advanced_model, 
     provider: localForm.value.advanced_model_provider,
     ollama_url: localForm.value.ollama_url,
@@ -415,7 +433,7 @@ const testAdvanced = () => {
         <button 
           type="button"
           @click="testSimple"
-          :disabled="testResults.simple_v?.status === 'loading' || !localForm.simple_model"
+          :disabled="testResults.simple_v?.status === 'loading' || (localForm.simple_model_provider !== 'comfyui' && !localForm.simple_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
           <i v-if="testResults.simple_v?.status === 'loading'" class="ra ra-cycle animate-spin text-cyan-400"></i>
@@ -438,7 +456,8 @@ const testAdvanced = () => {
           </select>
         </div>
 
-        <div>
+        <ComfyPresetSelector v-if="localForm.simple_model_provider === 'comfyui'" v-model="comfyOptions" profile="simple" />
+        <div v-if="localForm.simple_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
             :value="isCustomSimple ? 'custom' : localForm.simple_model"
@@ -455,7 +474,7 @@ const testAdvanced = () => {
       </div>
 
       <!-- Custom Model ID -->
-      <div v-if="isCustomSimple" class="pt-1">
+      <div v-if="isCustomSimple && localForm.simple_model_provider !== 'comfyui'" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input 
           v-model="localForm.simple_model" 
@@ -583,7 +602,7 @@ const testAdvanced = () => {
         <button 
           type="button"
           @click="testAdvanced"
-          :disabled="testResults.advanced_v?.status === 'loading' || !localForm.advanced_model"
+          :disabled="testResults.advanced_v?.status === 'loading' || (localForm.advanced_model_provider !== 'comfyui' && !localForm.advanced_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
           <i v-if="testResults.advanced_v?.status === 'loading'" class="ra ra-cycle animate-spin text-violet-400"></i>
@@ -606,7 +625,8 @@ const testAdvanced = () => {
           </select>
         </div>
 
-        <div>
+        <ComfyPresetSelector v-if="localForm.advanced_model_provider === 'comfyui'" v-model="comfyOptions" profile="advanced" />
+        <div v-if="localForm.advanced_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
             :value="isCustomAdvanced ? 'custom' : localForm.advanced_model"
@@ -623,7 +643,7 @@ const testAdvanced = () => {
       </div>
 
       <!-- Custom Model ID -->
-      <div v-if="isCustomAdvanced" class="pt-1">
+      <div v-if="isCustomAdvanced && localForm.advanced_model_provider !== 'comfyui'" class="pt-1">
         <label class="block text-xs font-bold text-slate-400 mb-1">Custom Model Identifier</label>
         <input 
           v-model="localForm.advanced_model" 
@@ -777,6 +797,11 @@ const testAdvanced = () => {
           </div>
         </div>
       </div>
+
+      <ComfySettingsEditor
+        v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui'"
+        v-model="comfyOptions"
+      />
 
       <!-- Stable Diffusion Endpoint -->
       <div 

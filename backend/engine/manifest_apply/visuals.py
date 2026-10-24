@@ -56,13 +56,23 @@ async def generate_image(
     ctx.image_counters["attempts"] += 1
     try:
         image_url = await asyncio.wait_for(factory(), timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.warning("%s timed out after %ss", failure_label, timeout)
+    except asyncio.TimeoutError as exc:
+        logger.warning(
+            "%s timed out: %s (overall image limit: %ss)",
+            failure_label,
+            str(exc).strip() or type(exc).__name__,
+            timeout,
+        )
         return None
     except Exception as exc:
         if wg.is_image_moderation_error(exc):
             ctx.image_counters["moderation"] += 1
-        logger.warning("%s failed: %s", failure_label, exc)
+        logger.warning(
+            "%s failed (%s): %s",
+            failure_label,
+            type(exc).__name__,
+            str(exc).strip() or "No error details provided.",
+        )
         return None
     if image_url:
         ctx.image_counters["successes"] += 1
@@ -84,9 +94,12 @@ async def placeholder_image(
 def t2i_config(ctx: ApplyContext) -> tuple[dict, dict]:
     """Returns the (user_config, api_keys) pair every MediaEngine call expects."""
     user = ctx.user
-    return {"t2i_settings": user.t2i_settings if user else None}, dict(
-        (user.encrypted_api_keys if user else None) or {}
-    )
+    from backend.engine.story_visual_presets import story_t2i
+
+    return {
+        "t2i_settings": story_t2i(user.t2i_settings if user else None, ctx.adventure),
+        "prompt_user": user,
+    }, dict((user.encrypted_api_keys if user else None) or {})
 
 
 def uses_advanced_model(ctx: ApplyContext, setting: str, default: str) -> bool:

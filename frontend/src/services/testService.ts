@@ -1,3 +1,4 @@
+import type { ComfyOptions } from '@/types/comfyui'
 import { ref } from 'vue'
 import type { OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import { api } from '@/composables/useApi'
@@ -114,7 +115,8 @@ class TestService {
     height?: number | null,
     samplerName?: string | null,
     scheduler?: string | null,
-    minLongEdge?: number | null
+    minLongEdge?: number | null,
+    comfyOptions?: ComfyOptions
   ) {
     this.testResults.value[key] = { status: 'loading', message: 'Generating test image...' }
 
@@ -131,6 +133,7 @@ class TestService {
 
     try {
       const data = await api.testVision({
+        ...comfyOptions,
         model,
         provider,
         ollama_url: cleanStr(ollamaUrl),

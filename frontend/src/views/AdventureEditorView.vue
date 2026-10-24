@@ -418,6 +418,7 @@ const showPromptDialog = ref(false)
 const isRegenerating = ref(false)
 const isSuggestingPrompt = ref(false)
 const useAdvancedModel = ref(false)
+const useCurrentImage = ref(false)
 const showRegenerateAllConfirmDialog = ref(false)
 const pendingBatchRegeneration = ref<{ kind: string; missingOnly: boolean } | null>(null)
 type PendingDeleteTarget = {
@@ -1524,6 +1525,7 @@ function downloadVisualAsset(imagePath: string | null | undefined, filenameLabel
 function openRegenerateDialog(kind: any, id: string, label: string) {
   const description = getVisualDescription(kind, id)
   const hint = visualService.UPLOAD_LIMITS[kind as VisualKind].hint
+  useCurrentImage.value = false
   selectedVisual.value = { kind, id, label, description, hint }
   visualPrompt.value = ''
   useAdvancedModel.value = kind === 'scene' || kind === 'cover'
@@ -1692,7 +1694,8 @@ async function regenerateVisual() {
        selectedVisual.value.id,
        visualPrompt.value,
        useAdvancedModel.value,
-       controller.signal
+       controller.signal,
+       useCurrentImage.value
      )
      showPromptDialog.value = false
      await fetchDebugInfo()
@@ -1718,7 +1721,8 @@ async function suggestPrompt() {
      const suggested = await visualService.suggestPrompt(
        props.adventureId,
        selectedVisual.value.kind,
-       selectedVisual.value.id
+       selectedVisual.value.id,
+       useAdvancedModel.value
      )
      if (suggested) {
        visualPrompt.value = suggested
@@ -2886,6 +2890,7 @@ watch(
       :selected-visual="selectedVisual"
       v-model:visual-prompt="visualPrompt"
       v-model:use-advanced-model="useAdvancedModel"
+      v-model:use-current-image="useCurrentImage"
       :is-suggesting-prompt="isSuggestingPrompt"
       :is-regenerating="isRegenerating"
       :upload-limits="visualService.UPLOAD_LIMITS"

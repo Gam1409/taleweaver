@@ -1,7 +1,6 @@
-from typing import Optional
 import os
 import uuid
-import re
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from PIL import Image
@@ -9,11 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
-from backend.core.config import settings
 from backend.core.database import get_db
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
-from backend.utils.path_security import ensure_within_data_dir, local_path_to_data_url, safe_data_path, sanitize_path_component
+from backend.utils.path_security import (
+    ensure_within_data_dir,
+    local_path_to_data_url,
+    safe_data_path,
+    sanitize_path_component,
+)
 
 # Security: Limit Pillow's decompressed pixel count to mitigate image-bomb DoS.
 # A 1 MB PNG can otherwise expand to >100k x 100k pixels and exhaust RAM.
@@ -24,6 +27,7 @@ router = APIRouter()
 
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB raw upload
+
 
 def _get_extension(filename: str) -> str:
     return filename.rsplit(".", maxsplit=1)[-1].lower() if "." in filename else ""
@@ -36,6 +40,26 @@ def _safe_data_path(*parts: str) -> str:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid path traversal attempt") from exc
 
+
+async def _upload_directory(
+    upload_type: str, adventure_id: Optional[str], db: AsyncSession, current_user: User
+) -> str:
+    if upload_type == "character":
+        return _safe_data_path("characters")
+    if not adventure_id:
+        return _safe_data_path("adventures", "library")
+    safe_adventure_id = sanitize_path_component(adventure_id)
+    if not safe_adventure_id or safe_adventure_id != adventure_id:
+        raise HTTPException(status_code=400, detail="Invalid adventure ID format")
+    result = await db.execute(
+        select(AdventureTemplate).where(AdventureTemplate.id == safe_adventure_id)
+    )
+    adventure = result.scalars().first()
+    if not adventure or (adventure.owner_id != current_user.id and current_user.role != "admin"):
+        raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
+    return _safe_data_path("adventures", "library", safe_adventure_id)
+
+
 @router.post("/data/image")
 async def upload_image(
     file: UploadFile = File(...),
@@ -44,7 +68,9 @@ async def upload_image(
         alias="type",
         description="Type of upload: 'character' or 'adventure'",
     ),
-    adventure_id: Optional[str] = Query(None, description="Optional ID for adventure-specific subfolders"),
+    adventure_id: Optional[str] = Query(
+        None, description="Optional ID for adventure-specific subfolders"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -63,34 +89,12 @@ async def upload_image(
         raise HTTPException(status_code=400, detail="Missing filename")
     ext = _get_extension(file.filename)
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Unsupported file extension. Use jpg, png, or webp.")
+        raise HTTPException(
+            status_code=400, detail="Unsupported file extension. Use jpg, png, or webp."
+        )
 
-    # Determine target directory
-    url_parts: list[str]
-    path_parts: list[str]
-    if upload_type == "character":
-        url_parts = ["characters"]
-        path_parts = ["characters"]
-        target_dir = _safe_data_path(*path_parts)
-    else:
-        if adventure_id:
-            safe_adventure_id = sanitize_path_component(adventure_id)
-            if not safe_adventure_id or not re.match(r"^[a-z0-9-]+$", safe_adventure_id):
-                raise HTTPException(status_code=400, detail="Invalid adventure ID format")
-            # Tenant isolation: only the owner (or admin) may upload to a template's directory.
-            adv_res = await db.execute(
-                select(AdventureTemplate).where(AdventureTemplate.id == safe_adventure_id)
-            )
-            adv = adv_res.scalars().first()
-            if not adv or (adv.owner_id != current_user.id and current_user.role != "admin"):
-                raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
-            url_parts = ["adventures", "library", safe_adventure_id]
-            path_parts = ["adventures", "library", safe_adventure_id]
-        else:
-            url_parts = ["adventures", "library"]
-            path_parts = ["adventures", "library"]
-        target_dir = _safe_data_path(*path_parts)
-    
+    target_dir = await _upload_directory(upload_type, adventure_id, db, current_user)
+
     os.makedirs(target_dir, exist_ok=True)
 
     # Generate a unique filename
@@ -106,23 +110,25 @@ async def upload_image(
 
         # Max dimensions based on type
         max_size = (256, 256) if upload_type == "character" else (512, 512)
-        
+
         # Convert to RGB if needed
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
 
         # Resize keeping aspect ratio
         image.thumbnail(max_size, Image.Resampling.LANCZOS)
-        
+
         image.save(filepath, format=ext.upper() if ext != "jpg" else "JPEG")
-        
+
         # Return the public URL for the image
         url = local_path_to_data_url(filepath)
         return {"url": url}
 
     except HTTPException:
         raise
-    except Image.DecompressionBombWarning:  # type: ignore[attr-defined]
-        raise HTTPException(status_code=400, detail="Image dimensions exceed safety limits.")
+    except Image.DecompressionBombWarning as exc:  # type: ignore[attr-defined]
+        raise HTTPException(
+            status_code=400, detail="Image dimensions exceed safety limits."
+        ) from exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}") from e

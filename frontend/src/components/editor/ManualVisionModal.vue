@@ -8,6 +8,7 @@ const props = defineProps<{
   isSuggestingPrompt: boolean
   isRegenerating: boolean
   useAdvancedModel: boolean
+  useCurrentImage: boolean
   uploadLimits: any
   formatBytes: (bytes: number) => string
   fixNewlines: (text: string) => string
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   (e: 'cancelRegen'): void
   (e: 'update:visualPrompt', val: string): void
   (e: 'update:useAdvancedModel', val: boolean): void
+  (e: 'update:useCurrentImage', val: boolean): void
 }>()
 
 const localPrompt = ref(props.visualPrompt)
@@ -96,6 +98,11 @@ watch(localPrompt, (newVal) => {
                 </button>
               </div>
             </div>
+
+            <label class="flex items-start gap-3 text-xs text-slate-300">
+              <input type="checkbox" :checked="useCurrentImage" :disabled="isRegenerating" @change="emit('update:useCurrentImage', ($event.target as HTMLInputElement).checked)" />
+              <span>Use current image with ComfyUI image workflow.<br /><span class="text-slate-500">Requires an image workflow in the selected profile. The workflow controls reference / img2img behavior.</span></span>
+            </label>
 
             <div class="flex justify-end gap-6 pt-4">
               <button @click="isRegenerating ? emit('cancelRegen') : emit('close')" class="px-8 py-3 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">

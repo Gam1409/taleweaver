@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.core import prompts
-from backend.core.config import settings
+from backend.engine.image_profiles import image_timeout
+from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
 from backend.engine.manifest_apply.avatar import StartingItems
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
@@ -238,6 +239,13 @@ async def _generate_item_image(
         name=obj["name"], description=obj["description"]
     )
     user_config, api_keys = t2i_config(ctx)
+    prompt = asset_source(
+        user_config["t2i_settings"],
+        "object",
+        prompt,
+        name=obj["name"],
+        description=obj["description"],
+    )
     return await generate_image(
         ctx,
         status=f"Reifying Artifact {idx}/{total}: {obj['name']}...",
@@ -252,7 +260,7 @@ async def _generate_item_image(
             style_instruction=ctx.style_instruction,
             use_advanced_model=uses_advanced_model(ctx, "asset_model_quality", "simple"),
         ),  # fmt: skip
-        timeout=float(settings.VISUAL_TIMEOUT),
+        timeout=image_timeout(user_config["t2i_settings"]),
         failure_label=f"Object image generation for {ctx.template_id}/{obj['id']}",
     )
 

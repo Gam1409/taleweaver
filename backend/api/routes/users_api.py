@@ -331,7 +331,7 @@ async def generate_my_profile_image(
     provider = (t2i.get("simple_model_provider") or "openai").lower()
     model = t2i.get("simple_model")
 
-    if not model:
+    if not model and provider != "comfyui":
         raise HTTPException(status_code=400, detail="Simple image model not configured")
 
     api_key = _resolve_provider_api_key(provider, settings_owner.encrypted_api_keys or {})
@@ -359,7 +359,11 @@ async def generate_my_profile_image(
             provider=provider,
             target_dir=target_dir,
             filename=filename,
-            provider_options=t2i,
+            provider_options={
+                **t2i,
+                "visual_target_type": "protagonist",
+                "_prompt_user": settings_owner,
+            },
         )
         logger.info("Image generation completed. URL: %s", image_url)
 

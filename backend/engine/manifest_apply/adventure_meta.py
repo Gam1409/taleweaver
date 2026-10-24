@@ -257,4 +257,6 @@ def apply_final_adventure_fields(ctx: ApplyContext) -> None:
         getattr(adventure, "scripts_generation_enabled", False),
     )
     adventure.is_ready = False  # type: ignore[assignment]
-    adventure.original_manifest = ctx.manifest  # type: ignore[assignment]
+    from backend.engine.story_visual_presets import preserve_story_presets
+
+    adventure.original_manifest = preserve_story_presets(ctx.manifest, adventure)  # type: ignore[assignment]

@@ -15,6 +15,7 @@ LLM_PROVIDERS = [
 ]
 
 IMAGE_PROVIDERS = [
+    {"id": "comfyui", "name": "ComfyUI (Local)"},
     {"id": "openai", "name": "OpenAI"},
     {"id": "openrouter", "name": "OpenRouter (Various)"},
     {"id": "black_forest_labs", "name": "Black Forest Labs"},
@@ -41,6 +42,7 @@ PREDEFINED_LLM_MODELS = {
 }
 
 PREDEFINED_IMAGE_MODELS = {
+    "comfyui": [],
     "openai": ["gpt-image-1-mini", "gpt-image-1.5", "gpt-image-2"],
     "openrouter": [
         "black-forest-labs/flux.2-klein-4b",

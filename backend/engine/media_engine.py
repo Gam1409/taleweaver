@@ -6,23 +6,24 @@ import asyncio
 import base64
 import io
 import logging
-from typing import Optional
 import os
 import re
 import shutil
 import time
 import uuid
+from typing import Any, Optional
 from urllib.parse import urlsplit, urlunsplit
-from typing import Any
 
 import litellm
 import requests
 from PIL import Image
 
 from backend.core import prompts
+from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import build_bfl_payload, resolve_bfl_model_alias
+from backend.engine.image_prompt_adapter import cover_source
 from backend.utils.image_generator import (
     ColorTheme,
     OrganicGradientStrategy,
@@ -30,9 +31,13 @@ from backend.utils.image_generator import (
 )
 from backend.utils.path_security import (
     ensure_within_base_dir,
-    ensure_within_data_dir as ensure_within_data_dir_shared,
     local_path_to_data_url,
     sanitize_relative_segment,
+)
+from backend.utils.path_security import (
+    ensure_within_data_dir as ensure_within_data_dir_shared,
+)
+from backend.utils.path_security import (
     sanitize_path_component as sanitize_path_component_shared,
 )
 from backend.utils.svg_generator import SVGPlaceholderGenerator
@@ -47,7 +52,6 @@ NO_TEXT_IMAGE_PROMPT_SUFFIX = prompts.NO_TEXT_IMAGE_PROMPT_SUFFIX
 
 
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-_SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 _FRONTEND_SVG_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "src", "assets", "svg")
@@ -307,8 +311,6 @@ class MediaEngine:
             safe_thumb_name = sanitize_relative_segment(f"{source_stem}_thumb{ext}")
             if not safe_thumb_name:
                 raise ValueError("Invalid thumbnail filename.")
-            if not re.match(r"^[A-Za-z0-9._-]+$", safe_thumb_name):
-                raise ValueError("Invalid thumbnail filename pattern")
             thumb_path = _ensure_within_data_dir(
                 os.path.join(os.path.dirname(safe_filepath), safe_thumb_name)
             )
@@ -328,7 +330,11 @@ class MediaEngine:
             def _resize():
                 with Image.open(safe_filepath) as img:
                     img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                    img_to_save = img.convert("RGB") if img.mode in ("RGBA", "P") else img
+                    img_to_save = (
+                        img.convert("RGB")
+                        if img.mode in ("RGBA", "P") and ext.lower() in (".jpg", ".jpeg")
+                        else img
+                    )
                     img_to_save.save(thumb_path, optimize=True, quality=80)
                 return thumb_path
 
@@ -724,11 +730,13 @@ class MediaEngine:
     ) -> Optional[str]:
         """Generates an image and saves it locally."""
         provider_key = (provider or "openai").lower()
-        if not prompt or not model:
+        if not prompt or (not model and provider_key != "comfyui"):
             raise ValueError("Missing prompt or model for image generation.")
         
         # Inject style instruction if provided
-        if style_instruction:
+        adapted = provider_key == "comfyui" and prompt_rules(provider_options or {})
+        manual_adapted = adapted and (provider_options or {}).get("_prompt_prepared")
+        if style_instruction and style_instruction not in prompt and not manual_adapted:
             # Ensure we don't have multiple dots
             prompt = prompt.strip()
             while prompt.endswith("."):
@@ -736,10 +744,11 @@ class MediaEngine:
             prompt += f". Style: {style_instruction}."
             logger.info("Style instruction injected")
 
-        prompt = MediaEngine._apply_no_text_instruction(prompt)
+        if not adapted:
+            prompt = MediaEngine._apply_no_text_instruction(prompt)
         logger.info("Image prompt prepared (%s)", _safe_prompt_summary(prompt))
 
-        if provider_key not in ("ollama", "stable_diffusion") and not api_key:
+        if provider_key not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
             # Try to resolve from ENV if not passed
             api_key = settings.get_env_api_key(provider_key)
             if not api_key:
@@ -781,6 +790,11 @@ class MediaEngine:
         
         try:
             provider_options = provider_options or {}
+
+            if provider_key == "comfyui":
+                from backend.engine.comfyui_images import generate_comfy_image
+
+                return await generate_comfy_image(prompt, provider_options, target_dir, filename)
 
             if provider_key == "openrouter":
                 return await MediaEngine._generate_image_openrouter_direct(
@@ -1197,11 +1211,11 @@ class MediaEngine:
         
         logger.info("Resolving scene generation: provider=%s, model=%s", provider, model)
         
-        if not model:
+        if not model and provider != "comfyui":
             raise ValueError("Missing image model configuration for scenes.")
 
         api_key = MediaEngine._resolve_api_key(provider, api_keys)
-        if provider not in ("ollama", "stable_diffusion") and not api_key:
+        if provider not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
             logger.error("API key resolution failed for provider: %s (Advanced Model/Scenes)", provider)
             raise ValueError(f"Missing image configuration or API key for {provider} (Advanced Model). Please check your Visual Preferences in Admin settings.")
         
@@ -1214,6 +1228,9 @@ class MediaEngine:
         
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
+        options["visual_target_type"] = "scene"
+        options["_prompt_user"] = user_config.get("prompt_user")
+        options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
         if use_advanced_model:
             options["steps"] = t2i.get("advanced_steps")
             options["cfg_scale"] = t2i.get("advanced_cfg_scale")
@@ -1227,7 +1244,7 @@ class MediaEngine:
             options["scheduler"] = t2i.get("simple_scheduler")
             min_long_edge = t2i.get("simple_min_long_edge")
 
-        if provider in ("stable_diffusion", "ollama"):
+        if provider in ("stable_diffusion", "ollama", "comfyui"):
             width, height = MediaEngine._resolve_sd_dimensions("SCENE", min_long_edge)
             options["width"] = width
             options["height"] = height
@@ -1261,11 +1278,11 @@ class MediaEngine:
         
         logger.info("Resolving entity generation: provider=%s, model=%s", provider, model)
         
-        if not model:
+        if not model and provider != "comfyui":
             raise ValueError("Missing image model configuration for entities.")
 
         api_key = MediaEngine._resolve_api_key(provider, api_keys)
-        if provider not in ("ollama", "stable_diffusion") and not api_key:
+        if provider not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
             logger.error("API key resolution failed for provider: %s (Simple Model/Entities)", provider)
             raise ValueError(f"Missing image configuration or API key for {provider} (Simple Model). Please check your Visual Preferences in Admin settings.")
         
@@ -1279,6 +1296,9 @@ class MediaEngine:
         
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
+        options["visual_target_type"] = entity_type.lower()
+        options["_prompt_user"] = user_config.get("prompt_user")
+        options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
         if use_advanced_model:
             options["steps"] = t2i.get("advanced_steps")
             options["cfg_scale"] = t2i.get("advanced_cfg_scale")
@@ -1292,7 +1312,7 @@ class MediaEngine:
             options["scheduler"] = t2i.get("simple_scheduler")
             min_long_edge = t2i.get("simple_min_long_edge")
 
-        if provider in ("stable_diffusion", "ollama"):
+        if provider in ("stable_diffusion", "ollama", "comfyui"):
             width, height = MediaEngine._resolve_sd_dimensions(entity_type, min_long_edge)
             options["width"] = width
             options["height"] = height
@@ -1310,23 +1330,24 @@ class MediaEngine:
         )
 
     @staticmethod
-    async def generate_adventure_cover(title: str, original_prompt: str, adventure_id: str, user_config: dict, api_keys: dict, style_instruction: Optional[str] = None) -> Optional[str]:
+    async def generate_adventure_cover(title: str, original_prompt: str, adventure_id: str, user_config: dict, api_keys: dict, style_instruction: Optional[str] = None, use_advanced_model: bool = True) -> Optional[str]:
         """High-level wrapper for adventure cover generation (uses Advanced Model, 3:2 aspect ratio)."""
         t2i = user_config.get("t2i_settings")
         if not t2i: 
             logger.warning("No T2I settings found in user_config")
             return None
         
-        provider = (t2i.get("advanced_model_provider") or t2i.get("provider", "openai")).lower()
-        model = t2i.get("advanced_model")
+        profile = "advanced" if use_advanced_model else "simple"
+        provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
+        model = t2i.get(f"{profile}_model")
         
         logger.info("Resolving adventure cover generation: provider=%s, model=%s", provider, model)
         
-        if not model:
+        if not model and provider != "comfyui":
             raise ValueError("Missing image model configuration for adventure cover.")
 
         api_key = MediaEngine._resolve_api_key(provider, api_keys)
-        if provider not in ("ollama", "stable_diffusion") and not api_key:
+        if provider not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
             logger.error("API key resolution failed for provider: %s (Advanced Model/Cover)", provider)
             raise ValueError(f"Missing image configuration or API key for {provider} (Advanced Model/Cover). Please check your Visual Preferences in Admin settings.")
         
@@ -1341,36 +1362,26 @@ class MediaEngine:
         safe_id = safe_adventure_id
         filename = f"{safe_id}_cover_{uuid.uuid4().hex[:8]}.{ext}"
         
-        # Clean original_prompt for cover generation:
-        # Strip out structured [Sequence: ...], [Scene: ...], [NPC: ...] blocks to prevent multi-panel storyboarding
-        clean_prompt = str(original_prompt or "").strip()
-        tag_match = re.search(r'\[(?:Sequence|Scene|NPC|Item|Quest)\b', clean_prompt, flags=re.IGNORECASE)
-        if tag_match:
-            clean_prompt = clean_prompt[:tag_match.start()].strip()
-        if not clean_prompt:
-            clean_prompt = str(original_prompt or "").strip()
-        if len(clean_prompt) > 400 and "." in clean_prompt[:400]:
-            clean_prompt = clean_prompt[:400].rsplit(".", 1)[0] + "."
-        elif len(clean_prompt) > 400:
-            clean_prompt = clean_prompt[:400]
-
-        prompt = prompts.ADVENTURE_COVER_PROMPT_TEMPLATE.format(
-            title=title, original_prompt=clean_prompt
+        prompt = cover_source(
+            title, original_prompt, provider, {**t2i, "comfyui_profile": profile}
         )
         
         # Resolve steps and cfg_scale for advanced model
         options = dict(t2i)
+        options["visual_target_type"] = "cover"
+        options["_prompt_user"] = user_config.get("prompt_user")
+        options["comfyui_profile"] = profile
         options.setdefault("aspect_ratio", "3:2")
         existing_neg = options.get("negative_prompt") or ""
         anti_split_neg = "split screen, multi-panel, panels, comic strip, collage, triptych, diptych, multiple views, storyboard, frames, borders, dividers"
         options["negative_prompt"] = f"{existing_neg}, {anti_split_neg}".strip(", ") if existing_neg else anti_split_neg
-        options["steps"] = t2i.get("advanced_steps")
-        options["cfg_scale"] = t2i.get("advanced_cfg_scale")
-        options["sampler_name"] = t2i.get("advanced_sampler_name")
-        options["scheduler"] = t2i.get("advanced_scheduler")
-        min_long_edge = t2i.get("advanced_min_long_edge")
+        options["steps"] = t2i.get(f"{profile}_steps")
+        options["cfg_scale"] = t2i.get(f"{profile}_cfg_scale")
+        options["sampler_name"] = t2i.get(f"{profile}_sampler_name")
+        options["scheduler"] = t2i.get(f"{profile}_scheduler")
+        min_long_edge = t2i.get(f"{profile}_min_long_edge")
 
-        if provider in ("stable_diffusion", "ollama"):
+        if provider in ("stable_diffusion", "ollama", "comfyui"):
             width, height = MediaEngine._resolve_sd_dimensions("COVER", min_long_edge)
             options["width"] = width
             options["height"] = height

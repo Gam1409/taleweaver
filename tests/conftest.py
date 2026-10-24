@@ -166,7 +166,9 @@ def _patch_external_generation_and_media(monkeypatch, request):
     """
 
     # MediaEngine unit tests should exercise the real wrappers and decide their own patches.
-    if request.node.fspath.basename == "test_media_engine.py":
+    if request.node.fspath.basename in (
+        "test_media_engine.py", "test_comfyui.py", "test_comfyui_presets.py"
+    ):
         yield
         return
 

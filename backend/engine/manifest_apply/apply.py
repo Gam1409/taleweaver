@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from sqlalchemy import delete, select
@@ -19,6 +20,7 @@ from backend.engine.manifest_apply.context import ApplyContext, StatusCallback, 
 from backend.engine.manifest_apply.npcs import persist_npcs
 from backend.engine.manifest_apply.objects import ObjectPlacement, persist_objects
 from backend.engine.manifest_apply.scenes import persist_exits, persist_scenes
+from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -128,7 +130,12 @@ async def _prepare_context(
     )
     logger.info("Applying manifest with style instruction: '%s'", ctx.style_instruction)
     wg._validate_t2i_prerequisites(
-        user,
+        SimpleNamespace(
+            t2i_settings=story_t2i(user.t2i_settings, adventure),
+            encrypted_api_keys=user.encrypted_api_keys,
+        )
+        if user
+        else None,
         need_scene_images=ctx.gen_scenes,
         need_npc_images=ctx.gen_npc,
         need_item_images=ctx.gen_items,
