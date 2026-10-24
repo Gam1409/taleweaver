@@ -181,15 +181,17 @@ Template for generating the main cover image of an adventure.
 Variables: title, original_prompt.
 """
 
-PROTAGONIST_IMAGE_PROMPT_TEMPLATE = (
-    "Portrait of character {name}, {role}. {description}. Game attribute art style. "
-    "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
-    "2:3 aspect ratio, dramatic cinematic lighting, highly detailed digital painting."
+PORTRAIT_COMPOSITION_INSTRUCTION = (
+    "Single-character portrait for a character card. Exactly one subject, centered, "
+    "chest-up framing with the face clearly visible and a simple unobtrusive background. "
+    "Preserve known visible appearance and clothing. Do not depict other characters "
+    "mentioned in the biography, hidden possessions, captions, text, borders, collages "
+    "or multiple views. Portrait orientation."
 )
-"""
-Template for generating the player character's portrait.
-Variables: name, role, description.
-"""
+
+PROTAGONIST_IMAGE_PROMPT_TEMPLATE = (
+    "Portrait of character {name}, {role}. {description}. " + PORTRAIT_COMPOSITION_INSTRUCTION
+)
 
 SCENE_IMAGE_PROMPT_TEMPLATE = (
     "Background scene: {name}. {description}. 3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
@@ -201,13 +203,8 @@ Variables: name, description.
 """
 
 NPC_IMAGE_PROMPT_TEMPLATE = (
-    "Character portrait: {name}. {description}. Game attribute art style. "
-    "3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting."
+    "Character portrait: {name}. {description}. " + PORTRAIT_COMPOSITION_INSTRUCTION
 )
-"""
-Template for generating NPC portraits.
-Variables: name, description.
-"""
 
 OBJECT_IMAGE_PROMPT_TEMPLATE = (
     "Item asset: {name}. {description}. Centered, isolated on simple background."

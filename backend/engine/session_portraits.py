@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import prompts
+from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
 from backend.engine.image_prompt_adapter import asset_source
@@ -28,6 +29,8 @@ from backend.utils.path_security import safe_data_path, sanitize_path_component
 
 class SessionPortraitRequest(BaseModel):
     target_id: str = Field(min_length=1, max_length=128)
+    use_previous_image: bool = False
+    change_description: str = Field(default="", max_length=1000)
 
 
 async def _context(
@@ -154,6 +157,23 @@ async def regenerate_session_portrait(
     try:
         t2i, style, tone = await _settings(db, state, user)
         request = _image_request(session_id, facts, t2i, user, style, tone)
+        if payload.change_description.strip():
+            request["prompt"] += (
+                " Requested portrait change (preserve identity and single-subject framing): "
+                + payload.change_description.strip()
+            )
+        if payload.use_previous_image:
+            if request["provider"] != "comfyui":
+                raise ValueError("Previous portrait references currently require ComfyUI.")
+            previous = override.get("image_url", npc.image_url)
+            if not previous:
+                raise ValueError("This NPC has no previous portrait to use as a reference.")
+            select_workflow(request["provider_options"], reference=True)
+            request["provider_options"]["reference_image_url"] = previous
+            request["prompt"] += (
+                " Preserve the reference character's identity, facial features and appearance; "
+                "change only the requested expression, action or setting."
+            )
         user_id = user.id
         # Release the read transaction while the provider is working.
         await db.commit()
