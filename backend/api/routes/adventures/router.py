@@ -13,6 +13,7 @@ from backend.api.routes.adventures.editor_special_actions import (
     router as editor_special_actions_router,
 )
 from backend.api.routes.adventures.gameplay import router as gameplay_router
+from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
@@ -48,6 +49,7 @@ router.include_router(editor_entity_transfer_router)
 router.include_router(cloning_router)
 
 # 6. Templates (parameterized paths like /{template_id})
+router.include_router(generation_resume_router)
 router.include_router(templates_router)
 
 # 7. Gameplay (parameterized paths like /{game_id}/chat)

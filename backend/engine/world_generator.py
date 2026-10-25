@@ -21,6 +21,7 @@ from typing import Any, Literal, Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import prompts
+from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.llm_logger import log_structured_event
@@ -39,7 +40,7 @@ from backend.engine.world_schemas import (  # noqa: F401
     WorldObjectSchema,
     WorldSceneSchema,
 )
-from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.utils.path_security import sanitize_path_component
 from backend.utils.text_utils import slugify
@@ -115,10 +116,9 @@ async def _publish_generation_status(
     """Persist live status text; raise GenerationCancelled if user cancelled."""
     if not adventure:
         return
+    from backend.engine.generation_control import guard_generation_write
+
     await db.refresh(adventure)
-    if adventure.creation_status == "Cancelled":
-        raise GenerationCancelled("Generation was cancelled by the user.")
-    adventure.creation_status = status  # type: ignore[assignment]
     logs = list(adventure.generation_logs or [])
     logs.append(
         {
@@ -127,7 +127,7 @@ async def _publish_generation_status(
             "content": status,
         }
     )
-    adventure.generation_logs = logs  # type: ignore[assignment]
+    await guard_generation_write(db, adventure, creation_status=status, generation_logs=logs)
     await db.commit()
     await db.refresh(adventure)
 
@@ -150,6 +150,10 @@ async def _log_image_generation(
             "image_url": image_url,
         }
     )
+    from backend.engine.generation_control import generation_run, guard_generation_write
+
+    if generation_run.get() is not None:
+        await guard_generation_write(db, adventure)
     adventure.generation_logs = logs  # type: ignore[assignment]
     await db.commit()
     await db.refresh(adventure)
@@ -173,6 +177,10 @@ async def _log_reused_asset(
             "image_url": image_url,
         }
     )
+    from backend.engine.generation_control import generation_run, guard_generation_write
+
+    if generation_run.get() is not None:
+        await guard_generation_write(db, adventure)
     adventure.generation_logs = logs  # type: ignore[assignment]
     await db.commit()
     await db.refresh(adventure)
@@ -672,30 +680,22 @@ class WorldGenerator:
             allow_reuse_source_assets=allow_reuse_source_assets,
         )
 
-        # 1. Update Status
-        adventure = await db.get(AdventureTemplate, template_id)
-        if adventure:
-            adventure.generation_logs = []  # type: ignore[assignment]
-            await db.commit()
-            await _publish_generation_status_with_callback(
-                db, adventure, "Analyzing Story Idea...", status_callback=status_callback
-            )
-            log_structured_event(
-                "adventure.generation.status",
-                template_id=template_id,
-                status=adventure.creation_status,
-                phase="analysis",
-            )
-            await db.commit()
+        from backend.engine.staged_world import generate_manifest
 
-        manifesto: WorldManifesto = await llm.aexecute_complex_task(
+        async def publish_stage(message: str) -> None:
+            await _publish_generation_status_with_callback(
+                db, adventure, message, status_callback=status_callback
+            )
+
+        manifesto = await generate_manifest(
+            db=db,
+            adventure=adventure,
+            llm=llm,
+            status=publish_stage,
+            mode=effective_mode,
+            template_id=template_id,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            response_model=WorldManifesto,
-            model=model,
-            adventure_id=template_id,
-            operation="generate_world",
-            phase="analysis",
             metadata={
                 "generate_scene_images": generate_scene_images,
                 "generate_npc_images": generate_npc_images,
@@ -715,10 +715,15 @@ class WorldGenerator:
                 "quest_generation_enabled": quest_generation_enabled,
                 "min_quests": min_quests,
                 "max_quests": max_quests,
+                "min_sequences": min_sequences,
+                "max_sequences": max_sequences,
+                "award_generation_enabled": award_generation_enabled,
+                "min_awards": min_awards,
+                "max_awards": max_awards,
             },
         )
 
-        manifest_dict = manifesto.model_dump()
+        manifest_dict = {**manifesto.model_dump(), "format_version": CURRENT_VERSION}
         if policy.vn:
             normalize_vn_generated_manifest(manifest_dict)
         WorldGenerator.preprocess_manifest_object_ids(manifest_dict)
@@ -756,6 +761,9 @@ class WorldGenerator:
                 from backend.engine.story_visual_presets import preserve_story_presets
 
                 adventure.original_manifest = preserve_story_presets(manifest_dict, adventure)  # type: ignore[assignment]
+            from backend.engine.generation_control import guard_generation_write
+
+            await guard_generation_write(db, adventure)
             await db.commit()
 
         # Load source assets for cover-mode image reuse

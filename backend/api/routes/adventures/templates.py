@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.adventure_creation import (
@@ -14,6 +14,7 @@ from backend.api.routes.adventures.adventure_creation import (
     create_adventure_records,
     run_background_generation,
 )
+from backend.api.routes.adventures.generation_resume import can_resume_generation
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.manifest_export import (
     backfill_item_start_scenes,
@@ -42,6 +43,7 @@ from backend.core.prompts import (
     TEMPLATE_FIELD_GENERATION_SYSTEM_PROMPT,
     TEMPLATE_FIELD_GENERATION_USER_PROMPT_TEMPLATE,
 )
+from backend.engine.generation_control import cancel_local_generation
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
@@ -655,6 +657,7 @@ async def create_adventure(
                 session_id=created.session.id,
                 selected_image_styles=created.template.selected_image_styles,
                 cover=created.cover,
+                run_id=created.template.generation_run_id,
             ),
         )
 
@@ -882,6 +885,8 @@ async def get_adventure_status(
         "is_ready": adv.is_ready,
         "error": adv.creation_error,
         "stats": stats,
+        "can_resume": can_resume_generation(adv),
+        "completed_stages": len((adv.generation_checkpoint or {}).get("results", {})),
     }
 
 
@@ -1000,32 +1005,21 @@ async def cancel_adventure_generation(
     if adv.is_ready:
         raise HTTPException(status_code=400, detail="Generation already finished.")
 
-    adv.creation_status = "Cancelled"
-    await db.commit()
-    return {"status": "Cancelled"}
-
-
-@router.post("/{template_id}/cancel")
-async def cancel_adventure(
-    template_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Cancels an active adventure generation."""
     result = await db.execute(
-        select(AdventureTemplate).where(
-            (AdventureTemplate.id == template_id) & (AdventureTemplate.owner_id == current_user.id)
+        update(AdventureTemplate)
+        .where(
+            AdventureTemplate.id == template_id,
+            AdventureTemplate.is_ready.is_(False),
+            AdventureTemplate.generation_run_id == adv.generation_run_id,
         )
+        .values(creation_status="Cancelled", generation_run_id=None)
     )
-    adv = result.scalars().first()
-    if not adv:
-        raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
-
-    if not adv.is_ready:
-        adv.creation_status = "Cancelled"
-        await db.commit()
-
-    return {"status": "cancelled"}
+    if result.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(409, "Generation finished or changed before cancellation.")
+    await db.commit()
+    cancel_local_generation(template_id)
+    return {"status": "Cancelled"}
 
 
 @router.delete("/{template_id}", status_code=200)

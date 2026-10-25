@@ -1,10 +1,12 @@
 """Portal adventure creation: template, protagonist, first session and background generation."""
 
+import asyncio
 import logging
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import or_, select
@@ -18,8 +20,15 @@ from backend.api.routes.adventures.session_materializer import (
 )
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
+from backend.engine.generation_control import (
+    assert_generation_current,
+    generation_run,
+    guard_generation_write,
+    register_generation,
+    unregister_generation,
+)
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
-from backend.models.adventure_template import AdventureTemplate
+from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -41,10 +50,11 @@ class CoverSource:
     template: Optional[AdventureTemplate] = None
     manifest: Optional[dict[str, Any]] = None
     name: Optional[str] = None
+    saved_id: Optional[str] = None
 
     @property
     def adventure_id(self) -> Optional[str]:
-        return self.template.id if self.template else None
+        return self.template.id if self.template else self.saved_id
 
 
 @dataclass
@@ -294,6 +304,16 @@ async def create_adventure_records(
         os.path.join(settings.DATA_DIR, "adventures", "sessions", session.id), exist_ok=True
     )
 
+    if not payload.skip_generation:
+        adv.generation_run_id = str(uuid4())
+        adv.generation_request = {
+            "payload": payload.model_dump(mode="json"),
+            "session_id": session.id,
+            "selected_image_styles": adv.selected_image_styles,
+            "cover_manifest": cover.manifest,
+            "cover_name": cover.name,
+            "cover_source_id": cover.adventure_id,
+        }
     await _create_initial_session_state(db, adv, session, avatar, user.id)
     await db.commit()
     return CreatedAdventure(template=adv, avatar=avatar, session=session, cover=cover)
@@ -377,6 +397,7 @@ class GenerationJob:
     session_id: str
     selected_image_styles: Any
     cover: CoverSource
+    run_id: Optional[str] = None
 
 
 async def _load_template(db: AsyncSession, template_id: str) -> Optional[AdventureTemplate]:
@@ -411,7 +432,7 @@ async def _generate_world(db: AsyncSession, user: Optional[User], job: Generatio
         language=payload.language,
         cover_source_manifest=job.cover.manifest,
         cover_source_adventure_id=job.cover.adventure_id,
-        cover_source_adventure_name=(job.cover.name if job.cover.template else None),
+        cover_source_adventure_name=(job.cover.name if job.cover.adventure_id else None),
         cover_similarity_percent=_similarity_percent(payload),
         allow_reuse_source_assets=bool(payload.allow_reuse_source_assets),
         **effective_generation_bounds(payload, job.cover.manifest),
@@ -422,6 +443,8 @@ async def _record_generation_failure(db: AsyncSession, template_id: str, exc: Ex
     adv = await _load_template(db, template_id)
     if not adv:
         return
+    await assert_generation_current(db, adv)
+    await guard_generation_write(db, adv)
     if is_image_moderation_error(exc):
         adv.is_ready = True
         adv.creation_status = "Ready"
@@ -437,6 +460,8 @@ async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
 
     adv = await _load_template(db, job.template_id)
     if adv:
+        await assert_generation_current(db, adv)
+        await guard_generation_write(db, adv)
         adv.creation_status = "Generating world structure"
         await db.commit()
 
@@ -450,6 +475,8 @@ async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
 
     adv = await _load_template(db, job.template_id)
     if adv:
+        await assert_generation_current(db, adv)
+        await guard_generation_write(db, adv)
         normalize_vn_template(adv)
         await db.flush()
 
@@ -459,8 +486,19 @@ async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
 
     adv = await _load_template(db, job.template_id)
     if adv:
+        await assert_generation_current(db, adv)
         adv.is_ready = True
         adv.creation_status = "Ready"
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == job.session_id)
+        )
+        if state:
+            state.entity_states = {
+                **(state.entity_states or {}),
+                AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY: (
+                    AdventureLogic.build_session_manifest_snapshot(adv)
+                ),
+            }
         await db.commit()
 
 
@@ -469,9 +507,21 @@ async def run_background_generation(job: GenerationJob) -> None:
     # A fresh DB session: the request session is closed once the response is sent.
     import backend.core.database as core_database
 
-    async with core_database.AsyncSessionLocal() as db:
-        try:
-            await _generate_and_finalize(db, job)
-        except Exception as exc:
-            logger.exception("Background generation failed for %s: %s", job.template_id, exc)
-            await _record_generation_failure(db, job.template_id, exc)
+    token = generation_run.set(job.run_id)
+    register_generation(job.template_id)
+    try:
+        async with core_database.AsyncSessionLocal() as db:
+            try:
+                await _generate_and_finalize(db, job)
+            except (GenerationCancelled, asyncio.CancelledError):
+                await db.rollback()
+            except Exception as exc:
+                logger.exception("Background generation failed for %s: %s", job.template_id, exc)
+                await db.rollback()
+                try:
+                    await _record_generation_failure(db, job.template_id, exc)
+                except GenerationCancelled:
+                    await db.rollback()
+    finally:
+        unregister_generation(job.template_id)
+        generation_run.reset(token)

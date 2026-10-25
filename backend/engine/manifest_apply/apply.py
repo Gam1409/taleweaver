@@ -101,7 +101,7 @@ async def _report_image_warnings(ctx: ApplyContext) -> None:
         )
     if warnings and ctx.adventure:
         ctx.adventure.creation_error = " ".join(warnings)  # type: ignore[assignment]
-        await ctx.db.commit()
+        await ctx.commit_and_refresh(refresh_user=False)
 
 
 async def _prepare_context(
@@ -165,7 +165,7 @@ async def _persist_world(ctx: ApplyContext) -> None:
     objects = _objects_with_protagonist_items(ctx.manifest, prot)
     resolved = await persist_objects(ctx, objects, default_scene_id, placement)
     await _assign_npc_inventories(ctx, npc_inventories, resolved)
-    await ctx.db.commit()
+    await ctx.commit_and_refresh(refresh_user=False)
 
 
 async def apply_manifest(
@@ -207,6 +207,7 @@ async def apply_manifest(
         if existing_images is not None
         else await _collect_existing_images(db, template_id)
     )
+    await ctx.guard_write()
     await _clear_world(db, template_id)
     await apply_adventure_meta(ctx)
     await _persist_world(ctx)

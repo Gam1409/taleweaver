@@ -54,6 +54,9 @@ class AdventureTemplate(Base, TimestampMixin):
     creation_status: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     creation_error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     generation_logs: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    generation_request: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    generation_checkpoint: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    generation_run_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     # Metadata
     original_manifest: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)

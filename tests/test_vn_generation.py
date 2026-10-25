@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from backend.api.routes.adventures.adventure_creation import CoverSource, build_template
 from backend.api.routes.adventures.schemas import CreateAdventureTemplatePayload
+from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.game_modes import is_vn, mode_policy
 from backend.engine.adventure_exporter import AdventureExporter
 from backend.engine.adventure_importer import AdventureTemplateImporter
@@ -263,6 +264,8 @@ async def test_generator_threads_vn_prompt_and_sanitizes_before_apply(monkeypatc
     monkeypatch.setattr(
         "backend.engine.world_generator.GameMasterLLM.for_role", lambda *a, **k: llm
     )
+    generate = AsyncMock(return_value=generated)
+    monkeypatch.setattr("backend.engine.staged_world.generate_manifest", generate)
     apply = AsyncMock()
     monkeypatch.setattr("backend.engine.world_manifest_applier.apply_manifest", apply)
     db = AsyncMock()
@@ -279,11 +282,14 @@ async def test_generator_threads_vn_prompt_and_sanitizes_before_apply(monkeypatc
         language="Japanese",
     )
 
-    request = llm.aexecute_complex_task.call_args.kwargs
+    request = generate.call_args.kwargs
+    assert request["mode"] == "vn"
+    assert request["llm"] is llm
     assert "interactive visual novel" in request["system_prompt"]
     assert "Japanese" in request["system_prompt"]
     assert request["metadata"]["quest_generation_enabled"] is False
     applied = apply.call_args.args[2]
+    assert applied["format_version"] == CURRENT_VERSION
     assert applied["quests"] == applied["awards"] == applied["sequences"] == []
     assert applied["scripts"] == []
     assert applied["can_damage_npcs"] is False

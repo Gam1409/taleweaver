@@ -10,6 +10,7 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
+from backend.engine.generation_control import generation_run, guard_generation_write
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 
@@ -61,7 +62,13 @@ class ApplyContext:
 
     async def commit_and_refresh(self, refresh_user: bool = True) -> None:
         """Commits and reloads the adventure (and user) so later steps never see expired rows."""
+        await self.guard_write()
         await self.db.commit()
         self.adventure = await self.db.get(AdventureTemplate, self.template_id)
         if refresh_user and self.user:
             self.user = await self.db.get(User, self.user.id)
+
+    async def guard_write(self) -> None:
+        """Fence background generation while leaving explicit editor actions unchanged."""
+        if generation_run.get() is not None and self.adventure is not None:
+            await guard_generation_write(self.db, self.adventure)

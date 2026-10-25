@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'resumed'): void
 }>()
 
 interface LogEntry {
@@ -48,13 +49,54 @@ async function fetchLogs() {
 // Check if generation is still active
 const isReady = ref(false)
 const hasError = ref(false)
+const canResume = ref(false)
+const completedStages = ref(0)
+const isResuming = ref(false)
+const resumeError = ref('')
+const statusDescription = ref('Preparing generation...')
+const generationError = ref('')
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = window.setInterval(() => {
+    void fetchLogs()
+    void checkStatus()
+  }, 1500)
+}
+
+async function resumeGeneration() {
+  if (isResuming.value) return
+  isResuming.value = true
+  resumeError.value = ''
+  try {
+    await api.resumeAdventureGeneration(props.adventureId)
+    hasError.value = false
+    isReady.value = false
+    canResume.value = false
+    generationError.value = ''
+    statusDescription.value = 'Resuming saved generation...'
+    emit('resumed')
+    startPolling()
+    await fetchLogs()
+    await checkStatus()
+  } catch (error) {
+    resumeError.value = error instanceof Error ? error.message : 'Could not resume generation.'
+  } finally {
+    isResuming.value = false
+  }
+}
 
 const backendStats = ref<any>(null)
 async function checkStatus() {
   try {
     const statusData = await api.getAdventureStatus(props.adventureId)
     isReady.value = statusData.is_ready
-    if (statusData.error || statusData.status === 'Failed' || statusData.status === 'Cancelled') {
+    canResume.value = Boolean(statusData.can_resume)
+    completedStages.value = statusData.completed_stages || 0
+    statusDescription.value = statusData.status || 'Preparing generation...'
+    generationError.value = statusData.error || ''
+    hasError.value = false
+    if ((statusData.error && !statusData.error.startsWith('Notice:')) || statusData.status === 'Failed' || statusData.status === 'Cancelled') {
       hasError.value = true
     }
     if (statusData.stats) {
@@ -185,10 +227,7 @@ onMounted(() => {
   void fetchLogs()
   void checkStatus()
   
-  pollTimer = window.setInterval(() => {
-    void fetchLogs()
-    void checkStatus()
-  }, 1500)
+  startPolling()
 
   sayingTimer = window.setInterval(updateSaying, 5000)
 })
@@ -398,8 +437,15 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-if="hasError || completedStages" class="px-6 py-3 border-t border-white/10 text-sm">
+        <p v-if="generationError" class="text-red-300 break-words" role="alert">{{ generationError }}</p>
+        <p v-if="completedStages" class="text-slate-300">{{ completedStages }} completed steps saved.</p>
+        <p v-if="hasError && canResume" class="mt-1 text-slate-400">Resume keeps completed text steps and retries the unfinished work using your current model settings.</p>
+        <p v-if="resumeError" class="mt-2 text-red-300" role="alert">{{ resumeError }}</p>
+      </div>
+
       <!-- Footer / Status indicator -->
-      <div class="px-6 py-4 border-t border-white/10 bg-[#060b13] flex justify-between items-center">
+      <div class="px-6 py-4 border-t border-white/10 bg-[#060b13] flex flex-wrap gap-3 justify-between items-center">
         <div class="flex items-center gap-2 text-xxs font-bold uppercase tracking-wider">
           <span v-if="isReady" class="text-emerald-400 flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Ready
@@ -409,9 +455,18 @@ onUnmounted(() => {
           </span>
           <span v-else class="text-sky-400 flex items-center gap-1.5 max-w-[450px] line-clamp-1">
             <span class="w-2 h-2 border-2 border-sky-400/20 border-t-sky-400 rounded-full animate-spin shrink-0"></span>
-            <span>{{ currentSaying }}</span>
+            <span>{{ statusDescription }}</span>
           </span>
         </div>
+        <button
+          v-if="hasError && canResume"
+          type="button"
+          :disabled="isResuming"
+          class="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+          @click="resumeGeneration"
+        >
+          {{ isResuming ? 'Resuming...' : 'Resume generation' }}
+        </button>
         <button 
           class="px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 border"
           :class="[

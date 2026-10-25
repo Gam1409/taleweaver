@@ -97,8 +97,8 @@ class AdventureLogic:
             "can_damage_npcs": adventure.can_damage_npcs,
             "npcs_can_damage_protagonist": adventure.npcs_can_damage_protagonist,
             "is_adventure_generator": adventure.is_adventure_generator,
-            "is_ready": True,
-            "creation_status": "Ready",
+            "is_ready": bool(adventure.is_ready),
+            "creation_status": adventure.creation_status,
         }
         return {
             "adventure": adventure_payload,
