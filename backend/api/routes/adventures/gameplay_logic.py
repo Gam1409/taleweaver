@@ -32,6 +32,10 @@ from backend.api.routes.adventures.turn_pass_flow import (
     run_guardrail_chain,
     turn_anchor,
 )
+from backend.api.routes.adventures.scene_transition_intent import (
+    confirm_scene_transition,
+    location_resolution,
+)
 from backend.api.routes.adventures.turn_prompt_layout import (
     build_exit_description_task,
     build_narration_messages,
@@ -49,7 +53,11 @@ from backend.api.routes.adventures.session_language import (
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
+from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
+from backend.engine.dynamic_locations.prompts import intent_schema, prompt_block
+from backend.engine.dynamic_locations.service import discard_unentered, resolve_proposal
+from backend.engine.dynamic_locations.images import schedule_images
 from backend.engine.llm_intents import ChatProgressionIntent, MechanicsIntent, to_game_event
 from backend.engine.rule_engine import (
     RESOURCE_CAP,
@@ -1245,7 +1253,13 @@ class GameTurnManager:
                 mechanics_suffix = prompts.GM_STORY_MECHANICS_SUFFIX
 
             # Static system prompt (cacheable); quests, awards and live state go to the user message.
-            mechanics_prompt = ctx.mechanics_static_prompt + "\n\n" + mechanics_suffix
+            mechanics_prompt = (
+                ctx.mechanics_static_prompt
+                + "\n\n"
+                + mechanics_suffix
+                + "\n"
+                + prompt_block(self.state)
+            )
             mechanics_user_prompt = build_pass1_user_prompt(
                 ctx.mechanics_state_block,
                 user_msg,
@@ -1264,11 +1278,14 @@ class GameTurnManager:
                 mechanics_intent = await llm.aexecute_complex_task(
                     mechanics_prompt,
                     mechanics_user_prompt,
-                    response_model=MechanicsIntent,
+                    response_model=intent_schema(MechanicsIntent, self.state),
                     model=small_model,
                     operation="chat_turn",
                     phase="mechanics",
                 )
+                if getattr(mechanics_intent, "new_local_place", None):
+                    yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
+                await resolve_proposal(self, mechanics_intent, user_msg, history, language)
                 game_event = to_game_event(mechanics_intent)
             except Exception as e:
                 user_safe_error = _friendly_llm_error_message(e)
@@ -1606,9 +1623,9 @@ class GameTurnManager:
             progression_start = time.perf_counter()
             try:
                 progression_intent = await llm.aexecute_complex_task(
-                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT,
+                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT + "\n" + prompt_block(self.state),
                     progression_user_prompt,
-                    response_model=ChatProgressionIntent,
+                    response_model=intent_schema(ChatProgressionIntent, self.state),
                     model=small_model,
                 )
             except Exception as e:
@@ -1634,13 +1651,12 @@ class GameTurnManager:
                 }
                 move_is_valid = (
                     progression_intent.new_scene_id in allowed_open_destinations
-                    and await self._is_explicit_scene_transition_request(user_msg)
-                    and self._message_mentions_transition_target(
+                    and await confirm_scene_transition(
+                        self.adventure_gen.classify_short_intent,
                         user_msg=user_msg,
                         target_scene_id=progression_intent.new_scene_id,
-                        exit_label=progression_intent.exit_label,
-                        reduced_scenes=reduced_scenes,
-                        reduced_exits=reduced_exits,
+                        scenes=reduced_scenes,
+                        exits=reduced_exits,
                     )
                 )
                 if not move_is_valid:
@@ -1663,6 +1679,9 @@ class GameTurnManager:
                 notes_count=min(len(self._get_gm_notes()), GM_NOTES_PROMPT_MAX_ITEMS),
             )
 
+            if getattr(progression_intent, "new_local_place", None):
+                yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
+            await resolve_proposal(self, progression_intent, user_msg, history, language)
             game_event = self._build_progression_event(progression_intent)
 
             try:
@@ -1683,6 +1702,8 @@ class GameTurnManager:
                 await self._finalize_session("game_over", str(goe))
                 game_event.game_over = True
                 game_event.status_note = str(goe)
+
+        await discard_unentered(self)
 
         # Logic-pass completion scripts (on_logic_pass_done)
         if script_runner.scripts:
@@ -1774,7 +1795,9 @@ class GameTurnManager:
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
 
-        reminders: list[str] = []
+        reminders: list[str] = [
+            location_resolution(scene_id_before_turn, self.state.current_scene_id)
+        ]
         if use_vocal_tags:
             reminders.append(
                 "Use tone tags like [excited] at the start of paragraphs, and inline vocal bursts like <sigh> or <laugh> where appropriate."
@@ -1944,7 +1967,10 @@ class GameTurnManager:
 
         # Finalize
         assistant_chat = ChatMessage(
-            session_id=self.state.session_id, role="assistant", content=response_text
+            session_id=self.state.session_id,
+            role="assistant",
+            content=response_text,
+            npc_journal={"status": "pending", "attempts": 0},
         )
         self.db.add(assistant_chat)
 
@@ -2140,6 +2166,9 @@ class GameTurnManager:
         # see advance_in_game_turn above.
 
         await self.db.commit()
+        schedule_npc_journal(self.state.session_id, self.user.id)
+        schedule_images(self.state, self.user.id, getattr(self, "_dynamic_scene_images", []))
+        self._dynamic_scene_images = []
 
         async for comp_event in self._compress_history_if_needed():
             yield comp_event
@@ -2421,16 +2450,6 @@ class GameTurnManager:
 
     async def _is_generation_retry_request(self, *args, **kwargs) -> bool:
         return await self.adventure_gen.is_generation_retry_request(*args, **kwargs)
-
-    @staticmethod
-    def _contains_transition_movement_cue(text: str) -> bool:
-        return TurnAdventureGenManager.contains_transition_movement_cue(text)
-
-    def _message_mentions_transition_target(self, *args, **kwargs) -> bool:
-        return self.adventure_gen.message_mentions_transition_target(*args, **kwargs)
-
-    async def _is_explicit_scene_transition_request(self, *args, **kwargs) -> bool:
-        return await self.adventure_gen.is_explicit_scene_transition_request(*args, **kwargs)
 
     def _set_last_ag_generation_request(self, *args, **kwargs) -> None:
         self.adventure_gen.set_last_ag_generation_request(*args, **kwargs)

@@ -220,10 +220,12 @@ class SettingsService {
   }
 
   ollamaModelsByUrl = ref<Record<string, string[]>>({})
+  private ollamaRequests = 0
 
   async fetchOllamaModels(ollamaUrl?: string, role?: OllamaRole): Promise<string[]> {
     const url = (ollamaUrl || 'http://localhost:11434').trim().replace(/\/+$/, '')
     this.isLoadingOllamaModels.value = true
+    this.ollamaRequests++
     try {
       const data = await api.getOllamaModels(url)
       const models = Array.isArray(data.models) ? data.models : []
@@ -250,7 +252,8 @@ class SettingsService {
       }
       return []
     } finally {
-      this.isLoadingOllamaModels.value = false
+      this.ollamaRequests--
+      this.isLoadingOllamaModels.value = this.ollamaRequests > 0
     }
   }
 

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
 from backend.api.routes.adventures.cloning import router as cloning_router
+from backend.api.routes.adventures.dynamic_locations import router as dynamic_locations_router
 from backend.api.routes.adventures.editor import router as editor_router
 from backend.api.routes.adventures.editor_entity_transfer import (
     router as editor_entity_transfer_router,
@@ -15,6 +16,7 @@ from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
+from backend.api.routes.adventures.session_npcs import router as session_npcs_router
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
@@ -51,3 +53,6 @@ router.include_router(gameplay_router)
 router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)
+router.include_router(session_npcs_router)
+
+router.include_router(dynamic_locations_router)

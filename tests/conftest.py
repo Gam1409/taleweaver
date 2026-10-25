@@ -219,3 +219,15 @@ def _patch_external_generation_and_media(monkeypatch, request):
     )
 
     yield
+
+
+@pytest.fixture(autouse=True)
+def _stub_npc_journal_background(monkeypatch):
+    """Only dedicated journal tests run workers, with mocked model and media calls."""
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.gameplay_logic.schedule_npc_journal", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.gameplay.schedule_npc_journal", lambda *args: None
+    )
+    monkeypatch.setattr("backend.api.routes.adventures.session_npcs.schedule", lambda *args: None)

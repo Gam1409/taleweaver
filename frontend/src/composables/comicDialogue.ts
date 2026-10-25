@@ -5,6 +5,20 @@ export interface SpeakerIdentity {
   name?: unknown
   id?: unknown
   entity_type?: unknown
+  metadata_json?: { npc_journal?: { aliases?: unknown } }
+}
+
+export function speakerAliases(entity: SpeakerIdentity): string[] {
+  const aliases = entity.metadata_json?.npc_journal?.aliases
+  return Array.isArray(aliases) ? aliases.filter((value): value is string => typeof value === 'string') : []
+}
+
+export function resolveSpeakerAlias(name: string, entities: readonly SpeakerIdentity[]): SpeakerIdentity | null {
+  const normalized = name.trim().toLowerCase()
+  const matches = entities.filter(entity =>
+    (!entity.entity_type || String(entity.entity_type).toUpperCase() === 'NPC') &&
+    speakerAliases(entity).some(alias => alias.trim().toLowerCase() === normalized))
+  return matches.length === 1 ? matches[0]! : null
 }
 export interface DialogueOptions {
   playerName?: string
@@ -41,7 +55,7 @@ export function knownSpeakerNames(
     'you',
     playerName,
     ...Object.keys(metadata),
-    ...[...characters, ...records].flatMap(entity => [entity.name, entity.id])
+    ...[...characters, ...records].flatMap(entity => [entity.name, entity.id, ...speakerAliases(entity)])
   ]
   return new Set(
     names

@@ -10,6 +10,7 @@ import {
   Scroll,
   Map as MapIcon,
   User,
+  Users,
   History,
   Lightbulb,
   BrainCircuit,
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   openChronicles: []
   openWalkthrough: []
   openMemories: []
+  openCharacters: []
   openDebug: []
   shuffleSuggestions: []
   selectSuggestion: [suggestion: string]
@@ -188,6 +190,10 @@ onBeforeUnmount(() => {
         <span class="hidden sm:inline uppercase tracking-wider">Debug</span>
       </button>
     </div>
+
+    <button type="button" title="Characters you have met" aria-label="Characters" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900/90 text-slate-200 hover:border-amber-400 text-xs font-bold" @click="emit('openCharacters')">
+      <Users class="w-4 h-4 text-amber-300" /><span class="hidden sm:inline">Characters</span>
+    </button>
 
     <!-- Ideas Section with Animated Popup List -->
     <div ref="ideasWrapperRef" class="relative shrink-0">

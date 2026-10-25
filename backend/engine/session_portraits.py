@@ -12,10 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import prompts
+from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.media_engine import MediaEngine
+from backend.engine.npc_journal.records import memory_context
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.game_session import GameSession
@@ -27,6 +29,8 @@ from backend.utils.path_security import safe_data_path, sanitize_path_component
 
 class SessionPortraitRequest(BaseModel):
     target_id: str = Field(min_length=1, max_length=128)
+    use_previous_image: bool = False
+    change_description: str = Field(default="", max_length=1000)
 
 
 async def _context(
@@ -63,14 +67,16 @@ def _override_key(state: SessionState, target_id: str) -> str:
     )
 
 
-async def _settings(db: AsyncSession, state: SessionState, user: User) -> tuple[dict, str, str]:
+async def _settings(
+    db: AsyncSession, state: SessionState, user: User, kind: str = "npc"
+) -> tuple[dict, str, str]:
     snapshot = AdventureLogic.extract_manifest_snapshot(state)
     story = SimpleNamespace(original_manifest=snapshot.get("original_manifest") or {})
     if not snapshot and state.template_id:
         story = await db.get(AdventureTemplate, state.template_id) or story
     t2i = story_t2i(user.t2i_settings, story)
     validate_image_profiles(
-        SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), ["npc"]
+        SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), [kind]
     )
     meta = snapshot.get("adventure") or {}
     styles = state.selected_image_styles
@@ -149,9 +155,27 @@ async def regenerate_session_portrait(
     raw_override = (state.entity_states or {}).get(_override_key(state, npc.id))
     override = raw_override if isinstance(raw_override, dict) else {}
     facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
+    facts["description"] = (facts.get("description") or "") + memory_context(npc, visual_only=True)
     try:
         t2i, style, tone = await _settings(db, state, user)
         request = _image_request(session_id, facts, t2i, user, style, tone)
+        if payload.change_description.strip():
+            request["prompt"] += (
+                " Requested portrait change (preserve identity and single-subject framing): "
+                + payload.change_description.strip()
+            )
+        if payload.use_previous_image:
+            if request["provider"] != "comfyui":
+                raise ValueError("Previous portrait references currently require ComfyUI.")
+            previous = override.get("image_url", npc.image_url)
+            if not previous:
+                raise ValueError("This NPC has no previous portrait to use as a reference.")
+            select_workflow(request["provider_options"], reference=True)
+            request["provider_options"]["reference_image_url"] = previous
+            request["prompt"] += (
+                " Preserve the reference character's identity, facial features and appearance; "
+                "change only the requested expression, action or setting."
+            )
         user_id = user.id
         # Release the read transaction while the provider is working.
         await db.commit()

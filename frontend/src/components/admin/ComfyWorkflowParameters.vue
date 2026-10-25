@@ -24,6 +24,12 @@ const controls: Record<string, { label: string; min: number; max: number; step: 
 }
 const entries = computed(() => Object.entries(props.modelValue.graph).flatMap(([id, node]) => Object.entries(node.inputs).map(([field, value]) => ({ id, field, value, kind: node.class_type }))))
 const models = computed(() => entries.value.filter(item => labels[item.field] && typeof item.value === 'string'))
+const checkpointVaeSources = computed(() => [...new Set(entries.value.flatMap(item => {
+  if (item.field !== 'vae' || !Array.isArray(item.value) || item.value[1] !== 2) return []
+  const source = props.modelValue.graph[String(item.value[0])]
+  if (!source || !['CheckpointLoaderSimple', 'CheckpointLoader'].includes(source.class_type)) return []
+  return [String(source.inputs.ckpt_name || item.value[0])]
+}))])
 const checkedModels = computed(() => models.value.filter(item => modelFiles(item.id, item.field) !== undefined))
 const missingModels = computed(() => checkedModels.value.filter(item => !choices(item.id, item.field).includes(String(item.value))))
 const parameters = computed(() => entries.value.filter(item => controls[item.field] && typeof item.value === 'number' && /KSampler|CLIPTextEncodeFlux|FluxGuidance|LoraLoader/.test(item.kind)))
@@ -71,6 +77,9 @@ async function refresh(): Promise<void> {
 
 <template>
   <div class="space-y-3">
+    <p v-if="checkpointVaeSources.length" role="status" class="text-xs text-slate-400">
+      VAE from checkpoint: {{ checkpointVaeSources.join(', ') }}. These workflow connections use the checkpoint's VAE output; no separate VAE file is needed for them. Run a test image to confirm the checkpoint contains a working VAE.
+    </p>
     <ComfyModelField v-for="item in models" :key="`${item.id}-${item.field}`" :label="labels[item.field]! + (models.filter(model => model.field === item.field).length > 1 ? ` · ${item.id}` : '')" :model-value="String(item.value)" :files="modelFiles(item.id, item.field)" :folder="folders[item.field]" @update:model-value="update(item.id, item.field, $event)" />
     <button v-if="models.length" type="button" :disabled="loading" class="text-xs text-cyan-300 underline disabled:opacity-40" @click="refresh">{{ loading ? 'Loading models…' : 'Refresh model list from server' }}</button>
     <p v-if="message" role="status" class="text-xs text-slate-400">{{ message }}</p>

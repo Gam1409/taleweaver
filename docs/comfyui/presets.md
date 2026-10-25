@@ -150,3 +150,20 @@ graphic details, and excludes minors and age-ambiguous characters. The preferenc
 is stored separately from automatic template selection, so detecting another model
 does not reset it. It affects LLM prompt adaptation only; manual prompts and workflow
 JSON/sampling controls remain unchanged.
+# Checkpoint VAE versus a separate VAE
+
+The SDXL, Illustrious, Animagine and combined FLUX checkpoint starters connect
+`CheckpointLoaderSimple` output 2 directly to `VAEDecode`. Their reference workflows
+also connect that same output to `VAEEncode`. They do not require a separate VAE file
+in `models/vae`, and an empty server VAE list does not make these workflows incompatible.
+The settings display this checkpoint connection explicitly.
+
+Anima's split-model starter uses `VAELoader` and requires its selected external VAE.
+Imported workflows follow their actual node connections: a `VAELoader` node still
+requires its file even if some other checkpoint also contains a VAE. Removing or
+replacing that node requires rewiring its consumers in the workflow JSON.
+
+The compatibility check verifies node availability and selected filenames, not the
+weights inside a checkpoint. A checkpoint without a usable embedded VAE can pass
+static checks and fail when ComfyUI executes it. Use a test image to confirm actual
+loading and decoding. The checkpoint's filename alone is not reliable evidence.

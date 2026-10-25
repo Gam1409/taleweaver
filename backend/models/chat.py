@@ -1,5 +1,5 @@
 import uuid6
-from sqlalchemy import Column, ForeignKey, String, Text, event, inspect
+from sqlalchemy import JSON, Column, ForeignKey, String, Text, event, inspect
 from sqlalchemy.orm import Session
 
 from backend.models.base import Base, TimestampMixin
@@ -10,6 +10,7 @@ class ChatMessage(Base, TimestampMixin):
     """
     Stores conversational history for the sliding-window memory management.
     """
+
     __tablename__ = "chat_messages"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
@@ -25,6 +26,9 @@ class ChatMessage(Base, TimestampMixin):
     # one page per scene/sequence. Stamped automatically on flush (see below).
     scene_id = Column(String(100), nullable=True)
     sequence_id = Column(String(100), nullable=True)
+
+    # Durable optional background extraction task; old narration is not rescanned implicitly.
+    npc_journal = Column(JSON, nullable=True)
 
     def to_client_dict(self) -> dict:
         """Chat history entry as sent to the client."""

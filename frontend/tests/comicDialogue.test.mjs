@@ -9,7 +9,7 @@ const source = readFileSync(new URL('../src/composables/comicDialogue.ts', impor
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText
-const { parseComicDialogue, knownSpeakerNames } = await import(
+const { parseComicDialogue, knownSpeakerNames, resolveSpeakerAlias } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 
@@ -113,4 +113,13 @@ test('object labels do not become known unquoted speakers', () => {
   const knownNames = knownSpeakerNames('Hero', [{ name: 'Сундук', entity_type: 'OBJECT' }])
   const result = parseComicDialogue('Сундук: закрыт.', { knownNames, resolveSpeaker: () => null })
   assert.equal(result.dialogues[0].isNarration, true)
+})
+
+
+test('a unique learned alias resolves to the same NPC and ambiguous labels do not', () => {
+  const mira = { id: 'mira-id', name: 'Мира', entity_type: 'NPC', metadata_json: { npc_journal: { aliases: ['Девушка', 'Искра'] } } }
+  assert.equal(resolveSpeakerAlias('Искра', [mira]), mira)
+  assert.equal(knownSpeakerNames('Hero', [mira]).has('искра'), true)
+  const other = { id: 'other-id', name: 'Анна', entity_type: 'NPC', metadata_json: { npc_journal: { aliases: ['Девушка'] } } }
+  assert.equal(resolveSpeakerAlias('Девушка', [mira, other]), null)
 })

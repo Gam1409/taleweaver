@@ -3,7 +3,7 @@
 from fastapi import HTTPException
 
 from backend.core import prompts
-from backend.core.comfyui_config import prompt_rules
+from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
@@ -39,7 +39,8 @@ async def suggest_preset_prompt(
         )
         if t2i.get(f"{profile}_model_provider") != "comfyui":
             return None
-        rules = prompt_rules({**t2i, "comfyui_profile": profile})
+        options = {**t2i, "comfyui_profile": profile}
+        rules = prompt_rules(options)
         if not rules:
             return None
         style = resolve_style_instruction(
@@ -48,7 +49,12 @@ async def suggest_preset_prompt(
         tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
         source = f"Asset: {payload.target_type}. Name: {name}. Description: {description}. Style: {style}. Mood: {tone}."
         # Return the editable body. Mandatory prefix/suffix are added only at generation.
-        return await adapt_body(source, rules, user)
+        return await adapt_body(
+            source,
+            rules,
+            user,
+            mature_themes=getattr(select_profile(options), "mature_themes", False),
+        )
     except Exception as exc:
         raise HTTPException(
             400,

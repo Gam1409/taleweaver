@@ -106,3 +106,20 @@ The specification's 30 original locations map to the following current code. Sev
 ## Remaining limitations
 
 The global legacy `ollama_url` still lacks save-time and router-time SSRF validation. This task validates the new role URLs and submitted test URLs without changing that older policy. `AI_FIX_FALLBACK_PROVIDER=openai` with the default `gpt-4o-mini` can send adventure content to a cloud service after a local failure if an OpenAI key is configured; setting the fallback provider to an empty value disables that environment fallback. Image, TTS and STT providers are unchanged. No dependency lock files were modified.
+
+## Discovering models for a role URL
+
+Each role's Ollama settings has a **Check models at this URL** button beside the URL.
+Opening settings or editing a role URL automatically refreshes its model list after
+600 ms without further edits. Results are cached by normalized server URL and used
+only by roles pointing to that server; discovery never changes a selected model.
+The status shows the returned model count, or asks you to check the address/server
+when no models were returned. An empty role URL uses the global Ollama URL.
+Save the settings to persist the chosen URL and model. Runtime requests use the
+saved role URL; discovery alone does not save the form.
+
+Verification: 75 role/transport tests and 51 Ollama settings/API tests passed with
+mocked endpoints. Browser checks used the actual role component and settings service
+against two distinct mocked URLs, including automatic refresh, URL changes, separate
+caches and the manual check button. Production build passed; TypeScript diagnostics
+remain at the existing baseline.

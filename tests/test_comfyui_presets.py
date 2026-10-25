@@ -16,7 +16,7 @@ from backend.core.image_model_detection import detect_preset_template, detect_te
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.image_prompt_templates import TEMPLATES, template_rules
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.image_prompt_adapter import prepare_prompt
+from backend.engine.image_prompt_adapter import MATURE_THEMES_INSTRUCTION, prepare_prompt
 from backend.engine.media_engine import MediaEngine
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
@@ -175,14 +175,17 @@ async def test_manual_body_skips_llm_and_preserves_workflow_negative(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
 async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
-    comfy_options, workflow, monkeypatch
+    comfy_options, workflow, monkeypatch, enabled
 ):
     from backend.api.routes.adventures.schemas import SuggestPromptRequest
     from backend.engine.preset_prompt_suggestion import suggest_preset_prompt
 
     options = preset_options(comfy_options, workflow, template="pony6")
     options["comfyui_presets"]["detailed"] = named_preset(workflow, template="flux1")
+    options["comfyui_presets"]["art"]["mature_themes"] = enabled
+    options["comfyui_presets"]["detailed"]["mature_themes"] = not enabled
     story = SimpleNamespace(
         original_manifest={"visual_presets": {"advanced": "detailed"}},
         selected_image_styles=[],
@@ -195,12 +198,16 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     body = await suggest_preset_prompt(user, story, payload, "Traveler", "A red coat")
     assert body == "red coat" and "score_9" not in body
     assert '"format": "tags"' in llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
+    system = llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
+    assert (MATURE_THEMES_INSTRUCTION in system) is enabled
     prepared = await prepare_prompt(body, {**options, "_prompt_prepared": True})
     assert prepared["positive"] == "score_9, score_8_up, score_7_up, red coat"
     assert llm.aexecute_simple_task.await_count == 1
     payload.use_advanced_model = True
     await suggest_preset_prompt(user, story, payload, "Traveler", "A red coat")
     assert '"format": "description"' in llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
+    system = llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
+    assert (MATURE_THEMES_INSTRUCTION in system) is not enabled
 
 
 @pytest.mark.asyncio
