@@ -146,7 +146,7 @@ async def retry_learning(
         )
     ).all()
     for message in messages:
-        message.npc_journal = {"status": "pending", "attempts": 0}
+        message.npc_journal = {"status": "pending", "attempts": 0, "recovering": True}
     await db.commit()
-    schedule(game_id, user.id)
+    schedule(game_id, user.id, retry=True)
     return {"queued": len(messages)}

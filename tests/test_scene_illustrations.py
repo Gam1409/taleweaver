@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -124,7 +125,7 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
         target.write_bytes(b"fake image")
         return local_path_to_data_url(str(target))
 
-    async def adapt(description, rules, user):
+    async def adapt(description, rules, user, **kwargs):
         return description
 
     monkeypatch.setattr(render, "adapt_body", adapt)
@@ -277,7 +278,10 @@ async def test_snapshot_bound_preserves_generated_image_metadata(auth_client, il
         assert registry["images"]["moment-reply"]["image_url"]
 
 
-async def test_comfy_story_preset_is_used(auth_client, illustration_world, workflow, monkeypatch):
+@pytest.mark.parametrize("adapt_with_llm", [True, False])
+async def test_comfy_story_preset_is_used(
+    auth_client, illustration_world, workflow, monkeypatch, adapt_with_llm
+):
     monkeypatch.setattr(settings, "ALLOW_PRIVATE_NETWORK_MODELS", True)
     async with TestSessionLocal() as db:
         user = (await db.scalars(select(User))).first()
@@ -287,12 +291,20 @@ async def test_comfy_story_preset_is_used(auth_client, illustration_world, workf
                 "story-art": {
                     "name": "Story",
                     "generate": workflow,
-                    "prompt_rules": {"adapt_with_llm": True, "language": "English"},
+                    "prompt_rules": {
+                        "adapt_with_llm": adapt_with_llm,
+                        "language": "English",
+                        "format": "tags",
+                        "prefix": "model-quality-token",
+                        "suffix": "model-style-token",
+                        "instructions": "Use visual tags for this checkpoint.",
+                    },
                 }
             },
             "comfyui_url": "http://127.0.0.1:8188",
         }
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
+        state.selected_image_styles = [{"instruction": "Soft watercolor with ink outlines"}]
         data = deepcopy(state.entity_states)
         data[AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY]["original_manifest"] = {
             "visual_presets": {"advanced": "story-art"}
@@ -300,16 +312,38 @@ async def test_comfy_story_preset_is_used(auth_client, illustration_world, workf
         state.entity_states = data
         await db.commit()
 
-    async def unexpected_adaptation(*args, **kwargs):
-        raise AssertionError("ComfyUI adapter owns its single Utility call")
+    adaptations = []
 
-    monkeypatch.setattr(render, "adapt_body", unexpected_adaptation)
+    async def adapt(description, rules, user, **kwargs):
+        adaptations.append(rules)
+        assert "Soft watercolor with ink outlines" in description
+        return "2 adults, standing apart, woman beside window, man seated"
+
+    monkeypatch.setattr(render, "adapt_body", adapt)
     result = await finish(auth_client)
     assert result["state"] == "succeeded", result
     assert illustration_world[0]["provider"] == "comfyui"
     options = illustration_world[0]["provider_options"]
     assert options["comfyui_assignments"]["advanced"] == "story-art"
-    assert options["_prompt_prepared"] is False
+    assert options["_prompt_prepared"] is True
+    assert len(adaptations) == 1
+    assert adaptations[0].format == ("tags" if adapt_with_llm else "description")
+    if adapt_with_llm:
+        assert "Use visual tags for this checkpoint." in adaptations[0].instructions
+    assert "final visible moment" in adaptations[0].instructions
+    assert "later departure" in adaptations[0].instructions
+
+    from backend.engine import image_prompt_adapter
+
+    async def unexpected_adaptation(*args, **kwargs):
+        raise AssertionError("The image provider must not reinterpret the final frame")
+
+    monkeypatch.setattr(image_prompt_adapter, "adapt_body", unexpected_adaptation)
+    prepared = await image_prompt_adapter.prepare_prompt(illustration_world[0]["prompt"], options)
+    assert prepared["positive"] == (
+        "model-quality-token, 2 adults, standing apart, woman beside window, man seated, "
+        "model-style-token"
+    )
 
 
 async def test_timeout_keeps_previous_image(auth_client, illustration_world, monkeypatch):
@@ -381,3 +415,41 @@ async def test_capture_merges_images_finished_during_turn(auth_client, illustrat
             == (result["result"]["image_url"])
         )
         assert state.entity_states["turn_fact"]["value"] == 7
+
+
+async def test_completed_moment_freezes_public_positions_without_private_items(
+    auth_client, illustration_world
+):
+    from backend.engine.visual_novel.runtime import capture_completed_moment
+
+    async with TestSessionLocal() as db:
+        state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
+        npc = await db.scalar(select(WorldEntity).where(WorldEntity.session_id == "moment"))
+        npc.spatial_position = "beside the window, apart from the seated hero"
+        npc.goal = "Private goal"
+        avatar = await db.get(Avatar, "moment-avatar")
+        avatar.inventory = [
+            {"id": "COAT", "name": "Red coat", "description": "Wool coat"},
+            {"id": "LETTER", "name": "Hidden letter", "description": "Private secret"},
+        ]
+        avatar.equipment = {"body": "COAT"}
+        await db.flush()
+        message = ChatMessage(
+            id="final-moment",
+            session_id="moment",
+            role="assistant",
+            content="<short pause> Лина отошла к окну, отпустив руку героя.",
+        )
+        db.add(message)
+        assert message.scene_id is None
+        await capture_completed_moment(SimpleNamespace(db=db, state=state, avatar=avatar), message)
+        snapshot = registry_of(state.entity_states)["snapshots"][message.id]
+        facts = snapshot["visible_facts"]
+        assert facts["setting"] == "Cafe"
+        assert message.scene_id == "CAFE"
+        assert facts["characters"][1]["position"] == npc.spatial_position
+        assert "Red coat" in facts["characters"][0]["clothing"]
+        assert "Hidden letter" not in str(facts)
+        assert "Private goal" not in str(facts)
+        assert snapshot["narration"] == message.content
+        assert "<short pause>" in message.content

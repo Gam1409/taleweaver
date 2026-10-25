@@ -97,23 +97,6 @@ async def test_learned_character_stays_known_without_revealing_hidden_items(
     assert response.json()["entries"][0]["text"] == "Синий плащ"
 
 
-async def test_failed_introduction_pauses_later_learning_until_retry(journal_world, monkeypatch):
-    owner, _ = journal_world
-    first = await save_message()
-    later = await save_message("Мира сказала: «Я кузнец».")
-    async with TestSessionLocal() as db:
-        message = await db.get(ChatMessage, first)
-        message.npc_journal = {"status": "failed", "attempts": 1}
-        await db.commit()
-    extract_mock = AsyncMock()
-    monkeypatch.setattr(worker, "extract", extract_mock)
-    monkeypatch.setattr(worker, "resume_pending", AsyncMock())
-    await worker._run("portrait-session", owner)
-    extract_mock.assert_not_called()
-    async with TestSessionLocal() as db:
-        assert (await db.get(ChatMessage, later)).npc_journal["status"] == "pending"
-
-
 async def test_export_import_preserves_journal_and_remaps_source_message_ids(
     auth_client, journal_world
 ):

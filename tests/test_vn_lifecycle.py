@@ -50,6 +50,7 @@ def social_fixture() -> SocialState:
     return SocialState(
         turn=7,
         processed_message_ids=[FIRST_MESSAGE],
+        reviewed_scene_message_ids=[FIRST_MESSAGE],
         characters={
             "NPC_NEW": CharacterState(
                 core=PRIVATE_CORE,
@@ -144,6 +145,7 @@ def test_remap_preserves_private_state_but_rebinds_only_message_references():
     npc = social.characters["NPC_NEW"]
     assert original == before
     assert social.processed_message_ids == ["new-local-source"]
+    assert social.reviewed_scene_message_ids == ["new-local-source"]
     assert npc.last_source_message_id == "new-local-source"
     assert npc.memories[0].source_message_id == "new-local-source"
     assert npc.memories[0].event_id == social_event_id("new-local-source", "NPC_NEW", "cooperation")
@@ -158,6 +160,7 @@ def test_remap_drops_orphaned_provenance_without_resetting_relationships():
     social = SocialState.model_validate(result[STATE_KEY])
     npc = social.characters["NPC_NEW"]
     assert not social.processed_message_ids and not npc.memories
+    assert not social.reviewed_scene_message_ids
     assert npc.last_source_message_id == ""
     assert npc.relationship.trust == 12 and npc.meaningful_events == 3
     assert npc.core == PRIVATE_CORE

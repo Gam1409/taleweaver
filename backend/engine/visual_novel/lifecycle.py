@@ -26,6 +26,9 @@ def remap_social_state(entity_states: dict | None, message_ids: dict[str, str]) 
     social.processed_message_ids = [
         message_ids[old] for old in social.processed_message_ids if old in message_ids
     ]
+    social.reviewed_scene_message_ids = [
+        message_ids[old] for old in social.reviewed_scene_message_ids if old in message_ids
+    ]
     for npc_id, character in social.characters.items():
         character.last_source_message_id = message_ids.get(character.last_source_message_id, "")
         character.memories = [

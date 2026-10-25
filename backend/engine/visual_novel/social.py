@@ -11,8 +11,10 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
+    MAX_PROCESSED,
     CharacterState,
     InteractionPlan,
+    SocialProposal,
     SocialState,
 )
 from backend.engine.visual_novel.state import (
@@ -101,6 +103,7 @@ def _payload(
         {
             "npc_id": npc.id,
             "name": npc.name,
+            "authored_description": str(getattr(npc, "description", "") or "")[:700],
             "character": _character_context(social.characters[npc.id]),
         }
         for npc in npcs
@@ -129,34 +132,51 @@ def apply_plan(
 ) -> SocialState:
     """Mutate durable completed events; return a separate tentative narrator direction."""
     present = {npc.id for npc in npcs}
-    seen: set[str] = set()
-    reactions = []
     sources = {"player_action": user_msg[:MAX_ACTION_CHARS], "scene_context": scene_context}
+
+    def grounded(proposal: SocialProposal) -> bool:
+        return (
+            proposal.npc_id in present
+            and proposal.npc_id in social.characters
+            and proposal.basis == "performed_interaction"
+            and proposal.evidence in sources[proposal.source]
+        )
+
+    if source_message_id and source_message_id not in social.reviewed_scene_message_ids:
+        seen: set[str] = set()
+        # Accept legacy scene observations, but never let a new player reaction
+        # crowd out the completed interaction for the same NPC.
+        completed = [*plan.completed_events, *plan.reactions]
+        for proposal in completed:
+            if (
+                proposal.source != "scene_context"
+                or proposal.npc_id in seen
+                or not grounded(proposal)
+            ):
+                continue
+            seen.add(proposal.npc_id)
+            character = social.characters[proposal.npc_id]
+            apply_event(social, character, proposal, source_message_id)
+            # A witnessed emotion need not earn points or pass the positive-event
+            # cooldown. It remains separate from scores, promotion and memories.
+            _set_direction(character, proposal)
+        social.reviewed_scene_message_ids = (
+            social.reviewed_scene_message_ids + [source_message_id]
+        )[-MAX_PROCESSED:]
+    directed = social.model_copy(deep=True)
+    seen = set()
     for proposal in plan.reactions:
-        if proposal.npc_id not in present or proposal.npc_id in seen:
+        if proposal.source != "player_action" or proposal.npc_id in seen or not grounded(proposal):
             continue
         seen.add(proposal.npc_id)
-        if (
-            proposal.basis != "performed_interaction"
-            or proposal.evidence not in sources[proposal.source]
-        ):
-            continue
-        character = social.characters.get(proposal.npc_id)
-        if character is None:
-            continue
-        applied = apply_event(social, character, proposal, source_message_id)
-        if applied:
-            character.emotion = proposal.emotion
-            character.emotion_cause = proposal.evidence
-            character.next_intention = proposal.intention
-        reactions.append(proposal)
-    directed = social.model_copy(deep=True)
-    for proposal in reactions:
-        character = directed.characters[proposal.npc_id]
-        character.emotion = proposal.emotion
-        character.emotion_cause = proposal.evidence
-        character.next_intention = proposal.intention
+        _set_direction(directed.characters[proposal.npc_id], proposal)
     return directed
+
+
+def _set_direction(character: CharacterState, proposal: SocialProposal) -> None:
+    character.emotion = proposal.emotion
+    character.emotion_cause = proposal.evidence
+    character.next_intention = proposal.intention
 
 
 async def plan_interaction(

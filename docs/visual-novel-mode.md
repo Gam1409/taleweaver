@@ -38,6 +38,9 @@ one-reply delay. The current player message can guide the immediate reaction, bu
 cannot establish a durable relationship fact by assertion. Repeated evidence is
 deduplicated; compliments do not increase scores; positive changes have a cooldown.
 Code bounds score deltas instead of accepting absolute model-assigned scores.
+The same call reviews completed events separately from new reactions, so a new
+question does not crowd out a previous conflict. An evidenced emotion can persist
+without awarding relationship points. Reviewed narrator IDs prevent replaying it.
 
 After three distinct meaningful events, an NPC is marked as a major character.
 This does not create a duplicate entity and does not require affection: conflict
@@ -61,6 +64,17 @@ Generating later uses that snapshot, not the current location or a character's
 later possessions. The latest 100 snapshots are retained; generated image records
 remain available. Messages without a matching snapshot cannot be illustrated.
 An undone, deleted or edited message cannot receive the result of an obsolete job.
+
+Snapshots include the public location description and known NPC positions. Prompt
+preparation selects the final visible arrangement: stepping back, releasing a hand
+or leaving supersedes an earlier approach or contact. ComfyUI uses these instructions
+together with its selected model's prompt rules and the story's visual style in one
+Utility call. Vocal tags remain in displayed narration and TTS; the image prompt
+does not treat them as visible objects.
+
+The narrator is explicitly constrained to approved NPC movements. These instructions
+do not automatically repair an existing discrepancy between prose and engine state,
+or invent a destination for a character whose whereabouts are unknown.
 
 Existing provider/workflow limitations still apply. A scene description does not
 guarantee perfect multi-character anatomy or identity consistency. This feature

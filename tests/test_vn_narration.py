@@ -42,6 +42,10 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert "Stop before the next meaningful player decision" in prompt
     assert 'Character Name: "Dialogue"' in prompt
     assert "session's content language" in prompt
+    assert "approved NPC movement in TURN RESOLUTION" in prompt
+    assert "does not authorize leaving the room" in prompt
+    assert "Never invent a destination" in prompt
+    assert "Use CURRENT STATE's present cast" in prompt
     assert "Wait until tomorrow" not in prompt
     assert "Sitcom" not in prompt
 

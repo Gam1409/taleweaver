@@ -2,7 +2,10 @@
 
 from typing import Any
 
+from sqlalchemy import select
+
 from backend.engine.scene_illustrations import capture_scene_snapshot
+from backend.models.world_entity import WorldScene
 
 
 def equipped_appearance(avatar: Any) -> str:
@@ -27,9 +30,18 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     """Freeze the public cast at completion; never include hidden possessions or goals."""
     from backend.api.routes.adventures.logic import AdventureLogic
 
+    # ChatMessage's insert hook stamps scene_id from the session on flush.
+    await manager.db.flush([message])
     with manager.db.no_autoflush:
         entities = await AdventureLogic.build_session_entities(manager.db, manager.state)
+        scene = await manager.db.scalar(
+            select(WorldScene).where(
+                WorldScene.session_id == manager.state.session_id,
+                WorldScene.id == message.scene_id,
+            )
+        )
     facts = {
+        "setting": scene.description if scene is not None else "",
         "characters": [
             {
                 "id": manager.avatar.id,
@@ -42,11 +54,11 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
                     "id": entity.get("id"),
                     "name": entity.get("name"),
                     "appearance": entity.get("description"),
+                    "position": entity.get("spatial_position"),
                 }
                 for entity in entities
                 if entity.get("entity_type") == "NPC" and not entity.get("is_defeated")
             ],
-        ]
+        ],
     }
-    await manager.db.flush([message])
     await capture_scene_snapshot(manager.db, manager.state, message, facts)

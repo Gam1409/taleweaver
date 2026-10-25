@@ -59,7 +59,13 @@ def character_state(npc: Any) -> CharacterState:
 
 def ensure_character(social: SocialState, npc: Any) -> CharacterState | None:
     if npc.id in social.characters:
-        return social.characters[npc.id]
+        character = social.characters[npc.id]
+        authored = character_state(npc)
+        if not character.core and authored.core:
+            character.core = authored.core
+        if not character.goals and authored.goals:
+            character.goals = authored.goals
+        return character
     if len(social.characters) >= MAX_CAST:
         return None
     character = character_state(npc)

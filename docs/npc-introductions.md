@@ -75,9 +75,12 @@ retains the history. A discarded cloak is therefore not reused as the latest out
 - Copying or exporting/importing a save retains cards and history and remaps message
   references to the copied conversation.
 - Restoring a checkpoint removes later introductions, facts and aliases.
-- Opening a session or the Characters directory resumes pending learning. A failed
-  response pauses later learning to preserve story order. **Retry learning** retries
-  it after the Small / Utility model is available again.
+- Opening a session or the Characters directory resumes eligible learning. A failed
+  response no longer blocks later messages. Failed work is eligible for another
+  attempt after 60 seconds, up to three attempts; two consecutive failures pause
+  the session's queue for 60 seconds to avoid exhausting a backlog during an outage.
+  **Retry learning** explicitly restarts failed work. When a failed introduction
+  recovers, dependent observations are revisited and deduplicated in source order.
 - Existing conversations are **not** rescanned automatically. For an NPC mentioned
   only in old messages, have them introduce themselves in a new turn.
 
@@ -100,10 +103,11 @@ per character, prioritizing the latest value of each category/topic. Extraction 
 up to 24,000 characters of current narration and up to 3,000 of the previous player
 message. Extremely long responses may therefore leave later passages unprocessed.
 
-Learning has a 90-second timeout, up to three recovery attempts for interrupted work,
-and one worker per session. Process-wide limits allow two learning jobs and one
+Learning has a 90-second timeout, up to three total automatic attempts per message,
+and one worker per session. Database claims reject duplicate or stale results.
+Process-wide limits allow two learning jobs and one
 automatic portrait at a time. This implementation assumes a **single backend process**;
-multiple application workers would need database leases. Interrupted image requests
+multiple application workers would need shared capacity and portrait coordination. Interrupted image requests
 require manual retry to avoid automatically submitting another paid generation.
 
 ## Verification

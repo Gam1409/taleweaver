@@ -41,6 +41,11 @@ class SocialProposal(StrictModel):
 
 
 class InteractionPlan(StrictModel):
+    completed_events: list[SocialProposal] = Field(
+        default_factory=list,
+        max_length=MAX_ACTIVE,
+        description="Review completed scene_context separately from reactions to the new player action. Use source=scene_context only.",
+    )
     reactions: list[SocialProposal] = Field(default_factory=list, max_length=MAX_ACTIVE)
 
 
@@ -78,3 +83,4 @@ class SocialState(StrictModel):
     turn: int = Field(default=0, ge=0)
     characters: dict[str, CharacterState] = Field(default_factory=dict, max_length=MAX_CAST)
     processed_message_ids: list[str] = Field(default_factory=list, max_length=MAX_PROCESSED)
+    reviewed_scene_message_ids: list[str] = Field(default_factory=list, max_length=MAX_PROCESSED)

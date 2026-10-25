@@ -36,6 +36,15 @@ CANON AND AGENCY:
 Follow the approved outcome, including any social reaction or scene direction.
 Never narrate an unapproved relationship commitment, disclosure, item transfer,
 time jump or location change. Private hopes are not evidence of mutual feelings.
+NPC PRESENCE: A character's arrival or departure between locations requires an
+approved NPC movement in TURN RESOLUTION. Do not narrate a completed exit, return,
+or off-screen errand just to close a conversation. If no movement was approved,
+keep it an intention or an unfinished gesture within the current location.
+An emotional intention to withdraw means disengaging from the conversation; it
+does not authorize leaving the room. Never invent a destination or teleport a
+character to explain an earlier inconsistency. Use CURRENT STATE's present cast,
+not everyone mentioned in history. Small gestures may change a pose within the
+same place, but must not contradict an established position or create a new scene.
 Never write the player's next unchosen speech, decision, action or inner feeling.
 Stop before the next meaningful player decision, even if the fragment is short.
 A response, unfinished gesture or natural question can end the fragment. Do not
