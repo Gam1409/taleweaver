@@ -210,6 +210,7 @@ class SessionImporter:
                         label=sc.get("label"),
                         description=sc.get("description"),
                         image_url=sc.get("image_url"),
+                        decorative_objects=sc.get("decorative_objects"),
                     )
                     db.add(world_sc)
 

@@ -572,6 +572,8 @@ async def start_session_for_template(
             name=template_avatar.name,
             role=template_avatar.role,
             description=template_avatar.description,
+            goal=template_avatar.goal,
+            character=template_avatar.character,
             profile_image=template_avatar.profile_image,
             hp=template_avatar.hp,
             max_hp=template_avatar.max_hp,
@@ -599,6 +601,8 @@ async def start_session_for_template(
             name=prot.get("name", "You"),
             role=prot.get("role"), 
             description=prot.get("description"), 
+            goal=prot.get("goal"),
+            character=prot.get("character"),
             profile_image=prot.get("profile_image"),
             hp=prot.get("hp", 200), 
             max_hp=prot.get("hp", 200), 
@@ -822,7 +826,8 @@ async def start_session_for_template(
         copied_scene_image = _copy_data_asset_to_session(new_session.id, "scenes", s.image_url, asset_copy_cache)
         new_s = WorldScene(
             id=s.id, session_id=new_session.id, template_id=None,
-            label=s.label, description=s.description, image_url=(copied_scene_image or s.image_url)
+            label=s.label, description=s.description, image_url=(copied_scene_image or s.image_url),
+            decorative_objects=deepcopy(s.decorative_objects),
         )
         db.add(new_s)
     
@@ -890,6 +895,8 @@ async def start_session_for_template(
             moveable=bool(ent.moveable) if ent.moveable is not None else (str(ent.movement_type or "").upper() == "MOVABLE"),
             allowed_scenes=deepcopy(ent.allowed_scenes) if ent.allowed_scenes else [],
             notes=ent.notes,
+            goal=ent.goal,
+            character=ent.character,
             hp=ent.hp, max_hp=ent.max_hp, mana=ent.mana, max_mana=ent.max_mana, stamina=ent.stamina, max_stamina=ent.max_stamina,
             stat_modifier_strength=ent.stat_modifier_strength, stat_modifier_dexterity=ent.stat_modifier_dexterity,
             stat_modifier_intelligence=ent.stat_modifier_intelligence, stat_modifier_wisdom=ent.stat_modifier_wisdom,
@@ -1102,6 +1109,8 @@ async def copy_session(
         name=original_avatar.name,
         role=original_avatar.role,
         description=original_avatar.description,
+        goal=original_avatar.goal,
+        character=original_avatar.character,
         profile_image=original_avatar.profile_image,
         hp=original_avatar.hp,
         max_hp=original_avatar.max_hp,
@@ -1234,7 +1243,8 @@ async def copy_session(
             template_id=None,
             label=s.label,
             description=s.description,
-            image_url=(copied_scene_image or s.image_url)
+            image_url=(copied_scene_image or s.image_url),
+            decorative_objects=deepcopy(s.decorative_objects),
         )
         db.add(cloned_scene)
 
@@ -1287,6 +1297,8 @@ async def copy_session(
             moveable=bool(ent.moveable) if ent.moveable is not None else (str(ent.movement_type or "").upper() == "MOVABLE"),
             allowed_scenes=deepcopy(ent.allowed_scenes) if ent.allowed_scenes else [],
             notes=ent.notes,
+            goal=ent.goal,
+            character=ent.character,
             hp=ent.hp,
             max_hp=ent.max_hp,
             mana=ent.mana,

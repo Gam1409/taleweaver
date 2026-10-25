@@ -19,6 +19,7 @@ from backend.core import prompts
 from backend.core.config import settings
 from backend.core.game_modes import is_vn
 from backend.engine.map_engine import MapEngine
+from backend.engine.mutation_targets import validate_mutation_targets
 from backend.engine.quest_manager import QuestManager
 from backend.engine.rule_engine import (
     EntityMovement,
@@ -29,6 +30,7 @@ from backend.engine.rule_engine import (
 )
 from backend.engine.visual_novel.event_policy import enforce_vn_event_policy
 from backend.engine.visual_novel.ownership import sync_vn_ownership
+from backend.engine.world_memory_notifications import memory_saved_message, notification_language
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.chat import ChatMessage
 from backend.models.user import User
@@ -237,6 +239,7 @@ class TurnStateApplier:
     async def _apply_game_event(self, event: GameEvent) -> list[str]:
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         enforce_vn_event_policy(event, self.adventure)
+        await validate_mutation_targets(self.manager, event)
         vn_mode = is_vn(self.adventure)
         system_messages: list[str] = []
         states = dict(self.state.entity_states or {})
@@ -601,21 +604,8 @@ class TurnStateApplier:
                 state_dirty = True
 
         if event.updated_entities:
-            session_ents_res = await self.db.execute(
-                select(WorldEntity).where(WorldEntity.session_id == self.game_id)
-            )
-            canonical_ents = session_ents_res.scalars().all()
-            ent_lookup_by_id = {e.id.upper(): e.id for e in canonical_ents if e.id}
-            ent_lookup_by_name = {(e.name or "").strip().lower(): e.id for e in canonical_ents if e.name}
-
             for update in event.updated_entities:
-                raw_eid = str(update.entity_id or "").strip()
-                canonical_id = (
-                    ent_lookup_by_id.get(raw_eid.upper())
-                    or ent_lookup_by_name.get(raw_eid.lower())
-                    or raw_eid
-                )
-                eid = canonical_id
+                eid = update.entity_id
                 ent_obj = None
                 if eid not in states:
                     states[eid] = {}
@@ -1129,6 +1119,7 @@ class TurnStateApplier:
 
         if event.new_world_memories:
             import uuid
+            memory_language = await notification_language(self.manager)
             existing_memories = list(self.state.world_memories or [])
             for mem in event.new_world_memories:
                 target_scene_id = mem.scene_id or (self.state.current_scene_id if self.state else None)
@@ -1157,9 +1148,9 @@ class TurnStateApplier:
                     "scene_id": target_scene_id,
                 }
                 existing_memories.append(new_mem)
-                emotion_label = "positiv" if mem.emotion == "positive" else ("negativ" if mem.emotion == "negative" else "neutral")
-                scope_label = "szenen-lokal" if mem.scope == "local" else "global"
-                msg = f"Erinnerung gespeichert ({scope_label}, {emotion_label}): {mem.description}"
+                msg = memory_saved_message(
+                    mem.description, mem.scope, mem.emotion, memory_language
+                )
                 await self._save_chat_message("system", msg)
                 system_messages.append(msg)
             self.state.world_memories = existing_memories
