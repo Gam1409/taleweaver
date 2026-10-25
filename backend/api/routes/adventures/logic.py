@@ -2,6 +2,7 @@ import logging
 import os
 import glob
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Optional, Union
 
@@ -11,9 +12,11 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.config import settings
+from backend.core.game_modes import mode_policy
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
+from backend.engine.visual_novel.presentation import known_character, public_entity, session_is_vn
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -501,6 +504,7 @@ class AdventureLogic:
     @staticmethod
     async def build_session_entities(db: AsyncSession, state: SessionState) -> list[dict[str, Any]]:
         """Fetches and processes entities for the current session, filtering for the current scene."""
+        vn_mode = await session_is_vn(db, state)
         ent_res = await db.execute(
             select(WorldEntity).where(WorldEntity.session_id == state.session_id)
         )
@@ -560,7 +564,7 @@ class AdventureLogic:
             if str(ent.get("item_type") or "").upper() == "CONTAINER":
                 ent = dict(ent)
                 ent["inventory"] = AdventureLogic.hydrate_container_inventory(ent.get("inventory"), entity_lookup)
-            entities.append(player_entity_view(ent))
+            entities.append(public_entity(ent, state) if vn_mode else player_entity_view(ent))
         return entities
 
     @staticmethod
@@ -950,6 +954,10 @@ class AdventureLogic:
             "template_id": state.template_id,
             "exp": avatar.exp,
             "rule_enforcement_mode": adventure.rule_enforcement_mode if adventure else (session_snapshot.get("adventure") or {}).get("rule_enforcement_mode", "rpg"),
+            "mode_capabilities": asdict(mode_policy(
+                adventure.rule_enforcement_mode if adventure else (session_snapshot.get("adventure") or {}).get("rule_enforcement_mode", "rpg"),
+                adventure.strict_rules if adventure else (session_snapshot.get("adventure") or {}).get("strict_rules"),
+            )),
             "adventure_tone": adventure.selected_tone if adventure else (session_snapshot.get("adventure") or {}).get("selected_tone"),
             "clock_enabled": bool(adventure.clock_enabled) if adventure else bool((session_snapshot.get("adventure") or {}).get("clock_enabled", False)),
             "time_system": state.time_system or (adventure.time_system if adventure else (session_snapshot.get("adventure") or {}).get("time_system", "relative")),
@@ -993,6 +1001,8 @@ class AdventureLogic:
 
     @staticmethod
     async def get_npc_metadata(db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None) -> dict:
+        state = await db.scalar(select(SessionState).where(SessionState.session_id == session_id)) if session_id else None
+        vn_mode = state is not None and await session_is_vn(db, state)
         if session_id:
             npc_query = select(WorldEntity).where(WorldEntity.session_id == session_id, WorldEntity.entity_type.in_(["NPC", "npc"]))
         elif template_id:
@@ -1002,6 +1012,8 @@ class AdventureLogic:
         npc_res = await db.execute(npc_query)
         metadata = {}
         for npc in npc_res.scalars().all():
+            if vn_mode and not known_character(npc, state):
+                continue
             data = {
                 "name": npc.name,
                 "description": npc.description,

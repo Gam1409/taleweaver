@@ -630,7 +630,7 @@ const form = ref({
   license: '',
   license_url: '',
   original_prompt: '',
-  rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat',
+  rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
   time_per_turn: 5,
   max_time_per_turn: null as number | null,
   max_memory_turns: 10,
@@ -831,7 +831,7 @@ async function fetchAdventure() {
     form.value.license = data.license || ''
     form.value.license_url = data.license_url || ''
     form.value.original_prompt = data.original_prompt || ''
-    form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat') || 'rpg'
+    form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
     form.value.time_per_turn = data.time_per_turn || 5
     form.value.max_time_per_turn = data.max_time_per_turn !== undefined ? data.max_time_per_turn : null
     form.value.max_memory_turns = typeof data.max_memory_turns === 'number' ? data.max_memory_turns : 10
@@ -2504,7 +2504,7 @@ watch(
       <div v-else class="space-y-6">
         <nav class="lg:hidden flex gap-2 overflow-x-auto pb-2">
           <button
-            v-for="tab in editorTabs"
+            v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
             :key="tab.key"
             @click="activeTab = tab.key"
             :class="[
@@ -2535,7 +2535,7 @@ watch(
             <div class="sticky top-24 bg-slate-900/40 border border-white/5 rounded-2xl p-3 backdrop-blur-md">
               <div class="space-y-1">
                 <button
-                  v-for="tab in editorTabs"
+                  v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
                   :key="tab.key"
                   @click="activeTab = tab.key"
                   :class="[

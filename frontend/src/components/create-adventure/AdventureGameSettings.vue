@@ -4,7 +4,7 @@ import AdventureRuleModeSelector from './AdventureRuleModeSelector.vue'
 import AdventureTimeSettings, { type TimeConfigData } from './AdventureTimeSettings.vue'
 import AdventureCombatSettings from './AdventureCombatSettings.vue'
 
-type RuleMode = 'rpg' | 'story' | 'chat'
+import type { RuleMode } from '@/types'
 
 const props = defineProps<{
   modelValue: {

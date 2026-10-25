@@ -22,12 +22,14 @@ from backend.engine.adventure_updates import is_legacy_session
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.game_modes import is_vn
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.base import utc_now
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import copy_messages
+from backend.engine.visual_novel.lifecycle import copy_vn_state
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
@@ -717,9 +719,9 @@ async def start_session_for_template(
     adv_init_script = manifest.get("init_script") or getattr(adventure, "init_script", None)
     init_narrative_messages: list[str] = []
 
-    if adv_init_script or any(
+    if not is_vn(adventure) and (adv_init_script or any(
         isinstance(s, dict) and s.get("trigger") == "on_init" for s in adv_scripts
-    ):
+    )):
         entities_map = {ent.id: ent.__dict__.copy() for ent in template_entities if ent.id}
         avatar_dict = {
             "name": avatar.name,
@@ -1212,6 +1214,14 @@ async def copy_session(
 
     # 6. Clone the conversation and map evidence to its new message IDs.
     message_ids = await copy_messages(db, original_session.id, copied_session.id)
+    if original_state:
+        cloned_state.entity_states = copy_vn_state(
+            cloned_state.entity_states,
+            message_ids,
+            lambda url: _copy_data_asset_to_session(
+                copied_session.id, "illustrations", url, asset_copy_cache
+            ),
+        )
 
     # 7. Clone WorldScene
     scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == original_session.id))

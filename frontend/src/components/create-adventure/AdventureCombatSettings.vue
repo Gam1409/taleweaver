@@ -4,7 +4,7 @@ import { AlertTriangle, Shield, ShieldOff } from 'lucide-vue-next'
 import InfoPopoverButton from '@/components/create-adventure/InfoPopoverButton.vue'
 import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpTexts'
 
-type RuleMode = 'rpg' | 'story' | 'chat'
+import type { RuleMode } from '@/types'
 
 const props = defineProps<{
   ruleEnforcementMode: RuleMode
@@ -31,7 +31,7 @@ function toggleNpcsCanDamageProtagonist() {
 </script>
 
 <template>
-  <div class="p-4 sm:p-5 md:p-6 bg-rose-500/5 border border-rose-500/10 rounded-2xl space-y-4 md:space-y-6 transition-all">
+  <div v-if="ruleEnforcementMode !== 'vn'" class="p-4 sm:p-5 md:p-6 bg-rose-500/5 border border-rose-500/10 rounded-2xl space-y-4 md:space-y-6 transition-all">
     <!-- Header -->
     <div class="flex items-center justify-between gap-2 border-b border-white/5 pb-3">
       <div class="flex items-center gap-2 sm:gap-3 min-w-0">

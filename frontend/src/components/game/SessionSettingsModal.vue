@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import VnNarrationSettings from './VnNarrationSettings.vue'
 import DynamicLocationSettings from './DynamicLocationSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
   sessionId?: string
+  mode?: string
   initialTurns?: number
   initialCompression?: boolean
   initialAutoSpeakNarration?: boolean
@@ -17,12 +19,14 @@ const emit = defineEmits<{
   (e: 'save', payload: { turns: number; enableCompression: boolean; autoSpeakNarration: boolean; autoSpeakDialogues: boolean }): void
 }>()
 
+const vnNarration = ref<InstanceType<typeof VnNarrationSettings> | null>(null)
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
 const savingExploration = ref(false)
 async function saveAll(): Promise<void> {
   if (savingExploration.value || props.isSaving) return
   savingExploration.value = true
   try {
+    if (vnNarration.value && !await vnNarration.value.save()) return
     if (exploration.value && !await exploration.value.save()) return
     emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
   } finally { savingExploration.value = false }
@@ -103,6 +107,7 @@ function handleInput(event: Event) {
 
       <!-- Content -->
       <div class="px-6 py-6 flex flex-col gap-6 max-h-[65dvh] overflow-y-auto">
+        <VnNarrationSettings v-if="sessionId && mode === 'vn'" ref="vnNarration" :session-id="sessionId" />
         <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
         <!-- Memory Turns Slider Panel -->
         <div class="space-y-4">

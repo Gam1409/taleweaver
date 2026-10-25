@@ -11,6 +11,7 @@ import { ImagePlus } from 'lucide-vue-next'
 import type { PortraitTarget } from '@/composables/useSessionPortrait'
 
 const props = defineProps<{
+  mode?: string
   npcs: any[]
   activeSpeakers: Set<string>
   activeTurnIndex?: number
@@ -112,7 +113,7 @@ function isNpcSpeaking(npc: any): boolean {
           :src="getImageUrl(npc.image_url, { thumbnail: true })"
           :alt="npc.name"
           class="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-          :class="{ 'grayscale opacity-50': npc.is_defeated || npc.hp === 0 }"
+          :class="{ 'grayscale opacity-50': props.mode !== 'vn' && (npc.is_defeated || npc.hp === 0) }"
           @error="onImageLoadError($event, npc.image_url)"
         />
         <div v-else class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 text-slate-600">
@@ -144,7 +145,7 @@ function isNpcSpeaking(npc: any): boolean {
         </div>
 
         <!-- Defeated Ribbon -->
-        <div v-if="npc.is_defeated || npc.hp === 0" class="absolute -right-6 top-3 bg-red-600 text-white text-[8px] font-black uppercase tracking-[0.12em] py-0.5 w-24 text-center rotate-45 shadow-lg z-20">
+        <div v-if="props.mode !== 'vn' && (npc.is_defeated || npc.hp === 0)" class="absolute -right-6 top-3 bg-red-600 text-white text-[8px] font-black uppercase tracking-[0.12em] py-0.5 w-24 text-center rotate-45 shadow-lg z-20">
           Defeated
         </div>
 

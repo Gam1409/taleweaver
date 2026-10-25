@@ -5,13 +5,15 @@
  * A page covers one scene + sequence (chapter) and shows all of its exchanges in order
  * (see comicPages.ts). The page only changes when the scene or the sequence changes.
  */
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import type { ComicTurn } from '@/composables/useComicTurns'
+import VnMomentIllustration from '@/components/game/VnMomentIllustration.vue'
 import LicenseInfoBlock from '@/components/game/LicenseInfoBlock.vue'
 import ImmersiveStoryExchange from '@/components/game/immersive/ImmersiveStoryExchange.vue'
 import { Sparkles, ChevronLeft, ChevronRight, Compass } from 'lucide-vue-next'
 
 const props = defineProps<{
+  mode?: string
   gameTurns: ComicTurn[]
   activeTurn: ComicTurn | null
   activeTurnIndex: number
@@ -39,6 +41,15 @@ const emit = defineEmits<{
   npcLeave: []
   npcContextmenu: [entity: any, event: MouseEvent]
 }>()
+
+const latestAssistantId = computed(() => {
+  for (const page of [...props.gameTurns].reverse()) {
+    for (const exchange of [...page.exchanges].reverse()) {
+      if (exchange.assistantMessage?.id) return exchange.assistantMessage.id
+    }
+  }
+  return null
+})
 
 const storyContainerRef = ref<HTMLElement | null>(null)
 
@@ -80,7 +91,7 @@ function isLatestExchange(exIdx: number): boolean {
       <!-- Empty State -->
       <div v-if="!props.activeTurn && !props.isEvaluating" class="flex-1 flex flex-col items-center justify-center text-slate-500">
         <Sparkles class="w-8 h-8 text-amber-400/60 mb-2 animate-pulse" />
-        <p class="text-sm font-semibold tracking-wider uppercase">Awaiting Adventure Turn...</p>
+        <p class="text-sm font-semibold tracking-wider uppercase">{{ props.mode === 'vn' ? 'Awaiting the next story moment…' : 'Awaiting Adventure Turn...' }}</p>
       </div>
 
       <!-- Loading / Scene Transitioning State -->
@@ -99,9 +110,8 @@ function isLatestExchange(exIdx: number): boolean {
         <LicenseInfoBlock v-if="props.activeTurn.licenseMessage" :msg="props.activeTurn.licenseMessage" class="shrink-0" />
 
         <!-- EXCHANGES OF THIS SCENE -->
+        <div v-for="(exchange, exIdx) in props.activeTurn.exchanges" :key="exchange.userMessage?.id || exchange.assistantMessage?.id || exIdx" class="space-y-3">
         <ImmersiveStoryExchange
-          v-for="(exchange, exIdx) in props.activeTurn.exchanges"
-          :key="exchange.userMessage?.id || exchange.assistantMessage?.id || exIdx"
           data-story-exchange
           class="shrink-0"
           :exchange="exchange"
@@ -124,6 +134,13 @@ function isLatestExchange(exIdx: number): boolean {
           @npc-leave="emit('npcLeave')"
           @npc-contextmenu="(entity, event) => emit('npcContextmenu', entity, event)"
         />
+        <VnMomentIllustration
+          v-if="props.mode === 'vn' && props.gameId && exchange.assistantMessage?.id"
+          :session-id="props.gameId"
+          :message-id="exchange.assistantMessage.id"
+          :can-generate="!props.isEvaluating && exchange.assistantMessage.id === latestAssistantId"
+        />
+        </div>
       </template>
     </div>
 
@@ -139,7 +156,7 @@ function isLatestExchange(exIdx: number): boolean {
         >
           <ChevronLeft class="w-3.5 h-3.5" />
         </button>
-        <span class="px-2 font-mono">Turn {{ props.activeTurnIndex + 1 }} / {{ props.gameTurns.length }}</span>
+        <span class="px-2 font-mono">{{ props.mode === 'vn' ? 'Scene' : 'Turn' }} {{ props.activeTurnIndex + 1 }} / {{ props.gameTurns.length }}</span>
         <button
           type="button"
           :disabled="props.activeTurnIndex >= props.gameTurns.length - 1"

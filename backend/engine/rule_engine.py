@@ -1,4 +1,4 @@
-from typing import Optional, Union, Literal, Any
+from typing import Any, Literal, Optional, Union
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -112,6 +112,7 @@ class AdventureGenerationRequest(BaseModel):
     """
     Requested by the GM (NPC) to create a brand new adventure.
     """
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = None
     title: str
     prompt: str
     min_scenes: Optional[int] = None

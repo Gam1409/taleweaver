@@ -30,7 +30,7 @@ const emit = defineEmits<{
   (e: 'cancel-edit'): void
   (e: 'generate-field', field: string): void
   (e: 'update:tempValue', val: string): void
-  (e: 'update:mode', val: 'rpg' | 'story' | 'chat'): void
+  (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
   (e: 'save-changes'): void
   (e: 'update:pacing', val: number): void
   (e: 'update:max-time-per-turn', val: number | null): void
@@ -519,7 +519,7 @@ const licenseUrlInvalid = computed(() => {
       <!-- Adventure Style -->
       <div class="space-y-2">
         <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.2em]">Adventure Style</label>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             @click="emit('update:mode', 'rpg')"
             class="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border"
@@ -541,6 +541,7 @@ const licenseUrlInvalid = computed(() => {
           >
             Chat
           </button>
+          <button type="button" @click="emit('update:mode', 'vn')" class="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border" :class="form.rule_enforcement_mode === 'vn' ? 'bg-emerald-600/80 border-emerald-500 text-white' : 'bg-black/40 border-white/10 text-slate-400 hover:text-white'">Visual novel</button>
         </div>
       </div>
     </div>

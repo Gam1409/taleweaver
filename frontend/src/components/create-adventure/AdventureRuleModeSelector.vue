@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import InfoPopoverButton from '@/components/create-adventure/InfoPopoverButton.vue'
 import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpTexts'
 
-type RuleMode = 'rpg' | 'story' | 'chat'
+import type { RuleMode } from '@/types'
 
 const props = defineProps<{
   modelValue: RuleMode
@@ -20,6 +20,7 @@ const ruleModeHelp = computed(() => {
   if (props.modelValue === 'story') {
     return 'Story and atmosphere in the foreground. Balanced mechanics with narrative priority.'
   }
+  if (props.modelValue === 'vn') return 'Visual novel: character-led dialogue, relationships, and room to respond. No quests, XP, or combat mechanics.'
   return 'Story, atmosphere, and conversational roleplay. No strict combat or rule barriers.'
 })
 </script>
@@ -27,20 +28,20 @@ const ruleModeHelp = computed(() => {
 <template>
   <div class="space-y-2.5 sm:space-y-3">
     <div class="flex items-center justify-between gap-2">
-      <label class="block text-xxs font-black text-white/40 uppercase tracking-[0.2em]">Rule Enforcement Mode</label>
+      <label class="block text-xxs font-black text-white/40 uppercase tracking-[0.2em]">Story Mode</label>
       <InfoPopoverButton title="Rule Enforcement" :text="CREATE_ADVENTURE_HELP_TEXTS.ruleEnforcement" />
     </div>
 
-    <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
       <button
-        v-for="mode in (['rpg', 'story', 'chat'] as RuleMode[])"
+        v-for="mode in (['rpg', 'story', 'chat', 'vn'] as RuleMode[])"
         :key="mode"
         type="button"
         @click="emit('update:modelValue', mode)"
         class="px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition-all flex flex-col items-center justify-center cursor-pointer select-none active:scale-95"
         :class="props.modelValue === mode ? 'border-cyan-400 bg-cyan-400/10 text-white shadow-sm' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/10 hover:text-white/70'"
       >
-        <span class="text-xs sm:text-xs font-black uppercase tracking-wider">{{ mode === 'rpg' ? 'RPG' : mode }}</span>
+        <span class="text-xs sm:text-xs font-black uppercase tracking-wider">{{ mode === 'vn' ? 'Visual novel' : mode === 'rpg' ? 'RPG' : mode }}</span>
       </button>
     </div>
 

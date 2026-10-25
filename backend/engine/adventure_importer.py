@@ -13,15 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.adventure_format import validate_manifest_version
 from backend.core.auth import get_password_hash
 from backend.core.config import settings
-from backend.engine.world_generator import WorldGenerator
+from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.media_engine import MediaEngine
+from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.utils.text_utils import generate_adventure_id, generate_session_id
-from backend.engine.media_engine import MediaEngine
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ class AdventureTemplateImporter:
                 new_template_id = generate_adventure_id(adv_data["title"])
                 
                 enforcement_mode = adv_data.get("rule_enforcement_mode", "rpg")
-                is_strict = adv_data.get("strict_rules") if "strict_rules" in adv_data else (enforcement_mode != "chat")
+                is_strict = mode_policy(enforcement_mode, adv_data.get("strict_rules")).mechanics
                 
                 # Create AdventureTemplate record
                 resolved_license = adv_data.get("license") or manifest_data.get("license")
@@ -436,6 +437,7 @@ class AdventureTemplateImporter:
                     origin_id=origin_id
                 )
 
+                normalize_vn_template(new_template)
                 db.add(new_template)
                 
                 target_base_dir = _ensure_within_data_dir(
@@ -682,6 +684,7 @@ class AdventureTemplateImporter:
                     creation_status="Ready"
                 )
 
+                normalize_vn_template(new_template)
                 db.add(new_template)
                 await db.flush()
                 
@@ -793,7 +796,7 @@ class AdventureTemplateImporter:
                 adv_meta = payload.get("adventure") or payload
                 
                 enforcement_mode = adv_meta.get("rule_enforcement_mode") or manifest.get("rule_enforcement_mode") or "rpg"
-                is_strict = adv_meta.get("strict_rules") if "strict_rules" in adv_meta else (manifest.get("strict_rules") if "strict_rules" in manifest else (enforcement_mode != "chat"))
+                is_strict = mode_policy(enforcement_mode, adv_meta.get("strict_rules", manifest.get("strict_rules"))).mechanics
                 
                 new_template = AdventureTemplate(
                     id=generate_adventure_id(adv_meta.get("title") or manifest.get("title") or "Imported Blueprint"),
@@ -869,6 +872,7 @@ class AdventureTemplateImporter:
                     creation_status="Ready"
                 )
 
+                normalize_vn_template(new_template)
                 db.add(new_template)
                 await db.flush()
                 

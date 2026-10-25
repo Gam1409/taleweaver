@@ -10,7 +10,7 @@ export interface Adventure {
   copyright?: string
   license?: string
   original_prompt?: string
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -65,7 +65,7 @@ export interface AdventureFormData {
   copyright: string
   license: string
   original_prompt: string
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null

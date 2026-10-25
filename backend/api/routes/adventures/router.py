@@ -14,6 +14,7 @@ from backend.api.routes.adventures.editor_special_actions import (
 )
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
 from backend.api.routes.adventures.session_npcs import router as session_npcs_router
@@ -21,6 +22,7 @@ from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
 from backend.api.routes.adventures.visual_presets import router as visual_presets_router
+from backend.api.routes.adventures.vn_settings import router as vn_settings_router
 
 router = APIRouter(prefix="/adventures")
 
@@ -56,3 +58,6 @@ router.include_router(suggestions_router)
 router.include_router(session_npcs_router)
 
 router.include_router(dynamic_locations_router)
+
+router.include_router(vn_settings_router)
+router.include_router(scene_illustrations_router)

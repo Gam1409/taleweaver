@@ -43,7 +43,7 @@ const props = defineProps<{
   mapGlow?: boolean
   questGlow?: boolean
   activeActionId?: string | null
-  mode?: 'rpg' | 'story' | 'chat'
+  mode?: 'rpg' | 'story' | 'chat' | 'vn'
   inputLocked?: boolean
   sheet?: any
   gameId?: string
@@ -254,6 +254,7 @@ defineExpose({
     <div class="relative z-10 flex-grow min-h-0 flex flex-row gap-2 sm:gap-4 p-2 sm:p-4 lg:p-6 overflow-hidden">
       <!-- 3A. LEFT / CHARACTER STAGE -->
       <ImmersiveCharacterStage
+          :mode="props.mode"
         :npcs="npcs"
         :active-speakers="activeSpeakers"
         :active-turn-index="activeTurnIndex"
@@ -285,6 +286,7 @@ defineExpose({
         />
 
         <ImmersiveStoryFeed
+          :mode="props.mode"
           :game-turns="gameTurns"
           :active-turn="activeTurn"
           :active-turn-index="activeTurnIndex"
@@ -333,6 +335,7 @@ defineExpose({
     <!-- 4. BOTTOM ACTION BAR & USER INPUT -->
     <footer class="relative z-20 flex flex-col bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
       <ImmersiveActionBar
+        :mode="props.mode"
         :inventory="props.inventory"
         :tracked-quest="props.trackedQuest"
         :inventory-glow="props.inventoryGlow"

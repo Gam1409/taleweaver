@@ -14,6 +14,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from backend.core.game_modes import is_vn
 from backend.engine.rule_engine import GameEvent, GameOverException, RuleEngine
 
 logger = logging.getLogger(__name__)
@@ -59,10 +60,11 @@ async def run_guardrail_chain(
             await manager._save_chat_message("system", message)
             yield sse_system(message)
 
-    await manager._enforce_quest_and_award_guardrails(game_event)
-    rule_violations.extend(
-        await manager._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
-    )
+    if not is_vn(manager.adventure):
+        await manager._enforce_quest_and_award_guardrails(game_event)
+        rule_violations.extend(
+            await manager._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
+        )
     for system_message in await manager._apply_game_event(game_event):
         yield sse_role_message(system_message)
 
@@ -128,8 +130,9 @@ async def advance_in_game_turn(
 
         time_per_turn = manager.adventure.time_per_turn
         manager.state.in_game_time += int(time_per_turn if time_per_turn is not None else 5)
-        for tick_message in RuleEngine.apply_ticks(manager.avatar):
-            yield sse_system(tick_message)
+        if not is_vn(manager.adventure):
+            for tick_message in RuleEngine.apply_ticks(manager.avatar):
+                yield sse_system(tick_message)
 
         if script_runner.scripts:
             async for event in _run_turn_script(manager, script_runner, "on_turn_start"):

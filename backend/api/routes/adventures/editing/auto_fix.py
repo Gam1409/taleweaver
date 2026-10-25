@@ -21,6 +21,7 @@ from backend.api.routes.adventures.editing.auto_fix_log import (
     build_validation_log_entry,
 )
 from backend.api.routes.adventures.editing.validation import execute_validation_run
+from backend.core.game_modes import normalize_vn_template
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.schemas.validation import AIFixSuggestionsRequest, ValidationFinding
@@ -81,6 +82,7 @@ async def _auto_fix_finding(
         await db.refresh(adventure)
         return False
 
+    normalize_vn_template(adventure)
     await _commit_fix(db, template_id, user.id, response.finding_signature)
     return True
 

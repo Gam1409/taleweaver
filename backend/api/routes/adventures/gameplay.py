@@ -41,7 +41,7 @@ from backend.api.routes.adventures.unlock_service import (
     SwitchFlipRunner,
     add_system_message,
     avatar_has_item,
-    award_unlock_xp,
+    award_session_unlock_xp,
     enforce_container_guard,
     enforce_exit_guard,
     fire_container_unlock_success,
@@ -527,9 +527,10 @@ async def unlock_container_with_code(
     if mark_container_unlocked(state, entity.id):
         avatar = await load_avatar(db, state)
         if avatar:
-            xp_reward = award_unlock_xp(avatar, metadata_json)
+            xp_reward = await award_session_unlock_xp(db, state, avatar, metadata_json)
             add_system_message(db, state, f"Unlocked {entity.name} with the correct code!")
-            add_system_message(db, state, f"you gained {xp_reward} XP")
+            if xp_reward:
+                add_system_message(db, state, f"you gained {xp_reward} XP")
         await fire_container_unlock_success(db, state, entity, metadata_json)
 
     await db.commit()
@@ -567,10 +568,11 @@ async def unlock_container_with_item(
 
     # Only the first unlock grants XP.
     if mark_container_unlocked(state, entity.id):
-        xp_reward = award_unlock_xp(avatar, metadata_json)
+        xp_reward = await award_session_unlock_xp(db, state, avatar, metadata_json)
         item_name = inventory_item_name(avatar, submitted_item_id)
         add_system_message(db, state, f"Unlocked {entity.name} using {item_name}!")
-        add_system_message(db, state, f"you gained {xp_reward} XP")
+        if xp_reward:
+            add_system_message(db, state, f"you gained {xp_reward} XP")
         await fire_container_unlock_success(db, state, entity, metadata_json)
 
     await db.commit()
@@ -599,7 +601,7 @@ async def unlock_container(
     if mark_container_unlocked(state, entity.id):
         avatar = await load_avatar(db, state)
         if avatar:
-            award_unlock_xp(avatar, metadata_json)
+            await award_session_unlock_xp(db, state, avatar, metadata_json)
             add_system_message(db, state, f"Unlocked {entity.name}!")
         await fire_container_unlock_success(db, state, entity, metadata_json)
 

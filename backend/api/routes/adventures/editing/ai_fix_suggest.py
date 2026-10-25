@@ -28,6 +28,7 @@ from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.validators_prompts import AI_FIX_SUGGESTIONS_SYSTEM_PROMPT
+from backend.engine.vn_world_generation import vn_editor_guidance
 from backend.models.user import User
 from backend.schemas.validation import (
     AIFixSuggestionsRequest,
@@ -113,6 +114,7 @@ def _clean_proposal(raw: Any) -> Optional[FixProposal]:
 def _suggestion_prompt(payload: AIFixSuggestionsRequest, summary: dict[str, Any]) -> str:
     world_block = _format_focused_world_block(summary, location=payload.finding_location)
     return (
+        f"{vn_editor_guidance(summary.get('adventure') or {})}"
         f"=== ORIGINAL FINDING ===\n"
         f"- Code: {payload.finding_code}\n"
         f"- Severity: {payload.finding_severity}\n"

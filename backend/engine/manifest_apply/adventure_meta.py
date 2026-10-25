@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 
+from backend.core.game_modes import is_vn, mode_policy, normalize_vn_template
 from backend.engine.manifest_apply.assets import is_usable_image_url, resolve_source_asset_image
 from backend.engine.manifest_apply.context import ApplyContext, generator_module
 from backend.engine.manifest_apply.visuals import publish_status, t2i_config
@@ -104,16 +105,16 @@ def _clean_sequence(seq: Any) -> Any:
 def _apply_quests_awards_sequences(
     ctx: ApplyContext, adventure: AdventureTemplate
 ) -> tuple[list, list]:
-    chat_mode = adventure.rule_enforcement_mode == "chat"
-    quests = [] if chat_mode else (ctx.manifest.get("quests") or [])
-    awards = [] if chat_mode else (ctx.manifest.get("awards") or [])
+    policy = mode_policy(adventure.rule_enforcement_mode)
+    quests = (ctx.manifest.get("quests") or []) if policy.quests else []
+    awards = (ctx.manifest.get("awards") or []) if policy.awards else []
     for quest in quests:
         quest.setdefault("status", "open")
     for award in awards:
         award.setdefault("is_earned", False)
     adventure.quests = quests  # type: ignore[assignment]
     adventure.awards = awards  # type: ignore[assignment]
-    if ctx.manifest.get("sequences"):
+    if ctx.manifest.get("sequences") and not policy.vn:
         adventure.sequences = [_clean_sequence(s) for s in ctx.manifest["sequences"]]  # type: ignore[assignment]
     return quests, awards
 
@@ -123,7 +124,7 @@ def _apply_narrative(ctx: ApplyContext, adventure: AdventureTemplate) -> None:
         setattr(adventure, key, adventure_field(ctx.manifest, key) or getattr(adventure, key))
 
     walkthrough = adventure_field(ctx.manifest, "walkthrough")
-    if getattr(adventure, "sequences", None) or not walkthrough:
+    if is_vn(adventure) or getattr(adventure, "sequences", None) or not walkthrough:
         return
     # Legacy manifests with a walkthrough but no sequences get a single main sequence.
     adventure.sequences = [  # type: ignore[assignment]
@@ -234,6 +235,7 @@ async def apply_adventure_meta(ctx: ApplyContext) -> None:
     quests, _awards = _apply_quests_awards_sequences(ctx, adventure)
     _apply_narrative(ctx, adventure)
     _apply_runtime_settings(ctx, adventure)
+    normalize_vn_template(adventure)
     await _sync_sessions(ctx, adventure, quests)
     await ctx.commit_and_refresh()
     await _ensure_cover(ctx)
@@ -260,3 +262,4 @@ def apply_final_adventure_fields(ctx: ApplyContext) -> None:
     from backend.engine.story_visual_presets import preserve_story_presets
 
     adventure.original_manifest = preserve_story_presets(ctx.manifest, adventure)  # type: ignore[assignment]
+    normalize_vn_template(adventure)

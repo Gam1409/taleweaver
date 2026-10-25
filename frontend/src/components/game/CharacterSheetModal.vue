@@ -255,7 +255,7 @@ const onClose = () => {
               <!-- Right: Vitals (Desktop) & Close Button -->
               <div class="flex items-center gap-3 sm:gap-4 shrink-0">
                 <!-- Desktop quick stats bar -->
-                <div v-if="sheet.rule_enforcement_mode !== 'chat'" class="hidden md:flex items-center gap-4 min-w-[240px]">
+                <div v-if="sheet.rule_enforcement_mode !== 'chat' && sheet.rule_enforcement_mode !== 'vn'" class="hidden md:flex items-center gap-4 min-w-[240px]">
                   <div class="flex-grow">
                     <StatBar label="HP" :value="sheet.hp" :max="sheet.max_hp" color="crimson" size="xs" />
                     <StatBar label="STA" :value="sheet.stamina" :max="sheet.max_stamina" color="emerald" size="xs" />
@@ -278,7 +278,7 @@ const onClose = () => {
             </div>
 
             <!-- Mobile Vitals (compact bar) -->
-            <div v-if="sheet.rule_enforcement_mode !== 'chat'" class="md:hidden grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-800/40">
+            <div v-if="sheet.rule_enforcement_mode !== 'chat' && sheet.rule_enforcement_mode !== 'vn'" class="md:hidden grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-800/40">
               <StatBar label="HP" :value="sheet.hp" :max="sheet.max_hp" color="crimson" size="xs" />
               <StatBar label="STA" :value="sheet.stamina" :max="sheet.max_stamina" color="emerald" size="xs" />
               <StatBar v-if="sheet.rule_enforcement_mode === 'rpg'" label="MP" :value="sheet.mana" :max="sheet.max_mana" color="sapphire" size="xs" />
@@ -331,7 +331,7 @@ const onClose = () => {
               </button>
 
               <!-- Tab 3: Ailments & Buffs -->
-              <button
+              <button v-if="sheet.rule_enforcement_mode !== 'vn'"
                 :class="[
                   'flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2.5 px-1.5 sm:px-4 rounded-xl font-bold uppercase tracking-wider text-[11px] sm:text-xs md:text-sm transition-all select-none',
                   activeTab === 'ailments'
@@ -356,7 +356,7 @@ const onClose = () => {
               </button>
 
               <!-- Tab 4: Special Attacks -->
-              <button
+              <button v-if="sheet.rule_enforcement_mode !== 'vn'"
                 :class="[
                   'flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2.5 px-1.5 sm:px-4 rounded-xl font-bold uppercase tracking-wider text-[11px] sm:text-xs md:text-sm transition-all select-none',
                   activeTab === 'specials'

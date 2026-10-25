@@ -1,3 +1,14 @@
+export type RuleMode = 'rpg' | 'story' | 'chat' | 'vn'
+
+export interface ModeCapabilities {
+  vn: boolean
+  mechanics: boolean
+  combat: boolean
+  quests: boolean
+  awards: boolean
+  experience: boolean
+}
+
 export interface ChatMessage {
   id?: string
   role: 'user' | 'assistant' | 'system' | 'thought' | 'license_info'
@@ -11,6 +22,7 @@ export interface ChatMessage {
 
 /** Character sheet snapshot pushed by the server after every action. */
 export interface CharacterSheet {
+  mode_capabilities?: ModeCapabilities
   name: string
   adventure_title?: string | null
   adventure_version?: string | null
@@ -47,7 +59,7 @@ export interface CharacterSheet {
   max_time_per_turn?: number | null
   current_scene?: string | null
   scene_id?: string | null
-  rule_enforcement_mode?: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn'
   adventure_tone?: string | null
   is_debug_enabled?: boolean
   debug_mode?: boolean
@@ -285,7 +297,7 @@ export interface GameSession {
   max_memory_turns?: number
   enable_history_compression?: boolean
   is_legacy_format?: boolean
-  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | string
+  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn' | string
   selected_image_styles?: CatalogTile[] | any[]
   selected_tone?: CatalogTile | string | null
 }
@@ -329,7 +341,7 @@ export interface AdventureTemplateSummary {
   creation_error?: string | null
   selected_tone?: CatalogTile | string | null
   selected_image_styles?: CatalogTile[] | any[]
-  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | string
+  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn' | string
   progress?: number
   quest_count?: number
   completed_quest_count?: number
@@ -358,7 +370,7 @@ export interface CreateAdventurePayload {
   license?: string | null
   image_url?: string | null
   strict_rules?: boolean
-  rule_enforcement_mode?: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn'
   generate_npc_images?: boolean
   generate_item_images?: boolean
   generate_scene_images?: boolean
@@ -412,7 +424,7 @@ export interface StoryIdeaSuggestionPayload {
   title?: string
   story_idea?: string
   selected_tone?: CatalogTile | null
-  rule_enforcement_mode?: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn'
   language?: string
 }
 
@@ -432,7 +444,7 @@ export interface GeneratorSurprisePresetResponse {
   story_idea: string
   selected_tone?: string | null
   selected_style?: string | null
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   generate_scene_images: boolean
   generate_npc_images: boolean
   generate_item_images: boolean

@@ -19,6 +19,7 @@ const categories: Record<string, string> = { appearance: 'Appearance', backgroun
     <p v-if="error" role="alert" class="text-rose-300">{{ error }} <button class="underline" @click="load()">Retry</button></p>
     <p v-if="loading && !details" role="status" class="text-slate-400">Loading character history…</p>
     <template v-if="details">
+      <span v-if="details.narrative_role === 'major'" class="inline-block rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-1 text-xs text-rose-200">Major character</span>
       <p v-if="details.introduction" class="text-slate-300"><span class="text-slate-400">Introduced themselves:</span> “{{ details.introduction }}”</p>
       <p v-if="details.aliases.length" class="text-slate-400">Also known as: {{ details.aliases.join(', ') }}</p>
       <NpcRelationship :relationship="details.relationship" />

@@ -34,6 +34,7 @@ from backend.api.routes.adventures.schemas import (
 from backend.api.routes.adventures.template_reset import rebuild_template_world
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.core.game_modes import is_vn, mode_policy, normalize_vn_template
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
     STORY_IDEA_GENERATION_SYSTEM_PROMPT,
@@ -620,7 +621,8 @@ async def get_adventure(
     ]
 
     if (
-        not adv.sequences
+        not is_vn(adv)
+        and not adv.sequences
         and isinstance(adv.original_manifest, dict)
         and adv.original_manifest.get("sequences")
     ):
@@ -763,10 +765,12 @@ async def update_adventure(
 
     # Sync strict_rules internally if mode changed (but not if strict_rules was patched directly)
     if "rule_enforcement_mode" in update_data and "strict_rules" not in update_data:
-        adv.strict_rules = update_data["rule_enforcement_mode"] != "chat"
+        adv.strict_rules = mode_policy(update_data["rule_enforcement_mode"]).mechanics
 
     if "sequences" in update_data:
         _apply_sequences_update(adv, update_data["sequences"])
+
+    normalize_vn_template(adv)
 
     await _sync_updates_to_sessions(db, template_id, update_data)
 

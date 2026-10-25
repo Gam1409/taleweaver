@@ -44,7 +44,8 @@ const typeOptions: Array<{ id: RuleTypeFilter; label: string; icon: any }> = [
   { id: 'all', label: 'All Modes', icon: null },
   { id: 'rpg', label: 'RPG', icon: Sword },
   { id: 'story', label: 'Story', icon: BookOpen },
-  { id: 'chat', label: 'Chat', icon: MessageSquare }
+  { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'vn', label: 'Visual novel', icon: BookOpen }
 ]
 </script>
 
@@ -91,6 +92,7 @@ const typeOptions: Array<{ id: RuleTypeFilter; label: string; icon: any }> = [
             <option value="rpg">RPG Mode</option>
             <option value="story">Story Mode</option>
             <option value="chat">Chat Mode</option>
+            <option value="vn">Visual Novel Mode</option>
           </select>
           <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
             ▾

@@ -101,7 +101,7 @@ export interface GeneratorSurprisePresetResponse {
   story_idea: string
   selected_tone?: string | null
   selected_style?: string | null
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   generate_scene_images: boolean
   generate_npc_images: boolean
   generate_item_images: boolean

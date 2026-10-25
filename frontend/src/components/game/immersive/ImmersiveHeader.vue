@@ -31,7 +31,7 @@ const props = defineProps<{
   gameTime?: { dateShort: string; time: string } | null
   clockTick?: boolean
   exp?: number
-  mode?: 'rpg' | 'story' | 'chat'
+  mode?: 'rpg' | 'story' | 'chat' | 'vn'
   debugMode?: boolean
 }>()
 
@@ -162,7 +162,7 @@ const sequenceOrder = computed(() => {
 
     <!-- Center: Tracked Quest Banner -->
     <div
-      v-if="props.trackedQuest"
+      v-if="props.trackedQuest && props.mode !== 'vn'"
       class="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-amber-500/30 text-amber-200 text-xs font-semibold backdrop-blur-sm shadow-md cursor-pointer hover:border-amber-400 transition-all"
       @click="emit('openQuests')"
     >
@@ -188,7 +188,7 @@ const sequenceOrder = computed(() => {
       <GameClockWidget :game-time="props.gameTime || null" :clock-tick="props.clockTick || false" />
 
       <!-- Experience XP -->
-      <div
+      <div v-if="props.mode !== 'vn'"
         class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-black tracking-wider shadow-sm shrink-0"
         title="Experience Points (XP)"
       >

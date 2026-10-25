@@ -21,7 +21,7 @@ import AdventureWorldConstraints from '@/components/create-adventure/AdventureWo
 const router = useRouter()
 const route = useRoute()
 
-type RuleMode = 'rpg' | 'story' | 'chat'
+import type { RuleMode } from '@/types'
 
 const form = ref({
   title: '',
@@ -161,7 +161,7 @@ const resolveToneIdFromAdventure = (adventure: any): string => {
 const resolveRuleModeFromAdventure = (adventure: any): RuleMode | null => {
   const rawMode = String(adventure?.rule_enforcement_mode || '').trim().toLowerCase()
   if (!rawMode) return null
-  if (rawMode === 'rpg' || rawMode === 'story' || rawMode === 'chat') {
+  if (rawMode === 'rpg' || rawMode === 'story' || rawMode === 'chat' || rawMode === 'vn') {
     return rawMode as RuleMode
   }
   // Legacy mode value used in older data snapshots.
@@ -765,6 +765,7 @@ onMounted(() => {
 
           <!-- Min/Max Asset Counts Configuration Panel (Moved to Column 2 for balanced column heights) -->
           <AdventureWorldConstraints
+            :mode="form.rule_enforcement_mode"
             :min-scenes="form.min_scenes"
             :max-scenes="form.max_scenes"
             :min-items="form.min_items"

@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
+from backend.engine.scene_illustrations.snapshots import remap_illustrations
+from backend.engine.visual_novel.lifecycle import remap_social_state
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -195,6 +197,9 @@ class SessionImporter:
                 db.add(session_state)
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
+                session_state.entity_states = remap_illustrations(
+                    remap_social_state(session_state.entity_states, message_ids), message_ids
+                )
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:

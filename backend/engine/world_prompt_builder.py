@@ -9,6 +9,8 @@ cover-source guidance, etc.).
 from typing import Any, Optional
 
 from backend.core import prompts
+from backend.core.game_modes import mode_policy
+from backend.engine.vn_world_generation import build_vn_world_prompts
 from backend.engine.world_scripting_prompt import build_scripts_requirement
 
 _CONTAINER_LOCK_HINTS = (
@@ -441,12 +443,35 @@ def build_world_generation_prompts(
     allow_reuse_source_assets: bool,
     sequences: Optional[list[dict[str, Any]]] = None,
     generation_strictness: str = "creative",
+    rule_enforcement_mode: str | None = None,
 ) -> tuple[str, str]:
     """Build the system and user prompts for the world generation LLM call.
 
     Returns:
         A tuple of ``(system_prompt, user_prompt)``.
     """
+    if mode_policy(rule_enforcement_mode).vn:
+        return build_vn_world_prompts(
+            title=title,
+            original_prompt=original_prompt,
+            language=language,
+            selected_tone=selected_tone,
+            scene_requirement=_build_scene_requirement(min_scenes, max_scenes),
+            item_requirement=(
+                _build_item_requirement(min_items, max_items)
+                if min_items is not None or max_items is not None
+                else "Include only meaningful props; no required loot or inventory quota."
+            ),
+            cover_guidance=_build_cover_guidance(
+                cover_source_manifest,
+                cover_source_adventure_name,
+                cover_similarity_percent,
+                allow_reuse_source_assets,
+                scripts_generation_enabled=False,
+            ),
+            sequences=sequences,
+        )
+
     system_prompt = prompts.WORLD_GENERATION_SYSTEM_PROMPT
     if language:
         system_prompt += (

@@ -22,6 +22,7 @@ import {
 } from 'lucide-vue-next'
 
 const props = defineProps<{
+  mode?: string
   inventory?: any[]
   trackedQuest?: any
   worldMemories?: any[]
@@ -103,7 +104,7 @@ onBeforeUnmount(() => {
     <!-- Quick Modals Buttons -->
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
       <!-- Quests Button -->
-      <button
+      <button v-if="props.mode !== 'vn'"
         type="button"
         @click="emit('openQuests')"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
@@ -136,7 +137,7 @@ onBeforeUnmount(() => {
         title="Open Character Sheet & Inventory"
       >
         <User class="w-4 h-4 text-emerald-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Hero</span>
+        <span class="hidden sm:inline uppercase tracking-wider">{{ props.mode === 'vn' ? 'Profile' : 'Hero' }}</span>
         <span v-if="props.inventory?.length" class="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[9px] font-black rounded-full">
           {{ props.inventory.length }}
         </span>
@@ -154,7 +155,7 @@ onBeforeUnmount(() => {
       </button>
 
       <!-- Hints / Walkthrough -->
-      <button
+      <button v-if="props.mode !== 'vn'"
         type="button"
         @click="emit('openWalkthrough')"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"

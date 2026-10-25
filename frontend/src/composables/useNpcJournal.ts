@@ -24,6 +24,7 @@ export interface NpcJournalEntry {
 }
 
 export interface NpcCard {
+  narrative_role?: 'supporting' | 'major'
   id: string
   name: string
   description: string

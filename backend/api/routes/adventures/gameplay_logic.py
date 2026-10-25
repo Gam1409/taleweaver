@@ -19,6 +19,17 @@ from backend.api.routes.adventures.agent_commands import (
     handle_playagent_command,
 )
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.core.game_modes import is_vn, mode_policy
+from backend.engine.visual_novel.narration import narration_suffix
+from backend.engine.visual_novel.social import plan_interaction
+from backend.engine.visual_novel.runtime import capture_completed_moment
+from backend.engine.visual_novel.continuity import prepare_intent
+from backend.engine.visual_novel.concurrency import guard_session_turn
+from backend.engine.visual_novel.intent import (
+    VNProgressionIntent,
+    VN_PROGRESSION_PROMPT,
+    build_progression_context,
+)
 from backend.api.routes.adventures.turn_helpers import (
     TurnCombatStateHelper,
     TurnProgressionBuilder,
@@ -788,6 +799,7 @@ class GameTurnManager:
         logger.debug(f"[Turn {self.game_id}] Initialization (DB) took {duration:.4f}s")
         return True
 
+    @guard_session_turn
     async def process_turn(
         self, message: str, auto_visualize: bool = False, language: str | None = None
     ) -> AsyncGenerator[str, None]:
@@ -926,7 +938,7 @@ class GameTurnManager:
                 return
 
         # 1. Combat & Loot Handling (Active Phase)
-        if self._has_combat_phase():
+        if not is_vn(self.adventure) and self._has_combat_phase():
             async for chunk in self._handle_combat_turn(user_msg):
                 yield chunk
             return
@@ -1103,7 +1115,8 @@ class GameTurnManager:
         is_silent = any(actual_user_input.lower().startswith(cmd) for cmd in silent_commands)
 
         if actual_user_input and not is_silent:
-            await self._save_chat_message("user", actual_user_input)
+            player_message = await self._save_chat_message("user", actual_user_input)
+            self._vn_player_message_id = player_message.id
             await self.db.flush()
 
         # 3. LLM Processing (Pass 1 & Pass 2)
@@ -1187,8 +1200,9 @@ class GameTurnManager:
 
         # Pass 1: Mechanics (strict adventures), chat progression intent (normal chat),
         # or adventure-generator tool-intent pass (generator chat mode).
-        is_chat_mode = not self.adventure.strict_rules and not self.adventure.is_adventure_generator
-        run_mechanics_pass = self.adventure.strict_rules and not narration_only
+        policy = mode_policy(self.adventure.rule_enforcement_mode, self.adventure.strict_rules)
+        is_chat_mode = not policy.mechanics and not self.adventure.is_adventure_generator
+        run_mechanics_pass = policy.mechanics and not narration_only
         run_chat_progression_pass = is_chat_mode and not narration_only
         run_generator_tool_intent_pass = (
             self.adventure.is_adventure_generator
@@ -1596,8 +1610,10 @@ class GameTurnManager:
                 yield f"event: error\ndata: {json.dumps({'detail': 'Progression model configuration is invalid. Please check your settings and try again.'})}\n\n"
                 return
 
-            reduced_quests = self._build_chat_progression_quests()
-            reduced_awards = self._build_chat_progression_awards(mechanics_awards)
+            reduced_quests = [] if policy.vn else self._build_chat_progression_quests()
+            reduced_awards = (
+                [] if policy.vn else self._build_chat_progression_awards(mechanics_awards)
+            )
             reduced_npcs = self._build_chat_progression_npcs(entities)
             reduced_scenes = self._build_chat_progression_scenes(all_scenes)
             reduced_exits = self._build_chat_progression_exits(exits)
@@ -1613,6 +1629,15 @@ class GameTurnManager:
                 exits=reduced_exits,
                 locked_containers=locked_containers or None,
             )
+            if policy.vn:
+                progression_state = build_progression_context(
+                    self,
+                    npcs=reduced_npcs,
+                    scenes=reduced_scenes,
+                    exits=reduced_exits,
+                    locked_containers=locked_containers,
+                    entities=all_entities,
+                )
             progression_user_prompt = build_pass1_user_prompt(
                 progression_state,
                 user_msg,
@@ -1623,9 +1648,17 @@ class GameTurnManager:
             progression_start = time.perf_counter()
             try:
                 progression_intent = await llm.aexecute_complex_task(
-                    prompts.GM_CHAT_PROGRESSION_RULES_PROMPT + "\n" + prompt_block(self.state),
+                    (
+                        VN_PROGRESSION_PROMPT
+                        if policy.vn
+                        else prompts.GM_CHAT_PROGRESSION_RULES_PROMPT
+                    )
+                    + "\n"
+                    + prompt_block(self.state),
                     progression_user_prompt,
-                    response_model=intent_schema(ChatProgressionIntent, self.state),
+                    response_model=intent_schema(
+                        VNProgressionIntent if policy.vn else ChatProgressionIntent, self.state
+                    ),
                     model=small_model,
                 )
             except Exception as e:
@@ -1682,6 +1715,8 @@ class GameTurnManager:
             if getattr(progression_intent, "new_local_place", None):
                 yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
             await resolve_proposal(self, progression_intent, user_msg, history, language)
+            if policy.vn:
+                progression_intent = prepare_intent(self, progression_intent, all_entities)
             game_event = self._build_progression_event(progression_intent)
 
             try:
@@ -1789,9 +1824,11 @@ class GameTurnManager:
         narration_prompt_parts = [
             ctx.narration_static_prompt,
             prompts.GM_NARRATION_TURN_CONTRACT,
-            prompts.GM_NARRATION_MANDATORY_FORMATTING,
+            narration_suffix(self.state)
+            if policy.vn
+            else prompts.GM_NARRATION_MANDATORY_FORMATTING,
             prompts.get_vocal_direction_prompt(tts_provider) if use_vocal_tags else "",
-            prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode else "",
+            prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode and not policy.vn else "",
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
 
@@ -1809,8 +1846,11 @@ class GameTurnManager:
 
         exits_task = ""
         scene_changed_this_turn = self.state.current_scene_id != scene_id_before_turn
-        if self._is_lookaround_request(user_msg) or scene_changed_this_turn:
+        if not policy.vn and (self._is_lookaround_request(user_msg) or scene_changed_this_turn):
             exits_task = build_exit_description_task(await self._build_scene_exits_context_json())
+
+        if policy.vn and not narration_only:
+            reminders.append(await plan_interaction(self, user_msg, history, game_event))
 
         turn_context = build_narration_turn_block(
             ctx.narration_state_block,
@@ -2165,6 +2205,8 @@ class GameTurnManager:
         # on_turn_end / on_turn_start run at the in-game turn boundary (scene/sequence change),
         # see advance_in_game_turn above.
 
+        if policy.vn:
+            await capture_completed_moment(self, assistant_chat)
         await self.db.commit()
         schedule_npc_journal(self.state.session_id, self.user.id)
         schedule_images(self.state, self.user.id, getattr(self, "_dynamic_scene_images", []))
@@ -2829,6 +2871,8 @@ class GameTurnManager:
 
     def _get_script_runner(self) -> ScriptRunner:
         """Instantiates ScriptRunner with scripts and init_script from original_manifest."""
+        if is_vn(self.adventure):
+            return ScriptRunner([])
         manifest = getattr(self.adventure, "original_manifest", None) or {}
         scripts = manifest.get("scripts", [])
         init_script = manifest.get("init_script") or getattr(self.adventure, "init_script", None)
@@ -2841,7 +2885,7 @@ class GameTurnManager:
         target_id: str,
         extra_scope: dict[str, Any] | None = None,
     ) -> list[str]:
-        if not code or not code.strip():
+        if is_vn(self.adventure) or not code or not code.strip():
             return []
         context = await self._build_script_context()
         runner = self._get_script_runner()

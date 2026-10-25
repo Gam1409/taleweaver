@@ -17,6 +17,7 @@ from backend.api.routes.adventures.session_materializer import (
     materialize_initial_session_from_template,
 )
 from backend.core.config import settings
+from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -116,13 +117,13 @@ def _pacing_minutes(payload: CreateAdventureTemplatePayload) -> Optional[int]:
 def build_template(
     payload: CreateAdventureTemplatePayload, template_id: str, owner_id: str, cover: CoverSource
 ) -> AdventureTemplate:
-    chat_mode = is_chat_mode(payload)
-    return AdventureTemplate(
+    policy = mode_policy(payload.rule_enforcement_mode)
+    template = AdventureTemplate(
         id=template_id,
         owner_id=owner_id,
         title=payload.title,
         original_prompt=payload.original_prompt,
-        strict_rules=payload.rule_enforcement_mode != "chat",
+        strict_rules=policy.mechanics,
         rule_enforcement_mode=payload.rule_enforcement_mode or "rpg",
         generation_strictness=payload.generation_strictness or "creative",
         sequences=payload.sequences,
@@ -149,7 +150,8 @@ def build_template(
         text_log_generation_enabled=payload.text_log_generation_enabled,
         min_text_logs=payload.min_text_logs,
         max_text_logs=payload.max_text_logs,
-        award_generation_enabled=(False if chat_mode else payload.award_generation_enabled),
+        award_generation_enabled=policy.awards and payload.award_generation_enabled,
+        quest_generation_enabled=policy.quests and bool(payload.quest_generation_enabled),
         min_awards=payload.min_awards,
         max_awards=payload.max_awards,
         can_damage_npcs=payload.can_damage_npcs,
@@ -167,6 +169,9 @@ def build_template(
         cover_similarity_percent=_similarity_percent(payload),
         allow_reuse_source_assets=bool(payload.allow_reuse_source_assets),
     )
+
+    normalize_vn_template(template)
+    return template
 
 
 def _initial_object_lock_states(template_entities: list[WorldEntity]) -> dict[str, dict[str, bool]]:
@@ -330,7 +335,7 @@ def effective_generation_bounds(
         return bounds
 
     objects = cover_manifest.get("objects") or []
-    chat_mode = is_chat_mode(payload)
+    policy = mode_policy(payload.rule_enforcement_mode)
     # category -> (source count, hard minimum, category enabled)
     rules = {
         "scenes": (len(cover_manifest.get("scenes") or []), 1, True),
@@ -349,12 +354,12 @@ def effective_generation_bounds(
         "quests": (
             len(cover_manifest.get("quests") or []),
             1,
-            bool(payload.quest_generation_enabled) and not chat_mode,
+            bool(payload.quest_generation_enabled) and policy.quests,
         ),
         "awards": (
             len(cover_manifest.get("awards") or []),
             1,
-            bool(payload.award_generation_enabled) and not chat_mode,
+            bool(payload.award_generation_enabled) and policy.awards,
         ),
     }
     for cat, (src_count, hard_min, enabled) in rules.items():
@@ -381,8 +386,9 @@ async def _load_template(db: AsyncSession, template_id: str) -> Optional[Adventu
 
 async def _generate_world(db: AsyncSession, user: Optional[User], job: GenerationJob) -> None:
     payload = job.payload
-    chat_mode = is_chat_mode(payload)
+    policy = mode_policy(payload.rule_enforcement_mode)
     await WorldGenerator.generate_world(
+        rule_enforcement_mode=policy.mode,
         db=db,
         user=user,
         template_id=job.template_id,
@@ -397,8 +403,8 @@ async def _generate_world(db: AsyncSession, user: Optional[User], job: Generatio
         container_generation_enabled=payload.container_generation_enabled,
         scripts_generation_enabled=payload.scripts_generation_enabled,
         text_log_generation_enabled=bool(payload.text_log_generation_enabled),
-        quest_generation_enabled=(not chat_mode) and bool(payload.quest_generation_enabled),
-        award_generation_enabled=(False if chat_mode else payload.award_generation_enabled),
+        quest_generation_enabled=policy.quests and bool(payload.quest_generation_enabled),
+        award_generation_enabled=policy.awards and payload.award_generation_enabled,
         can_damage_npcs=payload.can_damage_npcs,
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         selected_image_styles=job.selected_image_styles,
@@ -441,6 +447,11 @@ async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
         from backend.api.routes.adventures.editing.auto_fix import run_auto_fix_pass_safely
 
         await run_auto_fix_pass_safely(db, job.template_id, user)
+
+    adv = await _load_template(db, job.template_id)
+    if adv:
+        normalize_vn_template(adv)
+        await db.flush()
 
     await materialize_initial_session_from_template(
         db=db, template_id=job.template_id, session_id=job.session_id

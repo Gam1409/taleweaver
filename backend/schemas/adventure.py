@@ -59,7 +59,7 @@ class AdventureTemplateBase(BaseModel):
     license: Optional[str] = Field(None, max_length=100)
     license_url: Optional[str] = Field(None, max_length=500)
     original_prompt: Optional[str] = Field(None, max_length=20000)
-    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat"]] = "rpg"
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = "rpg"
     generation_strictness: Optional[Literal["strict", "creative"]] = "creative"
     time_per_turn: Optional[int] = 5
     pacing_minutes: Optional[int] = 5
@@ -132,7 +132,7 @@ class AdventureTemplateUpdate(BaseModel):
     license: Optional[str] = Field(None, max_length=100)
     license_url: Optional[str] = Field(None, max_length=500)
     original_prompt: Optional[str] = Field(None, max_length=20000)
-    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "strict"]] = None
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "strict", "vn"]] = None
     generation_strictness: Optional[Literal["strict", "creative"]] = None
     time_per_turn: Optional[int] = None
     pacing_minutes: Optional[int] = None
@@ -235,7 +235,7 @@ class GeneratorSurprisePresetResponse(BaseModel):
     story_idea: str
     selected_tone: Optional[str] = None
     selected_style: Optional[str] = None
-    rule_enforcement_mode: Literal["rpg", "story", "chat"] = "story"
+    rule_enforcement_mode: Literal["rpg", "story", "chat", "vn"] = "story"
     generation_strictness: Literal["strict", "creative"] = "creative"
     generate_scene_images: bool = True
     generate_npc_images: bool = True

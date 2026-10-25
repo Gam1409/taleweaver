@@ -54,6 +54,7 @@ Instead of a static, predefined story, the AI acts as an intelligent, omniscient
 ## 2. Core Features
 
 ### 🧠 The Omniscient AI Gamemaster
+* **Visual Novel Mode (experimental):** Character-focused dialogue, adjustable narration pace, private relationship continuity and illustrations of completed moments, without RPG quests or XP. See the [Visual Novel guide](docs/visual-novel-mode.md).
 * **Limitless Generative Worlds:** The AI generates entire plots, puzzles, and explorable scenes "on the fly". No two playthroughs are ever the same.
 * **Dynamic NPCs:** Engage in fluid, natural conversations where the AI fully embodies the persona of every character you meet. NPCs can move between scenes and have their own goals and motivations.
 * **Cover Mode (Sequels & Variations):** Generate sequels, spin-offs, or variations by choosing an existing adventure as a "Cover Source". Adjust the similarity index (0% = freely inspired, 100% = very close) and toggle the reuse of visual assets.

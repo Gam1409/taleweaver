@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.style_catalog import default_image_styles_catalog
 from backend.engine.rule_engine import AdventureGenerationRequest
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
@@ -28,7 +29,10 @@ def _create_initial_template(
     request: AdventureGenerationRequest,
     images_enabled: bool,
 ) -> AdventureTemplate:
-    return AdventureTemplate(
+    policy = mode_policy(request.rule_enforcement_mode or "strict")
+    template = AdventureTemplate(
+        rule_enforcement_mode=policy.mode,
+        strict_rules=policy.mechanics,
         id=new_id,
         owner_id=user.id,
         title=request.title,
@@ -49,8 +53,9 @@ def _create_initial_template(
         selected_tone=_clean_tone(request.selected_tone),
         min_awards=request.min_awards,
         max_awards=request.max_awards,
-        award_generation_enabled=request.award_generation_enabled,
-        quest_generation_enabled=getattr(request, "quest_generation_enabled", True),
+        award_generation_enabled=policy.awards and request.award_generation_enabled,
+        quest_generation_enabled=policy.quests
+        and getattr(request, "quest_generation_enabled", True),
         min_quests=getattr(request, "min_quests", None),
         max_quests=getattr(request, "max_quests", None),
         sequences=getattr(request, "sequences", None),
@@ -58,6 +63,9 @@ def _create_initial_template(
         creation_status="Initializing...",
         is_ready=False,
     )
+
+    normalize_vn_template(template)
+    return template
 
 
 class AdventureGeneratorService:
@@ -121,6 +129,7 @@ class AdventureGeneratorService:
                 template_id=new_id,
                 title=request.title,
                 original_prompt=request.prompt,
+                rule_enforcement_mode=request.rule_enforcement_mode,
                 sequences=getattr(request, "sequences", None),
                 generation_strictness=getattr(request, "generation_strictness", "creative"),
                 generate_scene_images=images_enabled,
@@ -137,10 +146,10 @@ class AdventureGeneratorService:
                 text_log_generation_enabled=getattr(request, "text_log_generation_enabled", True),
                 min_text_logs=getattr(request, "min_text_logs", None),
                 max_text_logs=getattr(request, "max_text_logs", None),
-                award_generation_enabled=request.award_generation_enabled,
+                award_generation_enabled=new_template.award_generation_enabled,
                 min_awards=request.min_awards,
                 max_awards=request.max_awards,
-                quest_generation_enabled=getattr(request, "quest_generation_enabled", True),
+                quest_generation_enabled=new_template.quest_generation_enabled,
                 min_quests=getattr(request, "min_quests", None),
                 max_quests=getattr(request, "max_quests", None),
                 min_sequences=getattr(request, "min_sequences", None),

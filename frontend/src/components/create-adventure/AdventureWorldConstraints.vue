@@ -6,6 +6,7 @@ import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpText
 
 const props = withDefaults(
   defineProps<{
+    mode?: string
     minScenes: number | null
     maxScenes: number | null
     minItems: number | null
@@ -326,7 +327,7 @@ function updateAwardMax(val: number) {
           </tr>
 
           <!-- Sidequests -->
-          <tr class="hover:bg-slate-800/30 transition-colors">
+          <tr v-if="mode !== 'vn'" class="hover:bg-slate-800/30 transition-colors">
             <td class="py-2.5 text-center">
               <input
                 type="checkbox"
@@ -437,7 +438,7 @@ function updateAwardMax(val: number) {
           </tr>
 
           <!-- Awards -->
-          <tr class="hover:bg-slate-800/30 transition-colors border-b border-white/10">
+          <tr v-if="mode !== 'vn'" class="hover:bg-slate-800/30 transition-colors border-b border-white/10">
             <td class="py-2.5 text-center">
               <input
                 type="checkbox"

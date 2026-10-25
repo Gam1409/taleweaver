@@ -10,6 +10,7 @@ from backend.engine.npc_journal.portraits import portrait_status
 from backend.engine.npc_journal.records import journal_of
 from backend.engine.npc_journal.relationships import player_relationship
 from backend.engine.npc_journal.worker import schedule
+from backend.engine.visual_novel.state import public_profile
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -63,6 +64,9 @@ def _card(npc: WorldEntity, state: SessionState) -> dict:
         if npc.image_url
         else portrait_status(state.session_id, npc.id, journal.get("portrait_status")),
         "entry_count": len(journal.get("entries") or []),
+        "narrative_role": "major"
+        if public_profile(state, npc.id)["importance"] == "hero"
+        else "supporting",
     }
 
 

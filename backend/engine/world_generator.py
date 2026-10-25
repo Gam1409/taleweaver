@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import prompts
 from backend.core.config import settings
+from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.llm_logger import log_structured_event
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.vn_world_generation import normalize_vn_generated_manifest
 
 # --- Re-exports so existing imports stay valid ---
 from backend.engine.world_schemas import (  # noqa: F401
@@ -558,6 +560,7 @@ class WorldGenerator:
         cover_similarity_percent: int = 50,
         allow_reuse_source_assets: bool = True,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        rule_enforcement_mode: str | None = None,
     ) -> None:
         """Call the LLM to generate a coherent world and persist it to the DB.
 
@@ -578,6 +581,17 @@ class WorldGenerator:
             and sanitize_path_component(cover_source_adventure_id) != cover_source_adventure_id
         ):
             raise ValueError("Invalid cover_source_adventure_id")
+
+        adventure = await db.get(AdventureTemplate, template_id)
+        effective_mode = rule_enforcement_mode or getattr(adventure, "rule_enforcement_mode", None)
+        policy = mode_policy(effective_mode)
+        if policy.vn and adventure:
+            adventure.rule_enforcement_mode = "vn"
+            normalize_vn_template(adventure)
+        if policy.vn:
+            quest_generation_enabled = award_generation_enabled = False
+            can_damage_npcs = npcs_can_damage_protagonist = False
+            scripts_generation_enabled = False
 
         configured = user.llm_settings or {}
         provider_keys = (
@@ -622,6 +636,7 @@ class WorldGenerator:
                 original_prompt = cleaned_prompt
 
         system_prompt, user_prompt = build_world_generation_prompts(
+            rule_enforcement_mode=effective_mode,
             title=title,
             original_prompt=original_prompt,
             sequences=sequences,
@@ -704,6 +719,8 @@ class WorldGenerator:
         )
 
         manifest_dict = manifesto.model_dump()
+        if policy.vn:
+            normalize_vn_generated_manifest(manifest_dict)
         WorldGenerator.preprocess_manifest_object_ids(manifest_dict)
 
         log_structured_event(

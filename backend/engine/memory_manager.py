@@ -177,11 +177,18 @@ class MemoryManager:
         completed_condition: Optional[str] = None,
         gameover_condition: Optional[str] = None,
         is_adventure_generator: bool = False,
+        rule_enforcement_mode: Optional[str] = None,
     ) -> str:
         """
         Builds the static GM system prompt (persona, adventure frame, core rules).
         It only changes on sequence changes, so it forms a cacheable prompt prefix.
         """
+        if rule_enforcement_mode == "vn" and not is_adventure_generator:
+            from backend.engine.visual_novel.narration import build_static_prompt
+
+            return build_static_prompt(
+                world_context, plot, rules, walkthrough, completed_condition, gameover_condition
+            )
         static_prompt = prompts.GAME_MASTER_SYSTEM_PROMPT_TEMPLATE.format(
             plot=plot or "Explore and survive.",
             rules=rules or "Standard RPG rules apply.",

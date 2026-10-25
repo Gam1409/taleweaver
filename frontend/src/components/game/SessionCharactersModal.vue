@@ -31,7 +31,7 @@ onBeforeUnmount(() => { clearInterval(timer); dialog.value?.close(); previousFoc
         <button class="w-full flex gap-3 items-center rounded-xl border border-slate-700 p-3 text-left hover:bg-slate-800 focus-visible:outline-amber-300" @click="emit('select', npc)">
           <img v-if="npc.image_url" :src="getImageUrl(npc.image_url)" alt="" class="w-12 h-16 rounded-lg object-cover" />
           <Users v-else class="w-12 h-12 p-3 text-slate-500" />
-          <span class="min-w-0"><span class="block font-semibold">{{ npc.name }}</span><span class="block text-xs text-slate-400">{{ npc.entry_count }} learned detail(s)</span></span>
+          <span class="min-w-0"><span class="block font-semibold">{{ npc.name }}</span><span v-if="npc.narrative_role === 'major'" class="block text-xs text-rose-200">Major character</span><span class="block text-xs text-slate-400">{{ npc.entry_count }} learned detail(s)</span></span>
         </button>
       </li>
     </ul>

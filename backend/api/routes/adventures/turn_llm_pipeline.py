@@ -77,7 +77,9 @@ class TurnLlmContextBuilder:
 
     @staticmethod
     def _is_entity_locked_by_requirements(entity: WorldEntity, overrides: dict[str, Any]) -> bool:
-        state_locked = (overrides.get(entity.id) or {}).get("locked") if isinstance(overrides, dict) else None
+        state_locked = (
+            (overrides.get(entity.id) or {}).get("locked") if isinstance(overrides, dict) else None
+        )
         if isinstance(state_locked, bool):
             return state_locked
 
@@ -268,6 +270,7 @@ class TurnLlmContextBuilder:
             completed_condition=end_condition,
             gameover_condition=state.gameover_condition or adventure.gameover_condition,
             is_adventure_generator=adventure.is_adventure_generator,
+            rule_enforcement_mode=getattr(adventure, "rule_enforcement_mode", None),
         )
 
     def _build_state_blocks(

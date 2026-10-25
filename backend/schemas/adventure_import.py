@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -65,7 +66,7 @@ class AdventureTemplateImportPayload(BaseModel):
     tone: Optional[str] = None
     image_style: Optional[str] = None
     image_styles: Optional[list[str]] = None
-    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat"]] = None
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = None
     pacing: Optional[Pacing] = None
     protagonist: Optional[Protagonist] = None
     characters: Optional[list[CharacterSpec]] = None
