@@ -53,6 +53,8 @@ from backend.api.routes import (
     config_api,
     data,
     map_api,
+    memory_index,
+    memory_settings,
     stt_api,
     tts_api,
     users_api,
@@ -105,6 +107,9 @@ async def lifespan(_app: FastAPI):
         from backend.engine.npc_journal.worker import shutdown as stop_npc_journal
 
         await stop_npc_journal()
+        from backend.engine.memory_rag.worker import shutdown as stop_memory_rag
+
+        await stop_memory_rag()
         from backend.engine.dynamic_locations.images import shutdown as stop_location_images
 
         await stop_location_images()
@@ -192,6 +197,8 @@ async def add_security_headers(request, call_next):
     return response
 
 app.include_router(config_api.router, prefix="/api")
+app.include_router(memory_settings.router, prefix="/api")
+app.include_router(memory_index.router, prefix="/api")
 app.include_router(adventures.router, prefix="/api")
 app.include_router(avatars.router, prefix="/api")
 app.include_router(characters.router, prefix="/api")

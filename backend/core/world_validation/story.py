@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.core.game_modes import VN_OPTIONAL_STORY_FIELDS, mode_policy
 from backend.core.world_validation.context import (
     ValidationContext,
     entity_id,
@@ -61,7 +62,12 @@ def check_empty_adventure(ctx: ValidationContext) -> list[ValidationFinding]:
 
 def check_story_fields(ctx: ValidationContext) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
-    for field in _STORY_FIELDS:
+    fields = (
+        tuple(field for field in _STORY_FIELDS if field not in VN_OPTIONAL_STORY_FIELDS)
+        if mode_policy(ctx.mode).vn
+        else _STORY_FIELDS
+    )
+    for field in fields:
         value = (ctx.adventure.get(field) or "").strip()
         guard_field = _GUARD_REPLACES.get(field)
         if not value and guard_field and (ctx.adventure.get(guard_field) or "").strip():

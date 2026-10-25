@@ -1,6 +1,7 @@
 """Regenerate portraits for session-owned NPCs without restarting their adventure."""
 
 import asyncio
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,6 +15,8 @@ from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import prompts
 from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
+from backend.engine.clothing.frames import compose_frame, extract_frame
+from backend.engine.clothing.visuals import npc_visuals, portrait_description
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.media_engine import MediaEngine
@@ -146,6 +149,22 @@ async def _save_portrait(
     await db.commit()
 
 
+async def _portrait_facts(db, state, npc, override: dict) -> tuple[dict, dict | None]:
+    visible = await npc_visuals(db, state, npc)
+    if visible is not None:
+        return {"name": visible["name"], "description": portrait_description(visible)}, visible
+    facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
+    facts["description"] = (facts.get("description") or "") + memory_context(npc, visual_only=True)
+    return facts, None
+
+
+async def _portrait_change(user, change: str, visible: dict | None) -> str:
+    if visible is None:
+        return change
+    frame = await extract_frame(user, change, [visible])
+    return json.dumps(compose_frame(frame, [visible]), ensure_ascii=False)
+
+
 async def regenerate_session_portrait(
     session_id: str, payload: SessionPortraitRequest, db: AsyncSession, user: User
 ) -> dict:
@@ -154,15 +173,14 @@ async def regenerate_session_portrait(
     state, npc = await _context(db, session_id, payload.target_id, user.id)
     raw_override = (state.entity_states or {}).get(_override_key(state, npc.id))
     override = raw_override if isinstance(raw_override, dict) else {}
-    facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
-    facts["description"] = (facts.get("description") or "") + memory_context(npc, visual_only=True)
+    facts, visible = await _portrait_facts(db, state, npc, override)
     try:
         t2i, style, tone = await _settings(db, state, user)
         request = _image_request(session_id, facts, t2i, user, style, tone)
         if payload.change_description.strip():
             request["prompt"] += (
                 " Requested portrait change (preserve identity and single-subject framing): "
-                + payload.change_description.strip()
+                + await _portrait_change(user, payload.change_description.strip(), visible)
             )
         if payload.use_previous_image:
             if request["provider"] != "comfyui":
@@ -176,6 +194,11 @@ async def regenerate_session_portrait(
                 " Preserve the reference character's identity, facial features and appearance; "
                 "change only the requested expression, action or setting."
             )
+            if visible is not None:
+                request["prompt"] += (
+                    " Use the supplied current visible clothing only; the reference provides "
+                    "facial identity, not a previous outfit."
+                )
         user_id = user.id
         # Release the read transaction while the provider is working.
         await db.commit()

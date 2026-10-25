@@ -55,7 +55,7 @@ function Test-TaleWeaverBackend {
     if (-not $Python) { return $false }
     try {
         $global:LASTEXITCODE = $null
-        & $Python -c "import fastapi, uvicorn, sqlalchemy, alembic, cryptography, pydantic_settings" *> $null
+        & $Python -c "import fastapi, uvicorn, sqlalchemy, alembic, cryptography, pydantic_settings, lancedb" *> $null
         return ($LASTEXITCODE -eq 0)
     } catch {
         return $false

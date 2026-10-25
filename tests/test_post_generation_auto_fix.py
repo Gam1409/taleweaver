@@ -6,7 +6,7 @@ import pytest
 
 from backend.api.routes.adventures.editing import auto_fix
 from backend.api.routes.adventures.schemas import CreateAdventureTemplatePayload
-from backend.models.adventure_template import AdventureTemplate
+from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.user import User
 from backend.schemas.validation import (
     AIFixSuggestionsResponse,
@@ -125,7 +125,7 @@ async def test_auto_fix_caps_number_of_llm_fix_attempts(monkeypatch) -> None:
     assert report.fixed == 0
 
 
-async def test_safe_wrapper_swallows_failures_and_skips_cancelled(monkeypatch) -> None:
+async def test_safe_wrapper_swallows_failures_but_propagates_cancellation(monkeypatch) -> None:
     # Arrange
     user, template_id = await _seed()
     failing = AsyncMock(side_effect=RuntimeError("llm down"))
@@ -138,7 +138,8 @@ async def test_safe_wrapper_swallows_failures_and_skips_cancelled(monkeypatch) -
         adventure = await db.get(AdventureTemplate, template_id)
         adventure.creation_status = "Cancelled"
         await db.commit()
-        await _REAL_SAFE_WRAPPER(db, template_id, db_user)
+        with pytest.raises(GenerationCancelled):
+            await _REAL_SAFE_WRAPPER(db, template_id, db_user)
 
     # Assert
     assert failing.await_count == 1

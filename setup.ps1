@@ -29,7 +29,7 @@ if ($envFile -notmatch "PROJECT_NAME=") {
 Set-Content ".env" $envFile
 
 # 2. Dependency Management (Poetry)
-Write-Host "[*] Setting up Python dependencies with Poetry..." -ForegroundColor Yellow
+Write-Host "[*] Installing Python dependencies, including LanceDB, with Poetry..." -ForegroundColor Yellow
 $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 if (-not $poetryExe) {
     Write-Host "[*] Poetry not found in PATH. Checking virtual environment (venv)..." -ForegroundColor Yellow
@@ -46,7 +46,7 @@ if (-not $poetryExe) {
 Invoke-TaleWeaverNative -Command $poetryExe -Arguments @("install", "--no-interaction")
 $pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
 if (-not (Test-TaleWeaverBackend -Python $pythonExe)) {
-    throw "Backend dependencies are unavailable after installation. Check the Poetry installation output above."
+    throw "Backend dependencies (including LanceDB) are unavailable after installation. Check the Poetry installation output above."
 }
 Write-Host "[+] Backend Python: $pythonExe" -ForegroundColor Green
 

@@ -81,10 +81,15 @@ async def test_scene_payload_hides_npc_possessions_without_mutating_engine_state
         )
         npc.inventory = [{"id": "HIDDEN_GEM", "name": "Hidden gem"}]
         npc.notes = "A SECRET_POCKET holds the gem."
+        npc.goal = "SECRET_GOAL: leave before dawn."
+        npc.character = "SECRET_CHARACTER: distrusts the visitor."
+        npc.hp = 37
+        npc.max_hp = 45
         npc.metadata_json = {
             **npc.metadata_json,
             "inventory": [{"id": "NESTED_SECRET"}],
             "loadout": {"equipment": {"ring": "SECRET_RING"}},
+            "persona": {"goal": "NESTED_GOAL", "character": "NESTED_CHARACTER"},
         }
         # Some imported saves have stale scene flags on NPC-owned item definitions.
         db.add(
@@ -107,11 +112,25 @@ async def test_scene_payload_hides_npc_possessions_without_mutating_engine_state
         public = next(e for e in entities if e["id"] == npc_id)
         assert "inventory" not in public
         serialized = json.dumps(public, default=str)
-        for secret in ("HIDDEN_GEM", "NESTED_SECRET", "SECRET_RING", "SECRET_POCKET"):
+        for secret in (
+            "HIDDEN_GEM",
+            "NESTED_SECRET",
+            "SECRET_RING",
+            "SECRET_POCKET",
+            "SECRET_GOAL",
+            "SECRET_CHARACTER",
+            "NESTED_GOAL",
+            "NESTED_CHARACTER",
+        ):
             assert secret not in serialized
+        assert public["hp"] == 37 and public["max_hp"] == 45
+        assert "goal" not in public and "character" not in public
         assert "HIDDEN_GEM" not in [e["id"] for e in entities]
         await db.refresh(npc)
         assert npc.inventory[0]["id"] == "HIDDEN_GEM"
+        assert npc.goal == "SECRET_GOAL: leave before dawn."
+        assert npc.character == "SECRET_CHARACTER: distrusts the visitor."
+        assert npc.metadata_json["persona"]["goal"] == "NESTED_GOAL"
         assert npc.metadata_json["loadout"]["equipment"]["ring"] == "SECRET_RING"
         message = await db.get(ChatMessage, message_id)
         session = await db.get(GameSession, "portrait-session")

@@ -241,7 +241,7 @@ function getEntityForHover(nameOrEntity: any) {
             <span
               class="inline-flex items-center align-middle mr-2.5 not-italic select-none px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-sans font-black text-[10px] uppercase tracking-[0.2em] shadow-sm"
             >
-              Game Master
+              {{ props.sheet?.rule_enforcement_mode === 'vn' ? 'Narrator' : 'Game Master' }}
             </span>
             <span v-html="renderFormattedHtml(dlg.text)"></span>
           </div>

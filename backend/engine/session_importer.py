@@ -10,8 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
+from backend.engine.scene_illustrations.snapshots import remap_illustrations
+from backend.engine.visual_novel.lifecycle import remap_social_state
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -63,6 +66,23 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     return data
 
 
+def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
+    new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
+    os.makedirs(new_session_dir, exist_ok=True)
+
+    for zip_info in zip_file.infolist():
+        if zip_info.filename.startswith("assets/") and not zip_info.is_dir():
+            # Relativize destination path within the session directory
+            rel_path = zip_info.filename.replace("assets/", "", 1)
+            dest_path = os.path.join(new_session_dir, rel_path)
+            safe_dest_path = _ensure_within_base_dir(dest_path, new_session_dir)
+            safe_dest_path = _ensure_within_data_dir(safe_dest_path)
+
+            os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
+            with open(safe_dest_path, "wb") as f:
+                f.write(zip_file.read(zip_info.filename))
+
+
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
@@ -74,8 +94,7 @@ class SessionImporter:
             The new game session ID if successful, else None.
         """
         try:
-            zip_buffer = io.BytesIO(content)
-            with zipfile.ZipFile(zip_buffer, "r") as zip_file:
+            with zipfile.ZipFile(io.BytesIO(content), "r") as zip_file:
                 # 1. Read session manifest
                 if "session.json" not in zip_file.namelist():
                     logger.error("session.json missing in .ads archive")
@@ -125,6 +144,7 @@ class SessionImporter:
                     description=avatar_data.get("description"),
                     goal=avatar_data.get("goal"),
                     character=avatar_data.get("character"),
+                    visual_profile=avatar_data.get("visual_profile"),
                     profile_image=avatar_data.get("profile_image"),
                     hp=avatar_data.get("hp", 200),
                     max_hp=avatar_data.get("max_hp", 200),
@@ -189,12 +209,18 @@ class SessionImporter:
                     selected_tone=session_state_data.get("selected_tone"),
                     is_completed=session_state_data.get("is_completed", False),
                     is_debug_enabled=session_state_data.get("is_debug_enabled", False),
-                    is_walkthrough_revealed=session_state_data.get("is_walkthrough_revealed", False),
+                    is_walkthrough_revealed=session_state_data.get(
+                        "is_walkthrough_revealed", False
+                    ),
                     allow_dynamic_items=session_state_data.get("allow_dynamic_items", False),
                 )
                 db.add(session_state)
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
+                restore_memory(session_state, session_state_data, message_ids)
+                session_state.entity_states = remap_illustrations(
+                    remap_social_state(session_state.entity_states, message_ids), message_ids
+                )
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
@@ -205,6 +231,7 @@ class SessionImporter:
                         label=sc.get("label"),
                         description=sc.get("description"),
                         image_url=sc.get("image_url"),
+                        decorative_objects=sc.get("decorative_objects"),
                     )
                     db.add(world_sc)
 
@@ -251,11 +278,14 @@ class SessionImporter:
                         state_comment=ent.get("state_comment"),
                         npc_type=ent.get("npc_type"),
                         movement_type=ent.get("movement_type"),
-                        moveable=bool(ent.get("moveable")) if ent.get("moveable") is not None else (str(ent.get("movement_type") or "").upper() == "MOVABLE"),
+                        moveable=bool(ent.get("moveable"))
+                        if ent.get("moveable") is not None
+                        else (str(ent.get("movement_type") or "").upper() == "MOVABLE"),
                         allowed_scenes=ent.get("allowed_scenes") or [],
                         notes=ent.get("notes"),
                         goal=ent.get("goal"),
                         character=ent.get("character"),
+                        visual_profile=ent.get("visual_profile"),
                         hp=ent.get("hp"),
                         max_hp=ent.get("max_hp"),
                         mana=ent.get("mana"),
@@ -288,22 +318,11 @@ class SessionImporter:
                     )
                     db.add(world_map)
 
-                # 11. Extract local session files
-                new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
-                os.makedirs(new_session_dir, exist_ok=True)
+                _extract_assets(zip_file, new_session_id)
 
-                for zip_info in zip_file.infolist():
-                    if zip_info.filename.startswith("assets/") and not zip_info.is_dir():
-                        # Relativize destination path within the session directory
-                        rel_path = zip_info.filename.replace("assets/", "", 1)
-                        dest_path = os.path.join(new_session_dir, rel_path)
-                        safe_dest_path = _ensure_within_base_dir(dest_path, new_session_dir)
-                        safe_dest_path = _ensure_within_data_dir(safe_dest_path)
-
-                        os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
-                        with open(safe_dest_path, "wb") as f:
-                            f.write(zip_file.read(zip_info.filename))
-
+            await import_summaries(
+                db, session_state, owner_id, manifest.get("memory_summaries") or [], message_ids
+            )
             await db.commit()
             return new_session_id
 

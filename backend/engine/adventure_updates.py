@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.core.game_modes import is_vn
 from backend.engine.adventure_importer import AdventureTemplateImporter
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.game_session import GameSession
@@ -255,13 +256,12 @@ def is_legacy_template(template: AdventureTemplate) -> bool:
             if str(manifest_version) < CURRENT_VERSION:
                 return True
 
-    # If it was imported (has origin_id or manifest) and lacks sequences:
-    if (template.origin_id or template.original_manifest) and not (
-        template.sequences and len(template.sequences) > 0
-    ):
-        return True
-
-    return False
+    # VN intentionally has no RPG sequences; explicit old versions still fail above.
+    return bool(
+        not is_vn(template)
+        and (template.origin_id or template.original_manifest)
+        and not (template.sequences and len(template.sequences) > 0)
+    )
 
 
 def is_legacy_session(
@@ -300,7 +300,8 @@ def is_legacy_session(
             or (template and template.sequences and len(template.sequences) > 0)
             or getattr(state, "active_sequence_id", None)
         )
-        if is_imported and not has_sequences:
+        mode_source = template if template is not None else (snapshot.get("adventure") or {})
+        if is_imported and not has_sequences and not is_vn(mode_source):
             return True
 
     return False

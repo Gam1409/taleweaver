@@ -4,9 +4,9 @@ import asyncio
 import copy
 import json
 import logging
+import os
 import re
 import uuid
-import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -17,7 +17,10 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import prompts
 from backend.core.config import settings
+from backend.core.game_modes import is_vn
+from backend.engine.clothing.runtime import apply_wardrobe
 from backend.engine.map_engine import MapEngine
+from backend.engine.mutation_targets import validate_mutation_targets
 from backend.engine.quest_manager import QuestManager
 from backend.engine.rule_engine import (
     EntityMovement,
@@ -26,6 +29,10 @@ from backend.engine.rule_engine import (
     RuleEngine,
     WorldEntityUpdate,
 )
+from backend.engine.visual_novel.event_policy import enforce_vn_event_policy
+from backend.engine.visual_novel.ownership import sync_vn_ownership
+from backend.engine.visual_novel.time import apply_elapsed_time
+from backend.engine.world_memory_notifications import memory_saved_message, notification_language
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.chat import ChatMessage
 from backend.models.user import User
@@ -149,7 +156,7 @@ class TurnStateApplier:
 
     async def _build_awards_payload(self, adventure: AdventureTemplate | None) -> list[dict]:
         """Helper to build the awards payload with earned status."""
-        if not self.user:
+        if is_vn(adventure or self.adventure) or not self.user:
             return []
 
         adv_id = adventure.id if adventure else (self.state.template_id if self.state else None)
@@ -169,7 +176,7 @@ class TurnStateApplier:
         """Evaluates awards configured with deterministic hard rules and grants them if conditions are met."""
         from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 
-        if not self.adventure or not self.adventure.awards or not self.user:
+        if is_vn(self.adventure) or not self.adventure or not self.adventure.awards or not self.user:
             return []
 
         messages: list[str] = []
@@ -233,6 +240,9 @@ class TurnStateApplier:
 
     async def _apply_game_event(self, event: GameEvent) -> list[str]:
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
+        enforce_vn_event_policy(event, self.adventure)
+        await validate_mutation_targets(self.manager, event)
+        vn_mode = is_vn(self.adventure)
         system_messages: list[str] = []
         states = dict(self.state.entity_states or {})
         existing_item_ids = await self._collect_existing_item_ids()
@@ -274,7 +284,7 @@ class TurnStateApplier:
                     else None
                 )
 
-                if item.id and item.id in existing_item_ids and _is_consumable(item):
+                if item.id and item.id in existing_item_ids and _is_consumable(item) and not vn_mode:
                     if not item.image_url and isinstance(match, dict) and match.get("image_url"):
                         item.image_url = match.get("image_url")
                     source_id = item.id
@@ -288,10 +298,11 @@ class TurnStateApplier:
 
                 if not item.image_url:
                     try:
-                        from backend.engine.media_engine import MediaEngine
-                        from backend.core.config import settings
                         import os
                         import uuid
+
+                        from backend.core.config import settings
+                        from backend.engine.media_engine import MediaEngine
                         
                         item_type = item.item_type or "PICKABLE"
                         safe_id = re.sub(r"[^A-Za-z0-9_\-]", "_", item.id or f"LOOT_{uuid.uuid4().hex[:8]}")[:50]
@@ -355,7 +366,7 @@ class TurnStateApplier:
                 )
                 # Allow if it's a replacement for an item being removed
                 is_replacement = event.removed_inventory_item_ids and item.id in event.removed_inventory_item_ids
-                if item.id and item.id in existing_item_ids and not is_replacement and _is_consumable(item):
+                if item.id and item.id in existing_item_ids and not is_replacement and _is_consumable(item) and not vn_mode:
                     if not item.image_url and isinstance(match, dict) and match.get("image_url"):
                         item.image_url = match.get("image_url")
                     source_id = item.id
@@ -595,21 +606,8 @@ class TurnStateApplier:
                 state_dirty = True
 
         if event.updated_entities:
-            session_ents_res = await self.db.execute(
-                select(WorldEntity).where(WorldEntity.session_id == self.game_id)
-            )
-            canonical_ents = session_ents_res.scalars().all()
-            ent_lookup_by_id = {e.id.upper(): e.id for e in canonical_ents if e.id}
-            ent_lookup_by_name = {(e.name or "").strip().lower(): e.id for e in canonical_ents if e.name}
-
             for update in event.updated_entities:
-                raw_eid = str(update.entity_id or "").strip()
-                canonical_id = (
-                    ent_lookup_by_id.get(raw_eid.upper())
-                    or ent_lookup_by_name.get(raw_eid.lower())
-                    or raw_eid
-                )
-                eid = canonical_id
+                eid = update.entity_id
                 ent_obj = None
                 if eid not in states:
                     states[eid] = {}
@@ -639,7 +637,7 @@ class TurnStateApplier:
                     states[eid]["moveable"] = update.moveable
                 if update.allowed_scenes is not None:
                     states[eid]["allowed_scenes"] = update.allowed_scenes
-                if update.is_defeated is not None:
+                if update.is_defeated is not None and not vn_mode:
                     was_defeated = self.state.entity_states.get(eid, {}).get("is_defeated", False)
                     if not was_defeated and update.is_defeated is True:
                         ent_res = await self.db.execute(
@@ -697,7 +695,7 @@ class TurnStateApplier:
                         if ent_obj and ent_obj.entity_type == "OBJECT" and str(ent_obj.item_type or "").upper() == "CONTAINER":
                             metadata_json = dict(ent_obj.metadata_json or {})
                             code_to_unlock = str(metadata_json.get("code_to_unlock") or "").strip()
-                            if code_to_unlock:
+                            if code_to_unlock and not vn_mode:
                                 xp_reward = metadata_json.get("exp_reward") or metadata_json.get("xp_reward") or 100
                                 self.avatar.exp = (self.avatar.exp or 0) + xp_reward
                                 msg = f"Unlocked {ent_obj.name} with the correct code!"
@@ -822,7 +820,7 @@ class TurnStateApplier:
                             await self._save_chat_message("system", meta["on_drop_text"])
                             system_messages.append(meta["on_drop_text"])
 
-        if event.spawned_items:
+        if event.spawned_items and not vn_mode:
             for item in event.spawned_items:
                 await self._spawn_scene_item(item.model_dump(exclude_none=True))
             state_dirty = True
@@ -832,7 +830,7 @@ class TurnStateApplier:
 
         # Quest Updates
         newly_completed_quests: list[dict] = []
-        if event.completed_quest_ids:
+        if event.completed_quest_ids and not vn_mode:
             new_quests = deepcopy(self.state.quests or [])
             modified = False
             for qid in event.completed_quest_ids:
@@ -846,7 +844,7 @@ class TurnStateApplier:
                 self.state.quests = new_quests
                 state_dirty = True
 
-        if event.earned_award_keys:
+        if event.earned_award_keys and not vn_mode:
             now = datetime.utcnow().isoformat()
             award_defs = {
                 (aw.get("key") or ""): aw
@@ -907,7 +905,7 @@ class TurnStateApplier:
         system_messages.extend(det_award_msgs)
 
         # Deterministic Quest Sync (Post-LLM check)
-        det_completed = QuestManager.evaluate_quests(
+        det_completed = [] if vn_mode else QuestManager.evaluate_quests(
             self.avatar,
             self.state,
             new_inventory_items=event.new_inventory_items,
@@ -952,7 +950,7 @@ class TurnStateApplier:
 
         # Sequence Completion Logic
         old_seq_id = self.state.active_sequence_id
-        seq_messages = AdventureLogic.evaluate_sequence_progress(
+        seq_messages = [] if vn_mode else AdventureLogic.evaluate_sequence_progress(
             adventure=self.adventure,
             state=self.state,
             avatar=self.avatar,
@@ -999,7 +997,7 @@ class TurnStateApplier:
         )
         win_guard = raw_win_guard.strip() if isinstance(raw_win_guard, str) else ""
 
-        if win_guard:
+        if win_guard and not vn_mode:
             from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 
             is_win_met, _ = HardRuleEvaluator.check_guard_expression(
@@ -1063,6 +1061,10 @@ class TurnStateApplier:
             except Exception as e:
                 logger.error(f"Manual map exit update failed: {e}")
 
+        if vn_mode:
+            state_dirty |= await sync_vn_ownership(self.db, self.state, self.avatar, event, states)
+            state_dirty |= await apply_wardrobe(self.manager, event, states)
+
         # Auto-cleanup: remove items from NPC inventories if they are now in the scene or player inventory
         player_item_ids = {
             item.get("id")
@@ -1120,6 +1122,7 @@ class TurnStateApplier:
 
         if event.new_world_memories:
             import uuid
+            memory_language = await notification_language(self.manager)
             existing_memories = list(self.state.world_memories or [])
             for mem in event.new_world_memories:
                 target_scene_id = mem.scene_id or (self.state.current_scene_id if self.state else None)
@@ -1148,9 +1151,9 @@ class TurnStateApplier:
                     "scene_id": target_scene_id,
                 }
                 existing_memories.append(new_mem)
-                emotion_label = "positiv" if mem.emotion == "positive" else ("negativ" if mem.emotion == "negative" else "neutral")
-                scope_label = "szenen-lokal" if mem.scope == "local" else "global"
-                msg = f"Erinnerung gespeichert ({scope_label}, {emotion_label}): {mem.description}"
+                msg = memory_saved_message(
+                    mem.description, mem.scope, mem.emotion, memory_language
+                )
                 await self._save_chat_message("system", msg)
                 system_messages.append(msg)
             self.state.world_memories = existing_memories
@@ -1163,7 +1166,9 @@ class TurnStateApplier:
             self.state.start_datetime = event.start_datetime_override
             state_dirty = True
 
-        if event.time_override_minutes is not None:
+        if vn_mode:
+            state_dirty = apply_elapsed_time(self.state, event, self.adventure) or state_dirty
+        elif event.time_override_minutes is not None:
             self.state.in_game_time = max(0, int(event.time_override_minutes))
             state_dirty = True
         elif event.extra_time_minutes != 0:

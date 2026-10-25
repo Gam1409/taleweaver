@@ -7,13 +7,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.content_language import prose_language_instruction
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.npc_journal.records import journal_of, memory_context
+from backend.engine.npc_journal.records import is_significant, journal_of
 from backend.engine.npc_journal.schema import SYSTEM_PROMPT, JournalExtraction
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
+
+
+def _known_facts(npc: WorldEntity) -> list[dict]:
+    """Expose bounded distinct prior facts, including older legacy general topics."""
+    facts = []
+    remaining = 1600
+    for entry in reversed((journal_of(npc).get("entries") or [])[-32:]):
+        text = str(entry.get("text") or "")[:400]
+        if len(text) > remaining:
+            continue
+        facts.append(
+            {
+                "topic": entry.get("topic", "general"),
+                "text": text,
+                "source": entry.get("source", "observed"),
+            }
+        )
+        remaining -= len(text)
+    return list(reversed(facts))
 
 
 async def extraction_context(
@@ -39,7 +58,7 @@ async def extraction_context(
             "scene_id": npc.current_scene_id,
             "aliases": journal_of(npc).get("aliases", []),
             "appearance": npc.description,
-            "learned": memory_context(npc, 800),
+            "learned": _known_facts(npc),
         }
         for npc in npcs
     ]
@@ -67,7 +86,7 @@ async def extract(
     user: User, session: GameSession, message_id: str, payload: str
 ) -> JournalExtraction:
     llm = GameMasterLLM.for_role(user, "small")
-    return await llm.aexecute_complex_task(
+    result = await llm.aexecute_complex_task(
         SYSTEM_PROMPT
         + prose_language_instruction(
             session.content_language or user.default_language or "English", "observation text"
@@ -81,3 +100,13 @@ async def extract(
         phase="observations",
         metadata={"message_id": message_id},
     )
+    extraction = JournalExtraction.model_validate(result)
+    # Optional fields permit old stored/imported payloads, not unclassified new output.
+    # Retain valid identity introductions even when every proposed observation is rejected.
+    for character in extraction.characters:
+        character.observations = [
+            observation
+            for observation in character.observations
+            if observation.significance is not None and is_significant(observation)
+        ]
+    return extraction

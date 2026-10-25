@@ -15,11 +15,16 @@ from backend.models.chat import ChatMessage
 def restore_messages(
     db: AsyncSession, session_id: str, messages: list[dict[str, Any]]
 ) -> dict[str, str]:
-    ids: dict[str, str] = {}
+    ids: dict[str, str] = {raw["id"]: str(uuid4()) for raw in messages if raw.get("id")}
     for raw in messages:
-        message_id = str(uuid4())
-        if raw.get("id"):
-            ids[raw["id"]] = message_id
+        message_id = ids.get(raw.get("id"), str(uuid4()))
+        journal = deepcopy(raw.get("npc_journal"))
+        if isinstance(journal, dict):
+            journal["gaps"] = [ids[gap] for gap in journal.get("gaps", []) if gap in ids]
+            journal.pop("token", None)
+            journal.pop("lease_until", None)
+            if journal.get("status") == "running":
+                journal.update(status="pending", attempts=0, recovering=True)
         message = ChatMessage(
             id=message_id,
             session_id=session_id,
@@ -27,7 +32,7 @@ def restore_messages(
             content=raw.get("content"),
             scene_id=raw.get("scene_id"),
             sequence_id=raw.get("sequence_id"),
-            npc_journal=deepcopy(raw.get("npc_journal")),
+            npc_journal=journal,
         )
         created_at = raw.get("created_at")
         if isinstance(created_at, datetime):

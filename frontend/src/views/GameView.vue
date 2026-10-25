@@ -1787,6 +1787,7 @@ usePlayAgentAutoLoop()
     />
     <DynamicLocationImage :busy="inputLocked" :session-id="props.id" :scene-id="String(sheet?.scene_id || sheet?.current_scene_id || '')" @ready="currentSceneImage = $event" />
     <SessionSettingsModal
+      :mode="sheet?.rule_enforcement_mode"
       :session-id="props.id"
       v-if="showSettingsModal"
       :initial-turns="sheet?.max_memory_turns ?? 10"

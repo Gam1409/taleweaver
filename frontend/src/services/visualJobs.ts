@@ -14,7 +14,7 @@ async function readResponse(response: Response): Promise<JobStatus> {
 }
 
 export async function runVisualJob(
-  operation: 'test' | 'asset' | 'catalog' | 'avatar' | 'session_npc',
+  operation: 'test' | 'asset' | 'catalog' | 'avatar' | 'session_npc' | 'session_illustration',
   payload: unknown,
   templateId?: string,
   signal?: AbortSignal,

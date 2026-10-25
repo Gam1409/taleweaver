@@ -12,6 +12,30 @@ Open **Characters** in the game toolbar to see recorded characters. Select one t
 their portrait and learned history. New NPCs receive a server-generated UUID; their
 names can use any language. Existing authored NPCs remain usable as before.
 
+The card shows the portrait, current description and a short **General overview**
+from learned background facts. Two history tabs separate **General history**
+(background, appearance and other known facts) from **History with your character**
+(shared events and reactions toward the player). The latter starts with up to four
+recent observations; expand **All shared events** for its full history. Each tab
+has independent pagination and supports arrow-key navigation. Repeated summary
+topics use the latest entry, and claims remain labeled as claims. Summaries need
+no additional LLM request. A missing portrait has a visible **Generate portrait**
+button; **Portrait options** contains reference and regeneration controls.
+
+For VN stories, **Character cards → Show NPC state and relationship indicators**
+is available during world creation in both Simple and Advanced modes. It defaults
+to off. Change it later in **Characters → Character card display**, or in an open
+card; the choice applies to that session. When enabled, cards may show last evaluated
+emotion, trust, affinity, respect and tension. These are narrative estimates from
+completed interactions, not guaranteed current feelings. Missing evidence shows an
+unavailable state, never invented neutral values. NPC inventories, goals and plans
+remain private in both display modes.
+
+The display choice is stored independently of generated content. Models cannot
+change it. It survives template and session copying and export/import; old worlds
+without the setting keep indicators hidden. Saving the display preference during
+a game turn returns a busy response rather than overwriting the turn's state.
+
 After each completed response, the configured **Small / Utility** LLM extracts new
 information in the session's content language. This runs in the background and does
 not delay the player's next action. The journal stores appearance, background,
@@ -75,9 +99,12 @@ retains the history. A discarded cloak is therefore not reused as the latest out
 - Copying or exporting/importing a save retains cards and history and remaps message
   references to the copied conversation.
 - Restoring a checkpoint removes later introductions, facts and aliases.
-- Opening a session or the Characters directory resumes pending learning. A failed
-  response pauses later learning to preserve story order. **Retry learning** retries
-  it after the Small / Utility model is available again.
+- Opening a session or the Characters directory resumes eligible learning. A failed
+  response no longer blocks later messages. Failed work is eligible for another
+  attempt after 60 seconds, up to three attempts; two consecutive failures pause
+  the session's queue for 60 seconds to avoid exhausting a backlog during an outage.
+  **Retry learning** explicitly restarts failed work. When a failed introduction
+  recovers, dependent observations are revisited and deduplicated in source order.
 - Existing conversations are **not** rescanned automatically. For an NPC mentioned
   only in old messages, have them introduce themselves in a new turn.
 
@@ -100,10 +127,11 @@ per character, prioritizing the latest value of each category/topic. Extraction 
 up to 24,000 characters of current narration and up to 3,000 of the previous player
 message. Extremely long responses may therefore leave later passages unprocessed.
 
-Learning has a 90-second timeout, up to three recovery attempts for interrupted work,
-and one worker per session. Process-wide limits allow two learning jobs and one
+Learning has a 90-second timeout, up to three total automatic attempts per message,
+and one worker per session. Database claims reject duplicate or stale results.
+Process-wide limits allow two learning jobs and one
 automatic portrait at a time. This implementation assumes a **single backend process**;
-multiple application workers would need database leases. Interrupted image requests
+multiple application workers would need shared capacity and portrait coordination. Interrupted image requests
 require manual retry to avoid automatically submitting another paid generation.
 
 ## Verification

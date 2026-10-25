@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import type { AdventureTemplateSummary, GameSession } from '@/types'
 import AdventurePlayActions from './AdventurePlayActions.vue'
+import MemoryIndexActions from './MemoryIndexActions.vue'
 import { MoreHorizontal, X, ScrollText, Copy } from 'lucide-vue-next'
 import LicenseInfoPopup from '@/components/common/LicenseInfoPopup.vue'
 
@@ -262,6 +263,7 @@ const hasLicenseInfo = computed(() => {
               <ScrollText class="w-3.5 h-3.5" />
               License Info
             </button>
+            <MemoryIndexActions :template-id="props.template.template_id" :title="props.template.title" />
             <div class="h-[1px] bg-white/5 mx-2 my-1"></div>
             <button
               class="w-full text-left px-4 py-2.5 text-xs font-black uppercase tracking-widest text-red-400/60 hover:text-red-400 hover:bg-red-500/10"

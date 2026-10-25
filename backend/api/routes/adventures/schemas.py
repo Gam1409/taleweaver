@@ -23,10 +23,12 @@ class CreateAdventureTemplatePayload(BaseModel):
     language: Optional[str] = None
     original_prompt: Optional[str] = None
     intro_text: Optional[str] = None
-    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat"]] = "rpg"
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = "rpg"
     generate_scene_images: bool = False
     generate_npc_images: bool = False
     generate_item_images: bool = False
+    show_npc_state: bool = False
+    detailed_clothing: bool = False
     automatic_npc_voice_assignment: bool = True
     time_per_turn: int = 5
     pacing_minutes: Optional[int] = None
@@ -594,7 +596,7 @@ class StoryIdeaSuggestionRequest(BaseModel):
     title: Optional[str] = None
     story_idea: Optional[str] = None
     selected_tone: Optional[dict[str, Any]] = None
-    rule_enforcement_mode: Literal["rpg", "story", "chat"] = "story"
+    rule_enforcement_mode: Literal["rpg", "story", "chat", "vn"] = "story"
     language: Optional[str] = None
 
 
@@ -624,7 +626,7 @@ class AdventureTemplateUpdate(BaseModel):
     language: Optional[str] = None
     intro_text: Optional[str] = None
     original_prompt: Optional[str] = None
-    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat"]] = None
+    rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = None
     time_per_turn: Optional[int] = None
     pacing_minutes: Optional[int] = None
     clock_enabled: Optional[bool] = None

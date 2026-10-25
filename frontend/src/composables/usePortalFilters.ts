@@ -2,7 +2,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import type { AdventureTemplateSummary, GameSession, CatalogTile } from '@/types'
 
 export type PortalSectionType = 'templates' | 'sessions'
-export type RuleTypeFilter = 'all' | 'rpg' | 'story' | 'chat'
+export type RuleTypeFilter = 'all' | 'rpg' | 'story' | 'chat' | 'vn'
 export type ViewMode = 'grid' | 'table'
 
 export interface PortalFilterOptions {
@@ -176,7 +176,7 @@ export function usePortalFilters<T extends AdventureTemplateSummary | GameSessio
       const parsed = JSON.parse(savedFiltersRaw)
       initialFilters = {
         searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
-        selectedType: ['all', 'rpg', 'story', 'chat'].includes(parsed.selectedType)
+        selectedType: ['all', 'rpg', 'story', 'chat', 'vn'].includes(parsed.selectedType)
           ? parsed.selectedType
           : 'all',
         selectedTone: typeof parsed.selectedTone === 'string' ? parsed.selectedTone : 'all',

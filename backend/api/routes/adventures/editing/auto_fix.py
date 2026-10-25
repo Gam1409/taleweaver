@@ -21,7 +21,9 @@ from backend.api.routes.adventures.editing.auto_fix_log import (
     build_validation_log_entry,
 )
 from backend.api.routes.adventures.editing.validation import execute_validation_run
-from backend.models.adventure_template import AdventureTemplate
+from backend.core.game_modes import normalize_vn_template
+from backend.engine.generation_control import assert_generation_current, guard_generation_write
+from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.user import User
 from backend.schemas.validation import AIFixSuggestionsRequest, ValidationFinding
 
@@ -59,6 +61,7 @@ async def _auto_fix_finding(
     adventure: AdventureTemplate,
     finding: ValidationFinding,
 ) -> bool:
+    await assert_generation_current(db, adventure)
     request = AIFixSuggestionsRequest(
         finding_code=finding.code,
         finding_message=finding.message,
@@ -71,6 +74,7 @@ async def _auto_fix_finding(
         logger.info("Auto-fix: no proposal for %s (%s)", finding.code, response.error or "empty")
         return False
 
+    await guard_generation_write(db, adventure)
     applied, _stale = await _apply_patches(
         db, template_id, adventure, response.proposals[0].patches
     )
@@ -81,6 +85,7 @@ async def _auto_fix_finding(
         await db.refresh(adventure)
         return False
 
+    normalize_vn_template(adventure)
     await _commit_fix(db, template_id, user.id, response.finding_signature)
     return True
 
@@ -110,6 +115,8 @@ async def run_post_generation_auto_fix(
         report.attempted += 1
         try:
             fixed = await _auto_fix_finding(db, template_id, user, adventure, finding)
+        except GenerationCancelled:
+            raise
         except Exception:
             logger.exception("Auto-fix failed for %s on %s", finding.code, template_id)
             await db.rollback()
@@ -139,14 +146,18 @@ async def run_auto_fix_pass_safely(db: AsyncSession, template_id: str, user: Use
         .scalars()
         .first()
     )
-    if adventure is None or adventure.creation_status == "Cancelled":
+    if adventure is None:
         return
+    await assert_generation_current(db, adventure)
+    await guard_generation_write(db, adventure)
     adventure.creation_status = "Validating and auto-fixing"
     await db.commit()
     report: Optional[AutoFixReport] = None
     failure: Optional[str] = None
     try:
         report = await run_post_generation_auto_fix(db, template_id, user)
+    except GenerationCancelled:
+        raise
     except Exception as exc:
         logger.exception("Post-generation auto-fix failed for %s", template_id)
         await db.rollback()
@@ -160,8 +171,11 @@ async def _log_validation_result(db: AsyncSession, template_id: str, entry: dict
         adventure = await db.get(AdventureTemplate, template_id, populate_existing=True)
         if adventure is None:
             return
+        await guard_generation_write(db, adventure)
         append_validation_log(adventure, entry)
         await db.commit()
+    except GenerationCancelled:
+        raise
     except Exception:
         logger.exception("Could not log validation result for %s", template_id)
         await db.rollback()

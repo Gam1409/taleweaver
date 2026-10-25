@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.engine.clothing.settings import clothing_settings
+from backend.engine.npc_cards.settings import manifest_card_settings
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -92,6 +94,7 @@ _NPC_ENTITY_KEYS = {
     "notes",
     "goal",
     "character",
+    "visual_profile",
     "hp",
     "max_hp",
     "mana",
@@ -498,6 +501,7 @@ class AdventureExporter:
                 "description": avatar.description if avatar else "",
                 "goal": avatar.goal if avatar else "",
                 "character": avatar.character if avatar else "",
+                "visual_profile": avatar.visual_profile if avatar else None,
                 "profile_image": avatar.profile_image if avatar else None,
                 "hp": avatar.hp if avatar else 200,
                 "max_hp": avatar.max_hp if avatar else 200,
@@ -528,6 +532,8 @@ class AdventureExporter:
             "sequences": adv.sequences or [],
             "scripts": (adv.original_manifest or {}).get("scripts", []),
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
+            "npc_card_settings": manifest_card_settings(adv.original_manifest),
+            "clothing_settings": clothing_settings(adv.original_manifest),
         }
 
         return manifest

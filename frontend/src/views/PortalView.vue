@@ -595,6 +595,7 @@ onUnmounted(() => {
         v-if="activeProgressAdventure"
         :adventure-id="activeProgressAdventure.id"
         :adventure-title="activeProgressAdventure.title"
+        @resumed="trackNewAdventure(activeProgressAdventure.id, activeProgressAdventure.title)"
         @close="activeProgressAdventure = null"
       />
 

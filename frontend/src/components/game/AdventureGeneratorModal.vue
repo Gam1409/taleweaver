@@ -165,7 +165,7 @@ const form = ref({
   award_generation_enabled: true,
   min_awards: 2 as number | null,
   max_awards: 4 as number | null,
-  rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat',
+  rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
   language: '',
   // Time Handling
   clock_enabled: true,

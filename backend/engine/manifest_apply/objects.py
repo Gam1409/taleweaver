@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.core import prompts
+from backend.engine.clothing.profiles import sanitize_garment
 from backend.engine.image_profiles import image_timeout
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
@@ -194,6 +195,9 @@ _TYPE_METADATA: dict[str, Callable[[dict[str, Any], dict[str, Any]], None]] = {
 
 def object_metadata(obj: dict[str, Any], numbers: dict[str, Optional[int]]) -> dict[str, Any]:
     metadata = dict(obj.get("metadata_json") or {})
+    garment = sanitize_garment(obj.get("clothing") or metadata.get("clothing"))
+    if garment:
+        metadata["clothing"] = garment
     _merge_fields(obj, metadata, _BASE_SCRIPT_FIELDS)
     for key in EFFECT_KEYS:
         if numbers[key] is not None:
@@ -215,6 +219,9 @@ def resolved_item(
     obj: dict[str, Any], image_url: Optional[str], numbers: dict[str, Optional[int]]
 ) -> dict[str, Any]:
     """The item snapshot stored in NPC inventories."""
+    garment = sanitize_garment(
+        obj.get("clothing") or (obj.get("metadata_json") or {}).get("clothing")
+    )
     return {
         "id": obj["id"],
         "name": obj["name"],
@@ -222,6 +229,7 @@ def resolved_item(
         "image_url": image_url,
         "item_type": obj.get("item_type", "PICKABLE"),
         "slot": _item_slot(obj),
+        **({"clothing": garment} if garment else {}),
         "text_log_content": generator_module()._normalize_text_log_content(
             obj.get("text_log_content"), obj.get("description"), obj.get("name")
         ),

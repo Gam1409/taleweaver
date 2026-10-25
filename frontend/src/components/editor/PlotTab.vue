@@ -21,7 +21,7 @@ const emit = defineEmits<{
   (e: 'cancel-edit'): void
   (e: 'generate-field', field: string): void
   (e: 'update:tempValue', val: string): void
-  (e: 'update:mode', val: 'rpg' | 'story' | 'chat'): void
+  (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
 }>()
 </script>
 
@@ -44,7 +44,7 @@ const emit = defineEmits<{
            </div>
            <div class="flex bg-black/40 p-1 rounded-2xl border border-white/5 shadow-inner">
              <button 
-               v-for="mode in (['rpg', 'story', 'chat'] as const)" 
+               v-for="mode in (['rpg', 'story', 'chat', 'vn'] as const)"
                :key="mode" 
                @click="emit('update:mode', mode)"
                :class="[
@@ -52,7 +52,7 @@ const emit = defineEmits<{
                  form.rule_enforcement_mode === mode ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
                ]"
              >
-               {{ mode === 'rpg' ? 'RPG' : mode }}
+               {{ mode === 'vn' ? 'VN' : mode === 'rpg' ? 'RPG' : mode }}
              </button>
            </div>
          </div>

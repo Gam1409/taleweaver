@@ -35,6 +35,7 @@ const openMenuId = ref<string | null>(null)
 // ============ COMPONENT IMPORTS ============
 import ProviderKeysSection from '@/components/admin/ProviderKeysSection.vue'
 import IntelligenceSection from '@/components/admin/IntelligenceSection.vue'
+import MemoryRagSettings from '@/components/admin/MemoryRagSettings.vue'
 import VisualsSection from '@/components/admin/VisualsSection.vue'
 import SpeechSection from '@/components/admin/SpeechSection.vue'
 import SpeechToTextSection from '@/components/admin/SpeechToTextSection.vue'
@@ -407,6 +408,8 @@ const navCategories: NavCategory[] = [
           @refresh-llm-models="handleRefreshLlmModels"
           @switch-section="(s) => activeSection = s as Section"
         />
+
+        <MemoryRagSettings v-if="activeSection === 'llm'" />
 
         <VisualsSection 
           v-if="activeSection === 't2i'"

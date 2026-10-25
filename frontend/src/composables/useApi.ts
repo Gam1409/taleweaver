@@ -101,7 +101,7 @@ export interface GeneratorSurprisePresetResponse {
   story_idea: string
   selected_tone?: string | null
   selected_style?: string | null
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat'
+  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   generate_scene_images: boolean
   generate_npc_images: boolean
   generate_item_images: boolean
@@ -647,7 +647,7 @@ export const api = {
   },
 
   /** Retrieves the generation status and potential errors for an adventure. */
-  getAdventureStatus(adventureId: string): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any }> {
+  getAdventureStatus(adventureId: string): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any; can_resume?: boolean; completed_stages?: number }> {
     return request(`/adventures/${adventureId}/status`)
   },
 
@@ -658,6 +658,11 @@ export const api = {
 
   async getAdventureGenerationSayings(): Promise<string[]> {
     return GENERATION_SAYINGS
+  },
+
+  /** Continue a failed world generation from its saved steps. */
+  resumeAdventureGeneration(adventureId: string): Promise<{ adventure_id: string; game_id: string; status: string }> {
+    return request(`/adventures/${adventureId}/resume-generation`, { method: 'POST' })
   },
 
   /** Cancels an active adventure generation. */

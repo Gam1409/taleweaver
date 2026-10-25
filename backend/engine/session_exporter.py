@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import settings
+from backend.engine.memory_rag.lifecycle import export_summaries
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -62,7 +62,9 @@ class SessionExporter:
             raise ValueError(f"GameSession {session_id} not found")
 
         # 2. Fetch associated state
-        state_res = await db.execute(select(SessionState).where(SessionState.session_id == session_id))
+        state_res = await db.execute(
+            select(SessionState).where(SessionState.session_id == session_id)
+        )
         session_state = state_res.scalars().first()
 
         # 3. Fetch avatar
@@ -86,7 +88,9 @@ class SessionExporter:
         exits_res = await db.execute(select(WorldExit).where(WorldExit.session_id == session_id))
         world_exits = exits_res.scalars().all()
 
-        entities_res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == session_id))
+        entities_res = await db.execute(
+            select(WorldEntity).where(WorldEntity.session_id == session_id)
+        )
         world_entities = entities_res.scalars().all()
 
         map_res = await db.execute(select(WorldMap).where(WorldMap.session_id == session_id))
@@ -112,6 +116,7 @@ class SessionExporter:
             "world_exits": [to_dict(ex) for ex in world_exits],
             "world_entities": [to_dict(ent) for ent in world_entities],
             "world_map": to_dict(world_map),
+            "memory_summaries": await export_summaries(db, session_id),
         }
 
         # Localize any session URL paths inside the database JSON

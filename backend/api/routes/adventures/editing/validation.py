@@ -21,6 +21,7 @@ from backend.core.validators_prompts import (
     AI_VALIDATION_USER_PROMPT_TEMPLATE,
 )
 from backend.core.world_validator import validate_adventure
+from backend.engine.vn_world_generation import vn_editor_guidance
 from backend.models.user import User
 from backend.models.validation_run import ValidationRun
 from backend.schemas.validation import (
@@ -77,7 +78,7 @@ def _build_ai_validation_prompt(debug_payload: Any) -> str:
     def _dump(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
 
-    return AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
+    return vn_editor_guidance(adventure) + AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
         title=adventure.get("title", ""),
         language=adventure.get("language", ""),
         rule_enforcement_mode=adventure.get("rule_enforcement_mode", "rpg"),
@@ -123,7 +124,10 @@ async def _run_ai_validation(
         gm = GameMasterLLM.for_role(user, "complex")
         model = gm.model
         response = await gm.aexecute_complex_task(
-            system_prompt=AI_VALIDATION_SYSTEM_PROMPT,
+            system_prompt=(
+                AI_VALIDATION_SYSTEM_PROMPT
+                + vn_editor_guidance(_summarize_for_ai(debug_payload).get("adventure") or {})
+            ),
             user_prompt=_build_ai_validation_prompt(debug_payload),
             response_model=AIValidationResponse,
             model=model,

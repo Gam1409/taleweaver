@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import AdventureRuleModeSelector from '@/components/create-adventure/AdventureRuleModeSelector.vue'
 import { ref } from 'vue'
-import { Layers, ChevronDown, ChevronUp, Shield, BookOpen, MessageSquare } from 'lucide-vue-next'
+import { Layers, ChevronDown, ChevronUp } from 'lucide-vue-next'
 
-type RuleMode = 'rpg' | 'story' | 'chat'
+import type { RuleMode } from '@/types'
 
 const props = defineProps<{
   minScenes: number | null
@@ -67,80 +68,14 @@ function onNumberInput(e: Event, emitEvent: any, minLimit?: number, maxLimit?: n
     >
       <div class="flex items-center gap-2">
         <Layers class="w-3.5 h-3.5 text-cyan-400" />
-        <span>{{ isExpanded ? 'Hide Advanced World Settings' : 'Show Advanced World Settings (Scenes, Rules, Sidequests)' }}</span>
+        <span>{{ isExpanded ? 'Hide Advanced World Settings' : 'Show Advanced World Settings' }}</span>
       </div>
       <component :is="isExpanded ? ChevronUp : ChevronDown" class="w-4 h-4 text-slate-500" />
     </button>
 
     <!-- Expanded Body -->
     <div v-if="isExpanded" class="p-4 sm:p-5 bg-slate-950/50 border border-white/5 rounded-2xl space-y-5 animate-fade-in">
-      <!-- Rule Enforcement Mode -->
-      <div class="space-y-2">
-        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">
-          Game Master Rule Enforcement
-        </label>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <!-- RPG Mode -->
-          <button
-            type="button"
-            @click="emit('update:ruleEnforcementMode', 'rpg')"
-            :class="[
-              'p-3 rounded-xl border text-left transition-all',
-              props.ruleEnforcementMode === 'rpg'
-                ? 'bg-rose-500/10 border-rose-500/50 text-white shadow-sm ring-1 ring-rose-500/30'
-                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'
-            ]"
-          >
-            <div class="flex items-center gap-1.5 text-xs font-bold mb-1">
-              <Shield class="w-3.5 h-3.5 text-rose-400" />
-              <span>RPG Mode</span>
-            </div>
-            <p class="text-[10px] text-slate-400 leading-snug">
-              Strict rules, stat checks & inventory validation.
-            </p>
-          </button>
-
-          <!-- Story Mode -->
-          <button
-            type="button"
-            @click="emit('update:ruleEnforcementMode', 'story')"
-            :class="[
-              'p-3 rounded-xl border text-left transition-all',
-              props.ruleEnforcementMode === 'story'
-                ? 'bg-amber-500/10 border-amber-500/50 text-white shadow-sm ring-1 ring-amber-500/30'
-                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'
-            ]"
-          >
-            <div class="flex items-center gap-1.5 text-xs font-bold mb-1">
-              <BookOpen class="w-3.5 h-3.5 text-amber-400" />
-              <span>Story Mode</span>
-            </div>
-            <p class="text-[10px] text-slate-400 leading-snug">
-              Atmospheric narrative flow with balanced mechanics.
-            </p>
-          </button>
-
-          <!-- Chat Mode -->
-          <button
-            type="button"
-            @click="emit('update:ruleEnforcementMode', 'chat')"
-            :class="[
-              'p-3 rounded-xl border text-left transition-all',
-              props.ruleEnforcementMode === 'chat'
-                ? 'bg-cyan-500/10 border-cyan-500/50 text-white shadow-sm ring-1 ring-cyan-500/30'
-                : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'
-            ]"
-          >
-            <div class="flex items-center gap-1.5 text-xs font-bold mb-1">
-              <MessageSquare class="w-3.5 h-3.5 text-cyan-400" />
-              <span>Chat Mode</span>
-            </div>
-            <p class="text-[10px] text-slate-400 leading-snug">
-              Casual exploration with relaxed rules.
-            </p>
-          </button>
-        </div>
-      </div>
+      <AdventureRuleModeSelector :model-value="ruleEnforcementMode" @update:model-value="emit('update:ruleEnforcementMode', $event)" />
 
       <!-- Bounds Configuration -->
       <div class="space-y-3 pt-1">
@@ -174,7 +109,7 @@ function onNumberInput(e: Event, emitEvent: any, minLimit?: number, maxLimit?: n
               class="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-white text-xs font-bold outline-none focus:border-cyan-500"
             />
           </div>
-          <div>
+          <div v-if="ruleEnforcementMode !== 'vn'">
             <label class="block text-[10px] font-bold text-slate-400 mb-1">Min Sidequests</label>
             <input
               :value="props.minQuests"
@@ -186,7 +121,7 @@ function onNumberInput(e: Event, emitEvent: any, minLimit?: number, maxLimit?: n
               class="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-white text-xs font-bold outline-none focus:border-cyan-500"
             />
           </div>
-          <div>
+          <div v-if="ruleEnforcementMode !== 'vn'">
             <label class="block text-[10px] font-bold text-slate-400 mb-1">Max Sidequests</label>
             <input
               :value="props.maxQuests"
@@ -207,7 +142,7 @@ function onNumberInput(e: Event, emitEvent: any, minLimit?: number, maxLimit?: n
           Content Modules
         </span>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-white/5 text-xs font-semibold text-slate-300 cursor-pointer hover:border-white/10 select-none">
+          <label v-if="ruleEnforcementMode !== 'vn'" class="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-white/5 text-xs font-semibold text-slate-300 cursor-pointer hover:border-white/10 select-none">
             <input
               type="checkbox"
               :checked="props.questGenerationEnabled"
@@ -237,7 +172,7 @@ function onNumberInput(e: Event, emitEvent: any, minLimit?: number, maxLimit?: n
             <span>Lore & Logs</span>
           </label>
 
-          <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-white/5 text-xs font-semibold text-slate-300 cursor-pointer hover:border-white/10 select-none">
+          <label v-if="ruleEnforcementMode !== 'vn'" class="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-white/5 text-xs font-semibold text-slate-300 cursor-pointer hover:border-white/10 select-none">
             <input
               type="checkbox"
               :checked="props.awardGenerationEnabled"

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.switch_service import SwitchService
 from backend.engine.trigger_service import TriggerService
+from backend.engine.visual_novel.presentation import session_is_vn
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
@@ -165,7 +166,9 @@ def mark_container_unlocked(state: SessionState, entity_id: str) -> bool:
 
 
 def award_unlock_xp(avatar: Avatar, metadata_json: dict) -> int:
-    xp_reward = metadata_json.get("exp_reward") or metadata_json.get("xp_reward") or DEFAULT_UNLOCK_XP
+    xp_reward = (
+        metadata_json.get("exp_reward") or metadata_json.get("xp_reward") or DEFAULT_UNLOCK_XP
+    )
     avatar.exp = (avatar.exp or 0) + xp_reward
     return xp_reward
 
@@ -224,7 +227,9 @@ async def resolve_switch_flip(
     """Validates the requested target state and finds the matching transition (HTTP 4xx otherwise)."""
     entity = await load_session_object(db, state, entity_id, "SWITCH", "Switch not found.")
     config = SwitchService.resolve_switch_config(entity)
-    allowed_states = [str(s).strip().upper() for s in (config.get("states") or []) if str(s).strip()]
+    allowed_states = [
+        str(s).strip().upper() for s in (config.get("states") or []) if str(s).strip()
+    ]
 
     target_state = str(requested_state or "").strip().upper()
     if target_state not in allowed_states:
@@ -305,3 +310,12 @@ class SwitchFlipRunner:
         add_system_message(self.db, state, message)
         await self.db.commit()
         return {"status": "ok", "entity_id": flip.entity.id, "switch_state": flip.target_state}
+
+
+async def award_session_unlock_xp(
+    db: AsyncSession, state: SessionState, avatar: Avatar, metadata_json: dict
+) -> int:
+    """A VN session can unlock a door or possession without RPG experience rewards."""
+    if await session_is_vn(db, state):
+        return 0
+    return award_unlock_xp(avatar, metadata_json)

@@ -8,17 +8,47 @@ Category = Literal["appearance", "background", "relationship", "belongings", "eq
 PlayerAttitude = Literal[
     "unknown", "love", "trust", "friendly", "neutral", "suspicion", "hostility", "fear", "mixed"
 ]
+Significance = Literal[
+    "durable_fact",
+    "commitment",
+    "boundary",
+    "decision",
+    "relationship_change",
+    "meaningful_consequence",
+    "stable_appearance",
+    "ephemeral",
+]
+MemoryEffect = Literal["new_fact", "changed_fact", "confirmed_claim", "none"]
 
 
 class Observation(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     category: Category
-    topic: str = Field(default="general", min_length=1, max_length=80)
+    topic: str = Field(
+        default="general",
+        min_length=1,
+        max_length=80,
+        description="Stable specific fact key, such as promise_return_book or boundary_no_touch. Reuse that key when the fact changes. The legacy general default is not a topic choice for new extraction.",
+    )
     text: str = Field(min_length=1, max_length=600)
     evidence: str = Field(min_length=1, max_length=1000)
     source: Literal["observed", "claimed"]
     player_attitude: PlayerAttitude | None = None
+    significance: Significance | None = Field(
+        default=None,
+        description="Why this is worth remembering beyond the current exchange. New extraction must classify it; ephemeral observations are not saved. Null supports legacy records only.",
+    )
+    effect: MemoryEffect | None = Field(
+        default=None,
+        description="Whether evidence adds a new lasting fact, changes one, or verifies an earlier claim. Repetition and fleeting activity have effect none. Null supports legacy records only.",
+    )
+    reason: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=240,
+        description="Brief explanation of the lasting fact or consequence and what is new, in the session language. Never invent a consequence to justify retention.",
+    )
 
 
 class CharacterObservation(BaseModel):
@@ -64,6 +94,35 @@ that narration. 'claimed' means something the character says about themselves/ot
 'observed' means directly described visible events/appearance. Do not turn a claim into
 verified history or infer relationship scores, hidden motives, unseen possessions,
 combat stats, exact ages, gender, or biography. Do not repeat already recorded facts.
+
+SIGNIFICANCE: Memory is for lasting knowledge, not a transcript or a quota. Record only
+a NEW durable fact or a meaningful CHANGE supported by this narration: a promise,
+commitment, stated boundary, consequential decision, lasting relationship change,
+important consequence, stable personal fact, or newly established identifying appearance.
+For every new observation provide significance, effect and a short reason explaining
+what changed and why it can matter after this exchange. Use a specific stable topic,
+not general. Significance/effect are technical enum values; interpret meaning in ANY
+language. Do not use verb matching as a substitute for understanding the event.
+Repeated known facts have effect="none" and must be omitted. So must glances, smiles,
+adjusting a sleeve, routine motion, momentary poses, filler dialogue and momentary
+emotion unless the evidence establishes an actual lasting consequence. Do not infer
+a relationship change from a glance, politeness, an ordinary compliment or a gesture.
+Examples: "She glances at the door" -> no observation; "I promise to return your book
+tomorrow" -> commitment/new_fact, topic promise_return_book, still claimed;
+"Do not touch my shoulder again" -> boundary/new_fact, topic boundary_shoulder_touch;
+"I have decided to leave the guild" -> decision/new_fact, attributed as claimed;
+"She no longer trusts him after the betrayal" -> relationship_change/changed_fact only
+when publicly established, never an omniscient private feeling. "She is a blacksmith"
+can be a durable_fact when newly learned, but repeated unchanged is not a new entry.
+A first clearly described scar can establish stable_appearance/new_fact; noticing the
+same scar again or looking down at a sleeve adds nothing. A new lasting injury, explicit
+change of outfit or witnessed transfer/loss can be meaningful; a microgesture cannot.
+The same fact with genuinely changed value uses changed_fact and the same topic.
+Observed confirmation of an earlier claim uses confirmed_claim and keeps provenance.
+An observation marked ephemeral or effect none will be rejected by the server.
+Empty observations and {"characters": []} are successful, expected results. An explicit
+valid first self-introduction remains worth recording even without other observations.
+
 Use a short stable English topic key for each fact (occupation, hometown, relationship_player,
 coat, dagger). Reuse the same category/topic when that fact changes; distinct facts need
 distinct topics. Keep the SAME topic for an item across appearance, equipment and

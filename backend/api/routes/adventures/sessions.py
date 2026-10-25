@@ -22,12 +22,15 @@ from backend.engine.adventure_updates import is_legacy_session
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.game_modes import is_vn
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.base import utc_now
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import copy_messages
+from backend.engine.memory_rag.lifecycle import copy_session_summaries, memory_snapshot, restore_memory, purge_session_memory
+from backend.engine.visual_novel.lifecycle import copy_vn_state
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
@@ -570,6 +573,9 @@ async def start_session_for_template(
             name=template_avatar.name,
             role=template_avatar.role,
             description=template_avatar.description,
+            goal=template_avatar.goal,
+            character=template_avatar.character,
+            visual_profile=deepcopy(template_avatar.visual_profile),
             profile_image=template_avatar.profile_image,
             hp=template_avatar.hp,
             max_hp=template_avatar.max_hp,
@@ -597,6 +603,9 @@ async def start_session_for_template(
             name=prot.get("name", "You"),
             role=prot.get("role"), 
             description=prot.get("description"), 
+            goal=prot.get("goal"),
+            character=prot.get("character"),
+            visual_profile=deepcopy(prot.get("visual_profile")),
             profile_image=prot.get("profile_image"),
             hp=prot.get("hp", 200), 
             max_hp=prot.get("hp", 200), 
@@ -717,9 +726,9 @@ async def start_session_for_template(
     adv_init_script = manifest.get("init_script") or getattr(adventure, "init_script", None)
     init_narrative_messages: list[str] = []
 
-    if adv_init_script or any(
+    if not is_vn(adventure) and (adv_init_script or any(
         isinstance(s, dict) and s.get("trigger") == "on_init" for s in adv_scripts
-    ):
+    )):
         entities_map = {ent.id: ent.__dict__.copy() for ent in template_entities if ent.id}
         avatar_dict = {
             "name": avatar.name,
@@ -820,7 +829,8 @@ async def start_session_for_template(
         copied_scene_image = _copy_data_asset_to_session(new_session.id, "scenes", s.image_url, asset_copy_cache)
         new_s = WorldScene(
             id=s.id, session_id=new_session.id, template_id=None,
-            label=s.label, description=s.description, image_url=(copied_scene_image or s.image_url)
+            label=s.label, description=s.description, image_url=(copied_scene_image or s.image_url),
+            decorative_objects=deepcopy(s.decorative_objects),
         )
         db.add(new_s)
     
@@ -888,6 +898,9 @@ async def start_session_for_template(
             moveable=bool(ent.moveable) if ent.moveable is not None else (str(ent.movement_type or "").upper() == "MOVABLE"),
             allowed_scenes=deepcopy(ent.allowed_scenes) if ent.allowed_scenes else [],
             notes=ent.notes,
+            goal=ent.goal,
+            character=ent.character,
+            visual_profile=deepcopy(ent.visual_profile),
             hp=ent.hp, max_hp=ent.max_hp, mana=ent.mana, max_mana=ent.max_mana, stamina=ent.stamina, max_stamina=ent.max_stamina,
             stat_modifier_strength=ent.stat_modifier_strength, stat_modifier_dexterity=ent.stat_modifier_dexterity,
             stat_modifier_intelligence=ent.stat_modifier_intelligence, stat_modifier_wisdom=ent.stat_modifier_wisdom,
@@ -928,6 +941,7 @@ async def delete_session(game_id: str, db: AsyncSession = Depends(get_db), curre
         raise HTTPException(status_code=404, detail="Session not found.")
 
     avatar_id = game_session.avatar_id
+    await purge_session_memory(db, current_user.id, game_id)
 
     # Explicitly remove session-bound rows that may not be ORM-cascaded.
     await db.execute(delete(SessionCheckpoint).where(SessionCheckpoint.session_id == game_id))
@@ -1100,6 +1114,9 @@ async def copy_session(
         name=original_avatar.name,
         role=original_avatar.role,
         description=original_avatar.description,
+        goal=original_avatar.goal,
+        character=original_avatar.character,
+        visual_profile=deepcopy(original_avatar.visual_profile),
         profile_image=original_avatar.profile_image,
         hp=original_avatar.hp,
         max_hp=original_avatar.max_hp,
@@ -1212,6 +1229,15 @@ async def copy_session(
 
     # 6. Clone the conversation and map evidence to its new message IDs.
     message_ids = await copy_messages(db, original_session.id, copied_session.id)
+    if original_state:
+        restore_memory(cloned_state, memory_snapshot(original_state), message_ids)
+        cloned_state.entity_states = copy_vn_state(
+            cloned_state.entity_states,
+            message_ids,
+            lambda url: _copy_data_asset_to_session(
+                copied_session.id, "illustrations", url, asset_copy_cache
+            ),
+        )
 
     # 7. Clone WorldScene
     scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == original_session.id))
@@ -1224,7 +1250,8 @@ async def copy_session(
             template_id=None,
             label=s.label,
             description=s.description,
-            image_url=(copied_scene_image or s.image_url)
+            image_url=(copied_scene_image or s.image_url),
+            decorative_objects=deepcopy(s.decorative_objects),
         )
         db.add(cloned_scene)
 
@@ -1277,6 +1304,9 @@ async def copy_session(
             moveable=bool(ent.moveable) if ent.moveable is not None else (str(ent.movement_type or "").upper() == "MOVABLE"),
             allowed_scenes=deepcopy(ent.allowed_scenes) if ent.allowed_scenes else [],
             notes=ent.notes,
+            goal=ent.goal,
+            character=ent.character,
+            visual_profile=deepcopy(ent.visual_profile),
             hp=ent.hp,
             max_hp=ent.max_hp,
             mana=ent.mana,
@@ -1296,6 +1326,10 @@ async def copy_session(
             voice=ent.voice
         )
         db.add(cloned_ent)
+
+    await copy_session_summaries(
+        db, original_session.id, copied_session.id, current_user.id, message_ids,
+    )
 
     # 10. Clone WorldMap
     map_res = await db.execute(select(WorldMap).where(WorldMap.session_id == original_session.id))

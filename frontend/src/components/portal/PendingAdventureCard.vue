@@ -97,7 +97,7 @@ onUnmounted(() => {
             ]"
             :title="props.pending.hasError ? props.pending.status : undefined"
           >
-            {{ props.pending.hasError ? props.pending.status : currentSaying }}
+            {{ props.pending.status || currentSaying }}
           </p>
         </div>
         
@@ -113,7 +113,7 @@ onUnmounted(() => {
           class="hidden sm:flex text-[10px] font-bold text-red-400/80 uppercase tracking-widest items-center gap-1.5 mt-1"
         >
           <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
-          Click card for log
+          View log and resume options
         </span>
       </div>
 

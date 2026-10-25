@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_logger import log_structured_event
 from backend.core.style_catalog import resolve_style_instruction
+from backend.engine.clothing.generation import normalize_manifest_clothing
+from backend.engine.clothing.settings import clothing_settings, preserve_clothing_settings
 from backend.engine.manifest_apply.adventure_meta import (
     apply_adventure_meta,
     apply_final_adventure_fields,
@@ -101,7 +103,7 @@ async def _report_image_warnings(ctx: ApplyContext) -> None:
         )
     if warnings and ctx.adventure:
         ctx.adventure.creation_error = " ".join(warnings)  # type: ignore[assignment]
-        await ctx.db.commit()
+        await ctx.commit_and_refresh(refresh_user=False)
 
 
 async def _prepare_context(
@@ -114,6 +116,13 @@ async def _prepare_context(
     wg = generator_module()
     wg.preprocess_manifest_object_ids(manifest_dict)
     adventure = await db.get(AdventureTemplate, template_id)
+    manifest_dict = preserve_clothing_settings(manifest_dict, adventure)
+    prot = manifest_dict.get("protagonist")
+    if isinstance(prot, dict):
+        manifest_dict["objects"] = _objects_with_protagonist_items(manifest_dict, prot)
+    normalize_manifest_clothing(
+        manifest_dict, detailed=clothing_settings(manifest_dict)["detailed"]
+    )
     styles = options.pop("selected_image_styles")
     if styles is None and adventure:
         styles = adventure.selected_image_styles
@@ -165,7 +174,7 @@ async def _persist_world(ctx: ApplyContext) -> None:
     objects = _objects_with_protagonist_items(ctx.manifest, prot)
     resolved = await persist_objects(ctx, objects, default_scene_id, placement)
     await _assign_npc_inventories(ctx, npc_inventories, resolved)
-    await ctx.db.commit()
+    await ctx.commit_and_refresh(refresh_user=False)
 
 
 async def apply_manifest(
@@ -207,6 +216,7 @@ async def apply_manifest(
         if existing_images is not None
         else await _collect_existing_images(db, template_id)
     )
+    await ctx.guard_write()
     await _clear_world(db, template_id)
     await apply_adventure_meta(ctx)
     await _persist_world(ctx)
