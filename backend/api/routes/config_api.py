@@ -33,6 +33,7 @@ from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
 from backend.core.catalog_ids import legacy_catalog_id
 from backend.core.comfyui_config import ComfySettings, select_workflow, validate_comfy_settings
 from backend.core.config import settings
+from backend.core.custom_openai_diagnostics import connection_test_diagnostic
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
 from backend.core.llm_router import GameMasterLLM
@@ -978,8 +979,10 @@ async def test_llm_connection(
 
     import time
 
+    test_stage = "configuration"
     try:
         gm = GameMasterLLM.for_role(user, payload.role)
+        test_stage = "request_or_response"
         start_time = time.perf_counter()
         if payload.provider == "custom_openai":
             from backend.core.custom_openai import test_connection
@@ -995,8 +998,12 @@ async def test_llm_connection(
         latency = round(end_time - start_time, 2)
         return {"status": "success", "message": response, "response_time": latency}
     except Exception as exc:
-        diag = diagnose_provider_error(
-            exc, provider=payload.provider, model=payload.model, context="llm"
+        diag = (
+            connection_test_diagnostic(exc, stage=test_stage, model=payload.model)
+            if payload.provider == "custom_openai"
+            else diagnose_provider_error(
+                exc, provider=payload.provider, model=payload.model, context="llm"
+            )
         )
         logger.warning(
             "LLM connection test failed for provider '%s': %s",
