@@ -30,6 +30,7 @@ from backend.engine.rule_engine import (
 )
 from backend.engine.visual_novel.event_policy import enforce_vn_event_policy
 from backend.engine.visual_novel.ownership import sync_vn_ownership
+from backend.engine.visual_novel.time import apply_elapsed_time
 from backend.engine.world_memory_notifications import memory_saved_message, notification_language
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.chat import ChatMessage
@@ -1163,7 +1164,9 @@ class TurnStateApplier:
             self.state.start_datetime = event.start_datetime_override
             state_dirty = True
 
-        if event.time_override_minutes is not None:
+        if vn_mode:
+            state_dirty = apply_elapsed_time(self.state, event, self.adventure) or state_dirty
+        elif event.time_override_minutes is not None:
             self.state.in_game_time = max(0, int(event.time_override_minutes))
             state_dirty = True
         elif event.extra_time_minutes != 0:

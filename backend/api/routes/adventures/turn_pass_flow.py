@@ -16,6 +16,7 @@ from typing import Any
 
 from backend.core.game_modes import is_vn
 from backend.engine.rule_engine import GameEvent, GameOverException, RuleEngine
+from backend.engine.visual_novel.time import boundary_elapsed_time
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +129,11 @@ async def advance_in_game_turn(
             async for event in _run_turn_script(manager, script_runner, "on_turn_end"):
                 yield event
 
-        time_per_turn = manager.adventure.time_per_turn
-        manager.state.in_game_time += int(time_per_turn if time_per_turn is not None else 5)
+        if is_vn(manager.adventure):
+            manager.state.in_game_time += boundary_elapsed_time(manager.adventure, game_event)
+        else:
+            time_per_turn = manager.adventure.time_per_turn
+            manager.state.in_game_time += int(time_per_turn if time_per_turn is not None else 5)
         if not is_vn(manager.adventure):
             for tick_message in RuleEngine.apply_ticks(manager.avatar):
                 yield sse_system(tick_message)

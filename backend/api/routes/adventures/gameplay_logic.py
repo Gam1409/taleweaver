@@ -1175,6 +1175,7 @@ class GameTurnManager:
         _ = auto_visualize
         cycle_start = time.perf_counter()
         scene_id_before_turn = self.state.current_scene_id
+        time_before_turn = self.state.in_game_time
         if self._turn_anchor is None:
             self._turn_anchor = turn_anchor(self.state)
         ctx = await self._llm_context_builder.build_context(user_msg=user_msg, language=language)
@@ -1763,7 +1764,8 @@ class GameTurnManager:
             async for turn_event in advance_in_game_turn(self, script_runner, game_event):
                 yield turn_event
             self._turn_anchor = turn_anchor(self.state)
-            # Narrate from the new location/sequence instead of the pre-turn snapshot.
+        if turn_advanced or (policy.vn and self.state.in_game_time != time_before_turn):
+            # Narrate from the resolved location and clock, including same-room VN waits.
             ctx = await self._llm_context_builder.build_context(
                 user_msg=user_msg, language=language
             )

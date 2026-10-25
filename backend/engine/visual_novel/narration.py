@@ -45,6 +45,11 @@ does not authorize leaving the room. Never invent a destination or teleport a
 character to explain an earlier inconsistency. Use CURRENT STATE's present cast,
 not everyone mentioned in history. Small gestures may change a pose within the
 same place, but must not contradict an established position or create a new scene.
+STORY CLOCK: CURRENT GAME TIME and the approved elapsed duration are authoritative.
+Do not invent minutes passing or decrease a remaining-time countdown when the
+engine clock has not advanced. Derive remaining time from an established deadline
+and the current clock, not from the number of replies or the pace of the prose.
+Future appointments, remembered times and hypothetical waits do not change now.
 Never write the player's next unchosen speech, decision, action or inner feeling.
 Stop before the next meaningful player decision, even if the fragment is short.
 A response, unfinished gesture or natural question can end the fragment. Do not

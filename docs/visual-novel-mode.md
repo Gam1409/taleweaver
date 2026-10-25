@@ -23,6 +23,21 @@ decision. It preserves the session's content language. Character names and techn
 voice tags retain their existing identities. Narration is a separate VN contract,
 not the RPG or Chat format with another paragraph appended.
 
+## Story time
+
+The continuity model estimates elapsed minutes for completed actions, including
+waiting, travel and sustained conversation in one room. A brief exchange can take
+zero whole minutes; there is no automatic five-minute tick for every message.
+Mentioning tomorrow, recalling yesterday or asking the time does not itself move
+the clock. The narrator receives the updated clock before writing the reply.
+
+For VN, the existing `extra_time_minutes` API field means **total elapsed minutes**,
+not a surcharge on a base turn. A scene change adds the configured default duration
+only when the same action has no explicit duration. Configured maximum duration
+still applies, with an additional 1,440-minute bound per action. RPG and Chat time
+semantics are unchanged. Time interpretation remains model-dependent; the code
+does not infer elapsed time from language-specific keywords or real request latency.
+
 ## Characters and relationships
 
 An additional bounded Small/Utility-role call considers up to three present,

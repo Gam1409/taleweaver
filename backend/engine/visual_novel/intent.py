@@ -66,7 +66,15 @@ VNProgressionIntent = create_model(
     updated_inventory_items=(list[VNInventoryItem] | None, None),
     spawned_items=(list[VNInventoryItem] | None, None),
     updated_entities=(list[VNEntityUpdate] | None, None),
-    extra_time_minutes=(int, Field(default=0, ge=0, le=1440)),
+    extra_time_minutes=(
+        int,
+        Field(
+            default=0,
+            ge=0,
+            le=1440,
+            description="Total elapsed minutes for this completed VN action, including conversation or travel; not an addition to a base turn. Use 0 for brief exchanges or mere time references.",
+        ),
+    ),
     narrative_description=(str, Field(default="", max_length=800)),
 )
 
@@ -103,8 +111,15 @@ turn, not an attempted search. Use updated_entities.locked=false for a container
 or updated_exits with exact endpoint IDs, only when its supplied code, carried key
 or access rule is satisfied. Language and paraphrasing must not change exact IDs.
 
-TIME AND MEMORY: extra_time_minutes is non-negative elapsed time for a completed
-long action; promises to meet tomorrow do not advance time now. Record only actual
+TIME AND MEMORY: extra_time_minutes is the TOTAL non-negative elapsed minutes for
+the current completed action, including conversation, waiting, work or travel.
+Do not add a base turn duration. Estimate modest elapsed time for sustained
+dialogue/activity even when everyone stays in the same room; a brief exchange or
+gesture may take zero whole minutes. Explicit completed waits use their duration.
+Mentioning a clock time, recounting yesterday, promising to meet tomorrow, asking
+what time it is or considering a future wait does not itself advance the clock.
+Never jump to a mentioned date or hour unless that passage of time actually occurs.
+Record only actual
 lasting facts in remember_notes/new_world_memories, never hidden feelings or invented
 history. A claim stays attributed as a claim. Forget a note only when superseded;
 clear_notes is only for an explicit whole-notebook reset. Keep narrative_description

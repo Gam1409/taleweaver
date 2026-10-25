@@ -46,6 +46,9 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert "does not authorize leaving the room" in prompt
     assert "Never invent a destination" in prompt
     assert "Use CURRENT STATE's present cast" in prompt
+    assert "CURRENT GAME TIME and the approved elapsed duration are authoritative" in prompt
+    assert "Do not invent minutes passing" in prompt
+    assert "not from the number of replies" in prompt
     assert "Wait until tomorrow" not in prompt
     assert "Sitcom" not in prompt
 
