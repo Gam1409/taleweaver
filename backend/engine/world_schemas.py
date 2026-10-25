@@ -10,6 +10,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
+from backend.engine.clothing.schema import Garment, VisualProfile
+
 
 class WorldBaseSchema(BaseModel):
     """Base schema for world generation models that normalizes null LLM outputs."""
@@ -267,6 +269,10 @@ class SpecialActionSchema(WorldBaseSchema):
 
 
 class WorldNPCSchema(WorldBaseSchema):
+    visual_profile: Optional[VisualProfile] = Field(
+        default=None,
+        description="Optional stable appearance and canonical owned worn-item references.",
+    )
     id: str = Field(..., description="Unique slug for the NPC, e.g., MAD_ALCHEMIST")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(
@@ -470,6 +476,10 @@ class SwitchOutcomeSchema(WorldBaseSchema):
 
 
 class WorldObjectSchema(WorldBaseSchema):
+    clothing: Optional[Garment] = Field(
+        default=None,
+        description="Optional garment layers and covered regions; the object itself remains the canonical inventory item.",
+    )
     id: str = Field(..., description="Unique slug for the object, e.g., GOLDEN_KEY")
     name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Physical characteristics and details.")
@@ -799,6 +809,10 @@ class EquipmentSchema(WorldBaseSchema):
 
 
 class ProtagonistSchema(WorldBaseSchema):
+    visual_profile: Optional[VisualProfile] = Field(
+        default=None,
+        description="Optional stable appearance and canonical owned worn-item references.",
+    )
     name: str = Field(..., description="The name of the player character.")
     role: str = Field(..., description="The professional or narrative role of the player.")
     description: str = Field(..., description="Narrative description of appearance and backstory.")

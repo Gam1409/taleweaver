@@ -18,6 +18,7 @@ import AdventureCatalogSelector from '@/components/create-adventure/AdventureCat
 import AdventureRuleModeSelector from '@/components/create-adventure/AdventureRuleModeSelector.vue'
 import AdventureWorldConstraints from '@/components/create-adventure/AdventureWorldConstraints.vue'
 import AdventureCharacterSettings from '@/components/create-adventure/AdventureCharacterSettings.vue'
+import AdventureClothingSettings from '@/components/create-adventure/AdventureClothingSettings.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -37,6 +38,7 @@ const form = ref({
   pacing_minutes: 5,
   rule_enforcement_mode: 'story' as RuleMode,
   show_npc_state: false,
+  detailed_clothing: false,
   selected_style_id: '',
   selected_tone_id: '',
   min_scenes: null as number | null,
@@ -303,6 +305,7 @@ async function handleCreate() {
   const payload: any = {
     ...form.value,
     show_npc_state: form.value.rule_enforcement_mode === 'vn' && form.value.show_npc_state,
+    detailed_clothing: form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing,
     id: crypto.randomUUID(),
     title: (form.value.title.trim() || 'Untitled Odyssey').slice(0, 50),
     original_prompt: promptStr,
@@ -664,6 +667,10 @@ onMounted(() => {
             v-if="form.rule_enforcement_mode === 'vn'"
             v-model="form.show_npc_state"
           />
+          <AdventureClothingSettings
+            v-if="form.rule_enforcement_mode === 'vn'"
+            v-model="form.detailed_clothing"
+          />
         </div>
 
         <!-- 3. Image Style & Narrative Tone Catalogs -->
@@ -764,6 +771,10 @@ onMounted(() => {
             <AdventureCharacterSettings
               v-if="form.rule_enforcement_mode === 'vn'"
               v-model="form.show_npc_state"
+            />
+            <AdventureClothingSettings
+              v-if="form.rule_enforcement_mode === 'vn'"
+              v-model="form.detailed_clothing"
             />
           </div>
         </div>

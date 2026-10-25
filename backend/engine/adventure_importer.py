@@ -720,6 +720,7 @@ class AdventureTemplateImporter:
                         exp=old_avatar.get("exp", 0),
                         goal=old_avatar.get("goal", ""),
                         character=old_avatar.get("character", ""),
+                        visual_profile=deepcopy(old_avatar.get("visual_profile")),
                         stats=old_avatar["stats"], 
                         inventory=old_avatar["inventory"],
                         equipment=normalize_equipment_keys(old_avatar.get("equipment")),

@@ -82,7 +82,17 @@ def detail_context(
 
 def _cast_facts(row: dict) -> dict:
     # Copy exact author facts so cross-scene relationships survive each batch.
-    fields = ("id", "name", "description", "goal", "character", "notes", "reveal_rule", "inventory")
+    fields = (
+        "id",
+        "name",
+        "description",
+        "goal",
+        "character",
+        "notes",
+        "reveal_rule",
+        "inventory",
+        "visual_profile",
+    )
     return {key: row[key] for key in fields if key in row}
 
 

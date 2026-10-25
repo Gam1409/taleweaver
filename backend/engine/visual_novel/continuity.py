@@ -25,9 +25,11 @@ class Possessions:
     owners: dict[str, str] = field(default_factory=dict)
     npcs: dict[str, dict[str, Any]] = field(default_factory=dict)
     containers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    catalog: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def add(self, raw: Any, owner: str) -> None:
-        for item in raw if isinstance(raw, list) else []:
+        for entry in raw if isinstance(raw, list) else []:
+            item = self.catalog.get(entry) if isinstance(entry, str) else entry
             if not isinstance(item, dict) or not item.get("id") or not item.get("name"):
                 continue
             item_id = str(item["id"])
@@ -89,8 +91,21 @@ def _open_container(entity: Any, override: dict) -> bool:
 
 def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
     """Current location only; retained player items take precedence over shadow world rows."""
-    result = Possessions()
+    result = Possessions(
+        catalog={
+            entity.id: _entity_item(entity, _override(manager.state, entity.id))
+            for entity in entities
+            if entity.entity_type == "OBJECT"
+        }
+    )
     result.add(getattr(manager.avatar, "inventory", None), PLAYER)
+    equipment = getattr(manager.avatar, "equipment", None) or {}
+    result.add(
+        [value for value in equipment.values() if isinstance(value, dict)]
+        if isinstance(equipment, dict)
+        else [],
+        PLAYER,
+    )
     present = [entity for entity in entities if _present(manager, entity)]
     for entity in present:
         if str(entity.entity_type).upper() != "NPC":
@@ -103,7 +118,11 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
             "name": override.get("name", entity.name),
             "scene_id": manager.state.current_scene_id,
             "position": override.get("spatial_position", getattr(entity, "spatial_position", None)),
-            "inventory": inventory,
+            "inventory": [
+                item
+                for item_id, item in result.items.items()
+                if result.owners[item_id] == entity.id
+            ],
         }
     contained = {
         str(item.get("id") if isinstance(item, dict) else item)
@@ -228,7 +247,8 @@ def _hydrate(intent: ChatProgressionIntent, snapshot: Possessions) -> None:
     hydrated_updates = []
     for item in intent.updated_inventory_items or []:
         known = _canonical(snapshot, item.id)
-        for key in ("name", "description", "spatial_position"):
+        # Identity is immutable here; condition annotations are applied separately.
+        for key in ("spatial_position",):
             value = getattr(item, key)
             if value is not None:
                 setattr(known, key, value)
@@ -239,11 +259,31 @@ def _hydrate(intent: ChatProgressionIntent, snapshot: Possessions) -> None:
 
 def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgressionIntent:
     """Return an engine-ready intent; reject an invalid possession batch without losing items."""
-    from backend.engine.visual_novel.intent import to_chat_progression_intent
+    from backend.engine.visual_novel.intent import VNProgressionIntent, to_chat_progression_intent
 
-    result = to_chat_progression_intent(intent)
+    raw = intent.model_dump(exclude_none=True) if hasattr(intent, "model_dump") else intent
+    proposal = VNProgressionIntent.model_validate(raw)
+    result = to_chat_progression_intent(proposal)
     try:
         _hydrate(result, possession_snapshot(manager, entities))
+        conditions = {
+            item.id: item.condition_note
+            for item in proposal.updated_inventory_items or []
+            if item.condition_note is not None
+        }
+        for item in result.updated_inventory_items or []:
+            if item.id in conditions:
+                item.condition_note = conditions[item.id]
+        if any(
+            proposed.name != item.name
+            or (proposed.description is not None and proposed.description != item.description)
+            for proposed, item in zip(
+                proposal.updated_inventory_items or [],
+                result.updated_inventory_items or [],
+                strict=False,
+            )
+        ):
+            result.narrative_description += " Existing item identity, type and base description remain unchanged; only explicit condition notes may change."
     except (ValueError, TypeError):
         result.new_inventory_items = []
         result.updated_inventory_items = []

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import StatBar from './StatBar.vue'
 import SheetSpecialsPanel from './SheetSpecialsPanel.vue'
+import AppearanceAndClothing from './AppearanceAndClothing.vue'
 import type { CharacterSheet, InventoryItem } from '@/types'
 import { getItemIcon, getTypeColor, getImageUrl } from '@/utils/game_icons'
 
@@ -24,8 +25,13 @@ const emit = defineEmits<{
   itemContextmenu: [item: any, event: MouseEvent]
 }>()
 
-type TabType = 'inventory' | 'equipment' | 'ailments' | 'specials'
+type TabType = 'appearance' | 'inventory' | 'equipment' | 'ailments' | 'specials'
 const activeTab = ref<TabType>('inventory')
+watch([() => props.open, () => props.sheet?.rule_enforcement_mode], () => {
+  if (!props.open) return
+  if (props.sheet?.rule_enforcement_mode === 'vn') activeTab.value = 'appearance'
+  else if (activeTab.value === 'appearance') activeTab.value = 'inventory'
+}, { immediate: true })
 const showBio = ref(false)
 const brokenImages = ref<Record<string, boolean>>({})
 const stateChanged = ref(false)
@@ -288,6 +294,13 @@ const onClose = () => {
           <!-- TAB SWITCHER -->
           <div class="shrink-0 px-2.5 sm:px-6 pt-2.5 sm:pt-4 pb-2 bg-slate-950/20 border-b border-slate-800/50">
             <div class="flex items-center gap-1 sm:gap-2.5 p-1 bg-slate-950/70 border border-slate-800/80 rounded-2xl">
+              <button v-if="sheet.rule_enforcement_mode === 'vn'" type="button"
+                class="flex-1 flex items-center justify-center gap-1 sm:gap-2 rounded-xl px-1.5 py-1.5 text-[11px] font-bold uppercase tracking-wider sm:px-4 sm:py-2.5 sm:text-xs md:text-sm"
+                :class="activeTab === 'appearance' ? 'border border-slate-700/80 bg-slate-800 text-amber-400 shadow-md' : 'text-slate-400 hover:bg-slate-900/40 hover:text-slate-200'"
+                :aria-pressed="activeTab === 'appearance'" @click="activeTab = 'appearance'">
+                <i class="ra ra-player text-xs sm:text-base" aria-hidden="true"></i>
+                <span>Appearance</span>
+              </button>
               <!-- Tab 1: Inventory -->
               <button
                 :class="[
@@ -384,7 +397,8 @@ const onClose = () => {
             <!-- ============================================== -->
             <!-- TAB 1: INVENTORY (BACKPACK) -->
             <!-- ============================================== -->
-            <div v-if="activeTab === 'inventory'" class="flex flex-col h-full">
+            <AppearanceAndClothing v-if="activeTab === 'appearance' && sheet.rule_enforcement_mode === 'vn'" :clothing="sheet.clothing" />
+            <div v-else-if="activeTab === 'inventory'" class="flex flex-col h-full">
               <div class="flex items-center justify-between gap-2 mb-3 sm:mb-4 shrink-0">
                 <div class="flex items-center gap-2">
                   <h4 class="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest">Backpack Contents</h4>

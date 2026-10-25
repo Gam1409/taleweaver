@@ -1,6 +1,6 @@
 from typing import Any, Literal, Optional, Union
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr
 
 from backend.models.avatar import Avatar
 
@@ -211,6 +211,7 @@ class GameEvent(BaseModel):
     Structured Output Schema for the LLM when in `strict_rules` mode.
     The LLM responds utilizing this strict schema.
     """
+    _vn_clothing_plan: Any = PrivateAttr(default=None)
     narrative_description: str = ""
     hp_change: int = 0
     stamina_change: int = 0

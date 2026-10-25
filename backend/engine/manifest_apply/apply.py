@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_logger import log_structured_event
 from backend.core.style_catalog import resolve_style_instruction
+from backend.engine.clothing.generation import normalize_manifest_clothing
+from backend.engine.clothing.settings import clothing_settings, preserve_clothing_settings
 from backend.engine.manifest_apply.adventure_meta import (
     apply_adventure_meta,
     apply_final_adventure_fields,
@@ -114,6 +116,13 @@ async def _prepare_context(
     wg = generator_module()
     wg.preprocess_manifest_object_ids(manifest_dict)
     adventure = await db.get(AdventureTemplate, template_id)
+    manifest_dict = preserve_clothing_settings(manifest_dict, adventure)
+    prot = manifest_dict.get("protagonist")
+    if isinstance(prot, dict):
+        manifest_dict["objects"] = _objects_with_protagonist_items(manifest_dict, prot)
+    normalize_manifest_clothing(
+        manifest_dict, detailed=clothing_settings(manifest_dict)["detailed"]
+    )
     styles = options.pop("selected_image_styles")
     if styles is None and adventure:
         styles = adventure.selected_image_styles

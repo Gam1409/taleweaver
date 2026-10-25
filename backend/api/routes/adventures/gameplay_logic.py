@@ -22,6 +22,7 @@ from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
 from backend.engine.visual_novel.narration import narration_suffix
 from backend.engine.visual_novel.social import plan_interaction
+from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
 from backend.engine.visual_novel.continuity import prepare_intent
 from backend.engine.visual_novel.concurrency import guard_session_turn
@@ -1638,6 +1639,7 @@ class GameTurnManager:
                     exits=reduced_exits,
                     locked_containers=locked_containers,
                     entities=all_entities,
+                    clothing_scenes=all_scenes,
                 )
             progression_user_prompt = build_pass1_user_prompt(
                 progression_state,
@@ -1716,9 +1718,14 @@ class GameTurnManager:
             if getattr(progression_intent, "new_local_place", None):
                 yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
             await resolve_proposal(self, progression_intent, user_msg, history, language)
+            clothing_proposal = progression_intent
             if policy.vn:
                 progression_intent = prepare_intent(self, progression_intent, all_entities)
             game_event = self._build_progression_event(progression_intent)
+            if policy.vn:
+                await prepare_wardrobe_plan(
+                    self, game_event, clothing_proposal, user_msg, all_entities, all_scenes
+                )
 
             try:
                 if script_runner.scripts:
@@ -1764,7 +1771,13 @@ class GameTurnManager:
             async for turn_event in advance_in_game_turn(self, script_runner, game_event):
                 yield turn_event
             self._turn_anchor = turn_anchor(self.state)
-        if turn_advanced or (policy.vn and self.state.in_game_time != time_before_turn):
+        if turn_advanced or (
+            policy.vn
+            and (
+                self.state.in_game_time != time_before_turn
+                or getattr(self, "_vn_wardrobe_changed", False)
+            )
+        ):
             # Narrate from the resolved location and clock, including same-room VN waits.
             ctx = await self._llm_context_builder.build_context(
                 user_msg=user_msg, language=language

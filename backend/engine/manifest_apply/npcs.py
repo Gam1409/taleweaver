@@ -82,14 +82,20 @@ def _is_moveable(npc: dict[str, Any]) -> bool:
 async def _generate_portrait(
     ctx: ApplyContext, npc: dict[str, Any], idx: int, total: int
 ) -> Optional[str]:
+    from backend.engine.clothing.settings import clothing_settings
+    from backend.engine.clothing.visuals import character_visuals, portrait_description
     from backend.engine.media_engine import MediaEngine
 
-    prompt = prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(
-        name=npc["name"], description=npc["description"]
+    visual = character_visuals(
+        npc,
+        ctx.manifest.get("objects") or [],
+        detailed=clothing_settings(ctx.manifest)["detailed"],
     )
+    description = portrait_description(visual) if visual is not None else npc["description"]
+    prompt = prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(name=npc["name"], description=description)
     user_config, api_keys = t2i_config(ctx)
     prompt = asset_source(
-        user_config["t2i_settings"], "npc", prompt, name=npc["name"], description=npc["description"]
+        user_config["t2i_settings"], "npc", prompt, name=npc["name"], description=description
     )
     return await generate_image(
         ctx,
@@ -150,6 +156,7 @@ def _npc_entity(
         description=npc["description"],
         goal=npc.get("goal"),
         character=npc.get("character"),
+        visual_profile=npc.get("visual_profile"),
         current_scene_id=npc.get("start_scene_id")
         or npc.get("current_scene_id")
         or default_scene_id,

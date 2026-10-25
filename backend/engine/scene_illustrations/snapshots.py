@@ -45,9 +45,17 @@ def _visible_facts(value: dict | None) -> dict:
     people = facts.get("characters") or []
     result["characters"] = [
         {
-            key: str(person[key])[:1000]
-            for key in ("id", "name", "appearance", "clothing", "position")
-            if person.get(key)
+            **({"managed_clothing": True} if person.get("managed_clothing") is True else {}),
+            **(
+                {"clothing_detail_limited": True}
+                if person.get("clothing_detail_limited") is True
+                else {}
+            ),
+            **{
+                key: str(person[key])[:1000]
+                for key in ("id", "name", "appearance", "clothing", "position")
+                if person.get(key)
+            },
         }
         for person in people[:12]
         if isinstance(person, dict)

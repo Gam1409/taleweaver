@@ -7,6 +7,11 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.clothing.lifecycle import (
+    CHECKPOINT_KEY,
+    capture_item_ids,
+    rewind_created_garments,
+)
 from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
 from backend.engine.dynamic_locations.schema import registry
 from backend.engine.npc_journal.lifecycle import rewind_journals
@@ -91,6 +96,7 @@ class SessionCheckpointService:
                 "stats": deepcopy(avatar.stats or {}),
                 "inventory": deepcopy(avatar.inventory or []),
                 "equipment": deepcopy(avatar.equipment or {}),
+                "visual_profile": deepcopy(avatar.visual_profile),
                 "status_effects": deepcopy(avatar.status_effects or []),
             },
             "session_state": {
@@ -134,6 +140,7 @@ class SessionCheckpointService:
         message_ids = await SessionCheckpointService._message_ids(db, session_id)
 
         snapshot = SessionCheckpointService._build_snapshot(state, avatar, scene_label=scene_label)
+        snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
 
         checkpoint = SessionCheckpoint(
@@ -203,6 +210,7 @@ class SessionCheckpointService:
         avatar.stats = deepcopy(avatar_snapshot.get("stats") or {})
         avatar.inventory = deepcopy(avatar_snapshot.get("inventory") or [])
         avatar.equipment = deepcopy(avatar_snapshot.get("equipment") or {})
+        avatar.visual_profile = deepcopy(avatar_snapshot.get("visual_profile"))
         avatar.status_effects = deepcopy(avatar_snapshot.get("status_effects") or [])
 
         state.current_scene_id = str(
@@ -222,6 +230,7 @@ class SessionCheckpointService:
 
         message_ids = await SessionCheckpointService._message_ids(db, session_id)
         stale_ids = message_ids[checkpoint.message_index :]
+        await rewind_created_garments(db, session_id, snapshot, stale_ids)
         if stale_ids:
             await rewind_journals(db, session_id, stale_ids)
             await db.execute(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))

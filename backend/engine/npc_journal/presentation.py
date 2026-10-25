@@ -3,6 +3,7 @@
 from typing import Any
 
 _PRIVATE_FIELDS = {
+    "visual_profile",
     "inventory",
     "equipment",
     "starting_inventory",

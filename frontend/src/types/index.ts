@@ -20,9 +20,30 @@ export interface ChatMessage {
   sequence_id?: string | null
 }
 
+/** Player-owned appearance and worn clothing projected by the server. */
+export interface PlayerClothing {
+  appearance: {
+    age_years: number | null
+    hair: string
+    eyes: string
+    build: string
+    features: string
+  }
+  worn: Array<{
+    item_id: string
+    name: string
+    description: string
+    layer: number
+    visible: boolean
+    underwear: boolean
+  }>
+  detail_limited?: boolean
+}
+
 /** Character sheet snapshot pushed by the server after every action. */
 export interface CharacterSheet {
   mode_capabilities?: ModeCapabilities
+  clothing?: PlayerClothing | null
   name: string
   adventure_title?: string | null
   adventure_version?: string | null
@@ -362,6 +383,7 @@ export interface AdventureTemplateSummary {
 /** Payload for creating a new adventure. */
 export interface CreateAdventurePayload {
   show_npc_state?: boolean
+  detailed_clothing?: boolean
   id?: string
   title: string
   context?: string

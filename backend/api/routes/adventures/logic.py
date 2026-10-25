@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy
+from backend.engine.clothing.presentation import player_clothing
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
@@ -919,6 +920,7 @@ class AdventureLogic:
                     profile_image = resolved
                     break
         snapshot = {
+            "clothing": player_clothing(avatar, session_manifest),
             "name": avatar.name,
             "role": avatar.role,
             "description": avatar.description,

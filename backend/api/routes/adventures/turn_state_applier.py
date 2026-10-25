@@ -18,6 +18,7 @@ from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import prompts
 from backend.core.config import settings
 from backend.core.game_modes import is_vn
+from backend.engine.clothing.runtime import apply_wardrobe
 from backend.engine.map_engine import MapEngine
 from backend.engine.mutation_targets import validate_mutation_targets
 from backend.engine.quest_manager import QuestManager
@@ -1062,6 +1063,7 @@ class TurnStateApplier:
 
         if vn_mode:
             state_dirty |= await sync_vn_ownership(self.db, self.state, self.avatar, event, states)
+            state_dirty |= await apply_wardrobe(self.manager, event, states)
 
         # Auto-cleanup: remove items from NPC inventories if they are now in the scene or player inventory
         player_item_ids = {

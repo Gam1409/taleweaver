@@ -31,6 +31,7 @@ AVATAR_FIELDS: tuple[tuple[str, str, Any], ...] = (
     ("description", "description", ""),
     ("goal", "goal", ""),
     ("character", "character", ""),
+    ("visual_profile", "visual_profile", None),
     ("hp", "hp", 200),
     ("max_hp", "hp", 200),
     ("stamina", "stamina", 200),
@@ -110,6 +111,8 @@ def _new_avatar(ctx: ApplyContext, prot: dict[str, Any], stats: dict[str, Any]) 
 def _update_avatar(avatar: Any, prot: dict[str, Any], stats: dict[str, Any]) -> None:
     for attr, key, _default in AVATAR_FIELDS:
         setattr(avatar, attr, prot.get(key, getattr(avatar, attr)))
+    # A legacy replacement manifest cannot retain a future outfit from the old world.
+    avatar.visual_profile = prot.get("visual_profile")
     avatar.status_effects = prot.get("status_effects") or avatar.status_effects
     avatar.stats = stats
     avatar.inventory = []
@@ -117,12 +120,21 @@ def _update_avatar(avatar: Any, prot: dict[str, Any], stats: dict[str, Any]) -> 
 
 
 async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
+    from backend.engine.clothing.settings import clothing_settings
+    from backend.engine.clothing.visuals import character_visuals, portrait_description
     from backend.engine.media_engine import MediaEngine
 
-    prompt = prompts.PROTAGONIST_IMAGE_PROMPT_TEMPLATE.format(
-        name=avatar.name, role=avatar.role, description=avatar.description
+    visual = character_visuals(
+        avatar,
+        ctx.manifest.get("objects") or [],
+        detailed=clothing_settings(ctx.manifest)["detailed"],
     )
-    plot = (ctx.manifest.get("plot") or "").strip()
+    description = portrait_description(visual) if visual is not None else avatar.description
+    role = "" if visual is not None else avatar.role
+    prompt = prompts.PROTAGONIST_IMAGE_PROMPT_TEMPLATE.format(
+        name=avatar.name, role=role, description=description
+    )
+    plot = "" if visual is not None else (ctx.manifest.get("plot") or "").strip()
     if plot:
         prompt = f"{prompt} Narrative context: {plot[:1200]}"
     user_config, api_keys = t2i_config(ctx)
@@ -131,8 +143,8 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
         "protagonist",
         prompt,
         name=avatar.name,
-        role=avatar.role,
-        description=avatar.description,
+        role=role,
+        description=description,
         context=plot[:1200],
     )
     return await generate_image(

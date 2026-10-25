@@ -149,5 +149,6 @@ class WorldEntity(Base, TimestampMixin):
 
     # Optional state, e.g. NPC inventory: [{"name": "Key", "id": "BRONZE_KEY"}]
     inventory = Column(JSON, default=list, nullable=False)
+    visual_profile = Column(JSON, nullable=True)
     metadata_json = Column(JSON, default=dict, nullable=False)  # For stats or dynamic state
     adventure_id = synonym("template_id")

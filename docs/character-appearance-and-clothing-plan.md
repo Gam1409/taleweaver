@@ -1,58 +1,73 @@
-# Character appearance and clothing: proposed next stage
+# Character appearance and clothing
 
-Status: design agreed during the NPC-card work; not implemented by that change.
+VN characters can retain a neutral appearance profile and clothing linked to canonical
+inventory items. Hair, eyes, build and distinguishing features are separate from worn
+clothes. Existing RPG equipment slots and stat bonuses remain unchanged.
 
-## One source of truth
+## Creating a world
 
-The narrator, player sheet, portraits and scene illustrations should read a shared
-character appearance and worn-clothing state. Describe appearance separately from
-clothing so that removing a coat does not require rewriting a whole biography.
-Stable item IDs determine ownership; descriptions never create transferable items.
+The VN creation form has a separate **Adult content: detailed clothing** preference:
 
-Keep the existing mechanical equipment slots compatible. A layered worn view can
-reference the same owned items without replacing a single equipment slot with an
-array or duplicating armor bonuses. Removing a garment does not delete it: it stays
-owned until explicitly placed, transferred, consumed or otherwise resolved.
-Transfers and deletion must clear the former owner's worn reference atomically.
+- Off (default): track general outer clothing and accessories.
+- On: track garment details and layers, including ordinary underwear only for a
+  character whose structured age explicitly establishes adulthood.
 
-## Detail preference
+The preference is independent of NPC-card indicators. It does not establish age or
+enable arousal mechanics. Old worlds without the preference default to off.
 
-A world-creation preference controls clothing detail independently of the NPC-card
-indicator toggle:
+Generated outfits should suit each character's circumstances, personality, setting,
+profession and weather. There is no uniform default kit. Clothing uses the same
+canonical object registry as other possessions; with a small object budget, required
+story objects take priority and some clothing may remain unstructured descriptions.
+The implementation does not silently add an unlimited wardrobe to every character.
 
-- Off: general descriptions of visible clothing, without detailed intimate layers.
-- On: detailed garment layers, including underwear for explicitly adult characters.
+## Changes during play
 
-Missing settings in old worlds default to off. A detail setting does not establish
-any character's age; unknown or conflicting age information cannot enable adult-only
-fields. Any private intimate state remains separate from visible appearance and is
-excluded from NPC cards, public session payloads and image-generation input.
+The existing VN continuity call can propose bounded wardrobe changes using current
+item IDs and quoted evidence. Removing clothing retains ownership. Gifts transfer
+through the existing inventory mechanism and do not automatically equip the recipient.
+An NPC can choose to change clothes when the scene and their agency support it.
 
-The player can see their own worn clothing. An NPC card continues to expose only
-information learned through play, never a live private wardrobe or inventory.
+A genuinely new cosmetic garment requires a grounded acquisition: an accessible
+wardrobe, established shop or giver, or crafting with consumed owned materials.
+The server assigns its ID and tracks the result. Existing possessions must be
+transferred rather than recreated. These operations cannot mint money, armor bonuses
+or combat statistics. Plans, claims and hypothetical events are not completed actions.
 
-## Visible clothing
+Ownership, references, scene, source, permitted operations and duplicate requests are
+checked in code. Recognizing the meaning of a sentence and whether the situation
+justifies an acquisition still depends on the technical model. An exact quotation
+alone cannot prove that the model interpreted tense, negation or character choice
+correctly. Small models should be tested with the intended story and language.
 
-Garment metadata needs bounded body coverage, layer and opaque coverage. The visual
-projector selects exposed surfaces by region: a closed coat can hide a shirt, which
-can hide another layer. Removing the coat exposes the shirt, not every lower layer.
-Partially open garments require explicit coverage changes rather than guessed
-transparency. Unknown coverage should be handled conservatively.
+## Cards and images
 
-Project visible appearance before image preparation, and freeze that result with
-the scene snapshot. A prompt instruction alone is insufficient: raw narration,
-character descriptions and old journal entries can otherwise reintroduce hidden
-garments. Portraits and scene illustrations must use the same visibility rules.
-This improves continuity but cannot guarantee that every image model follows a prompt.
+The player's VN sheet has an **Appearance** tab showing their own tracked outfit.
+Detailed adult clothing can include the player's covered layers. NPC cards never
+expose a private wardrobe or inventory. A missing profile shows an empty state;
+it does not invent a standard outfit or imply that the character is undressed.
 
-## Integration and verification
+Image preparation resolves layers by body region. Higher opaque clothing hides lower
+layers; an explicitly open garment can expose only its specified uncovered regions.
+Portraits and frozen scene snapshots use this same visible projection. Invalid or
+unknown coverage is handled conservatively. Managed image prompts do not reuse raw
+biography, old wardrobe descriptions or journal entries as outfit instructions.
 
-Integration spans manifest application, Avatar and WorldEntity storage, equipment
-and transfer handling, the existing continuity pass, player-sheet rendering,
-portrait preparation, scene snapshots and save/import/clone/checkpoint handling.
-Prefer bounded additions to existing model calls over another call for each garment.
+A manual illustration of a managed scene extracts a bounded final composition before
+model-specific prompt formatting. The two Small-model operations share one preparation
+timeout. This additional operation is not performed on every gameplay turn. Managed
+portrait pose/expression edits also use bounded extraction. Image models and img2img
+references can still fail to follow the current outfit; this is not identity or pose
+control and does not require custom ComfyUI nodes.
 
-Verify layer occlusion, partial coverage, ownership and transfer invariants, failed
-or ambiguous actions, private-field exclusion, old-save compatibility, historical
-snapshot stability and concurrent image generation. Both actual provider request
-payloads and public API responses must be tested for hidden-clothing leakage.
+## Persistence and compatibility
+
+Nullable `visual_profile` JSON columns store Avatar and authored NPC profiles. NPC
+runtime changes live in session overrides. Canonical items carry `clothing` metadata;
+profiles reference their IDs. ADV/ADS export, import, session start/copy and checkpoints
+preserve the tracked state. The Alembic migration is `353aa8ad41f8`.
+
+Legacy worlds without structured profiles retain their existing rendering path. A
+specific garment already described as currently worn can be registered during play;
+missing age, anatomy or hidden clothes are not inferred. Existing saves are not
+rewritten into a fabricated wardrobe.

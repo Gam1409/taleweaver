@@ -84,9 +84,11 @@ An undone, deleted or edited message cannot receive the result of an obsolete jo
 Snapshots include the public location description and known NPC positions. Prompt
 preparation selects the final visible arrangement: stepping back, releasing a hand
 or leaving supersedes an earlier approach or contact. ComfyUI uses these instructions
-together with its selected model's prompt rules and the story's visual style in one
-Utility call. Vocal tags remain in displayed narration and TTS; the image prompt
-does not treat them as visible objects.
+together with its selected model's prompt rules and the story's visual style. Legacy
+scenes use one Utility call. For characters with tracked clothing, a bounded
+composition extraction precedes formatting; both calls share a total preparation
+timeout. Vocal tags remain in displayed narration and TTS; the image prompt does
+not treat them as visible objects.
 
 The narrator is explicitly constrained to approved NPC movements. These instructions
 do not automatically repair an existing discrepancy between prose and engine state,
@@ -131,3 +133,11 @@ measure prose quality or establish that a particular local model is sufficient.
 The narration contract draws on the preceding review of Japanese and other visual
 novels: distinct character voices, selective detail, subtext, readable blocks and
 player agency. It uses original instructions rather than copied game dialogue.
+
+## Appearance and clothing
+
+VN creation can enable detailed clothing independently of character-card indicators.
+The player sheet has an Appearance tab; NPC private wardrobes remain hidden.
+Outfits reference canonical possessions and change through grounded story actions.
+See [Character appearance and clothing](character-appearance-and-clothing-plan.md)
+for visibility, ownership, persistence and model limitations.

@@ -20,6 +20,7 @@ from backend.api.routes.adventures.session_materializer import (
 )
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
+from backend.engine.clothing.settings import with_clothing_settings
 from backend.engine.generation_control import (
     assert_generation_current,
     generation_run,
@@ -169,7 +170,10 @@ def build_template(
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         is_ready=bool(payload.skip_generation),
         creation_status="Ready" if payload.skip_generation else "Initializing...",
-        original_manifest=creation_manifest(payload.original_manifest, payload.show_npc_state),
+        original_manifest=with_clothing_settings(
+            creation_manifest(payload.original_manifest, payload.show_npc_state),
+            payload.detailed_clothing,
+        ),
         teaser=payload.teaser,
         version=payload.version,
         language=payload.language,

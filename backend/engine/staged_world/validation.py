@@ -12,6 +12,7 @@ from backend.engine.world_schemas import WorldExitSchema
 CATEGORIES = ("scenes", "npcs", "objects", "sequences", "quests", "awards", "scripts")
 _ID = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z")
 _ITEM_FIELDS = {
+    "item_id",
     "item_to_unlock",
     "reveals_item_id",
     "required_item_id",
@@ -246,6 +247,11 @@ def _validate_holder(
         seed["id"] for seed in plan.get("objects", []) if seed.get("owner_id") == identifier
     }
     actual = _owner_items(row, protagonist=identifier == "PROTAGONIST")
+    worn = {entry["item_id"] for entry in (row.get("visual_profile") or {}).get("worn", [])}
+    if not worn <= actual:
+        raise ValueError(
+            f"{identifier}: worn clothing must reference the actor's own canonical items."
+        )
     if actual != expected:
         raise ValueError(
             f"{identifier}: inventory and equipment must match planned owner assignments."

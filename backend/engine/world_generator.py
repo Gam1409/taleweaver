@@ -26,6 +26,8 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.llm_logger import log_structured_event
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.clothing.generation import generation_instruction
+from backend.engine.clothing.settings import preserve_clothing_settings
 from backend.engine.npc_cards.settings import preserve_card_settings
 from backend.engine.vn_world_generation import normalize_vn_generated_manifest
 
@@ -681,6 +683,10 @@ class WorldGenerator:
             allow_reuse_source_assets=allow_reuse_source_assets,
         )
 
+        system_prompt += generation_instruction(
+            getattr(adventure, "original_manifest", None), mode=effective_mode
+        )
+
         from backend.engine.staged_world import generate_manifest
 
         async def publish_stage(message: str) -> None:
@@ -759,11 +765,15 @@ class WorldGenerator:
             if not adventure.original_manifest or set(adventure.original_manifest) <= {
                 "visual_presets",
                 "npc_card_settings",
+                "clothing_settings",
             }:
                 from backend.engine.story_visual_presets import preserve_story_presets
 
-                adventure.original_manifest = preserve_card_settings(
-                    preserve_story_presets(manifest_dict, adventure), adventure
+                adventure.original_manifest = preserve_clothing_settings(
+                    preserve_card_settings(
+                        preserve_story_presets(manifest_dict, adventure), adventure
+                    ),
+                    adventure,
                 )  # type: ignore[assignment]
             from backend.engine.generation_control import guard_generation_write
 

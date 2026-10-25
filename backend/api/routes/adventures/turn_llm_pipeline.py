@@ -18,7 +18,9 @@ from backend.api.routes.adventures.turn_context_helpers import (
     resolve_model_settings,
     resolve_sequence_guidance,
 )
+from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
+from backend.engine.clothing.narration import narration_clothing
 from backend.engine.memory_manager import MemoryManager
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -301,6 +303,11 @@ class TurnLlmContextBuilder:
         )
         # Keep off-scene NPC metadata out of narration context to avoid
         # unintended dialogue from NPCs that are not physically present.
+        clothing_block = ""
+        if is_vn(adventure):
+            state_kwargs["entities"], clothing_block = narration_clothing(
+                self.manager, visible, world.all_entities
+            )
         narration_state_block = MemoryManager.build_state_block(
             self.manager.avatar,
             location_detail_level="full",
@@ -314,7 +321,7 @@ class TurnLlmContextBuilder:
         )
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
-            narration_state_block + session_memory_block,
+            narration_state_block + session_memory_block + clothing_block,
         )
 
     async def build_context(self, user_msg: str, language: str | None) -> TurnLlmContext:
