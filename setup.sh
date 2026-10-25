@@ -31,7 +31,7 @@ else
 fi
 
 # 2. Dependency Management (Poetry)
-echo "[*] Setting up Python dependencies with Poetry..."
+echo "[*] Installing Python dependencies, including LanceDB, with Poetry..."
 if command -v poetry &> /dev/null; then
     echo "[+] Using system Poetry..."
     poetry install
@@ -56,6 +56,11 @@ else
     fi
 fi
 
+echo "[*] Checking backend dependencies, including LanceDB..."
+if ! $PYTHON_CMD -c "import fastapi, uvicorn, sqlalchemy, alembic, cryptography, pydantic_settings, lancedb"; then
+    echo "[!] Backend dependencies are unavailable after installation. Check the Poetry installation output above."
+    exit 1
+fi
 
 # 4. Security Keys
 mkdir -p data

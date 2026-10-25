@@ -23,6 +23,7 @@ import {
 import { formatCatalogLabel } from '@/composables/usePortalFilters'
 import PendingAdventureCard from './PendingAdventureCard.vue'
 import AdventurePlayActions from './AdventurePlayActions.vue'
+import MemoryIndexActions from './MemoryIndexActions.vue'
 
 const props = defineProps<{
   visibleTemplates: AdventureTemplateSummary[]
@@ -429,6 +430,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
                           <span>Export (.adv)</span>
                         </button>
                       </div>
+                      <MemoryIndexActions :template-id="template.template_id" :title="template.title" />
                       <div class="pt-1">
                         <button
                           @click="$emit('delete', template.template_id, template.title); activeMenuId = null"

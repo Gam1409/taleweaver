@@ -176,6 +176,9 @@ async def get_chat_history(
     await apply_pending_sequence_progress(db, state, adventure, avatar)
     history = await load_chat_history(db, state.session_id)
     schedule_npc_journal(state.session_id, current_user.id)
+    from backend.engine.memory_rag.worker import schedule as schedule_memory
+
+    schedule_memory(state.session_id, current_user.id)
     session_status = state.session.status if state.session else None
 
     return ChatResponse(

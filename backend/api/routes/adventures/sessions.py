@@ -29,6 +29,7 @@ from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import copy_messages
+from backend.engine.memory_rag.lifecycle import copy_session_summaries, memory_snapshot, restore_memory, purge_session_memory
 from backend.engine.visual_novel.lifecycle import copy_vn_state
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
@@ -940,6 +941,7 @@ async def delete_session(game_id: str, db: AsyncSession = Depends(get_db), curre
         raise HTTPException(status_code=404, detail="Session not found.")
 
     avatar_id = game_session.avatar_id
+    await purge_session_memory(db, current_user.id, game_id)
 
     # Explicitly remove session-bound rows that may not be ORM-cascaded.
     await db.execute(delete(SessionCheckpoint).where(SessionCheckpoint.session_id == game_id))
@@ -1228,6 +1230,7 @@ async def copy_session(
     # 6. Clone the conversation and map evidence to its new message IDs.
     message_ids = await copy_messages(db, original_session.id, copied_session.id)
     if original_state:
+        restore_memory(cloned_state, memory_snapshot(original_state), message_ids)
         cloned_state.entity_states = copy_vn_state(
             cloned_state.entity_states,
             message_ids,
@@ -1323,6 +1326,10 @@ async def copy_session(
             voice=ent.voice
         )
         db.add(cloned_ent)
+
+    await copy_session_summaries(
+        db, original_session.id, copied_session.id, current_user.id, message_ids,
+    )
 
     # 10. Clone WorldMap
     map_res = await db.execute(select(WorldMap).where(WorldMap.session_id == original_session.id))

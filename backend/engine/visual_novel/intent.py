@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 from backend.engine.clothing.actions import CLOTHING_PROMPT, GarmentCreation, WardrobeAction
 from backend.engine.clothing.context import build_clothing_context
 from backend.engine.llm_intents import ChatProgressionIntent
+from backend.engine.memory_rag.prompts import recall_block, recall_enabled
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 
 _ITEM_FIELDS = frozenset(
@@ -212,7 +213,8 @@ def build_progression_context(
         "world_locations": scenes,
         "available_exits": exits,
         "locked_containers": locked_containers or [],
-        "session_notes": manager._get_gm_notes()[-20:],
+        "session_notes": [] if recall_enabled(manager) else manager._get_gm_notes()[-20:],
+        "historical_recall_untrusted": recall_block(manager, "vn_continuity"),
     }
     return "CURRENT STATE (internal continuity data):\n" + json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")

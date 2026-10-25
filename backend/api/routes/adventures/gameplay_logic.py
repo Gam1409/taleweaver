@@ -65,6 +65,7 @@ from backend.api.routes.adventures.session_language import (
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
+from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.dynamic_locations.prompts import intent_schema, prompt_block
@@ -801,6 +802,7 @@ class GameTurnManager:
         return True
 
     @guard_session_turn
+    @foreground_turn
     async def process_turn(
         self, message: str, auto_visualize: bool = False, language: str | None = None
     ) -> AsyncGenerator[str, None]:
@@ -2222,13 +2224,13 @@ class GameTurnManager:
 
         if policy.vn:
             await capture_completed_moment(self, assistant_chat)
+        from backend.engine.memory_rag.worker import mark_dirty
+
+        await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)
         await self.db.commit()
         schedule_npc_journal(self.state.session_id, self.user.id)
         schedule_images(self.state, self.user.id, getattr(self, "_dynamic_scene_images", []))
         self._dynamic_scene_images = []
-
-        async for comp_event in self._compress_history_if_needed():
-            yield comp_event
 
         checkpoint_events = await self._persist_pending_checkpoints()
         if checkpoint_events:

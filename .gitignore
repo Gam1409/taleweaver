@@ -220,6 +220,7 @@ backend/brain/
 # Editor
 .vscode/
 data-docker/
+/db/
 
 # Local agent configuration
 /.agent/

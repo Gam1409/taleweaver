@@ -1033,6 +1033,9 @@ class AdventureLogic:
         Decouples game sessions so they remain playable.
         """
         from backend.engine.media_engine import MediaEngine
+        from backend.engine.memory_rag.lifecycle import detach_template_memory
+
+        await detach_template_memory(db, template_id)
 
         # 1. Preserve session playability by detaching session-owned rows from template refs.
         session_avatar_query = select(GameSession.avatar_id).where(GameSession.template_id == template_id)

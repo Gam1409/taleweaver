@@ -228,6 +228,12 @@ def _patch_external_generation_and_media(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def _stub_memory_background(monkeypatch):
+    """Memory worker tests invoke steps explicitly with isolated model mocks."""
+    monkeypatch.setattr("backend.engine.memory_rag.worker.schedule", lambda *args, **kwargs: None)
+
+
+@pytest.fixture(autouse=True)
 def _stub_npc_journal_background(monkeypatch):
     """Only dedicated journal tests run workers, with mocked model and media calls."""
     monkeypatch.setattr(

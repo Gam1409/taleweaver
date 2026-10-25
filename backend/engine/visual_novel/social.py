@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.memory_rag.prompts import recall_block
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
@@ -98,6 +99,7 @@ def _payload(
     user_msg: str,
     scene_context: str,
     history: list[dict],
+    historical_recall: str = "",
 ) -> str:
     cast = [
         {
@@ -113,6 +115,7 @@ def _payload(
         "present_cast": cast,
         "player_action": user_msg[:MAX_ACTION_CHARS],
         "scene_context": scene_context[-MAX_SCENE_CHARS:],
+        "historical_recall_untrusted_orientation_only": historical_recall,
         "history_for_orientation_only": [
             {"role": m.get("role"), "content": str(m.get("content", ""))[-400:]}
             for m in history[-2:]
@@ -212,7 +215,14 @@ async def _plan(
     result = await asyncio.wait_for(
         llm.aexecute_complex_task(
             SYSTEM_PROMPT,
-            _payload(social, npcs, user_msg, scene_context, history),
+            _payload(
+                social,
+                npcs,
+                user_msg,
+                scene_context,
+                history,
+                recall_block(manager, "vn_social", {str(npc.id) for npc in npcs}),
+            ),
             InteractionPlan,
             llm.model,
             game_id=manager.state.session_id,

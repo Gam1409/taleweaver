@@ -22,6 +22,8 @@ from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
 from backend.engine.memory_manager import MemoryManager
+from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
+from backend.engine.memory_rag.retrieval import prepare_recall
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -287,7 +289,7 @@ class TurnLlmContextBuilder:
         adventure = self.manager.adventure
         state_kwargs: dict[str, Any] = {
             "current_scene": world.current_scene,
-            "entities": visible,
+            "entities": without_legacy_journal(self.manager, visible),
             "exits": world.exits,
             "in_game_time": state.in_game_time,
             "time_system": state.time_system or adventure.time_system or "calendar",
@@ -298,7 +300,9 @@ class TurnLlmContextBuilder:
         mechanics_state_block = MemoryManager.build_state_block(
             self.manager.avatar,
             location_detail_level="concise",
-            other_npcs=self._remembered_off_scene_npcs(world.all_entities),
+            other_npcs=without_legacy_journal(
+                self.manager, self._remembered_off_scene_npcs(world.all_entities)
+            ),
             **state_kwargs,
         )
         # Keep off-scene NPC metadata out of narration context to avoid
@@ -308,17 +312,23 @@ class TurnLlmContextBuilder:
             state_kwargs["entities"], clothing_block = narration_clothing(
                 self.manager, visible, world.all_entities
             )
+            state_kwargs["entities"] = without_legacy_journal(
+                self.manager, state_kwargs["entities"]
+            )
         narration_state_block = MemoryManager.build_state_block(
             self.manager.avatar,
             location_detail_level="full",
             other_npcs=None,
             **state_kwargs,
         )
-        session_memory_block = (
-            self.manager._build_gm_notes_prompt_block()
-            + self.manager._build_compressed_history_prompt_block()
-            + self.manager._build_world_memories_prompt_block()
-        )
+        if recall_enabled(self.manager):
+            session_memory_block = recall_block(self.manager, "narrator")
+        else:
+            session_memory_block = (
+                self.manager._build_gm_notes_prompt_block()
+                + self.manager._build_compressed_history_prompt_block()
+                + self.manager._build_world_memories_prompt_block()
+            )
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
             narration_state_block + session_memory_block + clothing_block,
@@ -330,6 +340,7 @@ class TurnLlmContextBuilder:
         world = await self._load_world()
         visible, hidden = self._partition_scene_entities(world.all_entities)
         await self._remember_scene_npcs(visible)
+        await prepare_recall(self.manager, user_msg, visible)
         global_unlock_rules_prompt_block = self._build_global_unlock_rules_prompt_block(
             all_entities=world.all_entities,
             all_exits=world.all_exits,

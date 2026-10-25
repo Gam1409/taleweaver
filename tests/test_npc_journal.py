@@ -7,6 +7,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
+from backend.engine.memory_rag import worker as memory_worker
+from backend.engine.memory_rag.scheduling import IdleScheduler
 from backend.engine.npc_journal import worker
 from backend.engine.npc_journal.apply import apply_extraction
 from backend.engine.npc_journal.records import journal_of, memory_context
@@ -33,6 +35,8 @@ def observation(category="appearance", text="Синий плащ", evidence="Н�
 
 @pytest_asyncio.fixture
 async def journal_world(portrait_world, monkeypatch):
+    monkeypatch.setattr(worker, "scheduler", IdleScheduler(grace_seconds=0))
+    monkeypatch.setattr(memory_worker, "schedule", MagicMock())
     async with TestSessionLocal() as db:
         db.add(
             WorldScene(

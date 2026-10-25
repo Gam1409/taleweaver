@@ -5,7 +5,7 @@ import unicodedata
 from copy import deepcopy
 from typing import Any
 
-from backend.engine.npc_journal.schema import CharacterObservation
+from backend.engine.npc_journal.schema import CharacterObservation, Observation
 
 JOURNAL_KEY = "npc_journal"
 _PHYSICAL_CATEGORIES = {"appearance", "equipment", "belongings"}
@@ -25,16 +25,65 @@ def journal_of(npc: Any) -> dict:
     return deepcopy(value) if isinstance(value, dict) else {}
 
 
+def is_significant(observation: Observation) -> bool:
+    """Validate the model's semantic classification without another model call.
+
+    Legacy payloads without these fields remain accepted. This is not a semantic
+    classifier: a model that falsely labels a gesture durable can still be wrong.
+    """
+    if observation.significance == "ephemeral" or observation.effect == "none":
+        return False
+    if observation.significance is None:
+        return True
+    return observation.effect is not None and bool(observation.reason)
+
+
+def _record(observation: Observation) -> dict:
+    record = observation.model_dump(exclude_none=True)
+    if record["topic"] == "general" and observation.significance:
+        record["topic"] = observation.significance
+    return record
+
+
+def _fact_key(entry: dict) -> tuple[str, str, str]:
+    return (
+        str(entry.get("category", "event")),
+        normalized(str(entry.get("topic", "general"))),
+        str(entry.get("source", "observed")),
+    )
+
+
+def _repeats_known_fact(entries: list[dict], record: dict, message_id: str) -> bool:
+    matching = [entry for entry in entries if _fact_key(entry) == _fact_key(record)]
+    if not matching:
+        return False
+    if any(
+        entry.get("message_id") == message_id
+        and normalized(entry.get("text", "")) == normalized(record["text"])
+        for entry in matching
+    ):
+        return True
+    # A -> B -> A is a meaningful reversal for a specific topic. Legacy "general"
+    # mixes unrelated facts, so an intervening unrelated entry is not a reversal.
+    candidates = matching if record["topic"] == "general" else matching[-1:]
+    return any(
+        normalized(entry.get("text", "")) == normalized(record["text"]) for entry in candidates
+    )
+
+
 def append_observations(npc: Any, extraction: CharacterObservation, message: Any) -> None:
     journal = journal_of(npc)
     entries = list(journal.get("entries") or [])
     existing = {entry.get("id") for entry in entries}
     for observation in extraction.observations:
-        if not supported_quote(observation.evidence, message.content):
+        if not is_significant(observation) or not supported_quote(
+            observation.evidence, message.content
+        ):
             continue
-        key = "|".join([str(message.id), observation.category, normalized(observation.text)])
+        record = _record(observation)
+        key = "|".join([str(message.id), *_fact_key(record), normalized(observation.text)])
         entry_id = hashlib.sha256(key.encode()).hexdigest()[:32]
-        if entry_id in existing:
+        if entry_id in existing or _repeats_known_fact(entries, record, message.id):
             continue
         entries.append(
             {
@@ -42,7 +91,7 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
                 "message_id": message.id,
                 "scene_id": message.scene_id,
                 "recorded_at": message.created_at.isoformat(),
-                **observation.model_dump(exclude_none=True),
+                **record,
             }
         )
         existing.add(entry_id)

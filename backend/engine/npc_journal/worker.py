@@ -5,6 +5,7 @@ import logging
 import time
 
 from backend.core import database
+from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import queue
 from backend.engine.npc_journal.apply import apply_extraction
 from backend.engine.npc_journal.extract import extract, extraction_context
@@ -19,7 +20,6 @@ EXTRACTION_TIMEOUT = 90
 _tasks: dict[str, asyncio.Task] = {}
 _wakeups: dict[str, str] = {}
 _cooldowns: dict[str, float] = {}
-_capacity = asyncio.Semaphore(2)
 
 
 async def process_message(message_id: str, user_id: str) -> bool:
@@ -39,9 +39,7 @@ async def process_message(message_id: str, user_id: str) -> bool:
                 return False
             payload, player_name = await extraction_context(db, message, session)
             original_content = message.content
-        result = await asyncio.wait_for(
-            extract(user, session, message_id, payload), timeout=EXTRACTION_TIMEOUT
-        )
+        result = await _extract_when_idle(user, session, message_id, payload, task)
         created = await _save(message_id, original_content, player_name, result, task["token"])
         if created is None:
             return False
@@ -59,9 +57,26 @@ async def process_message(message_id: str, user_id: str) -> bool:
         return False
 
 
+async def _extract_when_idle(
+    user: User, session: GameSession, message_id: str, payload: dict, task: dict
+) -> JournalExtraction | None:
+    if not scheduler.can_start_background():
+        await _defer(message_id, task)
+        return None
+    return await asyncio.wait_for(
+        extract(user, session, message_id, payload), timeout=EXTRACTION_TIMEOUT
+    )
+
+
 async def _save(
-    message_id: str, original_content: str, player_name: str, result: JournalExtraction, token: str
+    message_id: str,
+    original_content: str,
+    player_name: str,
+    result: JournalExtraction | None,
+    token: str,
 ) -> list[str] | None:
+    if result is None:
+        return None
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
         if message is None or message.content != original_content:
@@ -77,8 +92,29 @@ async def _save(
         }
         if task.get("recovering"):
             await queue.requeue_dependents(db, message)
+        from backend.engine.memory_rag.worker import mark_dirty
+        from backend.engine.memory_rag.worker import schedule as schedule_memory
+
+        session = await db.get(GameSession, message.session_id)
+        if session is not None:
+            await mark_dirty(db, session.id, session.user_id, session.template_id)
         await db.commit()
+        if session is not None:
+            schedule_memory(session.id, session.user_id)
         return created
+
+
+async def _defer(message_id: str, task: dict) -> None:
+    async with database.AsyncSessionLocal() as db:
+        message = await db.get(ChatMessage, message_id)
+        if message is None or not await queue.fence(db, message, task["token"]):
+            return
+        message.npc_journal = {
+            **task,
+            "status": "pending",
+            "attempts": max(0, task["attempts"] - 1),
+        }
+        await db.commit()
 
 
 async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> None:
@@ -102,10 +138,10 @@ async def _run(session_id: str, user_id: str) -> None:
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return
     _cooldowns.pop(session_id, None)
-    async with _capacity:
-        await resume_pending(session_id, user_id)
-        consecutive_failures = 0
-        for _ in range(20):
+    await resume_pending(session_id, user_id)
+    consecutive_failures = 0
+    while True:
+        async with scheduler.background():
             async with database.AsyncSessionLocal() as db:
                 message_id = await queue.next_message(db, session_id)
             if message_id is None:
@@ -113,10 +149,9 @@ async def _run(session_id: str, user_id: str) -> None:
             success = await process_message(message_id, user_id)
             consecutive_failures = 0 if success else consecutive_failures + 1
             if consecutive_failures >= 2:
-                # An unavailable model must not consume an entire backlog on every UI poll.
+                # A failing provider must not consume the backlog on every UI poll.
                 _cooldowns[session_id] = time.monotonic() + queue.RETRY_DELAY
                 return
-        _wakeups[session_id] = user_id
 
 
 def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:

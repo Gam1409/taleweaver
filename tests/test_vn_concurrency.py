@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import aclosing
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -93,7 +94,10 @@ async def test_pace_write_lease_blocks_turn_before_initialization(
     auth_client, vn_world, monkeypatch
 ):
     from backend.api.routes.adventures import vn_settings
+    from backend.engine.memory_rag import worker as memory_worker
 
+    update_memory = AsyncMock()
+    monkeypatch.setattr(memory_worker, "request_update", update_memory)
     entered, resume = asyncio.Event(), asyncio.Event()
     owned = vn_settings.owned_vn_state
 
@@ -123,6 +127,7 @@ async def test_pace_write_lease_blocks_turn_before_initialization(
         response = await asyncio.wait_for(request, timeout=2)
     assert response.status_code == 200
     assert SESSION not in _active_sessions
+    update_memory.assert_not_awaited()
 
 
 @pytest.mark.asyncio

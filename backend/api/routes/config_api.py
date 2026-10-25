@@ -902,7 +902,10 @@ async def update_llm_settings(
     validate_role_urls(payload, _safe_provider_url)
     if payload.custom_openai_url:
         payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
+    retained_memory = (user.llm_settings or {}).get("memory_rag")
     user.llm_settings = _normalize_llm_settings(payload.model_dump())
+    if retained_memory is not None:
+        user.llm_settings = {**user.llm_settings, "memory_rag": retained_memory}
     await _broadcast_global_settings(db, user)
     await db.commit()
     return {"status": "success", "message": "LLM settings updated."}

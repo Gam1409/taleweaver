@@ -6,6 +6,8 @@ from .base import Base
 from .character import Character
 from .chat import ChatMessage
 from .game_session import GameSession
+from .memory_rag import MemoryIndexState as MemoryIndexState
+from .memory_rag import MemorySummary as MemorySummary
 from .session_checkpoint import SessionCheckpoint
 from .session_state import SessionState
 from .user import User

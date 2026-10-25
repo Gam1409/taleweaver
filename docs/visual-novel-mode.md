@@ -40,6 +40,10 @@ does not infer elapsed time from language-specific keywords or real request late
 
 ## Characters and relationships
 
+NPC history now prioritizes durable facts and changes instead of routine gestures.
+Optional [memory and relevant recall](memory-rag.md) adds source-backed retrieval
+and layered summaries, with background work deferred while the player is active.
+
 An additional bounded Small/Utility-role call considers up to three present,
 visible NPCs per player input. It proposes reactions based on personality and
 established events. Private state includes trust, affinity, respect, tension,

@@ -14,6 +14,7 @@ from backend.engine.clothing.lifecycle import (
 )
 from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
 from backend.engine.dynamic_locations.schema import registry
+from backend.engine.memory_rag.lifecycle import invalidate_memory, memory_snapshot, restore_memory
 from backend.engine.npc_journal.lifecycle import rewind_journals
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -100,6 +101,7 @@ class SessionCheckpointService:
                 "status_effects": deepcopy(avatar.status_effects or []),
             },
             "session_state": {
+                **memory_snapshot(state),
                 "current_scene_id": state.current_scene_id,
                 "in_game_time": state.in_game_time,
                 "time_system": state.time_system,
@@ -227,6 +229,8 @@ class SessionCheckpointService:
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])
         state.quests = deepcopy(state_snapshot.get("quests") or [])
         state.is_completed = bool(state_snapshot.get("is_completed", state.is_completed))
+        restore_memory(state, state_snapshot)
+        await invalidate_memory(db, session_id)
 
         message_ids = await SessionCheckpointService._message_ids(db, session_id)
         stale_ids = message_ids[checkpoint.message_index :]

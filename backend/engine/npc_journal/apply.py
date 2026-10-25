@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.npc_journal.records import (
     JOURNAL_KEY,
     append_observations,
+    is_significant,
     journal_of,
     normalized,
     supported_quote,
@@ -142,6 +143,7 @@ def _update_appearance(npc: Any, character: CharacterObservation, message: ChatM
         for o in character.observations
         if o.category == "appearance"
         and o.source == "observed"
+        and is_significant(o)
         and supported_quote(o.evidence, message.content)
     ]
     if appearances and not npc.description:
