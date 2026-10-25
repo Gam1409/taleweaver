@@ -2,11 +2,14 @@
 import { onBeforeUnmount, onMounted, ref, toRef } from 'vue'
 import { X, Users } from 'lucide-vue-next'
 import { useNpcJournal, type NpcCard } from '@/composables/useNpcJournal'
+import { useNpcCardSettings } from '@/composables/useNpcCardSettings'
+import NpcCardPreferences from './NpcCardPreferences.vue'
 import { getImageUrl } from '@/utils/game_icons'
 
 const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ close: []; select: [npc: NpcCard] }>()
-const { characters, loading, error, pending, failed, load, retryLearning } = useNpcJournal(toRef(props, 'sessionId'), ref(undefined))
+const settings = useNpcCardSettings(toRef(props, 'sessionId'))
+const { characters, loading, error, pending, failed, load, retryLearning } = useNpcJournal(toRef(props, 'sessionId'), ref(undefined), settings.showState)
 const dialog = ref<HTMLDialogElement | null>(null)
 const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
 onMounted(() => dialog.value?.showModal())
@@ -15,7 +18,7 @@ onBeforeUnmount(() => { clearInterval(timer); dialog.value?.close(); previousFoc
 </script>
 
 <template>
-  <dialog ref="dialog" aria-labelledby="characters-heading" class="m-auto w-[calc(100%_-_2rem)] max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-white/15 bg-slate-900 p-5 text-slate-200 backdrop:bg-black/75" @cancel.prevent="emit('close')">
+  <dialog ref="dialog" aria-labelledby="characters-heading" class="character-directory-scroll m-auto w-[calc(100%_-_2rem)] max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-white/15 bg-slate-900 p-5 text-slate-200 backdrop:bg-black/75" @cancel.prevent="emit('close')">
     <div class="flex justify-between items-center gap-4 mb-4">
       <h2 id="characters-heading" class="font-bold text-lg flex items-center gap-2"><Users class="w-5 h-5" /> Characters</h2>
       <button aria-label="Close characters" class="p-2 rounded-lg hover:bg-white/10" @click="emit('close')"><X class="w-5 h-5" /></button>
@@ -35,5 +38,16 @@ onBeforeUnmount(() => { clearInterval(timer); dialog.value?.close(); previousFoc
         </button>
       </li>
     </ul>
+    <NpcCardPreferences class="mt-4" :settings="settings" />
   </dialog>
 </template>
+
+<style scoped>
+.character-directory-scroll {
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.character-directory-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>

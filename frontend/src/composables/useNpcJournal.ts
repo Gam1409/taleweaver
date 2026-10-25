@@ -23,6 +23,16 @@ export interface NpcJournalEntry {
   player_attitude?: NpcAttitude | null
 }
 
+export interface NpcInsights {
+  available: boolean
+  relationship: { trust: number; affinity: number; respect: number; tension: number } | null
+  emotion: string | null
+  evidence: string | null
+  source_message_id: string | null
+}
+
+export type NpcHistoryKind = 'all' | 'general' | 'shared'
+
 export interface NpcCard {
   narrative_role?: 'supporting' | 'major'
   id: string
@@ -37,6 +47,12 @@ export interface NpcCard {
   entry_count: number
   entries?: NpcJournalEntry[]
   has_more?: boolean
+  summary?: NpcJournalEntry[]
+  overview?: NpcJournalEntry[]
+  history_counts?: { general: number; shared: number }
+  history_kind?: NpcHistoryKind
+  state_visible?: boolean
+  insights?: NpcInsights | null
 }
 
 interface NpcJournalController {
@@ -50,7 +66,7 @@ interface NpcJournalController {
   retryLearning: () => Promise<void>
 }
 
-export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefined>): NpcJournalController {
+export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefined>, showState?: Readonly<Ref<boolean>>, history?: Ref<NpcHistoryKind>): NpcJournalController {
   const characters = ref<NpcCard[]>([])
   const details = ref<NpcCard | null>(null)
   const loading = ref(false)
@@ -59,6 +75,11 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
   const failed = ref(0)
   let active: AbortController | null = null
   let revision = 0
+
+  function visibleCard(card: NpcCard): NpcCard {
+    return showState?.value === false || card.state_visible !== true
+      ? { ...card, state_visible: false, insights: null } : card
+  }
 
   async function request(path: string, signal: AbortSignal, method = 'GET'): Promise<unknown> {
     const response = await fetch(`/api/adventures/${encodeURIComponent(sessionId.value)}/${path}`, {
@@ -81,13 +102,13 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     try {
       const offset = more ? details.value?.entries?.length || 0 : 0
       if (npcId.value) {
-        const data = await request(`npcs/${encodeURIComponent(npcId.value)}?offset=${offset}`, controller.signal) as NpcCard
+        const data = await request(`npcs/${encodeURIComponent(npcId.value)}?offset=${offset}${history ? `&history=${history.value}` : ''}`, controller.signal) as NpcCard
         if (token !== revision) return
-        details.value = { ...data, entries: more ? [...(details.value?.entries || []), ...(data.entries || [])] : data.entries }
+        details.value = visibleCard({ ...data, entries: more ? [...(details.value?.entries || []), ...(data.entries || [])] : data.entries })
       } else {
         const data = await request('npcs', controller.signal) as { characters: NpcCard[]; pending: number; failed: number }
         if (token !== revision) return
-        characters.value = data.characters
+        characters.value = data.characters.map(visibleCard)
         pending.value = data.pending
         failed.value = data.failed
       }
@@ -128,7 +149,23 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     active = null
     loading.value = false
   }
-  watch([sessionId, npcId], () => { stop(); details.value = null; characters.value = []; void load() }, { immediate: true })
+  watch([sessionId, npcId, () => history?.value], (current, previous) => {
+    stop()
+    if (current[0] !== previous?.[0] || current[1] !== previous?.[1]) {
+      details.value = null
+      characters.value = []
+    } else if (details.value && current[2] !== previous?.[2]) {
+      // Keep the profile visible while replacing only this tab's history page.
+      details.value = { ...details.value, entries: [], has_more: false, history_kind: history?.value }
+    }
+    void load()
+  }, { immediate: true })
+  if (showState) watch(showState, enabled => {
+    if (!enabled) {
+      if (details.value) details.value = visibleCard(details.value)
+      characters.value = characters.value.map(visibleCard)
+    } else void load()
+  })
   onScopeDispose(stop)
   return { characters, details, loading, error, pending, failed, load, retryLearning }
 }

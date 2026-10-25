@@ -12,6 +12,30 @@ Open **Characters** in the game toolbar to see recorded characters. Select one t
 their portrait and learned history. New NPCs receive a server-generated UUID; their
 names can use any language. Existing authored NPCs remain usable as before.
 
+The card shows the portrait, current description and a short **General overview**
+from learned background facts. Two history tabs separate **General history**
+(background, appearance and other known facts) from **History with your character**
+(shared events and reactions toward the player). The latter starts with up to four
+recent observations; expand **All shared events** for its full history. Each tab
+has independent pagination and supports arrow-key navigation. Repeated summary
+topics use the latest entry, and claims remain labeled as claims. Summaries need
+no additional LLM request. A missing portrait has a visible **Generate portrait**
+button; **Portrait options** contains reference and regeneration controls.
+
+For VN stories, **Character cards → Show NPC state and relationship indicators**
+is available during world creation in both Simple and Advanced modes. It defaults
+to off. Change it later in **Characters → Character card display**, or in an open
+card; the choice applies to that session. When enabled, cards may show last evaluated
+emotion, trust, affinity, respect and tension. These are narrative estimates from
+completed interactions, not guaranteed current feelings. Missing evidence shows an
+unavailable state, never invented neutral values. NPC inventories, goals and plans
+remain private in both display modes.
+
+The display choice is stored independently of generated content. Models cannot
+change it. It survives template and session copying and export/import; old worlds
+without the setting keep indicators hidden. Saving the display preference during
+a game turn returns a busy response rather than overwriting the turn's state.
+
 After each completed response, the configured **Small / Utility** LLM extracts new
 information in the session's content language. This runs in the background and does
 not delay the player's next action. The journal stores appearance, background,

@@ -49,7 +49,7 @@ async def test_resume_reuses_session_and_saved_request(auth_client, monkeypatch)
         )
         initial_snapshot = state.entity_states["__manifest_snapshot__"]
         assert initial_snapshot["adventure"]["is_ready"] is False
-        assert initial_snapshot["original_manifest"] == {}
+        assert initial_snapshot["original_manifest"] == {"npc_card_settings": {"show_state": False}}
         adventure.generation_checkpoint = {"results": {"outline": {"story": "saved"}}}
         await db.commit()
 

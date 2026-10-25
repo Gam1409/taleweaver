@@ -361,6 +361,7 @@ export interface AdventureTemplateSummary {
 
 /** Payload for creating a new adventure. */
 export interface CreateAdventurePayload {
+  show_npc_state?: boolean
   id?: string
   title: string
   context?: string

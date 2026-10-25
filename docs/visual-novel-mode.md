@@ -43,9 +43,10 @@ does not infer elapsed time from language-specific keywords or real request late
 An additional bounded Small/Utility-role call considers up to three present,
 visible NPCs per player input. It proposes reactions based on personality and
 established events. Private state includes trust, affinity, respect, tension,
-recent memories and short-term intentions. These values and private thoughts are
-not exposed through character cards. Existing public journal facts and observable
-relationship descriptions remain available.
+recent memories and short-term intentions. By default, cards show only learned
+facts and observable relationship descriptions. The optional **Character card
+display** setting exposes evidenced relationship scores and the last evaluated
+emotion. Private thoughts, intentions, goals and inventories remain hidden.
 
 Durable relationship changes use the previous completed narrator message in the
 same location, with evidence and message IDs. This deliberately introduces a

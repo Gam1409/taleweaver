@@ -26,6 +26,7 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.llm_logger import log_structured_event
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.npc_cards.settings import preserve_card_settings
 from backend.engine.vn_world_generation import normalize_vn_generated_manifest
 
 # --- Re-exports so existing imports stay valid ---
@@ -756,11 +757,14 @@ class WorldGenerator:
             if not adventure.origin_id:
                 adventure.origin_id = manifest_dict.get("origin_id") or template_id  # type: ignore[assignment]
             if not adventure.original_manifest or set(adventure.original_manifest) <= {
-                "visual_presets"
+                "visual_presets",
+                "npc_card_settings",
             }:
                 from backend.engine.story_visual_presets import preserve_story_presets
 
-                adventure.original_manifest = preserve_story_presets(manifest_dict, adventure)  # type: ignore[assignment]
+                adventure.original_manifest = preserve_card_settings(
+                    preserve_story_presets(manifest_dict, adventure), adventure
+                )  # type: ignore[assignment]
             from backend.engine.generation_control import guard_generation_write
 
             await guard_generation_write(db, adventure)

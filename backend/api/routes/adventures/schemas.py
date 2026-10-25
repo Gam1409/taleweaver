@@ -27,6 +27,7 @@ class CreateAdventureTemplatePayload(BaseModel):
     generate_scene_images: bool = False
     generate_npc_images: bool = False
     generate_item_images: bool = False
+    show_npc_state: bool = False
     automatic_npc_voice_assignment: bool = True
     time_per_turn: int = 5
     pacing_minutes: Optional[int] = None
