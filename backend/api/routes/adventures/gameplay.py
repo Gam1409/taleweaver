@@ -67,6 +67,7 @@ from backend.core.prompts import (
     BABLE_FISH_TRANSLATION_SYSTEM_PROMPT,
     BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE,
 )
+from backend.core.system_diagnostics import service as diagnostic_service
 from backend.engine.adventure_updates import is_legacy_session
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.trigger_service import TriggerService
@@ -193,6 +194,7 @@ async def get_chat_history(
     session_status = state.session.status if state.session else None
 
     return ChatResponse(
+        system_debug_enabled=diagnostic_service.enabled,
         language=language,
         messages=history,
         sheet=await AdventureLogic.build_sheet_snapshot(avatar, state, db),

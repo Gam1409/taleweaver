@@ -6,6 +6,7 @@ import logging
 from sqlalchemy import select, update
 
 from backend.core import database
+from backend.core.diagnostic_operations import diagnostic_job
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.npc_journal.records import JOURNAL_KEY, journal_of
 from backend.engine.session_portraits import SessionPortraitRequest, regenerate_session_portrait
@@ -78,6 +79,7 @@ async def _mark(session_id: str, npc_id: str, status: str) -> bool:
     raise RuntimeError("The NPC changed repeatedly while saving portrait status.")
 
 
+@diagnostic_job("npc_portrait")
 async def _run(session_id: str, npc_id: str, user_id: str) -> None:
     try:
         async with _capacity:

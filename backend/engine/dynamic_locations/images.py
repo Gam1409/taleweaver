@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import or_, select, update
 
 from backend.core import database, prompts
+from backend.core.diagnostic_operations import diagnostic_job
 from backend.engine.dynamic_locations.schema import policy, registry
 from backend.engine.image_profiles import advanced_for, image_timeout
 from backend.engine.image_prompt_adapter import asset_source
@@ -137,6 +138,7 @@ async def _save_image(
         return saved.rowcount == 1
 
 
+@diagnostic_job("scene_background")
 async def _run(session_id, scene_id, user_id):
     key = (session_id, scene_id)
     try:

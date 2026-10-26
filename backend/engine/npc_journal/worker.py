@@ -5,6 +5,7 @@ import logging
 import time
 
 from backend.core import database
+from backend.core.diagnostic_operations import diagnostic_job
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import queue
@@ -160,6 +161,7 @@ async def _next_message(session_id: str) -> str | None:
         return await queue.next_message(db, session_id)
 
 
+@diagnostic_job("npc_learning")
 async def _run(session_id: str, user_id: str) -> None:
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return

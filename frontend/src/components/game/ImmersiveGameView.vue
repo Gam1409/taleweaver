@@ -47,6 +47,7 @@ const props = defineProps<{
   inputLocked?: boolean
   sheet?: any
   gameId?: string
+  systemDebugEnabled?: boolean
   currentSceneImage?: string | null
   adventureImage?: string | null
   currentSceneName?: string | null
@@ -240,6 +241,8 @@ defineExpose({
       :exp="props.exp"
       :mode="props.mode"
       :debug-mode="!!props.sheet?.debug_mode"
+      :system-debug-enabled="!!props.systemDebugEnabled"
+      :session-id="props.gameId"
       @open-chronicles="emit('openChronicles')"
       @open-quests="emit('openQuests')"
       @open-memories="emit('openMemories')"

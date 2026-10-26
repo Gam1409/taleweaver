@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from backend.core.llm_diagnostics import async_operation
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
@@ -95,6 +96,7 @@ async def embed_texts(
     )
 
 
+@async_operation("embedding")
 async def embed_with_settings(
     settings: MemoryRagSettings,
     texts: list[str],

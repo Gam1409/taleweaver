@@ -10,6 +10,7 @@ from typing import Any, Optional, TypeVar
 import litellm
 from pydantic import BaseModel, ValidationError
 
+from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
     is_truncated_json,
@@ -147,6 +148,7 @@ class GameMasterLLM:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
                     if available_providers:
+                        retry(self, attempt + 1, error=exc)
                         logger.warning(
                             "OpenRouter provider mismatch for model '%s'. Retrying with provider order: %s",
                             kwargs.get("model"),
@@ -163,6 +165,7 @@ class GameMasterLLM:
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
                         extra_body = dict(kwargs.get("extra_body") or {})
                         if "provider" in extra_body:
+                            retry(self, attempt + 1, error=exc)
                             logger.warning(
                                 "OpenRouter provider routing failed for model '%s'. Retrying with unrestricted fallback routing.",
                                 kwargs.get("model"),
@@ -177,6 +180,7 @@ class GameMasterLLM:
 
                 if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
                     backoff_delay = 0.75 * (attempt + 1)
+                    retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
                         "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
                         attempt + 1,
@@ -215,6 +219,7 @@ class GameMasterLLM:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
                     if available_providers:
+                        retry(self, attempt + 1, error=exc)
                         logger.warning(
                             "OpenRouter provider mismatch for model '%s'. Retrying with provider order: %s",
                             kwargs.get("model"),
@@ -236,6 +241,7 @@ class GameMasterLLM:
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
                         extra_body = dict(kwargs.get("extra_body") or {})
                         if "provider" in extra_body:
+                            retry(self, attempt + 1, error=exc)
                             logger.warning(
                                 "OpenRouter provider routing failed for model '%s'. Retrying with unrestricted fallback routing.",
                                 kwargs.get("model"),
@@ -250,6 +256,7 @@ class GameMasterLLM:
 
                 if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
                     backoff_delay = 0.75 * (attempt + 1)
+                    retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
                         "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
                         attempt + 1,
@@ -546,6 +553,7 @@ class GameMasterLLM:
         logger.warning(
             "LLM returned empty assistant content but reasoning_content was populated. Retrying once with explicit content-channel instruction."
         )
+        retry(self, 1)
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
         return await self._acompletion_with_openrouter_fallback(retry_kwargs)
 
@@ -563,6 +571,7 @@ class GameMasterLLM:
         logger.warning(
             "LLM returned empty assistant content but reasoning_content was populated. Retrying once with explicit content-channel instruction."
         )
+        retry(self, 1)
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
         return self._completion_with_openrouter_fallback(retry_kwargs)
 
@@ -882,6 +891,7 @@ class GameMasterLLM:
                 "Configure a local Ollama model (for example: llama3.2, qwen2.5, mistral)."
             )
 
+    @sync_call("simple")
     def execute_simple_task(
         self,
         system_prompt: str,
@@ -951,6 +961,7 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("simple")
     async def aexecute_simple_task(
         self,
         system_prompt: str,
@@ -1019,6 +1030,7 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("stream")
     async def stream_simple_task(
         self,
         system_prompt: str,
@@ -1259,6 +1271,7 @@ class GameMasterLLM:
                 f"Preview: {self._content_preview(content)}. Validation: {exc}"
             ) from exc
 
+    @async_call("structured")
     async def aexecute_complex_task(
         self,
         system_prompt: str,
@@ -1301,6 +1314,7 @@ class GameMasterLLM:
         )
         return self._parse_structured_content(response, response_model)
 
+    @sync_call("structured")
     def execute_complex_task(
         self,
         system_prompt: str,

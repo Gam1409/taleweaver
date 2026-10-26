@@ -225,3 +225,6 @@ data-docker/
 # Local agent configuration
 /.agent/
 /.agents/
+
+# Private system diagnostics and its persisted switch
+/log/

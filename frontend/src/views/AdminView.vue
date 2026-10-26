@@ -12,7 +12,7 @@ import { testService } from '@/services/testService'
 const router = useRouter()
 
 // ============ NAVIGATION & UI STATE ============
-type Section = 'keys' | 'llm' | 't2i' | 'tts' | 'stt' | 'styles' | 'tones' | 'game' | 'users'
+type Section = 'keys' | 'llm' | 't2i' | 'tts' | 'stt' | 'styles' | 'tones' | 'game' | 'diagnostics' | 'users'
 const activeSection = ref<Section>('keys')
 
 // ============ MODAL STATE (UI only, not shared with services) ============
@@ -41,6 +41,7 @@ import SpeechSection from '@/components/admin/SpeechSection.vue'
 import SpeechToTextSection from '@/components/admin/SpeechToTextSection.vue'
 import CatalogSection from '@/components/admin/CatalogSection.vue'
 import GameSettingsSection from '@/components/admin/GameSettingsSection.vue'
+import SystemDiagnosticsSection from '@/components/admin/SystemDiagnosticsSection.vue'
 import UserManagementSection from '@/components/admin/UserManagementSection.vue'
 import UserEditModal from '@/components/admin/UserEditModal.vue'
 import CatalogEditModal from '@/components/admin/CatalogEditModal.vue'
@@ -295,6 +296,13 @@ const navCategories: NavCategory[] = [
         iconColor: 'text-sky-400'
       },
       {
+        id: 'diagnostics',
+        label: 'System Diagnostics',
+        icon: 'ra-gear',
+        activeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30 shadow-sm shadow-sky-950/20',
+        iconColor: 'text-sky-400'
+      },
+      {
         id: 'users',
         label: 'User Management',
         icon: 'ra-person',
@@ -445,7 +453,7 @@ const navCategories: NavCategory[] = [
 
         <CatalogSection 
           v-if="activeSection === 'styles' || activeSection === 'tones'"
-          :type="activeSection as 'styles' | 'tones'"
+          :type="activeSection === 'styles' ? 'styles' : 'tones'"
           :catalog="activeSection === 'styles' ? catalogService.imageStylesCatalog.value : catalogService.toneCatalog.value"
           :is-generating-item="catalogService.isGeneratingItem.value"
           :open-menu-id="openMenuId"
@@ -465,6 +473,8 @@ const navCategories: NavCategory[] = [
           :is-submitting="settingsService.isSubmitting.value"
           @save="handleSaveGameSettings"
         />
+
+        <SystemDiagnosticsSection v-if="activeSection === 'diagnostics'" />
 
         <UserManagementSection 
           v-if="activeSection === 'users'"

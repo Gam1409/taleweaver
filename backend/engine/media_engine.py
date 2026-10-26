@@ -21,6 +21,7 @@ from PIL import Image
 from backend.core import prompts
 from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
+from backend.core.llm_diagnostics import async_operation
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import build_bfl_payload, resolve_bfl_model_alias
 from backend.engine.image_prompt_adapter import cover_source
@@ -717,6 +718,7 @@ class MediaEngine:
         return None
 
     @staticmethod
+    @async_operation("image")
     async def generate_image(
         prompt: str, 
         model: str, 

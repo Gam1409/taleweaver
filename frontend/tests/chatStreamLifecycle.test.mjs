@@ -114,13 +114,16 @@ test('idle timeout preserves action and gives visible retry feedback', async t =
   assert.equal(f.game.status.value, 'connected')
 })
 
-test('EOF after partial prose is incomplete and includes Turn-ID', async t => {
+test('EOF feedback hides technical identifiers while keeping internal diagnostics', async t => {
   const f = await fixture(t)
   f.route(async (_url, options) => options.method === 'POST' ? new Response(frame('chunk', { content: 'Unfinished sentence' }), { headers: { 'x-taleweaver-turn-id': 'turn-test' } }) : new Response(JSON.stringify(snapshot())))
   await f.game.sendMessage(action)
   assert.equal(f.game.turnError.value.action, action)
   assert.match(f.game.turnError.value.message, /incomplete/)
-  assert.match(f.game.turnError.value.message, /turn-test/)
+  assert.doesNotMatch(f.game.turnError.value.message, /turn-test|Turn-ID/)
+  assert.ok(f.game.debugLogs.value.some(entry => entry.content.includes('turn-test')))
+  assert.ok(f.notifications.every(([message]) => !message.includes('turn-test')))
+  assert.ok(f.game.messages.value.every(message => !message.content.includes('turn-test')))
   assert.ok(f.game.messages.value.some(m => m.content === 'Unfinished sentence'))
 })
 
@@ -186,3 +189,19 @@ for (const command of ['/playagent off', '/debug inventory']) {
     assert.equal(f.game.status.value, 'connected')
   })
 }
+
+
+test('system debug visibility follows snapshots independently of gameplay debug', async t => {
+  const f = await fixture(t)
+  assert.equal(f.game.systemDebugEnabled.value, false)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: true, sheet: { debug_mode: false } })))
+  await f.game.refreshSession()
+  assert.equal(f.game.systemDebugEnabled.value, true)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: false, sheet: { debug_mode: true } })))
+  await f.game.refreshSession()
+  assert.equal(f.game.systemDebugEnabled.value, false)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: true })))
+  await f.game.refreshSession()
+  f.game.disconnect()
+  assert.equal(f.game.systemDebugEnabled.value, false)
+})

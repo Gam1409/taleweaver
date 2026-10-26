@@ -209,6 +209,7 @@ const {
   worldRumors,
   statusText,
   debugLogs,
+  systemDebugEnabled,
   inventoryGlow,
   mapGlow,
   questGlow,
@@ -1676,6 +1677,7 @@ usePlayAgentAutoLoop()
       :input-locked="isActionInputBlocked"
       :sheet="sheet"
       :game-id="props.id"
+      :system-debug-enabled="systemDebugEnabled"
       :current-scene-image="currentSceneImage"
       :adventure-image="adventureImage"
       :current-scene-name="currentSceneName"

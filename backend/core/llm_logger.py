@@ -5,6 +5,7 @@ import os
 from typing import Any, Optional
 
 from backend.core.config import settings
+from backend.core.llm_diagnostics import bridge_event
 
 # Logs may be sensitive (system prompts, full LLM I/O). Prefer a dedicated
 # directory outside DATA_DIR (set LLM_LOG_DIR). When unset we fall back to
@@ -24,7 +25,7 @@ MAX_LOG_TEXT_LENGTH = 12000
 _TELEMETRY_ENABLED = bool(getattr(settings, "LLM_TELEMETRY_ENABLED", False))
 logger.info(
     "LLM telemetry log: %s (LLM_TELEMETRY_ENABLED=%s)",
-    "ENABLED — writing to %s" % LOG_FILE if _TELEMETRY_ENABLED else "DISABLED",
+    f"ENABLED — writing to {LOG_FILE}" if _TELEMETRY_ENABLED else "DISABLED",
     _TELEMETRY_ENABLED,
 )
 
@@ -62,8 +63,9 @@ def _write_entry(entry: dict[str, Any]) -> None:
 def log_structured_event(event_type: str, **fields: Any) -> None:
     """Appends a structured lifecycle event to the JSONL debug log.
 
-    No-op when LLM_TELEMETRY_ENABLED is False (the default).
+    Raw logging is disabled by default. Content-free system diagnostics are independent.
     """
+    bridge_event(event_type, fields)
     if not _TELEMETRY_ENABLED:
         return
     _write_entry(
@@ -73,6 +75,7 @@ def log_structured_event(event_type: str, **fields: Any) -> None:
             **fields,
         }
     )
+
 
 def log_llm_interaction(
     model: str,
@@ -96,6 +99,31 @@ def log_llm_interaction(
     False. The standard Python logging system (LOG_LEVEL) is independent and
     continues to emit its own messages to stdout/stderr.
     """
+    usage = raw_response.get("usage") if isinstance(raw_response, dict) else None
+    counts = (
+        {
+            key: usage.get(key)
+            for key in (
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "cached_prompt_tokens",
+            )
+        }
+        if isinstance(usage, dict)
+        else {}
+    )
+    bridge_event(
+        event_type,
+        {
+            "provider": provider,
+            "adventure_id": adventure_id,
+            "game_id": game_id,
+            "operation": operation,
+            "phase": phase,
+            **counts,
+        },
+    )
     if not _TELEMETRY_ENABLED:
         return
 
@@ -126,21 +154,25 @@ def log_llm_interaction(
         print(
             f"\n>>> [TOKEN USAGE] Phase: {phase or 'unknown'} | Model: {model} | "
             f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-            flush=True
+            flush=True,
         )
     else:
         try:
             import litellm
-            prompt_t = litellm.token_counter(model=model, messages=[
-                {"role": "system", "content": system_prompt or ""},
-                {"role": "user", "content": user_prompt or ""}
-            ])
+
+            prompt_t = litellm.token_counter(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt or ""},
+                    {"role": "user", "content": user_prompt or ""},
+                ],
+            )
             completion_t = litellm.token_counter(model=model, text=response_content or "")
             total_t = prompt_t + completion_t
             print(
                 f"\n>>> [TOKEN USAGE (ESTIMATED)] Phase: {phase or 'unknown'} | Model: {model} | "
                 f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-                flush=True
+                flush=True,
             )
         except Exception:
             prompt_t = int(len((system_prompt or "") + (user_prompt or "")) / 4)
@@ -149,5 +181,5 @@ def log_llm_interaction(
             print(
                 f"\n>>> [TOKEN USAGE (ESTIMATED FALLBACK)] Phase: {phase or 'unknown'} | Model: {model} | "
                 f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-                flush=True
+                flush=True,
             )

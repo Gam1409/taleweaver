@@ -552,6 +552,7 @@ class TranslateTextResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    system_debug_enabled: bool = False
     language: str = "English"
     messages: list[dict[str, Any]]
     sheet: dict[str, Any]

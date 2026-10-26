@@ -12,6 +12,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
+from backend.core.diagnostic_operations import diagnostic_job
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
@@ -329,6 +330,7 @@ async def _idle_step(session_id: str, user_id: str) -> bool:
         return await _process_claim(claim)
 
 
+@diagnostic_job("memory_maintenance")
 async def _run(session_id: str, user_id: str) -> None:
     while True:
         try:

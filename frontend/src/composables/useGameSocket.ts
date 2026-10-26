@@ -69,6 +69,7 @@ export interface UseGameSocket {
   refreshSuggestions: () => Promise<void>
   worldMemories: Ref<any[]>
   worldRumors: Ref<any[]>
+  systemDebugEnabled: Ref<boolean>
   debugLogs: Ref<{ timestamp: string, content: string }[]>
   inventoryGlow: Ref<boolean>
   mapGlow: Ref<boolean>
@@ -130,6 +131,7 @@ export function useGameSocket(): UseGameSocket {
   const promptSuggestions = ref<string[]>([])
   const worldMemories = ref<any[]>([])
   const worldRumors = ref<any[]>([])
+  const systemDebugEnabled = ref(false)
   const debugLogs = ref<{ timestamp: string, content: string }[]>([])
   const inventoryGlow = ref(false)
   const mapGlow = ref(false)
@@ -269,6 +271,9 @@ export function useGameSocket(): UseGameSocket {
 
   function applySessionSnapshot(data: any, updateMessages = true): void {
     if (!data) return
+    if (typeof data.system_debug_enabled === 'boolean') {
+      systemDebugEnabled.value = data.system_debug_enabled
+    }
 
     if (updateMessages && Array.isArray(data.messages)) {
       messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date() }))
@@ -372,6 +377,7 @@ export function useGameSocket(): UseGameSocket {
     lastUserAction.value = ''
     resetSuggestionsRequest()
     currentGameId = gameId
+    systemDebugEnabled.value = false
     status.value = 'loading'
     messages.value = []
     stopSyncTimer()
@@ -439,6 +445,7 @@ export function useGameSocket(): UseGameSocket {
     promptSuggestions.value = []
     worldMemories.value = []
     worldRumors.value = []
+    systemDebugEnabled.value = false
     debugLogs.value = []
   }
 
@@ -559,7 +566,7 @@ export function useGameSocket(): UseGameSocket {
     }
     const reportTurnError = (reason: string) => {
       if (!ownsRequest()) return
-      const detail = turnId ? `${reason} (Turn-ID: ${turnId})` : reason
+      const detail = reason
       _pushMessage('system', detail)
       addNotification(detail, 'error')
       if (normalizedContent) turnError.value = { message: detail, action: normalizedContent }
@@ -586,7 +593,7 @@ export function useGameSocket(): UseGameSocket {
         applySessionSnapshot(snapshot, true)
         turnError.value = null
         lastUserAction.value = ''
-        const detail = `${reason} The saved turn was recovered; do not repeat the action.${turnId ? ` (Turn-ID: ${turnId})` : ''}`
+        const detail = `${reason} The saved turn was recovered; do not repeat the action.`
         _pushMessage('system', detail)
         addNotification(detail, 'info')
         return
@@ -614,9 +621,6 @@ export function useGameSocket(): UseGameSocket {
           timestamp: new Date().toLocaleTimeString(),
           content: `Turn-ID: ${turnId}`
         })
-        if (sheet.value?.debug_mode) {
-          _pushMessage('system', `[DEBUG] Turn-ID: ${turnId}`, undefined, true)
-        }
       }
 
       if (res.status === 401 && authState.isAuthenticated) {
@@ -1058,6 +1062,7 @@ export function useGameSocket(): UseGameSocket {
     refreshSuggestions,
     worldMemories,
     worldRumors,
+    systemDebugEnabled,
     debugLogs,
     inventoryGlow,
     mapGlow,

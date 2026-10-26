@@ -9,6 +9,7 @@
 import { ref, computed } from 'vue'
 import { configState } from '@/store/config'
 import { audioService } from '@/services/audioService'
+import SessionDiagnosticsId from './SessionDiagnosticsId.vue'
 import GameClockWidget from '@/components/game/GameClockWidget.vue'
 import BableFishSelector from '@/components/game/BableFishSelector.vue'
 import {
@@ -33,6 +34,8 @@ const props = defineProps<{
   exp?: number
   mode?: 'rpg' | 'story' | 'chat' | 'vn'
   debugMode?: boolean
+  systemDebugEnabled?: boolean
+  sessionId?: string
 }>()
 
 const emit = defineEmits<{
@@ -157,6 +160,7 @@ const sequenceOrder = computed(() => {
             {{ props.copyright || `© ${props.creator}` }}
           </span>
         </div>
+        <SessionDiagnosticsId :enabled="!!props.systemDebugEnabled" :session-id="props.sessionId" />
       </div>
     </div>
 

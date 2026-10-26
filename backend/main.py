@@ -5,7 +5,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -13,8 +13,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
+from backend.api.routes.system_diagnostics import router as diagnostics_router
 from backend.core.config import settings
 from backend.core.database import run_db_migrations
+from backend.core.diagnostic_http import DiagnosticMiddleware, session_diagnostic_context
+from backend.core.system_diagnostics import service as diagnostic_service
 
 # Configure logging based on .env settings
 logging.basicConfig(
@@ -26,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 from typing import Optional
+
+
 def _safe_join(base_dir: str, *parts: str) -> Optional[str]:
     """Safely join path parts and ensure result stays inside base_dir."""
     base_abs = os.path.abspath(base_dir)
@@ -64,12 +69,17 @@ from backend.api.routes import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Manages application startup and shutdown lifecycle."""
+    diagnostic_service.initialize()
+    from backend.core.database import engine
+    from backend.core.diagnostic_db import install_diagnostics
+
+    install_diagnostics(engine)
     # Database schema is managed exclusively by Alembic.
     await asyncio.to_thread(run_db_migrations)
 
     # Auto-import adventures
-    from backend.core.database import AsyncSessionLocal
     from backend.api.routes.adventures.sessions import _cleanup_stale_empty_session_dirs
+    from backend.core.database import AsyncSessionLocal
     from backend.engine.adventure_importer import AdventureTemplateImporter
     
     async with AsyncSessionLocal() as db:
@@ -113,6 +123,7 @@ async def lifespan(_app: FastAPI):
         from backend.engine.dynamic_locations.images import shutdown as stop_location_images
 
         await stop_location_images()
+        diagnostic_service.close()
 
 
 app = FastAPI(
@@ -120,6 +131,7 @@ app = FastAPI(
     description="Backend API for the TaleWeaver text-adventure engine.",
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    dependencies=[Depends(session_diagnostic_context)],
 )
 
 
@@ -151,6 +163,7 @@ app.add_middleware(
 
 # Performance: Gzip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(DiagnosticMiddleware)
 
 # Allow the Vue.js frontend (dev server) to reach the API
 app.add_middleware(
@@ -197,6 +210,7 @@ async def add_security_headers(request, call_next):
     return response
 
 app.include_router(config_api.router, prefix="/api")
+app.include_router(diagnostics_router, prefix="/api")
 app.include_router(memory_settings.router, prefix="/api")
 app.include_router(memory_index.router, prefix="/api")
 app.include_router(adventures.router, prefix="/api")
@@ -225,6 +239,7 @@ os.makedirs("adventures", exist_ok=True)
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
+
 
 class SafeStaticFiles(StaticFiles):
     """Custom StaticFiles that blocks access to sensitive files like the database
