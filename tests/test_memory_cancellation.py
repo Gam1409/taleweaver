@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.core import database
-from backend.engine.memory_rag import scheduling, worker
+from backend.engine.memory_rag import dirty_queue, scheduling, worker
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.models.memory_rag import MemoryIndexState
 from tests.conftest import TestSessionLocal
@@ -28,8 +28,8 @@ def manager():
 async def test_cancelled_stream_does_not_start_new_transaction(monkeypatch):
     scheduler = scheduling.IdleScheduler(grace_seconds=0)
     monkeypatch.setattr(scheduling, "scheduler", scheduler)
-    update = AsyncMock()
-    monkeypatch.setattr(worker, "request_update", update)
+    update = MagicMock()
+    monkeypatch.setattr(dirty_queue, "queue_refresh", update)
 
     @scheduling.foreground_turn
     async def stream(manager):
@@ -42,15 +42,15 @@ async def test_cancelled_stream_does_not_start_new_transaction(monkeypatch):
         scope.cancel()
         with pytest.raises(asyncio.CancelledError):
             await anext(iterator)
-    update.assert_not_awaited()
+    update.assert_not_called()
     assert scheduler.active_turns == 0
 
 
 async def test_explicit_stream_close_does_not_queue_uncommitted_data(monkeypatch):
     scheduler = scheduling.IdleScheduler(grace_seconds=0)
     monkeypatch.setattr(scheduling, "scheduler", scheduler)
-    update = AsyncMock()
-    monkeypatch.setattr(worker, "request_update", update)
+    update = MagicMock()
+    monkeypatch.setattr(dirty_queue, "queue_refresh", update)
 
     @scheduling.foreground_turn
     async def stream(manager):
@@ -59,7 +59,7 @@ async def test_explicit_stream_close_does_not_queue_uncommitted_data(monkeypatch
     iterator = stream(manager())
     await anext(iterator)
     await iterator.aclose()
-    update.assert_not_awaited()
+    update.assert_not_called()
     assert scheduler.active_turns == 0
 
 
@@ -111,7 +111,7 @@ async def test_raw_task_cancellation_never_commits_or_schedules(monkeypatch):
         yield db
 
     monkeypatch.setattr(worker.database, "AsyncSessionLocal", factory)
-    monkeypatch.setattr(worker, "mark_dirty", AsyncMock(side_effect=asyncio.CancelledError()))
+    monkeypatch.setattr(worker, "_mark_dirty", AsyncMock(side_effect=asyncio.CancelledError()))
     schedule = MagicMock()
     monkeypatch.setattr(worker, "schedule", schedule)
     with pytest.raises(asyncio.CancelledError):

@@ -62,6 +62,8 @@ def run_db_migrations() -> None:
 
     logger.info("Applying Alembic migrations (head)...")
     alembic_cfg = Config(str(alembic_ini))
+    # Embedded migrations must preserve Uvicorn and application error/debug logging.
+    alembic_cfg.attributes["configure_logger"] = False
     command.upgrade(alembic_cfg, "head")
     logger.info("Alembic migrations completed successfully.")
 

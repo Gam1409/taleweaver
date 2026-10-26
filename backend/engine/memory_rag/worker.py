@@ -16,6 +16,7 @@ from backend.engine.memory_rag.documents import MemoryDocument, collect_document
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
+from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState
@@ -52,6 +53,12 @@ async def mark_dirty(
     except Exception as exc:
         if cancelled := find_cancellation(exc):
             raise cancelled from None
+        if is_sqlite_busy(exc):
+            from backend.engine.memory_rag.dirty_queue import queue_refresh
+
+            queue_refresh(session_id, user_id)
+            logger.debug("Memory queue write deferred while SQLite is busy for %s", session_id)
+            return
         logger.exception("Could not queue memory maintenance for session %s", session_id)
 
 
@@ -82,12 +89,16 @@ async def request_update(session_id: str, user_id: str) -> None:
                 session = await db.get(GameSession, session_id)
                 if session is None or session.user_id != user_id:
                     return
-                await mark_dirty(db, session_id, user_id, session.template_id)
+                # This session owns only the queue transaction: failures must reach
+                # the background retry loop after the session has been closed.
+                await _mark_dirty(db, session_id, user_id, session.template_id)
                 await db.commit()
             schedule(session_id, user_id)
         except Exception as exc:
             if cancelled := find_cancellation(exc):
                 raise cancelled from None
+            if is_sqlite_busy(exc):
+                raise
             logger.exception("Could not schedule memory maintenance for session %s", session_id)
 
 
@@ -321,6 +332,9 @@ def _finish(session_id: str, task: asyncio.Task) -> None:
 
 
 async def shutdown() -> None:
+    from backend.engine.memory_rag.dirty_queue import shutdown as stop_queue
+
+    await stop_queue()
     _wakeups.clear()
     tasks = list(_tasks.values())
     for task in tasks:

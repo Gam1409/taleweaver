@@ -72,12 +72,12 @@ scheduler = IdleScheduler()
 
 
 async def _queue_initialized_turn(manager: Any) -> None:
-    from backend.engine.memory_rag.worker import request_update
+    from backend.engine.memory_rag.dirty_queue import queue_refresh
 
     session_id = getattr(getattr(manager, "state", None), "session_id", None)
     user_id = getattr(getattr(manager, "user", None), "id", None)
     if session_id and user_id:
-        await request_update(session_id, user_id)
+        queue_refresh(session_id, user_id)
 
 
 @asynccontextmanager
