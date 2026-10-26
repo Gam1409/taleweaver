@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures import legacy_session_mutations
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import GameSessionResponse
 from backend.schemas.session import GameSessionUpdate
@@ -917,21 +918,8 @@ async def start_session_for_template(
 
 @router.post("/{template_id}/reset")
 async def reset_adventure(template_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Resets a template into a fresh state while preserving any already-generated image URLs on the template/world data."""
-    # Verify ownership
-    adv = await db.get(AdventureTemplate, template_id)
-    if not adv or adv.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Adventure template not found.")
+    return await legacy_session_mutations.reset_sessions(db, template_id, current_user.id)
 
-    # Remove session-bound rows and leave template-level images intact.
-    # Only delete rows that belong to active sessions (session_id IS NOT NULL).
-    await db.execute(delete(GameSession).where(GameSession.template_id == template_id))
-    await db.execute(delete(SessionState).where(SessionState.template_id == template_id))
-    await db.execute(delete(WorldEntity).where((WorldEntity.template_id == template_id) & (WorldEntity.session_id != None)))
-    await db.execute(delete(WorldScene).where((WorldScene.template_id == template_id) & (WorldScene.session_id != None)))
-    await db.execute(delete(WorldExit).where((WorldExit.template_id == template_id) & (WorldExit.session_id != None)))
-    await db.commit()
-    return {"status": "success"}
 
 @router.delete("/sessions/{game_id}", status_code=200)
 async def delete_session(game_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1393,41 +1381,7 @@ async def update_adventure_state(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Patches the most-recent active session state for a template (e.g. scene_id, in_game_time)."""
-    state_res = await db.execute(
-        select(SessionState)
-        .join(GameSession, GameSession.id == SessionState.session_id)
-        .where(
-            GameSession.template_id == template_id,
-            GameSession.user_id == current_user.id,
-            GameSession.status == "active",
-        )
-        .order_by(GameSession.created_at.desc())
-        .limit(1)
-    )
-    state = state_res.scalars().first()
-    if not state:
-        raise HTTPException(status_code=404, detail="No active session found for this adventure.")
-
-    if "scene_id" in payload:
-        state.current_scene_id = payload["scene_id"]
-    if "in_game_time" in payload:
-        state.in_game_time = payload["in_game_time"]
-
-    await db.commit()
-    await db.refresh(state)
-
-    game_session_res = await db.execute(
-        select(GameSession).where(GameSession.id == state.session_id)
-    )
-    game_session = game_session_res.scalars().first()
-
-    return {
-        "scene_id": state.current_scene_id,
-        "in_game_time": state.in_game_time or 0,
-        "is_paused": bool(game_session and game_session.status == "paused"),
-        "session_id": state.session_id,
-    }
+    return await legacy_session_mutations.update_state(db, template_id, current_user.id, payload)
 
 
 @router.post("/{template_id}/pause")
@@ -1436,21 +1390,9 @@ async def pause_adventure(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Pauses the most-recent active session for a template."""
-    session_res = await db.execute(
-        select(GameSession).where(
-            GameSession.template_id == template_id,
-            GameSession.user_id == current_user.id,
-            GameSession.status == "active",
-        ).order_by(GameSession.created_at.desc()).limit(1)
+    return await legacy_session_mutations.change_status(
+        db, template_id, current_user.id, "active", "paused"
     )
-    game_session = session_res.scalars().first()
-    if not game_session:
-        raise HTTPException(status_code=404, detail="No active session found for this adventure.")
-
-    game_session.status = "paused"
-    await db.commit()
-    return {"status": "paused", "game_id": game_session.id}
 
 
 @router.post("/{template_id}/resume")
@@ -1459,21 +1401,9 @@ async def resume_adventure(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Resumes the most-recently paused session for a template."""
-    session_res = await db.execute(
-        select(GameSession).where(
-            GameSession.template_id == template_id,
-            GameSession.user_id == current_user.id,
-            GameSession.status == "paused",
-        ).order_by(GameSession.created_at.desc()).limit(1)
+    return await legacy_session_mutations.change_status(
+        db, template_id, current_user.id, "paused", "active"
     )
-    game_session = session_res.scalars().first()
-    if not game_session:
-        raise HTTPException(status_code=404, detail="No paused session found for this adventure.")
-
-    game_session.status = "active"
-    await db.commit()
-    return {"status": "active", "game_id": game_session.id}
 
 
 async def _get_session_response(db: AsyncSession, game_id: str, current_user_id: str) -> GameSessionResponse:

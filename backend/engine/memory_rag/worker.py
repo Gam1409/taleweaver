@@ -7,13 +7,15 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from anyio import CancelScope
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
@@ -65,18 +67,20 @@ async def mark_dirty(
 async def _mark_dirty(
     db: AsyncSession, session_id: str, user_id: str, template_id: str | None
 ) -> None:
-    result = await db.execute(
-        update(MemoryIndexState)
-        .where(MemoryIndexState.session_id == session_id, MemoryIndexState.user_id == user_id)
-        .values(
-            template_id=template_id,
-            desired_revision=MemoryIndexState.desired_revision + 1,
+    statement = sqlite_insert(MemoryIndexState).values(
+        session_id=session_id, user_id=user_id, template_id=template_id
+    )
+    await db.execute(
+        statement.on_conflict_do_update(
+            index_elements=[MemoryIndexState.session_id],
+            set_={
+                "template_id": template_id,
+                "desired_revision": MemoryIndexState.desired_revision + 1,
+                "updated_at": func.now(),
+            },
+            where=MemoryIndexState.user_id == user_id,
         )
     )
-    if result.rowcount:
-        return
-    db.add(MemoryIndexState(session_id=session_id, user_id=user_id, template_id=template_id))
-    await db.flush()
 
 
 async def request_update(session_id: str, user_id: str) -> None:
@@ -102,6 +106,7 @@ async def request_update(session_id: str, user_id: str) -> None:
             logger.exception("Could not schedule memory maintenance for session %s", session_id)
 
 
+@retry_transaction
 async def _claim(session_id: str, user_id: str) -> Claim | None:
     async with database.AsyncSessionLocal() as db:
         row = await db.get(MemoryIndexState, session_id)
@@ -132,15 +137,17 @@ async def _claim(session_id: str, user_id: str) -> Claim | None:
 
 
 def _fence(claim: Claim) -> tuple:
+    # Expiry permits takeover; only a changed token/epoch revokes this writer.
+    # A completed batch may wait behind a long foreground turn past its lease.
     return (
         MemoryIndexState.session_id == claim.session_id,
         MemoryIndexState.user_id == claim.user_id,
         MemoryIndexState.epoch == claim.epoch,
         MemoryIndexState.lease_token == claim.token,
-        MemoryIndexState.lease_until > time.time(),
     )
 
 
+@retry_transaction
 async def _release(claim: Claim, **values: object) -> None:
     async with database.AsyncSessionLocal() as db:
         await db.execute(
@@ -182,6 +189,7 @@ async def _summarize(claim: Claim, *, chronicle: bool) -> bool:
         return await summarize(db, user, state, epoch=claim.epoch, lease_token=claim.token)
 
 
+@retry_transaction
 async def _write_batch(
     claim: Claim, signature: str, documents: list[MemoryDocument], vectors: list[list[float]]
 ) -> bool:
@@ -225,6 +233,7 @@ async def _index_batch(claim: Claim, user: User, documents: list[MemoryDocument]
     return await _write_batch(claim, signature, batch, vectors)
 
 
+@retry_transaction
 async def _complete(claim: Claim, documents: list[MemoryDocument]) -> None:
     async with database.AsyncSessionLocal() as db:
         fenced = await db.execute(
@@ -265,6 +274,11 @@ async def _failed(claim: Claim) -> None:
     failures = _failures.get(claim.session_id, 0) + 1
     _failures[claim.session_id] = failures
     delay = min(RETRY_SECONDS * (2 ** min(failures - 1, 4)), 900)
+    await _record_failure(claim, delay)
+
+
+@retry_transaction
+async def _record_failure(claim: Claim, delay: float) -> None:
     async with database.AsyncSessionLocal() as db:
         await db.execute(
             update(MemoryIndexState)
@@ -288,9 +302,20 @@ async def _process_claim(claim: Claim) -> bool:
         await _release(claim)
         return True
     except asyncio.CancelledError:
-        await _release(claim)
+        try:
+            await _release(claim)
+        except Exception:
+            logger.exception("Could not release cancelled memory claim for %s", claim.session_id)
         raise
-    except Exception:
+    except Exception as exc:
+        if cancelled := find_cancellation(exc):
+            raise cancelled from None
+        if is_sqlite_busy(exc):
+            logger.debug(
+                "Deferring memory maintenance while SQLite is busy for %s", claim.session_id
+            )
+            await _release(claim)
+            return True
         logger.exception("Memory maintenance failed for session %s", claim.session_id)
         await _failed(claim)
         return False
@@ -305,8 +330,15 @@ async def _idle_step(session_id: str, user_id: str) -> bool:
 
 
 async def _run(session_id: str, user_id: str) -> None:
-    while await _idle_step(session_id, user_id):
-        pass
+    while True:
+        try:
+            if not await _idle_step(session_id, user_id):
+                return
+        except Exception as exc:
+            if not is_sqlite_busy(exc):
+                raise
+            logger.debug("Deferring memory worker while SQLite is busy for %s", session_id)
+            await asyncio.sleep(RETRY_SECONDS)
 
 
 def schedule(session_id: str, user_id: str) -> None:

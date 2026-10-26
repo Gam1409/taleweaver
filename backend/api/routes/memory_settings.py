@@ -39,10 +39,10 @@ def public_settings(user: User) -> dict:
     }
 
 
-async def settings_owner(db: AsyncSession, user: User) -> User:
+async def settings_owner(db: AsyncSession, user: User, *, for_update: bool = False) -> User:
     from backend.api.routes.config_api import _resolve_global_settings_owner
 
-    return await _resolve_global_settings_owner(db, user)
+    return await _resolve_global_settings_owner(db, user, for_update=for_update)
 
 
 @router.get("")
@@ -60,7 +60,7 @@ async def save_memory_settings(
 ) -> dict:
     from backend.api.routes.config_api import _broadcast_global_settings
 
-    owner = await settings_owner(db, user)
+    owner = await settings_owner(db, user, for_update=True)
     before = read_settings(owner).model_dump()
     after = payload.public_config()
     owner.llm_settings = {**(owner.llm_settings or {}), "memory_rag": after}
@@ -70,11 +70,11 @@ async def save_memory_settings(
     if payload.api_key and payload.api_key.strip():
         keys["memory_embeddings"] = encryption_util.encrypt_key(payload.api_key.strip())
     owner.encrypted_api_keys = keys
-    await _broadcast_global_settings(db, owner)
+    await _broadcast_global_settings(db, owner, fields=("llm_settings", "encrypted_api_keys"))
     rows = await ensure_index_states(db)
     if before != after or payload.api_key or payload.clear_api_key:
         for row in rows:
-            invalidate(row)
+            await invalidate(db, row)
     result = public_settings(owner)
     # Keep source IDs available with expire_on_commit sessions.
     scheduling = [(row.session_id, row.user_id, row.paused) for row in rows]

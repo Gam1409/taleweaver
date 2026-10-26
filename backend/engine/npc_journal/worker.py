@@ -5,6 +5,7 @@ import logging
 import time
 
 from backend.core import database
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import queue
 from backend.engine.npc_journal.apply import apply_extraction
@@ -26,19 +27,15 @@ async def process_message(message_id: str, user_id: str) -> bool:
     """Claim once; retries re-read current NPC rows before applying facts."""
     task = None
     try:
+        prepared = await _prepare(message_id, user_id)
+        if prepared is None:
+            return False
+        user, session, task, original_content = prepared
         async with database.AsyncSessionLocal() as db:
             message = await db.get(ChatMessage, message_id)
-            if message is None or message.role != "assistant":
-                return False
-            session = await db.get(GameSession, message.session_id)
-            user = await db.get(User, user_id)
-            if session is None or session.user_id != user_id or user is None:
-                return False
-            task = await queue.claim(db, message)
-            if task is None:
+            if message is None:
                 return False
             payload, player_name = await extraction_context(db, message, session)
-            original_content = message.content
         result = await _extract_when_idle(user, session, message_id, payload, task)
         created = await _save(message_id, original_content, player_name, result, task["token"])
         if created is None:
@@ -48,7 +45,10 @@ async def process_message(message_id: str, user_id: str) -> bool:
         return True
     except asyncio.CancelledError:
         if task:
-            await _fail(message_id, task, interrupted=True)
+            try:
+                await _fail(message_id, task, interrupted=True)
+            except Exception:
+                logger.exception("Could not release interrupted journal task %s", message_id)
         raise
     except Exception:
         logger.exception("NPC journal extraction failed for message %s", message_id)
@@ -57,8 +57,25 @@ async def process_message(message_id: str, user_id: str) -> bool:
         return False
 
 
+@retry_transaction
+async def _prepare(message_id: str, user_id: str) -> tuple[User, GameSession, dict, str] | None:
+    async with database.AsyncSessionLocal() as db:
+        message = await db.get(ChatMessage, message_id)
+        if message is None or message.role != "assistant":
+            return None
+        session = await db.get(GameSession, message.session_id)
+        user = await db.get(User, user_id)
+        if session is None or session.user_id != user_id or user is None:
+            return None
+        original_content = message.content
+        task = await queue.claim(db, message)
+        if task is None:
+            return None
+        return user, session, task, original_content
+
+
 async def _extract_when_idle(
-    user: User, session: GameSession, message_id: str, payload: dict, task: dict
+    user: User, session: GameSession, message_id: str, payload: str, task: dict
 ) -> JournalExtraction | None:
     if not scheduler.can_start_background():
         await _defer(message_id, task)
@@ -68,6 +85,7 @@ async def _extract_when_idle(
     )
 
 
+@retry_transaction
 async def _save(
     message_id: str,
     original_content: str,
@@ -104,6 +122,7 @@ async def _save(
         return created
 
 
+@retry_transaction
 async def _defer(message_id: str, task: dict) -> None:
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
@@ -117,6 +136,7 @@ async def _defer(message_id: str, task: dict) -> None:
         await db.commit()
 
 
+@retry_transaction
 async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> None:
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
@@ -134,6 +154,12 @@ async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> No
         await db.commit()
 
 
+@retry_transaction
+async def _next_message(session_id: str) -> str | None:
+    async with database.AsyncSessionLocal() as db:
+        return await queue.next_message(db, session_id)
+
+
 async def _run(session_id: str, user_id: str) -> None:
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return
@@ -142,8 +168,7 @@ async def _run(session_id: str, user_id: str) -> None:
     consecutive_failures = 0
     while True:
         async with scheduler.background():
-            async with database.AsyncSessionLocal() as db:
-                message_id = await queue.next_message(db, session_id)
+            message_id = await _next_message(session_id)
             if message_id is None:
                 return
             success = await process_message(message_id, user_id)

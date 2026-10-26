@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.engine.memory_rag.embeddings import validate_vectors
+from backend.engine.memory_rag.storage_tasks import mutate_storage
 from backend.engine.memory_rag.store_schema import (
     Scope,
     hybrid_rank,
@@ -58,7 +59,7 @@ class LanceMemoryStore:
         return connection.open_table(name) if name in _table_names(connection) else None
 
     async def upsert(self, scope: Scope, documents: list[dict], vectors: list[list[float]]) -> None:
-        await asyncio.to_thread(self._upsert, scope, documents, vectors)
+        await mutate_storage(self._upsert, scope, documents, vectors)
 
     def _upsert(self, scope: Scope, documents: list[dict], vectors: list[list[float]]) -> None:
         validated = validate_vectors(vectors, len(documents))
@@ -139,7 +140,7 @@ class LanceMemoryStore:
         return {record["id"]: record["source_hash"] for record in records}
 
     async def prune(self, scope: Scope, valid_ids: list[str] | set[str]) -> int:
-        return await asyncio.to_thread(self._prune, scope, set(valid_ids))
+        return await mutate_storage(self._prune, scope, set(valid_ids))
 
     def _prune(self, scope: Scope, valid_ids: set[str]) -> int:
         with _WRITE_LOCK:
@@ -157,9 +158,7 @@ class LanceMemoryStore:
             return len(obsolete)
 
     async def delete_scope(self, scope: Scope) -> int:
-        return await asyncio.to_thread(
-            self._delete, scope_filter(scope), table_name(scope.signature)
-        )
+        return await mutate_storage(self._delete, scope_filter(scope), table_name(scope.signature))
 
     async def prune_generations(self, scope: Scope) -> int:
         """Remove superseded generations while the caller holds the SQL epoch fence."""
@@ -169,15 +168,15 @@ class LanceMemoryStore:
             f" AND (epoch < {scope.epoch} OR"
             f" (epoch = {scope.epoch} AND signature != {literal(scope.signature)}))"
         )
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def delete_session(self, user_id: str, session_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND session_id = {literal(session_id)}"
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def delete_template(self, user_id: str, template_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND template_id = {literal(template_id)}"
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def count_template(self, user_id: str, template_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND template_id = {literal(template_id)}"

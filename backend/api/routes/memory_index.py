@@ -79,7 +79,7 @@ async def reset_index(db: AsyncSession, user: User, template_id: str, *, paused:
     await owned_template(db, user, template_id)
     rows = await ensure_index_states(db, user_id=user.id, template_id=template_id)
     for row in rows:
-        invalidate(row, paused=True)
+        await invalidate(db, row, paused=True)
     # Publish generation fences before any physical deletion or worker rescheduling.
     await db.commit()
     for row in rows:

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select, update
 
+from backend.core import database
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.documents import (
     MemoryDocument,
@@ -15,8 +16,10 @@ from backend.engine.memory_rag.documents import (
     sources_hash,
     summary_sources,
 )
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.models.memory_rag import MemoryIndexState, MemorySummary
+from backend.models.session_state import SessionState
 
 MIN_NEW_EVENTS = 8
 MAX_EVENTS = 24
@@ -169,22 +172,34 @@ async def summarize_one_group(
     )
     if not text or not text.strip():
         raise ValueError("Memory summary model returned no text.")
-    if not await lock_fence(db, session_id, epoch, lease_token):
+    return await _save_summary(session_id, user_id, epoch, lease_token, job, text)
+
+
+@retry_transaction
+async def _save_summary(
+    session_id: str, user_id: str, epoch: int, lease_token: str, job: SummaryJob, text: str
+) -> bool:
+    """Retry only persistence; every attempt checks the current lease and source text."""
+    async with database.AsyncSessionLocal() as db:
+        if not await lock_fence(db, session_id, epoch, lease_token):
+            return True
+        state = await db.scalar(select(SessionState).where(SessionState.session_id == session_id))
+        if state is None:
+            return True
+        documents = await collect_documents(db, state, user_id)
+        sources = summary_sources(documents, job.layer, job.npc_id, job.scene_id)
+        if sources_hash(sources, job.message_ids) != job.source_hash:
+            return True
+        row = MemorySummary(
+            session_id=session_id,
+            user_id=user_id,
+            layer=job.layer,
+            npc_id=job.npc_id,
+            scene_id=job.scene_id,
+        )
+        db.add(row)
+        row.text = text.strip()[:6000]
+        row.source_message_ids = job.message_ids
+        row.source_hash = job.source_hash
+        await db.commit()
         return True
-    documents = await collect_documents(db, state, user_id)
-    sources = summary_sources(documents, job.layer, job.npc_id, job.scene_id)
-    if sources_hash(sources, job.message_ids) != job.source_hash:
-        return True
-    row = MemorySummary(
-        session_id=session_id,
-        user_id=user_id,
-        layer=job.layer,
-        npc_id=job.npc_id,
-        scene_id=job.scene_id,
-    )
-    db.add(row)
-    row.text = text.strip()[:6000]
-    row.source_message_ids = job.message_ids
-    row.source_hash = job.source_hash
-    await db.commit()
-    return True

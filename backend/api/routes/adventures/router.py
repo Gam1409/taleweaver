@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
@@ -19,6 +19,7 @@ from backend.api.routes.adventures.npc_card_settings import router as npc_card_s
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
+from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.session_npcs import router as session_npcs_router
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
@@ -37,7 +38,7 @@ router.include_router(assets_router)
 router.include_router(visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
-router.include_router(sessions_router)
+router.include_router(sessions_router, dependencies=[Depends(session_mutation_lease)])
 router.include_router(session_exports_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
@@ -54,7 +55,7 @@ router.include_router(generation_resume_router)
 router.include_router(templates_router)
 
 # 7. Gameplay (parameterized paths like /{game_id}/chat)
-router.include_router(gameplay_router)
+router.include_router(gameplay_router, dependencies=[Depends(session_mutation_lease)])
 router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)

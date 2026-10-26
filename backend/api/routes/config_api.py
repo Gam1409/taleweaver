@@ -81,29 +81,37 @@ _CATALOG_EXT_BY_CONTENT_TYPE = {
 }
 
 
-async def _resolve_global_settings_owner(db: AsyncSession, fallback_user: User) -> User:
-    """Return the user that acts as global settings source (prefer admin)."""
+async def _resolve_global_settings_owner(
+    db: AsyncSession, fallback_user: User, *, for_update: bool = False
+) -> User:
+    """Return the global settings owner, optionally locking JSON merges against stale reads."""
     admin_res = await db.execute(select(User).where(User.role == "admin").limit(1))
-    admin_user = admin_res.scalars().first()
-    return admin_user or fallback_user
+    owner = admin_res.scalars().first() or fallback_user
+    if for_update:
+        # SQLite has no SELECT FOR UPDATE. Own the write lock before re-reading the
+        # shared JSON columns; the caller commits immediately after its settings save.
+        await db.execute(update(User).where(User.id == owner.id).values(id=owner.id))
+        await db.refresh(owner, attribute_names=["llm_settings", "encrypted_api_keys"])
+    return owner
 
 
-async def _broadcast_global_settings(db: AsyncSession, source_user: User) -> None:
-    """Copy global settings from source user to all users efficiently."""
-    # Using a bulk update is much better for SQLite to avoid lock contention
-    # and memory overhead of fetching all user objects.
-    await db.execute(
-        update(User).values(
-            encrypted_api_keys=dict(source_user.encrypted_api_keys or {}),
-            llm_settings=dict(source_user.llm_settings or {}),
-            t2i_settings=dict(source_user.t2i_settings or {}),
-            image_styles_catalog=list(source_user.image_styles_catalog or []),
-            tone_catalog=list(source_user.tone_catalog or []),
-            game_settings=dict(source_user.game_settings or {}),
-            tts_settings=dict(source_user.tts_settings or {}),
-        )
-    )
-    # No need to loop and modify objects manually
+async def _broadcast_global_settings(
+    db: AsyncSession, source_user: User, *, fields: tuple[str, ...]
+) -> None:
+    """Broadcast only explicitly edited settings, preserving concurrent edits elsewhere."""
+    allowed = {
+        "encrypted_api_keys",
+        "llm_settings",
+        "t2i_settings",
+        "image_styles_catalog",
+        "tone_catalog",
+        "game_settings",
+        "tts_settings",
+    }
+    if not fields or not set(fields) <= allowed:
+        raise ValueError("Invalid global settings fields.")
+    values = {field: getattr(source_user, field) for field in fields}
+    await db.execute(update(User).values(**values))
 
 
 def _slugify(value: str) -> str:
@@ -825,7 +833,7 @@ async def update_api_key(
             detail=f"The API key for {payload.provider} is managed via environment variables and cannot be modified here.",
         )
 
-    user = await _resolve_global_settings_owner(db, current_user)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
 
     normalized_api_key = (payload.api_key or "").strip()
     if (
@@ -845,7 +853,7 @@ async def update_api_key(
     new_keys[provider_lower] = encrypted_key
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
     await db.commit()
     return {"status": "success", "message": f"{payload.provider} key saved securely."}
 
@@ -868,7 +876,7 @@ async def delete_api_key(
             detail=f"The API key for {provider} is managed via environment variables and cannot be deleted here.",
         )
 
-    user = await _resolve_global_settings_owner(db, current_user)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
     logger.info("[Admin] Settings owner resolved for delete operation")
 
     current_keys = user.encrypted_api_keys or {}
@@ -882,7 +890,7 @@ async def delete_api_key(
     del new_keys[provider_lower]
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
     await db.commit()
     logger.info("[Admin] Successfully removed key for %s", provider_lower)
     return {"status": "success", "message": f"{provider} key removed."}
@@ -895,18 +903,17 @@ async def update_llm_settings(
     current_user: User = Depends(get_current_admin),
 ):
     """Updates the LLM model preferences."""
-    user = await _resolve_global_settings_owner(db, current_user)
-
     from backend.core.custom_openai import validate_custom_url
 
     validate_role_urls(payload, _safe_provider_url)
     if payload.custom_openai_url:
         payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
     retained_memory = (user.llm_settings or {}).get("memory_rag")
     user.llm_settings = _normalize_llm_settings(payload.model_dump())
     if retained_memory is not None:
         user.llm_settings = {**user.llm_settings, "memory_rag": retained_memory}
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("llm_settings",))
     await db.commit()
     return {"status": "success", "message": "LLM settings updated."}
 
@@ -925,7 +932,7 @@ async def update_t2i_settings(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     user.t2i_settings = _normalize_t2i_settings(payload.model_dump())
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("t2i_settings",))
     await db.commit()
     return {"status": "success", "message": "Image generation settings updated."}
 
@@ -942,7 +949,7 @@ async def update_tts_settings(
     # Use full model dump to capture all fields from the UI, then normalize.
     user.tts_settings = _normalize_tts_settings(payload.model_dump())
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("tts_settings",))
     await db.commit()
     return {"status": "success", "message": "TTS settings updated."}
 
@@ -1205,7 +1212,7 @@ async def update_image_styles_catalog(
     user.image_styles_catalog = _normalize_catalog(
         raw_items, fallback=_default_image_styles_catalog()
     )
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("image_styles_catalog",))
     await db.commit()
     return {"status": "success", "message": "Image styles catalog updated."}
 
@@ -1221,7 +1228,7 @@ async def update_tone_catalog(
 
     raw_items = [item.model_dump() for item in payload.items]
     user.tone_catalog = _normalize_catalog(raw_items, fallback=_default_tone_catalog())
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("tone_catalog",))
     await db.commit()
     return {"status": "success", "message": "Tone catalog updated."}
 
@@ -1342,7 +1349,7 @@ async def update_game_settings(
     user = await _resolve_global_settings_owner(db, current_user)
 
     user.game_settings = payload.model_dump()
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("game_settings",))
     await db.commit()
     return {"status": "success", "message": "Game settings updated."}
 

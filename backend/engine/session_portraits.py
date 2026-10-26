@@ -8,11 +8,11 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
-from backend.core import prompts
+from backend.core import database, prompts
 from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.clothing.frames import compose_frame, extract_frame
@@ -20,6 +20,7 @@ from backend.engine.clothing.visuals import npc_visuals, portrait_description
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.npc_journal.records import memory_context
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
@@ -134,19 +135,35 @@ def _image_request(
     }
 
 
-async def _save_portrait(
-    db: AsyncSession, session_id: str, target_id: str, user_id: str, image_url: str
-) -> None:
-    # Re-read after the slow generation; only the portrait changes, never stale HP or location.
-    state, npc = await _context(db, session_id, target_id, user_id)
-    npc.image_url = image_url
-    key = _override_key(state, target_id)
-    override = (state.entity_states or {}).get(key)
-    if isinstance(override, dict) and "image_url" in override:
-        overrides = deepcopy(state.entity_states)
-        overrides[key]["image_url"] = image_url
-        state.entity_states = overrides
-    await db.commit()
+@retry_transaction
+async def _try_save_portrait(session_id: str, target_id: str, user_id: str, image_url: str) -> bool:
+    # A fresh transaction checks ownership and merges only the image field.
+    async with database.AsyncSessionLocal() as db:
+        state, npc = await _context(db, session_id, target_id, user_id)
+        key = _override_key(state, target_id)
+        override = (state.entity_states or {}).get(key)
+        if isinstance(override, dict) and "image_url" in override:
+            before = deepcopy(state.entity_states)
+            overrides = deepcopy(before)
+            overrides[key]["image_url"] = image_url
+            updated = await db.execute(
+                update(SessionState)
+                .where(SessionState.id == state.id, SessionState.entity_states == before)
+                .values(entity_states=overrides)
+                .execution_options(synchronize_session=False)
+            )
+            if updated.rowcount != 1:
+                return False
+        npc.image_url = image_url
+        await db.commit()
+        return True
+
+
+async def _save_portrait(session_id: str, target_id: str, user_id: str, image_url: str) -> None:
+    for _attempt in range(3):
+        if await _try_save_portrait(session_id, target_id, user_id, image_url):
+            return
+    raise HTTPException(409, "The session changed while saving the portrait. Try again.")
 
 
 async def _portrait_facts(db, state, npc, override: dict) -> tuple[dict, dict | None]:
@@ -207,7 +224,7 @@ async def regenerate_session_portrait(
         )
         if not image_url:
             raise HTTPException(502, "No portrait was returned. The previous image was kept.")
-        await _save_portrait(db, session_id, payload.target_id, user_id, image_url)
+        await _save_portrait(session_id, payload.target_id, user_id, image_url)
     except TimeoutError as exc:
         raise HTTPException(
             504,

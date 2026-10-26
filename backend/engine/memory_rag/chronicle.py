@@ -6,8 +6,10 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core import database
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.documents import content_hash
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.summaries import (
     MAX_EVENTS,
@@ -17,6 +19,7 @@ from backend.engine.memory_rag.summaries import (
     lock_fence,
 )
 from backend.models.chat import ChatMessage
+from backend.models.session_state import SessionState
 
 
 def _bounded(rows: list[ChatMessage], history: dict) -> dict | None:
@@ -119,21 +122,40 @@ async def compress_history_one_group(
     )
     if not summary or not summary.strip():
         raise ValueError("Chronicle compression model returned no text.")
-    if not await lock_fence(db, session_id, epoch, lease_token, allow_paused=True):
+    return await _save_chronicle(
+        session_id, epoch, lease_token, history_hash, batch_hash, batch, summary
+    )
+
+
+@retry_transaction
+async def _save_chronicle(
+    session_id: str,
+    epoch: int,
+    lease_token: str,
+    history_hash: str,
+    batch_hash: str,
+    batch: dict,
+    summary: str,
+) -> bool:
+    """Recheck the source cursor and history in a fresh transaction after contention."""
+    async with database.AsyncSessionLocal() as db:
+        if not await lock_fence(db, session_id, epoch, lease_token, allow_paused=True):
+            return True
+        state = await db.scalar(select(SessionState).where(SessionState.session_id == session_id))
+        if state is None:
+            return True
+        if (
+            not state.enable_history_compression
+            or content_hash(state.compressed_history) != history_hash
+            or content_hash(await _batch(db, state)) != batch_hash
+        ):
+            return True
+        state.compressed_history = {
+            "summary": summary.strip(),
+            "last_compressed_msg_id": batch["last_compressed_msg_id"],
+            "pending_message_id": batch["pending_message_id"],
+            "pending_offset": batch["pending_offset"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.commit()
         return True
-    await db.refresh(state)
-    if (
-        not state.enable_history_compression
-        or content_hash(state.compressed_history) != history_hash
-        or content_hash(await _batch(db, state)) != batch_hash
-    ):
-        return True
-    state.compressed_history = {
-        "summary": summary.strip(),
-        "last_compressed_msg_id": batch["last_compressed_msg_id"],
-        "pending_message_id": batch["pending_message_id"],
-        "pending_offset": batch["pending_offset"],
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.commit()
-    return True

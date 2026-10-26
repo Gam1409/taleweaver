@@ -36,7 +36,10 @@ from backend.api.routes.adventures.schemas import (
     TranslateTextResponse,
 )
 from backend.api.routes.adventures.session_debug_payload import build_session_debug_payload
-from backend.api.routes.adventures.session_language import initialize_content_language
+from backend.api.routes.adventures.session_language import (
+    initialize_content_language,
+    resolve_content_language,
+)
 from backend.api.routes.adventures.unlock_service import (
     SwitchFlipRunner,
     add_system_message,
@@ -165,15 +168,21 @@ async def get_chat_history(
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
     avatar = cv_res.scalars().first()
 
-    map_dict = await build_session_map(db, state)
+    read_only = bool(db.info.get("snapshot_read_only"))
+    map_dict = await build_session_map(db, state, read_only=read_only)
     entities = await AdventureLogic.build_session_entities(db, state)
     scene_image = await AdventureLogic.resolve_scene_image(db, state, state.current_scene_id)
     pending_terminal_epilogue, input_locked = _terminal_flags_from_state(state)
     full_world_debug = await load_full_world_debug(db, state, include_full_world)
-    language = initialize_content_language(state, current_user, adventure)
-    await db.commit()
-    prompt_suggestions = await resolve_prompt_suggestions(db, state, current_user)
-    await apply_pending_sequence_progress(db, state, adventure, avatar)
+    language = resolve_content_language(state, current_user, adventure)
+    if not read_only:
+        language = initialize_content_language(state, current_user, adventure)
+        await db.commit()
+    prompt_suggestions = await resolve_prompt_suggestions(
+        db, state, current_user, read_only=read_only
+    )
+    if not read_only:
+        await apply_pending_sequence_progress(db, state, adventure, avatar)
     history = await load_chat_history(db, state.session_id)
     schedule_npc_journal(state.session_id, current_user.id)
     from backend.engine.memory_rag.worker import schedule as schedule_memory

@@ -9,8 +9,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core import database
 from backend.engine.image_profiles import image_timeout
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.models.session_state import SessionState
 from backend.models.user import User
 
@@ -52,11 +54,19 @@ async def _try_attach(
     return True
 
 
+@retry_transaction
+async def _attach_once(
+    session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+) -> bool:
+    async with database.AsyncSessionLocal() as db:
+        return await _try_attach(db, session_id, message_id, owner_id, snapshot, url)
+
+
 async def _attach(
-    db: AsyncSession, session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
 ) -> None:
     for _attempt in range(3):
-        if await _try_attach(db, session_id, message_id, owner_id, snapshot, url):
+        if await _attach_once(session_id, message_id, owner_id, snapshot, url):
             return
     raise HTTPException(409, "The session changed while attaching the illustration. Try again.")
 
@@ -78,7 +88,7 @@ async def generate_scene_illustration(
         )
         if not url:
             raise HTTPException(502, "No illustration was returned. Any previous image was kept.")
-        await _attach(db, session_id, payload.message_id, owner_id, snapshot, url)
+        await _attach(session_id, payload.message_id, owner_id, snapshot, url)
     except TimeoutError as exc:
         raise HTTPException(
             504, "Illustration generation timed out. A remote task may still be running."

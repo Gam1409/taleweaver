@@ -212,6 +212,7 @@ async def test_legacy_compression_runs_while_vectors_paused(journal_world, monke
             db, SimpleNamespace(id=state.user_id), state, epoch=0, lease_token="lease"
         )
         assert "An older promise." in model.aexecute_simple_task.call_args.kwargs["user_prompt"]
+        await db.refresh(state, attribute_names=["compressed_history"])
         assert state.compressed_history["summary"] == "An updated chronicle."
 
 

@@ -1,13 +1,16 @@
 """Regenerate one owned visual with a common profile and optional local reference."""
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import inspect, select, update
 
+from backend.core import database
 from backend.core.comfyui_config import prompt_rules
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.story_visual_presets import story_t2i
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
 from backend.utils.path_security import (
@@ -69,6 +72,10 @@ async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
         "style_instruction": style,
         "use_advanced_model": advanced,
     }
+    source = _source(adventure, target, field)
+    template_id, user_id = adventure.id, user.id
+    # No transaction or write lock is retained while a remote provider runs.
+    await db.commit()
     if payload.target_type == "cover":
         image_url = await MediaEngine.generate_adventure_cover(
             title=adventure.title,
@@ -96,9 +103,62 @@ async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
         image_url = await _generate_target(payload, target, prompt, common)
     if not image_url:
         raise ValueError("The image provider returned no image. The previous image was kept.")
-    setattr(target, field, image_url)
-    await db.commit()
+    await _save_visual(template_id, user_id, payload, source, image_url)
     return {"status": "success", "image_url": image_url}
+
+
+def _source(adventure, target, field: str) -> dict:
+    return {
+        "identity": inspect(target).identity,
+        "updated_at": target.updated_at,
+        "image": getattr(target, field),
+        "template_updated_at": adventure.updated_at,
+    }
+
+
+@retry_transaction
+async def _save_visual(
+    template_id: str, user_id: str, payload, source: dict, image_url: str
+) -> None:
+    async with database.AsyncSessionLocal() as db:
+        adventure = await db.get(AdventureTemplate, template_id)
+        if adventure is None or adventure.owner_id != user_id:
+            raise HTTPException(404, "Adventure template not found.")
+        target, field = await _target(db, adventure, payload)
+        if _source(adventure, target, field) != source:
+            raise HTTPException(
+                409, "The visual target changed while generating. The current image was kept."
+            )
+        model = type(target)
+        primary_keys = inspect(model).primary_key
+        owned = (
+            select(AdventureTemplate.id)
+            .where(
+                AdventureTemplate.id == template_id,
+                AdventureTemplate.owner_id == user_id,
+                AdventureTemplate.updated_at == source["template_updated_at"],
+            )
+            .exists()
+        )
+        changed = await db.execute(
+            update(model)
+            .where(
+                *(
+                    column == value
+                    for column, value in zip(primary_keys, source["identity"], strict=True)
+                ),
+                model.updated_at == source["updated_at"],
+                getattr(model, field) == source["image"],
+                owned,
+            )
+            .values(**{field: image_url})
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount != 1:
+            raise HTTPException(
+                409, "The visual target changed while saving. The current image was kept."
+            )
+        await db.commit()
 
 
 async def _generate_target(payload, target, prompt: str, common: dict):

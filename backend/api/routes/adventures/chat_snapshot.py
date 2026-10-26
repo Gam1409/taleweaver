@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -19,6 +20,7 @@ from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldExit
+from backend.models.world_map import WorldMap
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +34,21 @@ async def load_chat_history(db: AsyncSession, session_id: str) -> list[dict[str,
     return [m.to_client_dict() for m in chat_res.scalars().all()]
 
 
-async def build_session_map(db: AsyncSession, state: SessionState) -> dict[str, Any] | None:
+async def build_session_map(
+    db: AsyncSession, state: SessionState, *, read_only: bool = False
+) -> dict[str, Any] | None:
     """Canonical template map (shared by all sessions) augmented with adjacent unvisited scenes."""
-    world_map = await AdventureLogic.get_or_create_map(db, state.template_id)
+    if read_only:
+        world_map = await db.scalar(
+            select(WorldMap).where(
+                WorldMap.template_id == state.template_id, WorldMap.session_id.is_(None)
+            )
+        )
+    else:
+        world_map = await AdventureLogic.get_or_create_map(db, state.template_id)
     if not world_map:
         return None
-    map_dict = MapEngine.to_dict(world_map)
+    map_dict = deepcopy(MapEngine.to_dict(world_map))
     map_dict["current_scene_id"] = MapEngine._safe_id(state.current_scene_id)
     # Heal stale image_url values (e.g. from deleted sessions) in the map nodes
     for node in map_dict.get("nodes", {}).values():
@@ -69,10 +80,12 @@ async def load_full_world_debug(db: AsyncSession, state: SessionState, requested
 
 
 async def resolve_prompt_suggestions(
-    db: AsyncSession, state: SessionState, current_user: User
+    db: AsyncSession, state: SessionState, current_user: User, *, read_only: bool = False
 ) -> list[str]:
     """Stored suggestions, or player-only fallback suggestions built on session load."""
     prompt_suggestions = GameTurnManager.extract_prompt_suggestions(state.exit_states or {})
+    if read_only:
+        return prompt_suggestions
     stored_language = (state.exit_states or {}).get(PROMPT_SUGGESTIONS_LANGUAGE_KEY)
     if prompt_suggestions and state.session and stored_language == state.session.content_language:
         return prompt_suggestions
