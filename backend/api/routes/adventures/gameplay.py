@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -40,6 +41,7 @@ from backend.api.routes.adventures.session_language import (
     initialize_content_language,
     resolve_content_language,
 )
+from backend.api.routes.adventures.stream_transport import heartbeat_stream
 from backend.api.routes.adventures.unlock_service import (
     SwitchFlipRunner,
     add_system_message,
@@ -237,16 +239,27 @@ async def post_chat_message(
     try:
         manager = GameTurnManager(db, game_id, current_user)
         turn_id = uuid4().hex
+        manager.turn_id = turn_id
 
         async def _stream_with_turn_id(
             source: AsyncGenerator[str, None],
         ) -> AsyncGenerator[str, None]:
+            final_sent = False
             try:
                 async for chunk in source:
+                    final_sent = final_sent or chunk.startswith("event: final\n")
                     if isinstance(chunk, str) and chunk.startswith("event:"):
                         yield f"id: {turn_id}\n{chunk}"
                     else:
                         yield chunk
+            except (asyncio.CancelledError, GeneratorExit):
+                logger.info(
+                    "Chat transport disconnected: session=%s turn_id=%s final_sent=%s",
+                    game_id,
+                    turn_id,
+                    final_sent,
+                )
+                raise
             except Exception:
                 # Never forward the exception text to the client — log
                 # server-side, yield only the static error message.
@@ -256,6 +269,9 @@ async def post_chat_message(
                     "event: error\n"
                     f"data: {json.dumps({'detail': CLIENT_TURN_ERROR_DETAIL, 'retryable': True})}\n\n"
                 )
+
+            finally:
+                await source.aclose()
 
         try:
             turn_stream = manager.process_turn(
@@ -268,7 +284,7 @@ async def post_chat_message(
             raise HTTPException(status_code=500, detail=CLIENT_TURN_ERROR_DETAIL) from None
 
         return StreamingResponse(
-            _stream_with_turn_id(turn_stream),
+            heartbeat_stream(_stream_with_turn_id(turn_stream)),
             media_type="text/event-stream",
             headers={"X-Taleweaver-Turn-Id": turn_id},
         )

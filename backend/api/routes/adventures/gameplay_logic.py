@@ -20,6 +20,7 @@ from backend.api.routes.adventures.agent_commands import (
 )
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
+from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warning
 from backend.engine.visual_novel.narration import narration_suffix
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
@@ -1887,6 +1888,8 @@ class GameTurnManager:
             f"(memory_turns={memory_turns}, messages={len(narration_messages)})"
         )
         stream_usage: Any = None
+        narration_warning: str | None = None
+        narration_end_reason: str | None = None
         try:
             stream = await llm.stream_simple_task(
                 narration_prompt,
@@ -1900,6 +1903,10 @@ class GameTurnManager:
                 choices = getattr(chunk, "choices", None)
                 if not choices:
                     continue
+                finish_reason = getattr(choices[0], "finish_reason", None)
+                if isinstance(finish_reason, str):
+                    narration_end_reason = finish_reason
+                narration_warning = finish_warning(finish_reason) or narration_warning
                 delta = choices[0].delta.content or ""
                 if delta:
                     response_text += delta
@@ -1907,6 +1914,10 @@ class GameTurnManager:
 
         except Exception as e:
             if (response_text or "").strip():
+                narration_warning = narration_warning or INTERRUPTED_WARNING
+                narration_end_reason = (
+                    "timeout" if isinstance(e, TimeoutError) else "provider_error"
+                )
                 logger.warning(
                     "[Turn %s] Stream ended with exception (%s) after receiving %d chars of narrative; keeping content and completing turn.",
                     self.game_id,
@@ -2228,6 +2239,14 @@ class GameTurnManager:
 
         await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)
         await self.db.commit()
+        if narration_warning:
+            logger.warning(
+                "Committed incomplete narration: session=%s turn_id=%s reason=%s chars=%d",
+                self.game_id,
+                getattr(self, "turn_id", None),
+                narration_end_reason,
+                len(response_text),
+            )
         schedule_npc_journal(self.state.session_id, self.user.id)
         schedule_images(self.state, self.user.id, getattr(self, "_dynamic_scene_images", []))
         self._dynamic_scene_images = []
@@ -2276,6 +2295,9 @@ class GameTurnManager:
                 "sequence_id": self.state.active_sequence_id,
                 **self._build_prompt_suggestions_payload(),
                 **self._build_terminal_flags_payload(),
+                "narration_incomplete": bool(narration_warning),
+                "narration_warning": narration_warning,
+                "narration_end_reason": narration_end_reason,
                 "status": "success",
             }
         )

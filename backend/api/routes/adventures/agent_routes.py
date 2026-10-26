@@ -15,6 +15,7 @@ from backend.api.routes.adventures.agent_settings import (
 )
 from backend.api.routes.adventures.agent_turn_stream import ensure_agent_active, stream_agent_turn
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+from backend.api.routes.adventures.stream_transport import heartbeat_stream
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
@@ -30,7 +31,7 @@ async def run_agent_turn(
     """Computes an agent decision based on walkthrough & game state, then executes the turn."""
     await ensure_agent_active(game_id, current_user)
     return StreamingResponse(
-        stream_agent_turn(game_id, current_user),
+        heartbeat_stream(stream_agent_turn(game_id, current_user)),
         media_type="text/event-stream",
         headers={"X-Taleweaver-Turn-Id": uuid4().hex},
     )

@@ -472,54 +472,15 @@ class GameMasterLLM:
     @staticmethod
     async def _with_stream_timeout(
         stream,
-        initial_timeout: float = 40.0,
-        chunk_timeout: float = 12.0,
+        initial_timeout: float,
+        chunk_timeout: float,
     ):
-        """Async generator that enforces timeouts between streaming chunks.
+        """Bound provider silence; partial failures remain visible to the caller."""
+        from backend.core.llm_stream_timeout import with_stream_timeout
 
-        - initial_timeout: Max wait for the first chunk (time to first token).
-        - chunk_timeout: Max wait between subsequent chunks (inactivity timeout).
-        If chunk_timeout expires AFTER content has already been received, the stream
-        terminates gracefully (as LLMs often complete without sending EOF or [DONE]).
-        """
-        has_content = False
-        iterator = aiter(stream)
-
-        while True:
-            current_timeout = chunk_timeout if has_content else initial_timeout
-            try:
-                chunk = await asyncio.wait_for(anext(iterator), timeout=current_timeout)
-            except StopAsyncIteration:
-                break
-            except asyncio.TimeoutError:
-                if has_content:
-                    logger.warning(
-                        "Stream stalled for %.1fs after receiving content; terminating stream gracefully.",
-                        chunk_timeout,
-                    )
-                    break
-                logger.error(
-                    "Stream timed out after %.1fs without generating any content.",
-                    initial_timeout,
-                )
-                raise TimeoutError("The AI model did not respond in time.") from None
-            except Exception as e:
-                if has_content:
-                    logger.warning(
-                        "Stream interrupted by %s after receiving content; preserving received narrative: %s",
-                        type(e).__name__,
-                        e,
-                    )
-                    break
-                raise
-
-            try:
-                delta = chunk.choices[0].delta.content
-                if delta and delta.strip():
-                    has_content = True
-            except (AttributeError, IndexError, TypeError):
-                pass
-
+        async for chunk in with_stream_timeout(
+            stream, initial_timeout=initial_timeout, chunk_timeout=chunk_timeout
+        ):
             yield chunk
 
     @staticmethod
@@ -690,10 +651,6 @@ class GameMasterLLM:
         if model_category == "generator":
             raw_timeout = getattr(settings, "WORLDBUILDING_TIMEOUT", settings.INTELLIGENCE_TIMEOUT)
         self.request_timeout = self._coerce_int(raw_timeout, default=settings.INTELLIGENCE_TIMEOUT)
-        self.stream_chunk_timeout = float(getattr(settings, "STREAM_CHUNK_TIMEOUT", 12.0) or 12.0)
-        self.stream_initial_timeout = float(
-            getattr(settings, "STREAM_INITIAL_TIMEOUT", 40.0) or 40.0
-        )
         self.kimi_api_base = (
             getattr(settings, "KIMI_API_BASE", "https://api.moonshot.ai/v1")
             or "https://api.moonshot.ai/v1"
@@ -1116,8 +1073,8 @@ class GameMasterLLM:
         raw_stream = await self._acompletion_with_openrouter_fallback(kwargs)
         timed_stream = self._with_stream_timeout(
             raw_stream,
-            initial_timeout=self.stream_initial_timeout,
-            chunk_timeout=self.stream_chunk_timeout,
+            initial_timeout=float(self.request_timeout),
+            chunk_timeout=float(self.request_timeout),
         )
         stream = self._clean_stream_thinking(timed_stream)
         return self._clean_stream_voice_tags(stream)

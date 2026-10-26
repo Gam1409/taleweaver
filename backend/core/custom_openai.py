@@ -61,8 +61,6 @@ def configure_custom_router(router: Any, llm_settings: dict) -> None:
         1, min(3600, int(llm_settings.get("custom_openai_timeout") or 300))
     )
     router.custom_response_format = llm_settings.get("custom_openai_response_format", "prompt")
-    router.stream_initial_timeout = router.request_timeout
-    router.stream_chunk_timeout = router.request_timeout
 
 
 async def discover_models(base: str, api_key: str | None) -> list[str]:

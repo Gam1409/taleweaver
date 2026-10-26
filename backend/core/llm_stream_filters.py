@@ -119,19 +119,26 @@ async def clean_stream_voice_tags(
     prefix_processed = False
     last_chunk = None
 
-    async for chunk in stream:
-        delta = chunk_delta(chunk)
-        if delta is None or prefix_processed:
-            yield chunk
-            continue
+    stream_error = None
+    try:
+        async for chunk in stream:
+            delta = chunk_delta(chunk)
+            if delta is None or prefix_processed:
+                yield chunk
+                continue
 
-        buffer += delta
-        last_chunk = chunk
-        if _voice_prefix_ready(buffer):
-            set_chunk_delta(chunk, normalize(buffer))
-            prefix_processed = True
-            yield chunk
+            buffer += delta
+            last_chunk = chunk
+            if _voice_prefix_ready(buffer):
+                set_chunk_delta(chunk, normalize(buffer))
+                prefix_processed = True
+                yield chunk
+    except Exception as error:
+        stream_error = error
 
     if not prefix_processed and last_chunk is not None:
         set_chunk_delta(last_chunk, normalize(buffer))
         yield last_chunk
+
+    if stream_error is not None:
+        raise stream_error

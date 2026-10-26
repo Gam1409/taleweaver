@@ -76,8 +76,9 @@ class Settings(BaseSettings):
 
     VISUAL_TIMEOUT: int = 300
     INTELLIGENCE_TIMEOUT: int = 60
-    STREAM_CHUNK_TIMEOUT: float = 12.0
-    STREAM_INITIAL_TIMEOUT: float = 40.0
+    # Deprecated compatibility fields: stream waits use the resolved model timeout.
+    STREAM_CHUNK_TIMEOUT: Optional[float] = None
+    STREAM_INITIAL_TIMEOUT: Optional[float] = None
     WORLDBUILDING_TIMEOUT: int = 600
     TTS_TIMEOUT_SECONDS: int = 120
     TTS_TIMEOUT_PER_1K_CHARS: int = 20

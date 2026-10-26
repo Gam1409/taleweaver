@@ -10,6 +10,7 @@
     "test:portal": "node tests/librarySessions.test.mjs",
     "test:vn": "node tests/vnUi.test.mjs",
     "test:npcs": "node tests/npcJournal.test.mjs",
+    "test:chat": "node tests/chatStreamLifecycle.test.mjs",
     "test:ideas": "node tests/promptSuggestions.test.mjs",
     "test:catalog": "node tests/catalogService.test.mjs",
     "preview": "vite preview",
