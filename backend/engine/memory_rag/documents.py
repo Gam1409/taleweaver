@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from backend.engine.npc_journal.records import journal_of, supported_quote
 from backend.models.chat import ChatMessage
@@ -222,6 +223,9 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
     current = await db.scalar(
         select(SessionState)
         .where(SessionState.session_id == state.session_id)
+        # Refreshing this identity can expire the caller's loaded relationships.
+        # Terminal flags are synchronous, so reload session in this await.
+        .options(selectinload(SessionState.session))
         .execution_options(populate_existing=True)
     )
     if current is None:
