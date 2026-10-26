@@ -11,6 +11,7 @@ export interface Adventure {
   license?: string
   original_prompt?: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
+  detailed_clothing?: boolean
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -66,6 +67,7 @@ export interface AdventureFormData {
   license: string
   original_prompt: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
+  detailed_clothing?: boolean
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -163,7 +165,10 @@ export const adventureService = {
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
-    if (!res.ok) throw new Error('Failed to save changes.')
+    if (!res.ok) {
+      const error = await res.json().catch(() => null)
+      throw new Error(typeof error?.detail === 'string' ? error.detail : 'Failed to save changes.')
+    }
     return res.json()
   },
 

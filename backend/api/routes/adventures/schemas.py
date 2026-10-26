@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
 from backend.schemas.adventure import AdventureTemplateDebugResponse
@@ -308,6 +308,12 @@ class AdventureTemplateResponse(BaseModel):
     language: Optional[str] = None
     origin_id: Optional[str] = None
 
+    detailed_clothing: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "detailed_clothing", AliasPath("original_manifest", "clothing_settings", "detailed")
+        ),
+    )
     rule_enforcement_mode: str
     strict_rules: bool = True
     time_per_turn: int
@@ -616,6 +622,7 @@ class StoryIdeaSuggestionResponse(BaseModel):
 class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
+    detailed_clothing: Optional[bool] = None
     title: Optional[str] = None
     teaser: Optional[str] = None
     version: Optional[str] = None
