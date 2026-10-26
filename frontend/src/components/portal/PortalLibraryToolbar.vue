@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (e: 'delete-all-adventures'): void
   (e: 'delete-all-sessions'): void
   (e: 'update-all'): void
+  (e: 'browse-catalog'): void
 }>()
 
 const isMenuOpen = ref(false)
@@ -64,6 +65,15 @@ function runAndClose(action: 'import' | 'restore' | 'delete-all' | 'update-all')
         {{ props.activeSection === 'templates' ? 'Manage your world blueprints.' : 'Manage your active playthroughs.' }}
       </p>
     </div>
+
+    <button
+      v-if="props.activeSection === 'templates'"
+      type="button"
+      class="shrink-0 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:bg-cyan-500/20"
+      @click="emit('browse-catalog')"
+    >
+      <span class="hidden lg:inline">Community </span>Catalog
+    </button>
 
     <!-- Desktop / Tablet: inline action buttons -->
     <div class="hidden sm:flex items-center gap-3 shrink-0">

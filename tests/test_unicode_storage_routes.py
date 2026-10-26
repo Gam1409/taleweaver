@@ -142,6 +142,8 @@ async def test_world_generation_accepts_legacy_source_and_target(legacy_world, m
         provider="ollama", model="mock", aexecute_complex_task=AsyncMock(return_value=result)
     )
     monkeypatch.setattr(GameMasterLLM, "for_role", lambda *args, **kwargs: llm)
+    generate_manifest = AsyncMock(return_value=result)
+    monkeypatch.setattr("backend.engine.staged_world.generate_manifest", generate_manifest)
     apply = AsyncMock()
     monkeypatch.setattr("backend.engine.world_manifest_applier.apply_manifest", apply)
     async with TestSessionLocal() as db:
@@ -154,7 +156,7 @@ async def test_world_generation_accepts_legacy_source_and_target(legacy_world, m
             "История в лесу",
             cover_source_adventure_id=LEGACY_ID,
         )
-    llm.aexecute_complex_task.assert_awaited_once()
+    generate_manifest.assert_awaited_once()
     apply.assert_awaited_once()
     assert apply.call_args.args[1] == LEGACY_ID
     assert apply.call_args.kwargs["source_assets"]["cover"] == legacy_world[1]

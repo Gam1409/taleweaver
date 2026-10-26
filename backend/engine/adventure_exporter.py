@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.engine.adventure_identity import stable_origin_id
 from backend.engine.clothing.settings import clothing_settings
 from backend.engine.npc_cards.settings import manifest_card_settings
 from backend.models.adventure_template import AdventureTemplate
@@ -435,6 +436,7 @@ class AdventureExporter:
             "format": "TaleWeaver",
             "version": CURRENT_VERSION,
             "adventure": {
+                "origin_id": stable_origin_id(adv),
                 "title": adv.title,
                 "teaser": adv.teaser,
                 "version": adv.version,
@@ -531,6 +533,7 @@ class AdventureExporter:
             "awards": adv.awards or [],
             "sequences": adv.sequences or [],
             "scripts": (adv.original_manifest or {}).get("scripts", []),
+            "init_script": getattr(adv, "init_script", None),
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
             "npc_card_settings": manifest_card_settings(adv.original_manifest),
             "clothing_settings": clothing_settings(adv.original_manifest),
