@@ -153,7 +153,7 @@ class AdventureTemplateImporter:
         return False
 
     @staticmethod
-    async def import_adz(db: AsyncSession, adz_data: bytes, owner_id: Optional[str] = None, overwrite: bool = False) -> bool:
+    async def import_adz(db: AsyncSession, adz_data: bytes, owner_id: Optional[str] = None, overwrite: bool = False, preserve_existing: bool = False) -> bool:
         """Logic for ADZ (ZIP) import, including assets."""
         try:
             zip_buffer = io.BytesIO(adz_data)
@@ -222,7 +222,7 @@ class AdventureTemplateImporter:
                 
                 existing_res = await db.execute(query)
                 existing = existing_res.scalars().first()
-                if existing:
+                if existing and not preserve_existing:
                     if not overwrite:
                         raise AdventureConflictError(
                             title=adv_data["title"],

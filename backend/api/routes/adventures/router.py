@@ -15,7 +15,9 @@ from backend.api.routes.adventures.editor_special_actions import (
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.library import router as library_router
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
+from backend.api.routes.adventures.publication import router as publication_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
@@ -31,6 +33,8 @@ router = APIRouter(prefix="/adventures")
 # Include sub-routers in order of specificity.
 # 1. Imports (static paths like /import, /check-defaults)
 router.include_router(imports_router)
+router.include_router(library_router)
+router.include_router(publication_router)
 
 # 2. Assets (specific paths like /{template_id}/visuals/...)
 router.include_router(assets_router)

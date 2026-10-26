@@ -43,6 +43,12 @@ class TTSSettings(BaseModel):
     speech_rate: float = 1.0
 
 class Settings(BaseSettings):
+    ADVENTURE_LIBRARY_URL: str = (
+        "https://raw.githubusercontent.com/jschm42/taleweaver-adventures/main"
+    )
+    ADVENTURE_LIBRARY_TTL: int = Field(default=3600, ge=0, le=86400)
+    ADVENTURE_DOWNLOAD_MAX_BYTES: int = Field(default=104857600, ge=1024)
+
     PROJECT_NAME: str = "TaleWeaver"
     APP_VERSION: str = Field(default_factory=get_app_version)
     DATABASE_URL: str = ""

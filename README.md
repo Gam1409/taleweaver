@@ -339,6 +339,7 @@ Inspect the internal engine workflows through Mermaid diagrams in the repository
 - [Session language](docs/session-content-language.md)
 - [Staged world generation](docs/staged-world-generation.md)
 - [Action ideas](docs/idea-refresh.md)
+- [Adventure catalog and original-project exports](docs/adventure-catalog.md)
 
 </details>
 
