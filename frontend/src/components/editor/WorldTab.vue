@@ -32,6 +32,7 @@ const emit = defineEmits<{
   (e: 'update:tempValue', val: string): void
   (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
   (e: 'save-changes'): void
+  (e: 'update:detailed-clothing', val: boolean): void
   (e: 'update:pacing', val: number): void
   (e: 'update:max-time-per-turn', val: number | null): void
   (e: 'update:clock-enabled', val: boolean): void
@@ -1185,6 +1186,7 @@ const licenseUrlInvalid = computed(() => {
       :fix-newlines="fixNewlines"
       @update:temp-value="emit('update:tempValue', $event)"
       @update:mode="emit('update:mode', $event)"
+      @update:detailed-clothing="emit('update:detailed-clothing', $event)"
       @start-edit="(field, value) => emit('start-edit', field, value)"
       @save-field="emit('save-field')"
       @cancel-edit="emit('cancel-edit')"

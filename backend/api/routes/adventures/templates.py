@@ -14,6 +14,7 @@ from backend.api.routes.adventures.adventure_creation import (
     create_adventure_records,
     run_background_generation,
 )
+from backend.api.routes.adventures.editing.clothing_settings import apply_clothing_update
 from backend.api.routes.adventures.generation_resume import can_resume_generation
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.manifest_export import (
@@ -760,6 +761,7 @@ async def update_adventure(
         raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+    await apply_clothing_update(db, adv, current_user, update_data)
     if update_data.get("max_containers") is not None:
         update_data["max_containers"] = max(0, min(30, int(update_data["max_containers"])))
 

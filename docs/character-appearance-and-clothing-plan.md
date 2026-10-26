@@ -40,6 +40,21 @@ justifies an acquisition still depends on the technical model. An exact quotatio
 alone cannot prove that the model interpreted tense, negation or character choice
 correctly. Small models should be tested with the intended story and language.
 
+## Editing an existing adventure
+
+In a VN adventure editor, open **World → Narrative Blueprint** and use
+**Adult content: detailed clothing**, then **Save clothing settings**.
+Enabling prepares missing visual profiles through the Small/Utility model using
+known descriptions and already owned items. Existing valid profiles are retained;
+unknown facts stay unspecified, and the conversion does not invent possessions.
+Preparation is bounded to four minutes. A model error, invalid references or a
+concurrent edit prevents the save; reload or retry after correcting the model settings.
+
+Disabling deactivates detailed tracking without deleting inventory, profiles or
+character history, so re-enabling does not reset the wardrobe. Switching away from
+VN also disables this preference. The editor changes the adventure template and
+future games; existing saved sessions retain their own settings and state.
+
 ## Cards and images
 
 The player's VN sheet has an **Appearance** tab showing their own tracked outfit.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
+import ClothingDetailSettings from '@/components/editor/ClothingDetailSettings.vue'
 import { formatObjectIds } from '@/utils/editor_utils'
 
 defineProps<{
@@ -16,6 +17,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'save-changes'): void
+  (e: 'update:detailed-clothing', val: boolean): void
   (e: 'start-edit', field: string, value: string): void
   (e: 'save-field'): void
   (e: 'cancel-edit'): void
@@ -59,6 +61,15 @@ const emit = defineEmits<{
 
          
       </div>
+
+      <ClothingDetailSettings
+        v-if="form.rule_enforcement_mode === 'vn'"
+        :model-value="form.detailed_clothing === true"
+        :saved-value="adventure?.detailed_clothing === true"
+        :is-saving="isSaving"
+        @update:model-value="emit('update:detailed-clothing', $event)"
+        @save="emit('save-changes')"
+      />
 
       <div class="flex flex-col gap-10">
         <!-- Adventure Plot Section -->

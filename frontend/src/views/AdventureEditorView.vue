@@ -631,6 +631,7 @@ const form = ref({
   license_url: '',
   original_prompt: '',
   rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
+  detailed_clothing: false,
   time_per_turn: 5,
   max_time_per_turn: null as number | null,
   max_memory_turns: 10,
@@ -832,6 +833,7 @@ async function fetchAdventure() {
     form.value.license_url = data.license_url || ''
     form.value.original_prompt = data.original_prompt || ''
     form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
+    form.value.detailed_clothing = data.detailed_clothing === true
     form.value.time_per_turn = data.time_per_turn || 5
     form.value.max_time_per_turn = data.max_time_per_turn !== undefined ? data.max_time_per_turn : null
     form.value.max_memory_turns = typeof data.max_memory_turns === 'number' ? data.max_memory_turns : 10
@@ -1407,19 +1409,25 @@ async function saveChanges() {
     const teaserOrPlotChanged = (form.value.teaser || '') !== (adventure.value?.teaser || '')
       || (form.value.plot || '') !== (adventure.value?.plot || '')
 
+    const detailedClothing = form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing
+    const clothingChanged = detailedClothing !== (adventure.value?.detailed_clothing === true)
     const fullStyleObj = imageStylesCatalog.value.find(s => s.id === form.value.selected_style_id) || { id: form.value.selected_style_id, name: form.value.selected_style_id }
     const fullToneObj = toneCatalog.value.find(t => t.id === form.value.selected_tone_id) || { id: form.value.selected_tone_id, name: form.value.selected_tone_id }
     const payload = {
       ...form.value,
+      detailed_clothing: clothingChanged ? detailedClothing : undefined,
       selected_image_styles: form.value.selected_style_id ? [fullStyleObj] : [],
       selected_tone: form.value.selected_tone_id ? fullToneObj : null
     }
     await adventureService.updateAdventure(props.adventureId, payload as any)
     await fetchAdventure()
-    if (teaserOrPlotChanged) {
+    if (teaserOrPlotChanged || clothingChanged) {
       await fetchDebugInfo()
     }
     addNotification('Adventure configuration updated.', 'success')
+    if (clothingChanged) {
+      addNotification('Clothing settings apply to this adventure and new games only. Existing saved sessions keep their previous settings.', 'info')
+    }
 
     // Auto-run structural validation after every save. Only structural —
     // AI validation remains a manual action in the Validation tab to keep
@@ -2606,6 +2614,7 @@ watch(
               @update:calendar-max-value="form.time_config = { ...(form.time_config || {}), calendar_max_value: $event }"
               @update:calendar-max-unit="form.time_config = { ...(form.time_config || {}), calendar_max_unit: $event }"
               @update:mode="form.rule_enforcement_mode = $event as any"
+              @update:detailed-clothing="form.detailed_clothing = $event"
               @save-changes="saveChanges"
               @notify="addNotification"
             />
