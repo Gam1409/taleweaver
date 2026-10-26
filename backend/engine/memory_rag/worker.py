@@ -6,10 +6,12 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
+from anyio import CancelScope
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
+from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
@@ -47,7 +49,9 @@ async def mark_dirty(
     try:
         async with db.begin_nested():
             await _mark_dirty(db, session_id, user_id, template_id)
-    except Exception:
+    except Exception as exc:
+        if cancelled := find_cancellation(exc):
+            raise cancelled from None
         logger.exception("Could not queue memory maintenance for session %s", session_id)
 
 
@@ -70,16 +74,21 @@ async def _mark_dirty(
 
 async def request_update(session_id: str, user_id: str) -> None:
     """Queue only committed canonical data, including command/early-return turns."""
-    try:
-        async with database.AsyncSessionLocal() as db:
-            session = await db.get(GameSession, session_id)
-            if session is None or session.user_id != user_id:
-                return
-            await mark_dirty(db, session_id, user_id, session.template_id)
-            await db.commit()
-        schedule(session_id, user_id)
-    except Exception:
-        logger.exception("Could not schedule memory maintenance for session %s", session_id)
+    # Finish this short, independently owned transaction before request cancellation.
+    # No model or vector-store work runs inside this shield.
+    with CancelScope(shield=True):
+        try:
+            async with database.AsyncSessionLocal() as db:
+                session = await db.get(GameSession, session_id)
+                if session is None or session.user_id != user_id:
+                    return
+                await mark_dirty(db, session_id, user_id, session.template_id)
+                await db.commit()
+            schedule(session_id, user_id)
+        except Exception as exc:
+            if cancelled := find_cancellation(exc):
+                raise cancelled from None
+            logger.exception("Could not schedule memory maintenance for session %s", session_id)
 
 
 async def _claim(session_id: str, user_id: str) -> Claim | None:

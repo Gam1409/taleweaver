@@ -83,10 +83,17 @@ async def _queue_initialized_turn(manager: Any) -> None:
 @asynccontextmanager
 async def _turn_scope(manager: Any) -> AsyncIterator[None]:
     async with scheduler.foreground():
+        interrupted = False
         try:
             yield
+        except (asyncio.CancelledError, GeneratorExit):
+            interrupted = True
+            raise
         finally:
-            await _queue_initialized_turn(manager)
+            # A disconnected stream may still own uncommitted writes. Do not open
+            # a second transaction from its cancelled cleanup path.
+            if not interrupted:
+                await _queue_initialized_turn(manager)
 
 
 def foreground_turn(
