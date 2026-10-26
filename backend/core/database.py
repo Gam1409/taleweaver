@@ -1,5 +1,6 @@
 import logging
 
+from anyio import CancelScope
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -40,7 +41,9 @@ async def get_db():
         try:
             yield session
         finally:
-            await session.close()
+            # AnyIO cancellation repeats at each await; let rollback/close finish.
+            with CancelScope(shield=True):
+                await session.close()
 
 
 def run_db_migrations() -> None:
