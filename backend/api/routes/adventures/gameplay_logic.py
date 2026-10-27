@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from inspect import isawaitable
 import json
 import logging
 import random
@@ -2441,13 +2442,15 @@ class GameTurnManager:
     async def _emit_system_message(
         self,
         message: str,
-        stream_callback: Callable[[str], Awaitable[None] | None] = None,
+        stream_callback: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> None:
         """Persist a system message and optionally stream it via callback."""
         await self._save_chat_message("system", message)
         await self.db.flush()
         if stream_callback:
-            await stream_callback(message)
+            result = stream_callback(message)
+            if isawaitable(result):
+                await result
 
     async def _finalize_session(self, status: str, note: str | None = None):
         """Updates the session status and records the outcome in the user's game log."""
