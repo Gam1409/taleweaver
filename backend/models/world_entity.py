@@ -1,6 +1,6 @@
 import uuid6
 from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import synonym
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from backend.models.base import Base, TimestampMixin
 
@@ -13,11 +13,13 @@ class WorldScene(Base, TimestampMixin):
     __tablename__ = "world_scenes"
 
     pk = Column(Integer, primary_key=True, autoincrement=True)
-    id = Column(String(50), nullable=False)  # Unique within an adventure (e.g. "FOREST_START")
+    id: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # Unique within an adventure (e.g. "FOREST_START")
     template_id = Column(
         String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True
     )
-    session_id = Column(
+    session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("game_sessions.id", ondelete="CASCADE"), nullable=True
     )
 
@@ -25,10 +27,10 @@ class WorldScene(Base, TimestampMixin):
     description = Column(String(2000), nullable=False)  # Atmospheric description
     image_url = Column(String(255), nullable=True)  # Scene visual link
     decorative_objects = Column(JSON, nullable=True)  # Static, non-interactable background details
-    on_enter_scene_script = Column(String(5000), nullable=True)
-    on_enter_scene_text = Column(String(5000), nullable=True)
-    on_leave_scene_script = Column(String(5000), nullable=True)
-    on_leave_scene_text = Column(String(5000), nullable=True)
+    on_enter_scene_script: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_enter_scene_text: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_leave_scene_script: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_leave_scene_text: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     adventure_id = synonym("template_id")
 
 
@@ -39,11 +41,13 @@ class WorldExit(Base, TimestampMixin):
 
     __tablename__ = "world_exits"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid6.uuid7())
+    )
     template_id = Column(
         String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True
     )
-    session_id = Column(
+    session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("game_sessions.id", ondelete="CASCADE"), nullable=True
     )
 
@@ -60,10 +64,10 @@ class WorldExit(Base, TimestampMixin):
     item_to_unlock = Column(String(50), nullable=True)
     rule_to_unlock = Column(String(500), nullable=True)
     unlock_expression = Column(String(500), nullable=True)
-    on_open_exit_script = Column(String(5000), nullable=True)
-    on_open_exit_text = Column(String(5000), nullable=True)
-    on_exit_used_script = Column(String(5000), nullable=True)
-    on_exit_used_text = Column(String(5000), nullable=True)
+    on_open_exit_script: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_open_exit_text: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_exit_used_script: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    on_exit_used_text: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     on_unlock_success_script = Column(String(5000), nullable=True)
     on_unlock_success_text = Column(String(5000), nullable=True)
     on_unlock_failure_script = Column(String(5000), nullable=True)
@@ -79,11 +83,11 @@ class WorldEntity(Base, TimestampMixin):
     __tablename__ = "world_entities"
 
     pk = Column(Integer, primary_key=True, autoincrement=True)
-    id = Column(String(50), nullable=False)  # e.g. "OLD_LIBRARIAN"
+    id: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g. "OLD_LIBRARIAN"
     template_id = Column(
         String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True
     )
-    session_id = Column(
+    session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("game_sessions.id", ondelete="CASCADE"), nullable=True
     )
 

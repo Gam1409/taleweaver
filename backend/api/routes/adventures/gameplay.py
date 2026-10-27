@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -127,7 +127,7 @@ async def get_session_debug(
     game_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Unified debug inspector endpoint for active game sessions. Requires debug mode to be enabled."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -218,7 +218,7 @@ async def get_chat_history(
         sequence_id=state.active_sequence_id,
         quests=state.quests,
         awards=build_awards_for_snapshot(state, adventure, current_user),
-        is_completed=state.is_completed,
+        is_completed=bool(state.is_completed),
         game_over=session_status == "game_over",
         game_completed=session_status == "completed",
         status_note=state.session.status_note if state.session else None,
@@ -305,10 +305,10 @@ async def create_terminal_epilogue(
     payload: TerminalEpilogueRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Creates the one-time terminal epilogue for completed or game-over sessions."""
     manager = GameTurnManager(db, game_id, current_user)
-    return await cast(Any, manager).create_terminal_epilogue(language=payload.language)
+    return await manager.create_terminal_epilogue(language=payload.language)
 
 
 @router.post("/{game_id}/translate-text", response_model=TranslateTextResponse)
@@ -317,7 +317,7 @@ async def translate_text(
     payload: TranslateTextRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TranslateTextResponse:
     """Translates arbitrary session text into the requested language (Bable Fish target)."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -423,7 +423,7 @@ async def get_walkthrough(
     game_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the walkthrough status and payload for the current session."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -480,7 +480,7 @@ async def mark_text_log_read(
     entity_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Marks a READABLE object as read in session-scoped state overrides."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -541,7 +541,7 @@ async def unlock_container_with_code(
     payload: ContainerUnlockCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically unlocks a container when the provided code matches code_to_unlock."""
     state = await _require_session_state(db, game_id, current_user)
     entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
@@ -580,7 +580,7 @@ async def unlock_container_with_item(
     payload: ContainerUnlockItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically unlocks a container when the player possesses the required item."""
     state = await _require_session_state(db, game_id, current_user)
     entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
@@ -617,7 +617,7 @@ async def unlock_container(
     entity_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically unlocks a container directly (evaluating unlock_expression if present)."""
     state = await _require_session_state(db, game_id, current_user)
     entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
@@ -658,7 +658,7 @@ async def flip_switch_with_code(
     payload: SwitchFlipCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically flips a switch when the provided code matches the transition gate code."""
     state = await _require_session_state(db, game_id, current_user)
     flip = await resolve_switch_flip(db, state, entity_id, payload.target_state)
@@ -683,7 +683,7 @@ async def flip_switch_with_item(
     payload: SwitchFlipItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically flips a switch when the player possesses the required item."""
     state = await _require_session_state(db, game_id, current_user)
     flip = await resolve_switch_flip(db, state, entity_id, payload.target_state)
@@ -776,7 +776,7 @@ async def unlock_exit_with_code(
     payload: ExitUnlockCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Unlocks an exit by validating a submitted access code."""
     state = await _require_session_state(db, game_id, current_user)
     world_exit = await _require_session_exit(db, state, exit_id)
@@ -801,7 +801,7 @@ async def unlock_exit_with_item(
     payload: ExitUnlockItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Unlocks an exit when the player possesses the required key item."""
     state = await _require_session_state(db, game_id, current_user)
     world_exit = await _require_session_exit(db, state, exit_id)
@@ -832,7 +832,7 @@ async def unlock_exit(
     exit_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically unlocks an exit directly (evaluating unlock_expression if present)."""
     state = await _require_session_state(db, game_id, current_user)
     world_exit = await _require_session_exit(db, state, exit_id)
@@ -903,7 +903,7 @@ async def traverse_exit(
     exit_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Moves the player through an unlocked exit to the target scene."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
