@@ -22,7 +22,7 @@ const emit = defineEmits<{
         @change="emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
       />
       <span>
-        <span class="font-semibold text-pink-300">Adult content: detailed clothing</span>
+        <span class="font-semibold text-pink-300">Mature content</span>
         <span class="mt-2 block text-xs leading-relaxed text-slate-400">
           Track clothing layers, including underlayers, for clearly adult characters. Save to
           prepare missing appearance and clothing fields from known character details and owned

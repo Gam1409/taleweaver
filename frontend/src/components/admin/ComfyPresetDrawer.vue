@@ -102,7 +102,7 @@ async function previewPrompt(): Promise<void> {
             <div class="space-y-2">
               <label class="flex items-start gap-2 text-sm text-pink-400" title="Романтика и подразумеваемая близость между явно взрослыми персонажами, если это соответствует сцене.">
                 <input v-model="draft.mature_themes" type="checkbox" :disabled="!draft.prompt_rules?.adapt_with_llm" />
-                <span>Взрослая тематика</span>
+                <span>Mature content</span>
               </label>
               <p class="text-xs text-slate-400">Allows non-graphic romance and implied intimacy between adults when present in the scene. Used only with LLM prompt adaptation; manually prepared prompts are kept as entered.</p>
             </div>

@@ -10,7 +10,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
       <input type="checkbox" :checked="modelValue" class="mt-1 h-4 w-4 shrink-0 accent-pink-400"
         @change="emit('update:modelValue', ($event.target as HTMLInputElement).checked)" />
       <span>
-        <span class="font-medium text-pink-300">Adult content: detailed clothing</span>
+        <span class="font-medium text-pink-300">Mature content</span>
         <span class="mt-1 block text-xs leading-relaxed text-slate-400">Off: general outfits. On: clothing layers, including underlayers, for clearly adult characters. Your character’s clothing appears in their sheet and changes through actions in the story.</span>
       </span>
     </label>

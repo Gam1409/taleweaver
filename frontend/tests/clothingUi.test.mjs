@@ -55,7 +55,7 @@ test('long outfits collapse and garment text is escaped', async () => {
 
 test('adult clothing preference is a separate default-off setting', async () => {
   const off = await render(setting, { modelValue: false })
-  assert.match(off, /Adult content: detailed clothing/)
+  assert.match(off, /Mature content/)
   assert.match(off, /Off: general outfits/)
   assert.doesNotMatch(off, /<input[^>]*checked|NPC state|mature_themes/)
   assert.match(await render(setting, { modelValue: true }), /<input[^>]*checked/)
