@@ -10,6 +10,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
 
@@ -57,9 +58,7 @@ def configure_custom_router(router: Any, llm_settings: dict) -> None:
     router.api_key = None
     if (router.user.encrypted_api_keys or {}).get("custom_openai"):
         router.api_key = router._get_decrypted_key("custom_openai")
-    router.request_timeout = max(
-        1, min(3600, int(llm_settings.get("custom_openai_timeout") or 300))
-    )
+    router.request_timeout = custom_openai_timeout(llm_settings)
     router.custom_response_format = llm_settings.get("custom_openai_response_format", "prompt")
 
 
