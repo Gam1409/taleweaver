@@ -10,8 +10,9 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import override
 from uuid import uuid4
+
+from typing_extensions import override
 
 from backend.core.diagnostic_fields import EVENTS, safe_error, safe_fields
 

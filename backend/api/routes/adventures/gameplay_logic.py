@@ -2594,22 +2594,23 @@ class GameTurnManager:
     def _append_combat_log(self, *args, **kwargs) -> None:
         self.combat._append_combat_log(*args, **kwargs)
 
-    def _emit_combat_final(self, *args, **kwargs) -> Any:
-        return self.combat._emit_combat_final(*args, **kwargs)
+    async def _emit_combat_final(self, status_note: str | None = None) -> AsyncGenerator[str, None]:
+        async for item in self.combat._emit_combat_final(status_note):
+            yield item
 
     async def _emit_combat_aftermath_narration(self, *args, **kwargs) -> AsyncGenerator[str, None]:
         async for item in self.combat._emit_combat_aftermath_narration(*args, **kwargs):
             yield item
 
-    def _calculate_npc_total_stats(self, *args, **kwargs) -> dict[str, int]:
-        return self.combat._calculate_npc_total_stats(*args, **kwargs)
+    async def _calculate_npc_total_stats(self, npc: WorldEntity) -> dict[str, Any]:
+        return await self.combat._calculate_npc_total_stats(npc)
 
     async def _handle_fight_start(self, *args, **kwargs) -> AsyncGenerator[str, None]:
         async for item in self.combat._handle_fight_start(*args, **kwargs):
             yield item
 
-    def _auto_trigger_combat_from_gm(self, *args, **kwargs) -> Any:
-        return self.combat._auto_trigger_combat_from_gm(*args, **kwargs)
+    async def _auto_trigger_combat_from_gm(self, game_event: GameEvent) -> bool:
+        return await self.combat._auto_trigger_combat_from_gm(game_event)
 
     def _find_consumable(self, *args, **kwargs) -> dict[str, Any] | None:
         return self.combat._find_consumable(*args, **kwargs)
@@ -2617,11 +2618,11 @@ class GameTurnManager:
     def _sync_combat_player_snapshot(self, *args, **kwargs) -> None:
         self.combat._sync_combat_player_snapshot(*args, **kwargs)
 
-    def _description_delta(self, *args, **kwargs) -> dict[str, int]:
-        return self.combat._description_delta(*args, **kwargs)
+    def _description_delta(self, description: str, resource: str) -> int:
+        return self.combat._description_delta(description, resource)
 
-    def _resource_delta_from_consumable(self, *args, **kwargs) -> dict[str, int]:
-        return self.combat._resource_delta_from_consumable(*args, **kwargs)
+    def _resource_delta_from_consumable(self, item: dict[str, Any], resource: str) -> int:
+        return self.combat._resource_delta_from_consumable(item, resource)
 
     @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any] | None:
@@ -2630,19 +2631,20 @@ class GameTurnManager:
     async def _request_llm_combat_special_event(self, *args, **kwargs) -> dict[str, Any] | None:
         return await self.combat._request_llm_combat_special_event(*args, **kwargs)
 
-    def _consume_item_now(self, *args, **kwargs) -> dict[str, Any]:
-        return self.combat._consume_item_now(*args, **kwargs)
+    def _consume_item_now(self, item_name: str) -> str:
+        return self.combat._consume_item_now(item_name)
 
-    async def _maybe_trigger_special_event(
-        self, *args, **kwargs
-    ) -> tuple[dict[str, Any] | None, list[str]]:
-        return await self.combat._maybe_trigger_special_event(*args, **kwargs)
+    async def _maybe_trigger_special_event(self, combat: dict[str, Any]) -> str | None:
+        return await self.combat._maybe_trigger_special_event(combat)
 
-    async def _resolve_enemy_turn(self, *args, **kwargs) -> Any:
-        return self.combat._resolve_enemy_turn(*args, **kwargs)
+    async def _resolve_enemy_turn(
+        self, enemy_id: str | None = None, combat: dict[str, Any] | None = None
+    ) -> AsyncGenerator[str, None]:
+        async for item in self.combat._resolve_enemy_turn(enemy_id, combat):
+            yield item
 
-    async def _spawn_scene_item(self, *args, **kwargs) -> WorldEntity:
-        return await self.combat._spawn_scene_item(*args, **kwargs)
+    async def _spawn_scene_item(self, item: dict[str, Any]) -> None:
+        return await self.combat._spawn_scene_item(item)
 
     async def _session_entity_id_exists(self, *args, **kwargs) -> bool:
         return await self.combat._session_entity_id_exists(*args, **kwargs)
@@ -2650,11 +2652,11 @@ class GameTurnManager:
     async def _collect_existing_item_ids(self, *args, **kwargs) -> set[str]:
         return await self.combat._collect_existing_item_ids(*args, **kwargs)
 
-    def _normalize_loot_items(self, *args, **kwargs) -> list[dict[str, Any]]:
-        return self.combat._normalize_loot_items(*args, **kwargs)
+    async def _normalize_loot_items(self, items: list[Any]) -> list[dict[str, Any]]:
+        return await self.combat._normalize_loot_items(items)
 
-    def _resolve_loot_command(self, *args, **kwargs) -> tuple[bool, list[str], bool]:
-        return self.combat._resolve_loot_command(*args, **kwargs)
+    async def _resolve_loot_command(self, user_msg: str, combat: dict[str, Any]) -> str | None:
+        return await self.combat._resolve_loot_command(user_msg, combat)
 
     def _award_combat_victory_xp(self, *args, **kwargs) -> int:
         return self.combat._award_combat_victory_xp(*args, **kwargs)
@@ -2675,8 +2677,8 @@ class GameTurnManager:
     async def _extract_inspect_or_search_target(self, *args, **kwargs) -> str | None:
         return await self.guardrails._extract_inspect_or_search_target(*args, **kwargs)
 
-    async def _collect_inspect_search_visibility_tokens(self, *args, **kwargs) -> set[str]:
-        return await self.guardrails._collect_inspect_search_visibility_tokens(*args, **kwargs)
+    async def _collect_inspect_search_visibility_tokens(self) -> tuple[set[str], set[str]]:
+        return await self.guardrails._collect_inspect_search_visibility_tokens()
 
     async def _is_inspect_or_search_target_visible(self, *args, **kwargs) -> bool:
         return await self.guardrails._is_inspect_or_search_target_visible(*args, **kwargs)
@@ -2693,8 +2695,10 @@ class GameTurnManager:
     def _extract_access_code(self, *args, **kwargs) -> str | None:
         return self.guardrails._extract_access_code(*args, **kwargs)
 
-    async def _resolve_container_from_free_text(self, *args, **kwargs) -> WorldEntity | None:
-        return await self.guardrails._resolve_container_from_free_text(*args, **kwargs)
+    async def _resolve_container_from_free_text(
+        self, text: str
+    ) -> tuple[str, str, str, str, str, bool] | None:
+        return await self.guardrails._resolve_container_from_free_text(text)
 
     async def _enforce_no_dynamic_item_generation(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_no_dynamic_item_generation(*args, **kwargs)
@@ -2705,11 +2709,13 @@ class GameTurnManager:
     async def _enforce_hidden_entity_reveal(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_hidden_entity_reveal(*args, **kwargs)
 
-    def _is_key_item_referenced(self, *args, **kwargs) -> bool:
-        return self.guardrails._is_key_item_referenced(*args, **kwargs)
+    async def _is_key_item_referenced(
+        self, item_id: str, lowered_msg: str, target_name: str | None = None
+    ) -> bool:
+        return await self.guardrails._is_key_item_referenced(item_id, lowered_msg, target_name)
 
-    def _get_switch_story_flags(self, *args, **kwargs) -> dict[str, bool]:
-        return self.guardrails._get_switch_story_flags(*args, **kwargs)
+    async def _get_switch_story_flags(self) -> set[str]:
+        return await self.guardrails._get_switch_story_flags()
 
     async def _enforce_container_unlock_guardrails(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_container_unlock_guardrails(*args, **kwargs)
@@ -2723,90 +2729,100 @@ class GameTurnManager:
     async def _enforce_npc_movement_guardrails(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_npc_movement_guardrails(*args, **kwargs)
 
-    async def _enforce_quest_and_award_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_quest_and_award_guardrails(*args, **kwargs)
+    async def _enforce_quest_and_award_guardrails(self, event: GameEvent) -> None:
+        return await self.guardrails._enforce_quest_and_award_guardrails(event)
 
     async def _enforce_win_and_loss_guardrails(self, *args, **kwargs) -> list[str]:
         return await self.guardrails._enforce_win_and_loss_guardrails(*args, **kwargs)
 
-    async def _handle_read_action_unlock(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._handle_read_action_unlock(*args, **kwargs)
+    async def _handle_read_action_unlock(self, read_target: str) -> None:
+        return await self.guardrails._handle_read_action_unlock(read_target)
 
-    async def _check_special_action_unlocks(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._check_special_action_unlocks(*args, **kwargs)
+    async def _check_special_action_unlocks(self, condition_type: str, target_id: str) -> None:
+        return await self.guardrails._check_special_action_unlocks(condition_type, target_id)
 
     # --- Interactions ---
-    async def _handle_traverse_exit(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._handle_traverse_exit(*args, **kwargs):
+    async def _handle_traverse_exit(
+        self, exit_ref: str, language: str | None = None
+    ) -> AsyncGenerator[str, None]:
+        async for item in self.interactions._handle_traverse_exit(exit_ref, language):
             yield item
 
-    async def _handle_debug(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._handle_debug(*args, **kwargs):
+    async def _handle_debug(self, user_msg: str) -> AsyncGenerator[str, None]:
+        async for item in self.interactions._handle_debug(user_msg):
             yield item
 
-    async def _handle_debug_gen_item(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._handle_debug_gen_item(*args, **kwargs):
+    async def _handle_debug_gen_item(self, prompt: str) -> AsyncGenerator[str, None]:
+        async for item in self.interactions._handle_debug_gen_item(prompt):
             yield item
 
-    async def _debug_drop_npc_items(self, *args, **kwargs) -> Any:
-        return await self.interactions._debug_drop_npc_items(*args, **kwargs)
+    async def _debug_drop_npc_items(self) -> str:
+        return await self.interactions._debug_drop_npc_items()
 
-    def _is_switch_entity(self, *args, **kwargs) -> bool:
-        return self.interactions._is_switch_entity(*args, **kwargs)
+    def _is_switch_entity(self, entity: WorldEntity | dict[str, Any] | None) -> bool:
+        return self.interactions._is_switch_entity(entity)
 
-    def _switch_config(self, *args, **kwargs) -> dict[str, Any]:
-        return self.interactions._switch_config(*args, **kwargs)
+    def _switch_config(self, entity: WorldEntity) -> dict[str, Any]:
+        return self.interactions._switch_config(entity)
 
-    def _parse_switch_args(self, *args, **kwargs) -> Any:
-        return self.interactions._parse_switch_args(*args, **kwargs)
+    def _parse_switch_args(self, raw_args: str) -> tuple[str, str, str | None] | None:
+        return self.interactions._parse_switch_args(raw_args)
 
-    async def _resolve_scene_switch(self, *args, **kwargs) -> WorldEntity | None:
-        return await self.interactions._resolve_scene_switch(*args, **kwargs)
+    async def _resolve_scene_switch(self, target_hint: str) -> WorldEntity | None:
+        return await self.interactions._resolve_scene_switch(target_hint)
 
-    def _switch_story_flags(self, *args, **kwargs) -> dict[str, bool]:
-        return self.interactions._switch_story_flags(*args, **kwargs)
+    def _switch_story_flags(self) -> dict[str, bool]:
+        return self.interactions._switch_story_flags()
 
-    def _set_switch_story_flag(self, *args, **kwargs) -> None:
-        self.interactions._set_switch_story_flag(*args, **kwargs)
+    def _set_switch_story_flag(self, key: str) -> None:
+        return self.interactions._set_switch_story_flag(key)
 
-    def _avatar_inventory_ids(self, *args, **kwargs) -> set[str]:
-        return self.interactions._avatar_inventory_ids(*args, **kwargs)
+    def _avatar_inventory_ids(self) -> set[str]:
+        return self.interactions._avatar_inventory_ids()
 
-    async def _apply_switch_outcomes(self, *args, **kwargs) -> list[str]:
-        return await self.interactions._apply_switch_outcomes(*args, **kwargs)
+    async def _apply_switch_outcomes(self, outcomes: list[Any], on_state: str) -> list[str]:
+        return await self.interactions._apply_switch_outcomes(outcomes, on_state)
 
-    async def _execute_switch_command(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._execute_switch_command(*args, **kwargs):
-            yield item
+    async def _execute_switch_command(self, switch_args: str) -> str:
+        return await self.interactions._execute_switch_command(switch_args)
 
-    async def _handle_slash(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._handle_slash(*args, **kwargs):
+    async def _handle_slash(self, user_msg: str, response: str) -> AsyncGenerator[str, None]:
+        async for item in self.interactions._handle_slash(user_msg, response):
             yield item
 
     async def _resolve_container_target(
-        self, *args, **kwargs
-    ) -> tuple[WorldEntity | None, int | None]:
-        return await self.interactions._resolve_container_target(*args, **kwargs)
+        self, hint: str
+    ) -> tuple[WorldEntity | None, dict[str, Any] | None, int | None]:
+        return await self.interactions._resolve_container_target(hint)
 
-    def _get_container_inventory(self, *args, **kwargs) -> list[dict[str, Any]]:
-        return self.interactions._get_container_inventory(*args, **kwargs)
+    async def _get_container_inventory(
+        self, scene_container: WorldEntity | None, inventory_container: dict[str, Any] | None
+    ) -> list[Any]:
+        return await self.interactions._get_container_inventory(
+            scene_container, inventory_container
+        )
 
-    def _normalize_container_item_ref(
-        self, *args, **kwargs
-    ) -> tuple[dict[str, Any] | None, int | None]:
-        return self.interactions._normalize_container_item_ref(*args, **kwargs)
+    async def _normalize_container_item_ref(self, item_ref: Any) -> dict[str, Any] | None:
+        return await self.interactions._normalize_container_item_ref(item_ref)
 
-    def _normalize_container_items(self, *args, **kwargs) -> list[dict[str, Any]]:
-        return self.interactions._normalize_container_items(*args, **kwargs)
+    async def _normalize_container_items(self, raw_items: list[Any]) -> list[dict[str, Any]]:
+        return await self.interactions._normalize_container_items(raw_items)
 
-    async def _move_container_item_to_inventory(self, *args, **kwargs) -> tuple[bool, str]:
-        return await self.interactions._move_container_item_to_inventory(*args, **kwargs)
+    async def _move_container_item_to_inventory(self, item: dict[str, Any]) -> None:
+        return await self.interactions._move_container_item_to_inventory(item)
 
-    async def _move_container_item_to_scene(self, *args, **kwargs) -> tuple[bool, str]:
-        return await self.interactions._move_container_item_to_scene(*args, **kwargs)
+    async def _move_container_item_to_scene(self, item: dict[str, Any]) -> bool:
+        return await self.interactions._move_container_item_to_scene(item)
 
-    async def _clear_container_inventory(self, *args, **kwargs) -> list[dict[str, Any]]:
-        return await self.interactions._clear_container_inventory(*args, **kwargs)
+    async def _clear_container_inventory(
+        self,
+        scene_container: WorldEntity | None,
+        inventory_container: dict[str, Any] | None,
+        inventory_idx: int | None,
+    ) -> None:
+        return await self.interactions._clear_container_inventory(
+            scene_container, inventory_container, inventory_idx
+        )
 
     # --- State Applier ---
     def _upsert_entity_update(self, *args, **kwargs) -> None:
@@ -2827,11 +2843,11 @@ class GameTurnManager:
             applier = TurnStateApplier(self)
         return await applier._build_map_payload(*args, **kwargs)
 
-    async def _build_awards_payload(self, *args, **kwargs) -> dict[str, Any]:
+    async def _build_awards_payload(self, adventure: AdventureTemplate | None) -> list[dict]:
         applier = getattr(self, "state_applier", None)
         if applier is None or not hasattr(applier, "_build_awards_payload"):
             applier = TurnStateApplier(self)
-        return await applier._build_awards_payload(*args, **kwargs)
+        return await applier._build_awards_payload(adventure)
 
     async def _apply_game_event(self, *args, **kwargs) -> list[str]:
         applier = getattr(self, "state_applier", None)

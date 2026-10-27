@@ -2,55 +2,89 @@ name: TaleWeaver CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: read
 
 jobs:
-  backend-lint-test:
+  backend-checks:
+    name: Backend ${{ matrix.check }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # Type errors must not prevent tests or lint from reporting their own result.
+      fail-fast: false
+      matrix:
+        check: [lint, types, tests]
     defaults:
       run:
+        shell: bash
         working-directory: ./
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
 
     steps:
-    - name: Check out repository
-      uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Install Poetry
-      run: |
-        python -m pip install --upgrade pip
-        pip install "poetry>=2.0.0"
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install "poetry>=2.0.0"
 
-    - name: Install dependencies
-      run: |
-        poetry install
+      - name: Install dependencies
+        run: poetry install
 
-    - name: Code Quality & Security Linting (Ruff)
-      run: |
-        poetry run ruff check backend scripts
-        poetry run ruff format --check backend scripts
+      - name: Code Quality & Security Linting (Ruff)
+        if: matrix.check == 'lint'
+        run: |
+          poetry run ruff check backend scripts
+          poetry run ruff format --check backend scripts
 
-    - name: Type checking with mypy
-      run: |
-        poetry run mypy backend --ignore-missing-imports || true # Optional: remove || true once fully typed
+      - name: Type checking with mypy
+        if: matrix.check == 'types'
+        run: |
+          mkdir -p reports
+          poetry run mypy backend --ignore-missing-imports --no-color-output 2>&1 | tee reports/mypy.txt
 
-    - name: Run Tests with pytest
-      run: |
-        # Ensure a tests directory exists or this step will fail natively.
-        # We handle it gracefully in case it doesn't exist yet.
-        if [ -d "backend/tests" ]; then
-          poetry run pytest backend/tests/ -v
-        elif [ -d "tests" ]; then
-          poetry run pytest tests/ -v || true
-        else
-          echo "No tests directory found. Skipping tests."
-        fi
+      - name: Create temporary test keys
+        if: matrix.check == 'tests'
+        run: |
+          poetry run python - <<'PY'
+          import os
+          import secrets
+          from pathlib import Path
+          from cryptography.fernet import Fernet
+
+          values = {
+              "SECRET_KEY": secrets.token_urlsafe(48),
+              "ENCRYPTION_KEY": Fernet.generate_key().decode("ascii"),
+          }
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as output:
+              for name, value in values.items():
+                  print(f"::add-mask::{value}")
+                  output.write(f"{name}={value}\n")
+          PY
+
+      - name: Run Tests with pytest
+        if: matrix.check == 'tests'
+        run: |
+          mkdir -p reports
+          poetry run pytest tests/ -q --tb=short --junitxml=reports/pytest.xml 2>&1 | tee reports/pytest.txt
+
+      - name: Upload check reports
+        if: always() && matrix.check != 'lint'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.check }}-reports
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 7
