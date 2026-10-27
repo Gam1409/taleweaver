@@ -197,7 +197,7 @@ def safe_fields(fields: dict) -> dict:
 
 def safe_error(error: BaseException) -> dict:
     """Never inspect exception text/args, SQL parameters, source lines or locals."""
-    result = {"type": type(error).__name__}
+    result: dict[str, object] = {"type": type(error).__name__}
     frames = []
     trace = error.__traceback__
     while trace is not None:
@@ -211,9 +211,9 @@ def safe_error(error: BaseException) -> dict:
     if type(status) is int:
         result["status_code"] = status
     original = getattr(error, "orig", error)
-    code = getattr(original, "sqlite_errorcode", None)
-    if type(code) is int:
-        result["sqlite_code"] = code
+    sqlite_code = getattr(original, "sqlite_errorcode", None)
+    if type(sqlite_code) is int:
+        result["sqlite_code"] = sqlite_code
     cause = error.__cause__ or error.__context__
     if cause is not None:
         result["cause_type"] = type(cause).__name__
