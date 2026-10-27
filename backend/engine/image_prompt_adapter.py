@@ -4,19 +4,15 @@ import asyncio
 import json
 import re
 
-from backend.core import prompts
+from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.image_profiles import advanced_for
 
 PROMPT_TIMEOUT = 90
-MATURE_THEMES_INSTRUCTION = (
-    "When consistent with the supplied scene, allow romantic tension, flirting and implied "
-    "intimacy between clearly adult characters. Do not add sexual context on your own. "
-    "Do not describe sexual acts, intimate anatomy or graphic sexual details. "
-    "Do not sexualize minors or age-ambiguous characters."
-)
+# Compatibility export for callers importing the former instruction constant.
+MATURE_THEMES_INSTRUCTION = mature_content_prompts.IMAGE_PROMPT_ADDENDUM
 
 
 def cover_source(title: str, original_prompt: str, provider: str, options: dict) -> str:
@@ -74,7 +70,7 @@ async def adapt_body(
         "mandatory tokens are added separately. Avoid lettering unless explicitly requested."
     )
     if mature_themes:
-        system += "\n" + MATURE_THEMES_INSTRUCTION
+        system += "\n" + mature_content_prompts.IMAGE_PROMPT_ADDENDUM
     try:
         body = await asyncio.wait_for(
             llm.aexecute_simple_task(
