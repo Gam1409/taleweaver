@@ -12,8 +12,10 @@ from backend.schemas.session import (
 class CRUDGameSession(CRUDBase[GameSession, GameSessionCreate, GameSessionUpdate]):
     pass
 
+
 class CRUDSessionState(CRUDBase[SessionState, SessionStateCreate, SessionStateUpdate]):
     pass
+
 
 game_session = CRUDGameSession(GameSession)
 session_state = CRUDSessionState(SessionState)

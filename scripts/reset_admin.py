@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 # Add root to path so we can import backend
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from backend.core.auth import get_password_hash, validate_password_strength
 from backend.core.config import settings
@@ -54,7 +54,7 @@ async def reset_admin(username: str = DEFAULT_ADMIN_USERNAME, password: str | No
                     username=username,
                     hashed_password=hashed_password,
                     role="admin",
-                    bio="The root weaver of this realm."
+                    bio="The root weaver of this realm.",
                 )
                 db.add(user)
 

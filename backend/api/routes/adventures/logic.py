@@ -1,20 +1,11 @@
 import logging
-import os
-import glob
 from copy import deepcopy
-from dataclasses import asdict
-from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-from sqlalchemy import select, update, delete, or_
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.orm.attributes import flag_modified
 
-from backend.core.config import settings
-from backend.core.game_modes import mode_policy
-from backend.engine.clothing.presentation import player_clothing
-from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
 from backend.engine.visual_novel.presentation import known_character, public_entity, session_is_vn
@@ -24,35 +15,31 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
-from backend.utils.path_security import (
-    assert_within_data_dir,
-    data_url_to_local_path,
-    ensure_within_base_dir,
-    ensure_within_data_dir,
-    local_path_to_data_url,
-    safe_data_path,
-    sanitize_path_component,
-    sanitize_relative_segment,
-)
 
 logger = logging.getLogger(__name__)
 SESSION_MANIFEST_SNAPSHOT_KEY = "__manifest_snapshot__"
 
+
 class AdventureLogic:
     """Class grouping core business logic and helper functions for Adventure management."""
+
     SESSION_MANIFEST_SNAPSHOT_KEY = SESSION_MANIFEST_SNAPSHOT_KEY
 
     @staticmethod
-    async def get_or_create_map(db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None) -> WorldMap:
+    async def get_or_create_map(
+        db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None
+    ) -> WorldMap:
         """Fetch or lazily create a WorldMap row for the given adventure session."""
         if session_id:
             query = select(WorldMap).where(WorldMap.session_id == session_id)
         else:
-            query = select(WorldMap).where(WorldMap.template_id == template_id, WorldMap.session_id == None)
+            query = select(WorldMap).where(
+                WorldMap.template_id == template_id, WorldMap.session_id.is_(None)
+            )
 
         result = await db.execute(query)
         world_map = result.scalars().first()
-        
+
         if not world_map:
             world_map = WorldMap(template_id=template_id, session_id=session_id)
             db.add(world_map)
@@ -160,7 +147,9 @@ class AdventureLogic:
         return combat
 
     @staticmethod
-    def resolve_session_asset(state: Optional[SessionState], key: str, fallback: Optional[str] = None) -> Optional[str]:
+    def resolve_session_asset(
+        state: Optional[SessionState], key: str, fallback: Optional[str] = None
+    ) -> Optional[str]:
         if not state:
             return AdventureLogic.resolve_existing_data_asset_url(fallback)
         snapshot = AdventureLogic.extract_asset_snapshot(state)
@@ -171,109 +160,23 @@ class AdventureLogic:
     @staticmethod
     def resolve_existing_data_asset_url(url: Optional[str]) -> Optional[str]:
         """Best-effort repair for stale /data URLs that no longer match current folders."""
-        if not isinstance(url, str):
-            return url
-        candidate = url.strip()
-        if not candidate or not candidate.startswith("/data/"):
-            return candidate
+        from .session_asset_repair import resolve_existing_data_asset_url
 
-        abs_path = data_url_to_local_path(candidate)
-        if not abs_path:
-            return candidate
-        data_root = os.path.abspath(settings.DATA_DIR)
-        try:
-            if os.path.commonpath([abs_path, data_root]) == data_root and os.path.isfile(abs_path):
-                return candidate
-        except ValueError:
-            return candidate
-
-        filename = os.path.basename(abs_path)
-        if not filename:
-            return candidate
-
-        for root in (
-            os.path.join(settings.DATA_DIR, "adventures", "library"),
-            os.path.join(settings.DATA_DIR, "adventures", "sessions"),
-        ):
-            root_abs = os.path.abspath(root)
-            if not os.path.isdir(root_abs):
-                continue
-            for alt in glob.iglob(os.path.join(root_abs, "**", filename), recursive=True):
-                alt_abs = os.path.abspath(alt)
-                try:
-                    if os.path.commonpath([alt_abs, data_root]) != data_root:
-                        continue
-                except ValueError:
-                    continue
-                if os.path.isfile(alt_abs):
-                    rel_alt = os.path.relpath(alt_abs, data_root).replace("\\", "/")
-                    return f"/data/{rel_alt}"
-        # File not found at original location and no replacement found — return None
-        # so callers can fall back to alternative image sources rather than serving a 404.
-        return None
+        return resolve_existing_data_asset_url(url)
 
     @staticmethod
-    def heal_template_avatar_profile_image(template_id: Optional[str], profile_image: Optional[str]) -> Optional[str]:
+    def heal_template_avatar_profile_image(
+        template_id: Optional[str], profile_image: Optional[str]
+    ) -> Optional[str]:
         """Heals template avatar profile image if it points to a deleted session path."""
-        if not template_id or not profile_image:
-            return profile_image
+        from .session_asset_repair import heal_template_avatar_profile_image
 
-        safe_template_id = sanitize_path_component(template_id)
-        if not safe_template_id:
-            return profile_image
-
-        if "/adventures/sessions/" in profile_image:
-            abs_path = data_url_to_local_path(profile_image)
-            if abs_path and os.path.isfile(abs_path):
-                return profile_image
-
-            try:
-                library_dir = safe_data_path("adventures", "library", safe_template_id)
-            except ValueError:
-                return profile_image
-
-            data_root = os.path.realpath(settings.DATA_DIR)
-            if os.path.isdir(library_dir):
-                allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-                exact_match = None
-                fuzzy_match = None
-
-                try:
-                    with os.scandir(library_dir) as entries:
-                        for entry in entries:
-                            if not entry.is_file():
-                                continue
-                            name_upper = entry.name.upper()
-                            _, ext = os.path.splitext(entry.name)
-                            if ext.lower() not in allowed_exts:
-                                continue
-                            if name_upper.startswith("PROTAGONIST."):
-                                exact_match = entry.name
-                                break
-                            if "PROTAGONIST" in name_upper and fuzzy_match is None:
-                                fuzzy_match = entry.name
-                except OSError:
-                    return profile_image
-
-                chosen_name = exact_match or fuzzy_match
-                if chosen_name:
-                    safe_name = os.path.basename(sanitize_relative_segment(chosen_name) or "")
-                    if safe_name:
-                        try:
-                            candidate_path = ensure_within_base_dir(
-                                os.path.join(library_dir, safe_name),
-                                library_dir,
-                            )
-                            candidate_path = assert_within_data_dir(candidate_path)
-                            if os.path.isfile(candidate_path):
-                                return local_path_to_data_url(candidate_path)
-                        except ValueError:
-                            pass
-
-        return profile_image
+        return heal_template_avatar_profile_image(template_id, profile_image)
 
     @staticmethod
-    async def resolve_scene_image(db: AsyncSession, state: SessionState, scene_id: str) -> Optional[str]:
+    async def resolve_scene_image(
+        db: AsyncSession, state: SessionState, scene_id: str
+    ) -> Optional[str]:
         """Resolves the image for a scene, prioritizing session overrides then template defaults."""
         # 1. Try session override (e.g. generated image)
         img = AdventureLogic.resolve_existing_data_asset_url(
@@ -281,81 +184,29 @@ class AdventureLogic:
         )
         if img:
             return img
-            
+
         # 2. Try WorldScene table (template default)
-        res = await db.execute(select(WorldScene.image_url).where(
-            WorldScene.id == scene_id,
-            or_(WorldScene.session_id == state.session_id, WorldScene.template_id == state.template_id)
-        ))
+        res = await db.execute(
+            select(WorldScene.image_url).where(
+                WorldScene.id == scene_id,
+                or_(
+                    WorldScene.session_id == state.session_id,
+                    WorldScene.template_id == state.template_id,
+                ),
+            )
+        )
         return AdventureLogic.resolve_existing_data_asset_url(res.scalars().first())
 
     @staticmethod
-    def resolve_start_datetime(manifest: dict[str, Optional[Any]], state: Optional[SessionState] = None, time_config: Optional[dict] = None) -> Optional[str]:
+    def resolve_start_datetime(
+        manifest: dict[str, Optional[Any]],
+        state: Optional[SessionState] = None,
+        time_config: Optional[dict] = None,
+    ) -> Optional[str]:
         """Returns a usable ISO datetime string. Prioritizes session-specific state over manifest."""
-        if state and state.start_datetime:
-            return state.start_datetime
-        
-        target_manifest = manifest or {}
+        from .session_initial_state import resolve_start_datetime
 
-        # Merge explicit editor time_config over manifest defaults so in-game
-        # start time can be configured from the world editor.
-        merged_time_config = dict(time_config or {})
-        manifest_time_config = target_manifest.get("time_config")
-        if isinstance(manifest_time_config, dict):
-            for k, v in manifest_time_config.items():
-                merged_time_config.setdefault(k, v)
-
-        time_sys = merged_time_config.get("time_system") or target_manifest.get("time_system")
-        if time_sys in ("relative", "units"):
-            return None
-
-        # Check explicit start_datetime in time_config
-        config_start_dt = merged_time_config.get("start_datetime")
-        if isinstance(config_start_dt, str) and config_start_dt.strip():
-            try:
-                dt = datetime.fromisoformat(config_start_dt.strip().replace("Z", "+00:00"))
-                return dt.isoformat()
-            except ValueError:
-                pass
-
-        # Check explicit start_datetime in manifest
-        start_datetime = target_manifest.get("start_datetime")
-        if isinstance(start_datetime, str) and start_datetime.strip():
-            try:
-                dt = datetime.fromisoformat(start_datetime.strip().replace("Z", "+00:00"))
-                return dt.isoformat()
-            except ValueError:
-                pass
-
-        # Check start_date + start_time in merged config or manifest
-        start_date = merged_time_config.get("start_date") or target_manifest.get("start_date")
-        start_time = merged_time_config.get("start_time") or target_manifest.get("start_time")
-        if isinstance(start_date, str) and start_date.strip():
-            time_part = start_time.strip() if isinstance(start_time, str) and start_time.strip() else "08:00"
-            try:
-                dt = datetime.fromisoformat(f"{start_date.strip()}T{time_part}")
-                return dt.isoformat()
-            except ValueError:
-                pass
-
-        # Build from start_time (e.g. "14:30") + optional start_year_override.
-        base_hour, base_minute = 8, 0
-        configured_start = merged_time_config.get("start_time")
-        if isinstance(configured_start, str) and configured_start.strip():
-            try:
-                h, m = map(int, configured_start.strip().split(":"))
-                base_hour, base_minute = h, m
-            except Exception:
-                pass
-        year_override = merged_time_config.get("start_year_override")
-        if not configured_start and not year_override:
-            return None
-        try:
-            year = int(year_override) if year_override else 2026
-            dt = datetime(year=year, month=1, day=1, hour=base_hour, minute=base_minute)
-            return dt.isoformat()
-        except Exception:
-            return None
+        return resolve_start_datetime(manifest, state, time_config)
 
     @staticmethod
     async def resolve_initial_scene_id(db: AsyncSession, template_id: Optional[str]) -> str:
@@ -369,71 +220,14 @@ class AdventureLogic:
         5) Lexicographically first available scene id.
         6) Fallback "START" when no scenes exist.
         """
-        if not template_id:
-            return "START"
+        from .session_initial_state import resolve_initial_scene_id
 
-        scene_res = await db.execute(
-            select(WorldScene.id)
-            .where(
-                WorldScene.template_id == template_id,
-                WorldScene.session_id.is_(None),
-            )
-        )
-        scene_ids = [sid for sid in scene_res.scalars().all() if isinstance(sid, str) and sid]
-        if not scene_ids:
-            return "START"
-
-        scene_set = set(scene_ids)
-
-        adv_res = await db.execute(
-            select(AdventureTemplate.original_manifest).where(AdventureTemplate.id == template_id)
-        )
-        original_manifest = adv_res.scalar_one_or_none()
-        if isinstance(original_manifest, dict):
-            explicit_start = (
-                original_manifest.get("start_scene_id")
-                or original_manifest.get("scene_id")
-                or original_manifest.get("current_scene_id")
-            )
-            if isinstance(explicit_start, str):
-                normalized_explicit_start = explicit_start.strip()
-                if normalized_explicit_start in scene_set:
-                    return normalized_explicit_start
-
-            manifest_scenes = original_manifest.get("scenes")
-            if isinstance(manifest_scenes, list):
-                for entry in manifest_scenes:
-                    if not isinstance(entry, dict):
-                        continue
-                    candidate = entry.get("id")
-                    if isinstance(candidate, str):
-                        normalized_candidate = candidate.strip()
-                        if normalized_candidate in scene_set:
-                            return normalized_candidate
-
-        if "START" in scene_set:
-            return "START"
-
-        exit_res = await db.execute(
-            select(WorldExit.from_scene_id, WorldExit.to_scene_id)
-            .where(
-                WorldExit.template_id == template_id,
-                WorldExit.session_id.is_(None),
-            )
-        )
-        incoming_count: dict[str, int] = {sid: 0 for sid in scene_set}
-        for from_scene_id, to_scene_id in exit_res.all():
-            if from_scene_id in scene_set and to_scene_id in scene_set:
-                incoming_count[to_scene_id] = incoming_count.get(to_scene_id, 0) + 1
-
-        entry_scenes = sorted([sid for sid, count in incoming_count.items() if count == 0])
-        if entry_scenes:
-            return entry_scenes[0]
-
-        return sorted(scene_set)[0]
+        return await resolve_initial_scene_id(db, template_id)
 
     @staticmethod
-    async def resolve_session_state(db: AsyncSession, session_or_template_id: str, user_id: Optional[str] = None) -> Optional[SessionState]:
+    async def resolve_session_state(
+        db: AsyncSession, session_or_template_id: str, user_id: Optional[str] = None
+    ) -> Optional[SessionState]:
         """Resolve a session state by session id first, then by template/adventure id."""
         direct_res = await db.execute(
             select(SessionState)
@@ -445,7 +239,9 @@ class AdventureLogic:
             return direct_state
 
         session_candidate = None
-        session_by_id_res = await db.execute(select(GameSession).where(GameSession.id == session_or_template_id))
+        session_by_id_res = await db.execute(
+            select(GameSession).where(GameSession.id == session_or_template_id)
+        )
         session_candidate = session_by_id_res.scalars().first()
 
         if not session_candidate:
@@ -456,7 +252,9 @@ class AdventureLogic:
             )
             template_sessions = template_session_res.scalars().all()
             if user_id:
-                session_candidate = next((s for s in template_sessions if s.user_id == user_id), None)
+                session_candidate = next(
+                    (s for s in template_sessions if s.user_id == user_id), None
+                )
             else:
                 session_candidate = template_sessions[0] if template_sessions else None
 
@@ -471,11 +269,17 @@ class AdventureLogic:
             existing_for_candidate = existing_for_candidate_res.scalars().first()
             if existing_for_candidate:
                 return existing_for_candidate
-            
+
             # Auto-healing logic
-            first_scene_id = await AdventureLogic.resolve_initial_scene_id(db, session_candidate.template_id)
-            
-            adv_res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == session_candidate.template_id))
+            first_scene_id = await AdventureLogic.resolve_initial_scene_id(
+                db, session_candidate.template_id
+            )
+
+            adv_res = await db.execute(
+                select(AdventureTemplate).where(
+                    AdventureTemplate.id == session_candidate.template_id
+                )
+            )
             adventure = adv_res.scalars().first()
 
             healed_state = SessionState(
@@ -486,15 +290,19 @@ class AdventureLogic:
                 current_scene_id=first_scene_id,
                 in_game_time=0,
                 entity_states={
-                    AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY: AdventureLogic.build_session_manifest_snapshot(adventure)
-                } if adventure else {},
+                    AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY: AdventureLogic.build_session_manifest_snapshot(
+                        adventure
+                    )
+                }
+                if adventure
+                else {},
                 quests=adventure.quests if adventure else [],
                 plot=adventure.plot if adventure else None,
                 rules=adventure.rules if adventure else None,
                 walkthrough=adventure.walkthrough if adventure else None,
                 completed_condition=adventure.completed_condition if adventure else None,
                 gameover_condition=adventure.gameover_condition if adventure else None,
-                tts_director_notes=adventure.tts_director_notes if adventure else None
+                tts_director_notes=adventure.tts_director_notes if adventure else None,
             )
             db.add(healed_state)
             await db.commit()
@@ -515,7 +323,9 @@ class AdventureLogic:
         ]
 
         session_overrides = state.entity_states or {}
-        norm_overrides_by_id = {str(k).strip().upper(): v for k, v in session_overrides.items() if isinstance(v, dict)}
+        norm_overrides_by_id = {
+            str(k).strip().upper(): v for k, v in session_overrides.items() if isinstance(v, dict)
+        }
 
         merged_entities: list[dict[str, Any]] = []
         for ent in base_entities:
@@ -527,33 +337,33 @@ class AdventureLogic:
             elif eid_upper in norm_overrides_by_id:
                 ent.update(norm_overrides_by_id[eid_upper])
 
-            if str(ent.get("item_type") or "").upper() == "CONSTRUCTABLE":
-                override = session_overrides.get(eid) or norm_overrides_by_id.get(eid_upper) or {}
-                if "is_hidden" not in override:
-                    ent["is_hidden"] = True
-            metadata_json = ent.get("metadata_json") if isinstance(ent.get("metadata_json"), dict) else {}
-            discovery_visibility = metadata_json.get("discovery_visibility") if isinstance(metadata_json.get("discovery_visibility"), dict) else {}
-            listed_in_discoveries = discovery_visibility.get("listed_in_discoveries")
-            if isinstance(listed_in_discoveries, bool):
-                ent["listed_in_discoveries"] = listed_in_discoveries
-            elif str(ent.get("item_type") or "").upper() == "SWITCH":
-                ent["listed_in_discoveries"] = False
-            else:
-                ent["listed_in_discoveries"] = True
+            _apply_discovery_visibility(
+                ent, session_overrides, norm_overrides_by_id, eid, eid_upper
+            )
             ent["image_url"] = AdventureLogic.resolve_existing_data_asset_url(ent.get("image_url"))
             merged_entities.append(ent)
 
         entity_lookup: dict[str, dict[str, Any]] = {
-            str(ent.get("id")): ent
-            for ent in merged_entities
-            if ent.get("id")
+            str(ent.get("id")): ent for ent in merged_entities if ent.get("id")
         }
         contained_item_ids = AdventureLogic.collect_container_item_ids(merged_entities)
         contained_item_ids.update(npc_possession_ids(merged_entities))
         entities: list[dict[str, Any]] = []
         for ent in merged_entities:
-            ent_scene = str(ent.get("current_scene_id") or "").strip().lower().replace("-", "_").replace(" ", "_")
-            current_scene = str(state.current_scene_id or "").strip().lower().replace("-", "_").replace(" ", "_")
+            ent_scene = (
+                str(ent.get("current_scene_id") or "")
+                .strip()
+                .lower()
+                .replace("-", "_")
+                .replace(" ", "_")
+            )
+            current_scene = (
+                str(state.current_scene_id or "")
+                .strip()
+                .lower()
+                .replace("-", "_")
+                .replace(" ", "_")
+            )
             if ent_scene != current_scene:
                 continue
             if ent.get("is_hidden"):
@@ -563,9 +373,17 @@ class AdventureLogic:
             if str(ent.get("id") or "") in contained_item_ids:
                 continue
             if str(ent.get("item_type") or "").upper() == "CONTAINER":
-                ent = dict(ent)
-                ent["inventory"] = AdventureLogic.hydrate_container_inventory(ent.get("inventory"), entity_lookup)
-            entities.append(public_entity(ent, state) if vn_mode else player_entity_view(ent))
+                visible_entity = dict(ent)
+                visible_entity["inventory"] = AdventureLogic.hydrate_container_inventory(
+                    ent.get("inventory"), entity_lookup
+                )
+            else:
+                visible_entity = ent
+            entities.append(
+                public_entity(visible_entity, state)
+                if vn_mode
+                else player_entity_view(visible_entity)
+            )
         return entities
 
     @staticmethod
@@ -601,85 +419,18 @@ class AdventureLogic:
         If conditions are met, awards XP to the avatar, advances state.active_sequence_id,
         and returns descriptive system messages.
         """
-        if not adventure or not getattr(adventure, "sequences", None):
-            return []
-        raw_sequences = adventure.sequences
-        if not isinstance(raw_sequences, list) or len(raw_sequences) == 0:
-            return []
+        from .sequence_progress import evaluate_sequence_progress
 
-        sequences = sorted(
-            [s for s in raw_sequences if isinstance(s, dict)],
-            key=lambda x: x.get("order", 1),
+        return evaluate_sequence_progress(
+            adventure,
+            state,
+            avatar,
+            new_inventory_items,
+            new_scene_id,
+            updated_entities,
+            force_complete,
+            script_context,
         )
-        if not sequences:
-            return []
-
-        active_seq_id = getattr(state, "active_sequence_id", None)
-        current_seq_idx = -1
-        for i, seq in enumerate(sequences):
-            if seq.get("id") == active_seq_id or (not active_seq_id and i == 0):
-                current_seq_idx = i
-                break
-
-        if current_seq_idx < 0:
-            return []
-
-        current_seq = sequences[current_seq_idx]
-        from backend.engine.hard_rule_evaluator import HardRuleEvaluator
-
-        if HardRuleEvaluator.has_hard_rules(current_seq):
-            is_met, _ = HardRuleEvaluator.evaluate_hard_rules(
-                current_seq,
-                avatar,
-                state,
-                new_inventory_items=new_inventory_items,
-                new_scene_id=new_scene_id,
-                updated_entities=updated_entities,
-                script_context=script_context,
-            )
-            sequence_completed = is_met
-        else:
-            sequence_completed = force_complete
-
-        if not sequence_completed:
-            return []
-
-        system_messages: list[str] = []
-        seq_title = current_seq.get("title") or current_seq.get("id") or f"Chapter {current_seq_idx + 1}"
-        xp_reward = int(current_seq.get("exp_reward") or 0)
-        if xp_reward > 0:
-            avatar.exp = (getattr(avatar, "exp", 0) or 0) + xp_reward
-            try:
-                flag_modified(avatar, "exp")
-            except Exception:
-                pass
-            xp_msg = f"Sequence completed: {seq_title} (+{xp_reward} XP)"
-        else:
-            xp_msg = f"Sequence completed: {seq_title}"
-        system_messages.append(xp_msg)
-
-        next_seq_idx = current_seq_idx + 1
-        if next_seq_idx < len(sequences):
-            next_seq = sequences[next_seq_idx]
-            state.active_sequence_id = next_seq.get("id")
-            state.active_sequence_order = next_seq.get("order", next_seq_idx + 1)
-            try:
-                flag_modified(state, "active_sequence_id")
-                flag_modified(state, "active_sequence_order")
-            except Exception:
-                pass
-            next_title = next_seq.get("title") or next_seq.get("id")
-            next_msg = f"New Sequence unlocked: {next_title}"
-            system_messages.append(next_msg)
-        else:
-            if hasattr(state, "is_completed"):
-                state.is_completed = True
-                try:
-                    flag_modified(state, "is_completed")
-                except Exception:
-                    pass
-
-        return system_messages
 
     @staticmethod
     def extract_inventory_entity_ids(inventory: Any) -> set[str]:
@@ -709,11 +460,15 @@ class AdventureLogic:
         for entity in entities:
             if str(entity.get("item_type") or "").upper() != "CONTAINER":
                 continue
-            contained_ids.update(AdventureLogic.extract_inventory_entity_ids(entity.get("inventory")))
+            contained_ids.update(
+                AdventureLogic.extract_inventory_entity_ids(entity.get("inventory"))
+            )
         return contained_ids
 
     @staticmethod
-    def hydrate_container_inventory(inventory: Any, entity_lookup: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    def hydrate_container_inventory(
+        inventory: Any, entity_lookup: dict[str, dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Expands container inventory refs into item payloads used by the UI modal."""
         if not isinstance(inventory, list):
             return []
@@ -722,7 +477,9 @@ class AdventureLogic:
         for entry in inventory:
             if isinstance(entry, dict):
                 item = dict(entry)
-                item["image_url"] = AdventureLogic.resolve_existing_data_asset_url(item.get("image_url"))
+                item["image_url"] = AdventureLogic.resolve_existing_data_asset_url(
+                    item.get("image_url")
+                )
                 hydrated.append(item)
                 continue
 
@@ -741,251 +498,22 @@ class AdventureLogic:
     @staticmethod
     async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSession) -> dict:
         """Builds a serialisable character-sheet snapshot."""
-        adv_res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == state.template_id))
-        adventure = adv_res.scalars().first()
-        session_snapshot = AdventureLogic.extract_manifest_snapshot(state)
-        session_manifest = AdventureLogic.resolve_manifest_for_state(state)
-        adventure_time_config = adventure.time_config if adventure else (session_snapshot.get("adventure") or {}).get("time_config")
-        start_datetime = AdventureLogic.resolve_start_datetime(
-            adventure.original_manifest if adventure else session_manifest,
-            state=state,
-            time_config=adventure_time_config,
-        )
-        
-        if not start_datetime and ((adventure and adventure.clock_enabled) or bool((session_snapshot.get("adventure") or {}).get("clock_enabled"))):
-            resolved = AdventureLogic.resolve_start_datetime(
-                {"time_config": adventure_time_config or {}},
-                time_config=adventure_time_config,
-            )
-            start_datetime = resolved or "2026-04-17T08:00:00"
+        from .session_sheet import build_sheet_snapshot
 
-        snapshot = AdventureLogic.extract_asset_snapshot(state)
-        has_asset_snapshot = "__asset_snapshot__" in (state.entity_states or {})
-        snapshot_entity_images = snapshot.get("entity_images", {})
-
-        res = await db.execute(select(WorldEntity.id, WorldEntity.image_url).where(WorldEntity.session_id == state.session_id, WorldEntity.image_url.is_not(None)))
-        img_map = {row.id: row.image_url for row in res.all() if row.id}
-        if has_asset_snapshot:
-            img_map = {k: v for k, v in snapshot_entity_images.items() if isinstance(v, str) and v}
-        else:
-            img_map.update({k: v for k, v in snapshot_entity_images.items() if isinstance(v, str) and v})
-        
-        from backend.engine.item_logic import get_item_slot
-
-        def _entity_to_item_dict(ent: WorldEntity) -> dict:
-            """Build a minimal item dict from a WorldEntity for character sheet display."""
-            guessed_slot = get_item_slot(ent.name or "", ent.item_type or "PICKABLE")
-            wearable = ent.wearable_slots
-            if isinstance(wearable, list) and wearable:
-                item_slot = wearable[0]
-            elif isinstance(wearable, str):
-                item_slot = wearable
-            else:
-                item_slot = guessed_slot
-            metadata = ent.metadata_json or {}
-            effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
-
-            def _get_val(*candidates):
-                for c in candidates:
-                    if c is not None:
-                        try:
-                            return int(c)
-                        except (TypeError, ValueError):
-                            pass
-                return None
-
-            def _get_str(*candidates):
-                for c in candidates:
-                    if isinstance(c, str) and c.strip():
-                        return c.strip()
-                return None
-
-            return {
-                "id": ent.id,
-                "name": ent.name,
-                "description": ent.description,
-                "image_url": ent.image_url,
-                "item_type": ent.item_type or "PICKABLE",
-                "slot": item_slot,
-                "metadata_json": dict(metadata),
-                "stat_modifier_strength": _get_val(ent.stat_modifier_strength),
-                "stat_modifier_dexterity": _get_val(ent.stat_modifier_dexterity),
-                "stat_modifier_intelligence": _get_val(ent.stat_modifier_intelligence),
-                "stat_modifier_wisdom": _get_val(ent.stat_modifier_wisdom),
-                "stat_modifier_charisma": _get_val(ent.stat_modifier_charisma),
-                "stat_modifier_armor_class": _get_val(ent.stat_modifier_armor_class),
-                "hp_change": _get_val(metadata.get("hp_change"), effects.get("hp")),
-                "stamina_change": _get_val(metadata.get("stamina_change"), effects.get("stamina")),
-                "mana_change": _get_val(metadata.get("mana_change"), effects.get("mana")),
-                "damage_dice": _get_str(metadata.get("damage_dice")),
-                "weapon_cost_type": _get_str(metadata.get("weapon_cost_type")),
-                "weapon_cost_value": _get_val(metadata.get("weapon_cost_value")),
-            }
-
-        # Pre-load entity records for any string item IDs (legacy format: equipment stored as IDs)
-        item_ids_to_resolve: set[str] = set()
-        for _item in (avatar.inventory or []):
-            if isinstance(_item, str) and _item:
-                item_ids_to_resolve.add(_item)
-        normalized_eq_check = normalize_equipment_keys(avatar.equipment)
-        for _slot, _item in normalized_eq_check.items():
-            if isinstance(_item, str) and _item:
-                item_ids_to_resolve.add(_item)
-
-        entity_lookup: dict[str, Any] = {}
-        if item_ids_to_resolve:
-            ent_res = await db.execute(
-                select(WorldEntity).where(WorldEntity.id.in_(item_ids_to_resolve))
-            )
-            for ent in ent_res.scalars().all():
-                if ent.id not in entity_lookup:
-                    entity_lookup[ent.id] = ent
-                elif ent.session_id == state.session_id:
-                    # Prefer session-bound entities over template entities
-                    entity_lookup[ent.id] = ent
-
-        synced_inventory = []
-        for item in (avatar.inventory or []):
-            if not isinstance(item, dict):
-                if isinstance(item, str):
-                    if item in entity_lookup:
-                        item = _entity_to_item_dict(entity_lookup[item])
-                    else:
-                        item = {"name": item}
-                else:
-                    continue
-            item_copy = dict(item)
-            if not item_copy.get("slot"):
-                item_copy["slot"] = get_item_slot(item_copy.get("name", ""), item_copy.get("item_type", "PICKABLE"))
-            item_id = item_copy.get("id")
-            if item_id in img_map and not item_copy.get("image_url"):
-                item_copy["image_url"] = img_map[item_id]
-            synced_inventory.append(item_copy)
-            
-        synced_equipment = {}
-        normalized_equipment = normalize_equipment_keys(avatar.equipment)
-        for slot, item in normalized_equipment.items():
-            if item:
-                if not isinstance(item, dict):
-                    if isinstance(item, str):
-                        if item in entity_lookup:
-                            item = _entity_to_item_dict(entity_lookup[item])
-                        else:
-                            item = {"name": item}
-                    else:
-                        synced_equipment[slot] = item
-                        continue
-                item_copy = dict(item)
-                if not item_copy.get("slot"):
-                    item_copy["slot"] = get_item_slot(item_copy.get("name", ""), item_copy.get("item_type", "PICKABLE"))
-                item_id = item_copy.get("id")
-                if item_id in img_map and not item_copy.get("image_url"):
-                    item_copy["image_url"] = img_map[item_id]
-                synced_equipment[slot] = item_copy
-            else:
-                synced_equipment[slot] = item
-                
-        scene_res = await db.execute(select(WorldScene).where(WorldScene.id == state.current_scene_id, WorldScene.session_id == state.session_id))
-        current_scene = scene_res.scalars().first()
-        if not current_scene:
-            scene_res = await db.execute(select(WorldScene).where(WorldScene.id == state.current_scene_id, WorldScene.template_id == state.template_id))
-            current_scene = scene_res.scalars().first()
-        
-        from backend.engine.stat_aggregator import calculate_total_stats
-        total_stats = calculate_total_stats(avatar)
-
-        profile_image = AdventureLogic.resolve_session_asset(state, "protagonist", avatar.profile_image)
-        if profile_image and "/adventures/sessions/" in profile_image:
-            abs_path = data_url_to_local_path(profile_image)
-            if not abs_path or not os.path.isfile(abs_path):
-                profile_image = AdventureLogic.heal_template_avatar_profile_image(state.template_id, profile_image)
-        if not profile_image:
-            manifest_protagonist = session_manifest.get("protagonist") if isinstance(session_manifest, dict) else None
-            if isinstance(manifest_protagonist, dict):
-                profile_image = AdventureLogic.resolve_existing_data_asset_url(manifest_protagonist.get("profile_image"))
-        if not profile_image and state.template_id:
-            avatar_image_res = await db.execute(
-                select(Avatar.profile_image)
-                .where(
-                    Avatar.template_id == state.template_id,
-                    Avatar.profile_image.is_not(None),
-                    Avatar.profile_image != "",
-                )
-                .order_by(Avatar.updated_at.desc())
-                .limit(10)
-            )
-            for candidate in avatar_image_res.scalars().all():
-                resolved = AdventureLogic.resolve_existing_data_asset_url(candidate)
-                if resolved:
-                    profile_image = resolved
-                    break
-        snapshot = {
-            "clothing": player_clothing(avatar, session_manifest),
-            "name": avatar.name,
-            "role": avatar.role,
-            "description": avatar.description,
-            "profile_image": profile_image,
-            "hp": avatar.hp, 
-            "max_hp": avatar.max_hp,
-            "stamina": avatar.stamina, 
-            "max_stamina": avatar.max_stamina,
-            "mana": avatar.mana,
-            "max_mana": avatar.max_mana,
-            "strength": total_stats.get("strength", avatar.strength),
-            "dexterity": total_stats.get("dexterity", avatar.dexterity),
-            "intelligence": total_stats.get("intelligence", avatar.intelligence),
-            "wisdom": total_stats.get("wisdom", avatar.wisdom),
-            "charisma": total_stats.get("charisma", avatar.charisma),
-            "armor_class": total_stats.get("armor_class", avatar.armor_class),
-            "stats": total_stats, 
-            "inventory": synced_inventory, 
-            "equipment": synced_equipment,
-            "status_effects": avatar.status_effects or [], 
-            "in_game_time": state.in_game_time,
-            "start_datetime": start_datetime,
-            "current_scene": current_scene.label if current_scene else state.current_scene_id,
-            "special_actions": avatar.stats.get("special_actions") or [],
-            "unlocked_actions": avatar.stats.get("unlocked_actions") or [],
-            "scene_id": state.current_scene_id,
-            "adventure_title": adventure.title if adventure else "Unknown",
-            "adventure_version": adventure.version if adventure else None,
-            "creator": adventure.creator if adventure else None,
-            "copyright": adventure.copyright if adventure else None,
-            "license": adventure.license if adventure else None,
-            "license_url": adventure.license_url if adventure else None,
-            "template_id": state.template_id,
-            "exp": avatar.exp,
-            "rule_enforcement_mode": adventure.rule_enforcement_mode if adventure else (session_snapshot.get("adventure") or {}).get("rule_enforcement_mode", "rpg"),
-            "mode_capabilities": asdict(mode_policy(
-                adventure.rule_enforcement_mode if adventure else (session_snapshot.get("adventure") or {}).get("rule_enforcement_mode", "rpg"),
-                adventure.strict_rules if adventure else (session_snapshot.get("adventure") or {}).get("strict_rules"),
-            )),
-            "adventure_tone": adventure.selected_tone if adventure else (session_snapshot.get("adventure") or {}).get("selected_tone"),
-            "clock_enabled": bool(adventure.clock_enabled) if adventure else bool((session_snapshot.get("adventure") or {}).get("clock_enabled", False)),
-            "time_system": state.time_system or (adventure.time_system if adventure else (session_snapshot.get("adventure") or {}).get("time_system", "relative")),
-            "time_config": state.time_config or (adventure.time_config if adventure else (session_snapshot.get("adventure") or {}).get("time_config")),
-            "time_per_turn": adventure.time_per_turn if adventure else (session_snapshot.get("adventure") or {}).get("time_per_turn", 5),
-            "max_time_per_turn": adventure.max_time_per_turn if adventure else (session_snapshot.get("adventure") or {}).get("max_time_per_turn"),
-            "max_memory_turns": getattr(state, "max_memory_turns", None) if getattr(state, "max_memory_turns", None) is not None else (getattr(adventure, "max_memory_turns", 10) if adventure else 10),
-            "enable_history_compression": bool(getattr(state, "enable_history_compression", True)),
-            "compressed_history": getattr(state, "compressed_history", None),
-            "agent_active": bool((state.entity_states or {}).get("__agent__", {}).get("active", False)),
-            "agent_monkey_mode": bool((state.entity_states or {}).get("__agent__", {}).get("monkey_mode", False)),
-            "agent_allow_walkthrough": bool((state.entity_states or {}).get("__agent__", {}).get("allow_walkthrough", True)),
-            "agent_step_by_step": bool((state.entity_states or {}).get("__agent__", {}).get("step_by_step", False)),
-            "agent_personality": str((state.entity_states or {}).get("__agent__", {}).get("personality", "casual")),
-            "agent_custom_personality": str((state.entity_states or {}).get("__agent__", {}).get("custom_personality", "")),
-            "is_debug_enabled": bool(state.is_debug_enabled),
-            "debug_mode": bool(settings.TALEWEAVER_DEBUG_ENABLED or state.is_debug_enabled)
-        }
-        return snapshot
+        return await build_sheet_snapshot(avatar, state, db)
 
     @staticmethod
-    async def get_all_scene_metadata(db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None) -> dict:
+    async def get_all_scene_metadata(
+        db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None
+    ) -> dict:
         if session_id:
-            scene_res = await db.execute(select(WorldScene).where(WorldScene.session_id == session_id))
+            scene_res = await db.execute(
+                select(WorldScene).where(WorldScene.session_id == session_id)
+            )
         elif template_id:
-            scene_res = await db.execute(select(WorldScene).where(WorldScene.template_id == template_id))
+            scene_res = await db.execute(
+                select(WorldScene).where(WorldScene.template_id == template_id)
+            )
         else:
             return {}
         metadata = {}
@@ -1002,13 +530,23 @@ class AdventureLogic:
         return metadata
 
     @staticmethod
-    async def get_npc_metadata(db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None) -> dict:
-        state = await db.scalar(select(SessionState).where(SessionState.session_id == session_id)) if session_id else None
+    async def get_npc_metadata(
+        db: AsyncSession, template_id: Optional[str], session_id: Optional[str] = None
+    ) -> dict:
+        state = (
+            await db.scalar(select(SessionState).where(SessionState.session_id == session_id))
+            if session_id
+            else None
+        )
         vn_mode = state is not None and await session_is_vn(db, state)
         if session_id:
-            npc_query = select(WorldEntity).where(WorldEntity.session_id == session_id, WorldEntity.entity_type.in_(["NPC", "npc"]))
+            npc_query = select(WorldEntity).where(
+                WorldEntity.session_id == session_id, WorldEntity.entity_type.in_(["NPC", "npc"])
+            )
         elif template_id:
-            npc_query = select(WorldEntity).where(WorldEntity.template_id == template_id, WorldEntity.entity_type.in_(["NPC", "npc"]))
+            npc_query = select(WorldEntity).where(
+                WorldEntity.template_id == template_id, WorldEntity.entity_type.in_(["NPC", "npc"])
+            )
         else:
             return {}
         npc_res = await db.execute(npc_query)
@@ -1038,13 +576,13 @@ class AdventureLogic:
         await detach_template_memory(db, template_id)
 
         # 1. Preserve session playability by detaching session-owned rows from template refs.
-        session_avatar_query = select(GameSession.avatar_id).where(GameSession.template_id == template_id)
+        session_avatar_query = select(GameSession.avatar_id).where(
+            GameSession.template_id == template_id
+        )
         session_avatar_ids = (await db.execute(session_avatar_query)).scalars().all()
         if session_avatar_ids:
             await db.execute(
-                update(Avatar)
-                .where(Avatar.id.in_(session_avatar_ids))
-                .values(template_id=None)
+                update(Avatar).where(Avatar.id.in_(session_avatar_ids)).values(template_id=None)
             )
 
         # Detach sessions and session states
@@ -1078,11 +616,15 @@ class AdventureLogic:
         await db.execute(delete(WorldExit).where(WorldExit.template_id == template_id))
         await db.execute(delete(WorldEntity).where(WorldEntity.template_id == template_id))
         await db.execute(delete(WorldScene).where(WorldScene.template_id == template_id))
-        await db.execute(delete(WorldMap).where(WorldMap.template_id == template_id, WorldMap.session_id.is_(None)))
+        await db.execute(
+            delete(WorldMap).where(
+                WorldMap.template_id == template_id, WorldMap.session_id.is_(None)
+            )
+        )
 
         # 4. Finally delete the template itself
         await db.execute(delete(AdventureTemplate).where(AdventureTemplate.id == template_id))
-        
+
         await db.commit()
 
         # 5. Always clean up template-owned library assets.
@@ -1122,10 +664,12 @@ class AdventureLogic:
                 )
                 for ea in earned
             )
-            result.append({
-                **aw,
-                "is_earned": is_earned,
-            })
+            result.append(
+                {
+                    **aw,
+                    "is_earned": is_earned,
+                }
+            )
 
         # Include custom or unregistered earned awards for this adventure/session
         for ea in earned:
@@ -1138,10 +682,31 @@ class AdventureLogic:
                 or (session_id and ea.get("session_id") == session_id)
             ):
                 known_keys.add(k)
-                result.append({
-                    **ea,
-                    "is_earned": True,
-                })
+                result.append(
+                    {
+                        **ea,
+                        "is_earned": True,
+                    }
+                )
 
         return result
 
+
+def _apply_discovery_visibility(ent, session_overrides, norm_overrides_by_id, eid, eid_upper):
+    if str(ent.get("item_type") or "").upper() == "CONSTRUCTABLE":
+        override = session_overrides.get(eid) or norm_overrides_by_id.get(eid_upper) or {}
+        if "is_hidden" not in override:
+            ent["is_hidden"] = True
+    metadata_json = ent.get("metadata_json") if isinstance(ent.get("metadata_json"), dict) else {}
+    discovery_visibility = (
+        metadata_json.get("discovery_visibility")
+        if isinstance(metadata_json.get("discovery_visibility"), dict)
+        else {}
+    )
+    listed_in_discoveries = discovery_visibility.get("listed_in_discoveries")
+    if isinstance(listed_in_discoveries, bool):
+        ent["listed_in_discoveries"] = listed_in_discoveries
+    elif str(ent.get("item_type") or "").upper() == "SWITCH":
+        ent["listed_in_discoveries"] = False
+    else:
+        ent["listed_in_discoveries"] = True

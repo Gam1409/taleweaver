@@ -23,6 +23,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -34,11 +35,17 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError) as error:
+            logging.getLogger(__name__).warning(
+                "Could not configure console UTF-8 output (%s). Keeping the existing encoding.",
+                type(error).__name__,
+            )
 
 from sqlalchemy import desc, func, select, text
 
@@ -565,10 +572,10 @@ async def cmd_show_adventure(args):
             _print_header(f"Exits & Passages ({len(exits)})", char="-")
             for x in exits:
                 lock_tag = "\033[1;31m[LOCKED]\033[0m" if x.is_locked else "\033[1;32m[OPEN]\033[0m"
-                exit_label = getattr(x, "exit_type", None) or getattr(x, "direction", None) or "path"
-                print(
-                    f"  • {x.from_scene_id} -> {x.to_scene_id} ({exit_label}) {lock_tag}"
+                exit_label = (
+                    getattr(x, "exit_type", None) or getattr(x, "direction", None) or "path"
                 )
+                print(f"  • {x.from_scene_id} -> {x.to_scene_id} ({exit_label}) {lock_tag}")
                 if x.is_locked:
                     if x.item_to_unlock:
                         print(f"    Key Item: {x.item_to_unlock}")

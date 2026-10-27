@@ -1,5 +1,4 @@
 import uuid6
-
 from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, synonym
 
@@ -11,12 +10,14 @@ class SessionState(Base, TimestampMixin):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
     session_id = Column(String(36), ForeignKey("game_sessions.id"), nullable=False)
-    
+
     # Denormalized fields for easier querying
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
-    template_id = Column(String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True)
+    template_id = Column(
+        String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True
+    )
     avatar_id = Column(String(36), ForeignKey("avatars.id"), nullable=True)
-    
+
     # Current Runtime State
     current_scene_id = Column(String(100), nullable=False, default="START")
     in_game_time = Column(Integer, default=0, nullable=False)
@@ -24,7 +25,7 @@ class SessionState(Base, TimestampMixin):
     time_system = Column(String(20), default="calendar", nullable=False)
     time_config = Column(JSON, nullable=True)
     inventory = Column(JSON, nullable=True, default=[])
-    
+
     # Progress trackers
     entity_states = Column(JSON, nullable=True, default={})
     exit_states = Column(JSON, nullable=True, default={})
@@ -35,7 +36,7 @@ class SessionState(Base, TimestampMixin):
     compressed_history = Column(JSON, nullable=True, default=None)
     enable_history_compression = Column(Boolean, default=True, nullable=False)
     start_datetime = Column(String(36), nullable=True)
-    
+
     # Session-specific overrides/copies from template
     plot = Column(String(5000), nullable=True)
     rules = Column(String(5000), nullable=True)
@@ -44,14 +45,14 @@ class SessionState(Base, TimestampMixin):
     gameover_condition = Column(String(1000), nullable=True)
     completed_guard_expression = Column(String(2000), nullable=True)
     gameover_guard_expression = Column(String(2000), nullable=True)
-    
+
     # Active Sequence Tracking
     active_sequence_id = Column(String(100), nullable=True)
     active_sequence_order = Column(Integer, default=1, nullable=False)
     tts_director_notes = Column(String(5000), nullable=True)
     selected_image_styles = Column(JSON, nullable=True)
     selected_tone = Column(JSON, nullable=True)
-    
+
     # Runtime flags
     is_completed = Column(Boolean, default=False)
     is_debug_enabled = Column(Boolean, default=False)

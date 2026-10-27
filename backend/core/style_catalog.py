@@ -1,4 +1,4 @@
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
 
@@ -44,7 +44,7 @@ def resolve_style_instruction(
 
 
 def resolve_tone_instruction(
-    selected_tone: Optional[Union[str, dict[str, Any]]],
+    selected_tone: Optional[str | dict[str, Any]],
     user_catalog: list[dict[str, Optional[Any]]],
 ) -> str:
     """Resolve tone instruction from selected tone, then user catalog, then default catalog."""
@@ -70,5 +70,3 @@ def resolve_tone_instruction(
                 return (entry.get("instruction") or "").strip()
 
     return tone_id
-
-

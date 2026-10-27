@@ -4,6 +4,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,37 +13,11 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
-
-from backend.api.routes.system_diagnostics import router as diagnostics_router
-from backend.core.config import settings
-from backend.core.database import run_db_migrations
-from backend.core.diagnostic_http import DiagnosticMiddleware, session_diagnostic_context
-from backend.core.system_diagnostics import service as diagnostic_service
-
-# Configure logging based on .env settings
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(levelname)s:     %(name)s - %(message)s"
-)
-
-logger = logging.getLogger(__name__)
-
-
-from typing import Optional
-
-
-def _safe_join(base_dir: str, *parts: str) -> Optional[str]:
-    """Safely join path parts and ensure result stays inside base_dir."""
-    base_abs = os.path.abspath(base_dir)
-    candidate = os.path.abspath(os.path.join(base_abs, *parts))
-    try:
-        if os.path.commonpath([candidate, base_abs]) != base_abs:
-            return None
-    except ValueError:
-        return None
-    return candidate
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 # Import all models so SQLAlchemy metadata registers them before create_all
+import backend.core.startup_logging
 import backend.models.adventure_template
 import backend.models.avatar
 import backend.models.chat
@@ -64,6 +39,25 @@ from backend.api.routes import (
     tts_api,
     users_api,
 )
+from backend.api.routes.system_diagnostics import router as diagnostics_router
+from backend.core.config import settings
+from backend.core.database import run_db_migrations
+from backend.core.diagnostic_http import DiagnosticMiddleware, session_diagnostic_context
+from backend.core.system_diagnostics import service as diagnostic_service
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_join(base_dir: str, *parts: str) -> Optional[str]:
+    """Safely join path parts and ensure result stays inside base_dir."""
+    base_abs = os.path.abspath(base_dir)
+    candidate = os.path.abspath(os.path.join(base_abs, *parts))
+    try:
+        if os.path.commonpath([candidate, base_abs]) != base_abs:
+            return None
+    except ValueError:
+        return None
+    return candidate
 
 
 @asynccontextmanager
@@ -81,16 +75,20 @@ async def lifespan(_app: FastAPI):
     from backend.api.routes.adventures.sessions import _cleanup_stale_empty_session_dirs
     from backend.core.database import AsyncSessionLocal
     from backend.engine.adventure_importer import AdventureTemplateImporter
-    
+
     async with AsyncSessionLocal() as db:
         # Check if we have any admins in the database
-        result = await db.execute(select(backend.models.user.User).where(backend.models.user.User.role == "admin").limit(1))
+        result = await db.execute(
+            select(backend.models.user.User)
+            .where(backend.models.user.User.role == "admin")
+            .limit(1)
+        )
         has_admin = result.scalars().first() is not None
 
         if not has_admin:
             logger.info("No admin user found. Please use the setup flow or create a root user.")
-            
-        # We no longer auto-import adventures here. 
+
+        # We no longer auto-import adventures here.
         # Default adventures are imported per-user on their first login.
         # Manual drops in DATA_DIR/imports/adventures are still processed for convenience.
         await AdventureTemplateImporter.import_from_directory(
@@ -156,10 +154,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # Configured via ALLOWED_HOSTS in .env (default: "*" = allow all).
 # When running behind nginx (Docker), nginx is the security boundary.
 # For a public non-proxied deployment, set ALLOWED_HOSTS=yourdomain.com
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.allowed_hosts_list
-)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 
 # Performance: Gzip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -170,12 +165,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         f"http://localhost:{settings.FRONTEND_PORT}",
-        f"http://127.0.0.1:{settings.FRONTEND_PORT}"
+        f"http://127.0.0.1:{settings.FRONTEND_PORT}",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
 )
+
 
 # Security Headers Middleware
 @app.middleware("http")
@@ -209,6 +205,7 @@ async def add_security_headers(request, call_next):
     )
     return response
 
+
 app.include_router(config_api.router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
 app.include_router(memory_settings.router, prefix="/api")
@@ -224,7 +221,6 @@ app.include_router(tts_api.router, prefix="/api")
 app.include_router(stt_api.router, prefix="/api")
 
 
-
 # Ensure storage directories exist
 os.makedirs(os.path.join(settings.DATA_DIR, "characters"), exist_ok=True)
 os.makedirs(os.path.join(settings.DATA_DIR, "adventures"), exist_ok=True)
@@ -237,9 +233,6 @@ os.makedirs(os.path.join(settings.DATA_DIR, "imports", "adventures"), exist_ok=T
 os.makedirs(os.path.join(settings.DATA_DIR, "presets", "adventures"), exist_ok=True)
 os.makedirs("adventures", exist_ok=True)
 
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import Response
-
 
 class SafeStaticFiles(StaticFiles):
     """Custom StaticFiles that blocks access to sensitive files like the database
@@ -250,10 +243,16 @@ class SafeStaticFiles(StaticFiles):
       - LLM debug logs (.jsonl, .log)
       - Agent markdown notes and arbitrary text files (.md, .txt, .env)
     """
+
     _BLOCKED_EXTENSIONS = (
-        ".db", ".db-shm", ".db-wal",
-        ".jsonl", ".log",
-        ".md", ".env", ".ini",
+        ".db",
+        ".db-shm",
+        ".db-wal",
+        ".jsonl",
+        ".log",
+        ".md",
+        ".env",
+        ".ini",
     )
 
     async def get_response(self, path: str, scope) -> Response:
@@ -270,13 +269,20 @@ class SafeStaticFiles(StaticFiles):
                 if source_stat is not None and os.path.isfile(source_full):
                     try:
                         from backend.engine.media_engine import MediaEngine
+
                         await MediaEngine._generate_thumbnail(source_full)
                     except Exception as e:
-                        logger.warning("Dynamic thumbnail generation failed for %s: %s", source_full, e)
+                        logger.warning(
+                            "Dynamic thumbnail generation failed for %s: %s", source_full, e
+                        )
 
         resp = await super().get_response(path, scope)
         if resp.status_code == 200:
-            check_path = full_path if (full_path and os.path.isfile(full_path)) else self.lookup_path(path)[0]
+            check_path = (
+                full_path
+                if (full_path and os.path.isfile(full_path))
+                else self.lookup_path(path)[0]
+            )
             if check_path and os.path.isfile(check_path):
                 try:
                     with open(check_path, "rb") as f:
@@ -285,6 +291,7 @@ class SafeStaticFiles(StaticFiles):
                 except OSError:
                     pass
         return resp
+
 
 # Mount the entire DATA_DIR under /data for robustness, with security filters
 app.mount("/data", SafeStaticFiles(directory=os.path.abspath(settings.DATA_DIR)), name="data")
@@ -337,10 +344,12 @@ else:
             "message": "Backend is running. In development mode, start and open the frontend on http://localhost:5173 ('cd frontend; npm run dev') or run 'npm run build' in /frontend to serve the web UI directly on port 8000.",
         }
 
+
 @app.get("/health", tags=["Health"])
 async def health_check() -> dict:
     """Returns a simple liveness signal for load-balancer health checks."""
     return {"status": "ok"}
+
 
 @app.post("/api/ping")
 async def ping():
@@ -350,12 +359,13 @@ async def ping():
 def start() -> None:
     """Start the TaleWeaver backend server."""
     import uvicorn
+
     # On Windows, reload mode spawns a watchdog process and can produce noisy
     # KeyboardInterrupt traces on shutdown. Keep reload opt-in for local dev.
     reload_enabled = os.getenv("TALEWEAVER_RELOAD", "0").lower() in {"1", "true", "yes", "on"}
     uvicorn.run(
         "backend.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104 — Intentional LAN access; preserve the existing deployment interface.
         port=settings.BACKEND_PORT,
         reload=reload_enabled,
     )
@@ -363,4 +373,3 @@ def start() -> None:
 
 if __name__ == "__main__":
     start()
-

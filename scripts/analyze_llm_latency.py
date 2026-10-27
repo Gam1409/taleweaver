@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -93,7 +94,9 @@ def split_events_by_timestamp(
     return before, after
 
 
-def derive_request_response_latencies(events: list[dict[str, Any]]) -> dict[tuple[str, str, str, str], list[float]]:
+def derive_request_response_latencies(
+    events: list[dict[str, Any]],
+) -> dict[tuple[str, str, str, str], list[float]]:
     pending: dict[tuple[Any, ...], datetime] = {}
     grouped: dict[tuple[str, str, str, str], list[float]] = defaultdict(list)
 
@@ -104,7 +107,10 @@ def derive_request_response_latencies(events: list[dict[str, Any]]) -> dict[tupl
 
         try:
             ts = parse_iso_timestamp(str(event.get("timestamp")))
-        except Exception:
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                "Skipping an invalid event timestamp (%s).", type(error).__name__
+            )
             continue
 
         key = (
@@ -154,7 +160,9 @@ def collect_pipeline_events(events: list[dict[str, Any]]) -> dict[tuple[str, str
     return grouped
 
 
-def print_group_summary(title: str, grouped: dict[tuple[str, ...], list[float]], limit: int) -> None:
+def print_group_summary(
+    title: str, grouped: dict[tuple[str, ...], list[float]], limit: int
+) -> None:
     print("=" * 88)
     print(title)
     print("=" * 88)
@@ -265,9 +273,15 @@ def main() -> None:
     pipeline = collect_pipeline_events(events)
     req_resp = derive_request_response_latencies(events)
 
-    print_group_summary("Pipeline Events (duration_ms from gm.turn.pipeline.*)", pipeline, args.limit)
+    print_group_summary(
+        "Pipeline Events (duration_ms from gm.turn.pipeline.*)", pipeline, args.limit
+    )
     print()
-    print_group_summary("Request/Response Pair Latencies (gm.turn.request -> gm.turn.response)", req_resp, args.limit)
+    print_group_summary(
+        "Request/Response Pair Latencies (gm.turn.request -> gm.turn.response)",
+        req_resp,
+        args.limit,
+    )
 
     if args.split_ts:
         split_ts = parse_iso_timestamp(args.split_ts)

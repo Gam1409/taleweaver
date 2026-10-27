@@ -11,12 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.engine.adventure_export_assets import (
+    localize_archive_asset,
+    normalize_exported_equipment,
+    serialize_world_location,
+)
 from backend.engine.clothing.settings import clothing_settings
 from backend.engine.npc_cards.settings import manifest_card_settings
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
-from backend.utils.path_security import data_url_to_local_path
 
 logger = logging.getLogger(__name__)
 
@@ -358,77 +362,9 @@ class AdventureExporter:
         )
         avatar = avatar_res.scalars().first()
 
-        # Normalize legacy avatar inventory/equipment to ID references for the manifest.
-        # NOTE: This must NOT mutate the database — exporting is a read-only operation.
-        # Mutating during export causes "database is locked" errors on SQLite when
-        # background tasks (e.g. world generation) hold a write lock. We compute
-        # the cleaned values locally and use them when building the manifest below.
-        local_final_inventory: list[str] = []
-        local_final_equipment: dict[str, str] = {}
-        if avatar:
-
-            def _normalize_item(item: Any) -> str | None:
-                if isinstance(item, dict):
-                    return item.get("id")
-                return item
-
-            cleaned_inventory: list[str] = []
-            for item in avatar.inventory or []:
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_inventory.append(item_id)
-
-            cleaned_equipment: dict[str, str] = {}
-            for slot, item in (avatar.equipment or {}).items():
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_equipment[slot] = item_id
-
-            # Priority deduplication: Scene > Inventory > Equipped
-            items_in_scene = set()
-            for ent in entities:
-                if (
-                    ent.entity_type == "OBJECT"
-                    and ent.current_scene_id
-                    and ent.current_scene_id != "INVENTORY"
-                ):
-                    items_in_scene.add(ent.id)
-
-            for item_id in cleaned_inventory:
-                if item_id in items_in_scene:
-                    continue
-                if item_id not in local_final_inventory:
-                    local_final_inventory.append(item_id)
-
-            for slot, item_id in cleaned_equipment.items():
-                if item_id in items_in_scene:
-                    continue
-                if item_id in local_final_inventory:
-                    continue
-                if item_id in local_final_equipment.values():
-                    continue
-                local_final_equipment[slot] = item_id
-
-        def to_dict(obj):
-            if not obj:
-                return None
-            data = {
-                c.name: getattr(obj, c.name)
-                for c in obj.__table__.columns
-                if c.name not in _SYSTEM_ENTITY_KEYS
-            }
-            if isinstance(obj, WorldScene):
-                decor = data.get("decorative_objects")
-                if not isinstance(decor, list):
-                    decor = []
-                data["decorative_objects"] = [
-                    str(d) for d in decor if isinstance(d, (str, int, float))
-                ]
-            if isinstance(obj, WorldExit):
-                exit_type = str(getattr(obj, "exit_type", "one_way") or "one_way").strip().lower()
-                data["exit_type"] = exit_type
-                data["is_bidirectional"] = exit_type == "bidirectional"
-            return data
+        local_final_inventory, local_final_equipment = normalize_exported_equipment(
+            avatar, entities
+        )
 
         # Build standard manifest structure according to docs/specs/adventure_format.md
         manifest = {
@@ -521,8 +457,8 @@ class AdventureExporter:
                 "starting_inventory": list(local_final_inventory) if avatar else [],
                 "starting_equipment": dict(local_final_equipment) if avatar else {},
             },
-            "scenes": [to_dict(s) for s in scenes],
-            "exits": [to_dict(e) for e in exits],
+            "scenes": [serialize_world_location(s) for s in scenes],
+            "exits": [serialize_world_location(e) for e in exits],
             "npcs": [_serialize_world_entity(ent) for ent in entities if ent.entity_type == "NPC"],
             "objects": [
                 _serialize_world_entity(ent) for ent in entities if ent.entity_type == "OBJECT"
@@ -553,31 +489,7 @@ class AdventureExporter:
         asset_mapping = {}  # local_path -> zip_path
 
         def localize_path(path):
-            if not path or not path.startswith("/data/"):
-                return path
-
-            local_full = data_url_to_local_path(path)
-            if not local_full:
-                logger.warning("Skipping unsafe asset path during ADZ export: %s", path)
-                return path
-
-            if os.path.exists(local_full):
-                fname = _safe_zip_asset_name(local_full)
-                zip_rel = f"assets/{fname}"
-                asset_mapping[local_full] = zip_rel
-                return zip_rel
-
-            # Fallback: search in adventure_dir if not found directly
-            # (handles cases where path might be different but file exists there)
-            fname = _safe_zip_asset_name(path)
-            for root, _dirs, files in os.walk(adventure_dir):
-                if fname in files:
-                    local_full = _ensure_within_data_dir(os.path.join(root, fname))
-                    zip_rel = f"assets/{fname}"
-                    asset_mapping[local_full] = zip_rel
-                    return zip_rel
-
-            return path
+            return localize_archive_asset(path, adventure_dir, asset_mapping)
 
         # Localize all image fields
         manifest["adventure"]["image_url"] = localize_path(manifest["adventure"].get("image_url"))

@@ -12,7 +12,7 @@ from backend.engine.media_engine import MediaEngine
 async def run_migration():
     print("--- TaleWeaver Thumbnail Migration ---")
     library_dir = os.path.join(settings.DATA_DIR, "adventures", "library")
-    
+
     if not os.path.exists(library_dir):
         print(f"Library directory not found: {library_dir}")
         return
@@ -25,6 +25,7 @@ async def run_migration():
         await MediaEngine.ensure_thumbnails(adventure_id)
 
     print("\nMigration complete! All missing thumbnails have been generated.")
+
 
 if __name__ == "__main__":
     asyncio.run(run_migration())

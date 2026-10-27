@@ -13,10 +13,10 @@ Invalidation:
   applied finding signature, because the world state has changed.
 """
 
-import uuid6
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
+import uuid6
 from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,8 +46,10 @@ class AIFixCache(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    response: Mapped[Dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict,
+    response: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

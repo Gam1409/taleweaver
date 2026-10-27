@@ -6,7 +6,6 @@ into actionable, human-friendly error messages for the UI.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +20,72 @@ def diagnose_provider_error(
     lower_text = str(exc or "").lower()
     prov_display = provider.capitalize() if provider else "Provider"
 
+    credential_error = _diagnose_credentials(exc, lower_text, prov_display)
+    if credential_error:
+        return credential_error
+
+    # 4. Model Not Found / Unsupported Model / No Endpoints (404)
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "notfounderror",
+                "no endpoints found",
+                "model not found",
+                "does not exist",
+                "unknown model",
+                "model_not_found",
+                "status_code: 404",
+                "code 404",
+                "404 not found",
+            )
+        )
+        or getattr(exc, "status_code", None) == 404
+    ):
+        model_part = f" '{model}'" if model else ""
+        return (
+            f"Model{model_part} not found on {prov_display} (404). "
+            "Please check the model ID or choose a different model in Settings."
+        )
+
+    # 5. Rate Limit / Quota Exceeded / Out of Credits (429)
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "ratelimiterror",
+                "rate limit",
+                "too many requests",
+                "quota exceeded",
+                "insufficient_quota",
+                "credit balance",
+                "out of credits",
+                "status_code: 429",
+                "code 429",
+                "429 too many requests",
+            )
+        )
+        or getattr(exc, "status_code", None) == 429
+    ):
+        return (
+            f"Quota or rate limit exceeded for {prov_display} (429). "
+            "Please verify your account credits/balance or try again later."
+        )
+
+    request_error = _diagnose_request_limits(lower_text, prov_display)
+    if request_error:
+        return request_error
+
+    # Fallback: Never return raw exception text (str(exc) or exc.message) to the client
+    # to prevent information exposure through an exception (CodeQL py/stack-trace-exposure).
+    # All technical details must be inspected via server logs.
+    return (
+        f"Connection test failed for {prov_display}. "
+        "Please check your provider configuration, credentials, and server logs for details."
+    )
+
+
+def _diagnose_credentials(exc: Exception, lower_text: str, prov_display: str) -> str | None:
     # 1. ENCRYPTION_KEY / Decryption Errors
     if any(
         kw in lower_text
@@ -47,74 +112,36 @@ def diagnose_provider_error(
             "no api key found",
         )
     ):
-        return (
-            f"No API key configured for {prov_display}. "
-            "Please set your API key in Settings."
-        )
+        return f"No API key configured for {prov_display}. Please set your API key in Settings."
 
     # 3. Authentication / Invalid API Key (401)
-    if any(
-        kw in lower_text
-        for kw in (
-            "invalid authentication",
-            "authenticationerror",
-            "invalid_api_key",
-            "incorrect api key",
-            "unauthorized",
-            "invalid x-api-key",
-            "auth_subrequest_error",
-            "status_code: 401",
-            "code 401",
-            "401 unauthorized",
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "invalid authentication",
+                "authenticationerror",
+                "invalid_api_key",
+                "incorrect api key",
+                "unauthorized",
+                "invalid x-api-key",
+                "auth_subrequest_error",
+                "status_code: 401",
+                "code 401",
+                "401 unauthorized",
+            )
         )
-    ) or getattr(exc, "status_code", None) == 401:
+        or getattr(exc, "status_code", None) == 401
+    ):
         return (
             f"Authentication failed for {prov_display} (401): "
             "The API key is invalid, inactive, or expired. Please check your API key in Settings."
         )
 
-    # 4. Model Not Found / Unsupported Model / No Endpoints (404)
-    if any(
-        kw in lower_text
-        for kw in (
-            "notfounderror",
-            "no endpoints found",
-            "model not found",
-            "does not exist",
-            "unknown model",
-            "model_not_found",
-            "status_code: 404",
-            "code 404",
-            "404 not found",
-        )
-    ) or getattr(exc, "status_code", None) == 404:
-        model_part = f" '{model}'" if model else ""
-        return (
-            f"Model{model_part} not found on {prov_display} (404). "
-            "Please check the model ID or choose a different model in Settings."
-        )
+    return None
 
-    # 5. Rate Limit / Quota Exceeded / Out of Credits (429)
-    if any(
-        kw in lower_text
-        for kw in (
-            "ratelimiterror",
-            "rate limit",
-            "too many requests",
-            "quota exceeded",
-            "insufficient_quota",
-            "credit balance",
-            "out of credits",
-            "status_code: 429",
-            "code 429",
-            "429 too many requests",
-        )
-    ) or getattr(exc, "status_code", None) == 429:
-        return (
-            f"Quota or rate limit exceeded for {prov_display} (429). "
-            "Please verify your account credits/balance or try again later."
-        )
 
+def _diagnose_request_limits(lower_text: str, prov_display: str) -> str | None:
     # 6. Connection Refused / Service Offline (Ollama, Stable Diffusion, local URLs)
     if any(
         kw in lower_text
@@ -168,10 +195,4 @@ def diagnose_provider_error(
             "The request or thinking token budget exceeds the maximum allowed token limit."
         )
 
-    # Fallback: Never return raw exception text (str(exc) or exc.message) to the client
-    # to prevent information exposure through an exception (CodeQL py/stack-trace-exposure).
-    # All technical details must be inspected via server logs.
-    return (
-        f"Connection test failed for {prov_display}. "
-        "Please check your provider configuration, credentials, and server logs for details."
-    )
+    return None

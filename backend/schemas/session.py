@@ -17,8 +17,10 @@ class SessionStateBase(BaseModel):
     active_sequence_id: Optional[str] = None
     active_sequence_order: int = 1
 
+
 class SessionStateCreate(SessionStateBase):
     session_id: str
+
 
 class SessionStateUpdate(BaseModel):
     scene_id: Optional[str] = None
@@ -35,6 +37,7 @@ class SessionStateUpdate(BaseModel):
     active_sequence_id: Optional[str] = None
     active_sequence_order: Optional[int] = None
 
+
 class GameSessionBase(BaseModel):
     user_id: str
     avatar_id: str
@@ -42,14 +45,17 @@ class GameSessionBase(BaseModel):
     status: str = "active"
     status_note: Optional[str] = None
 
+
 class GameSessionCreate(GameSessionBase):
     pass
+
 
 class GameSessionUpdate(BaseModel):
     status: Optional[str] = None
     status_note: Optional[str] = None
     max_memory_turns: Optional[int] = None
     enable_history_compression: Optional[bool] = None
+
 
 class GameSession(GameSessionBase):
     id: str

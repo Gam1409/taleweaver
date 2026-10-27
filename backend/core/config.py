@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 import os
@@ -13,7 +12,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def get_app_version() -> str:
     try:
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "version.json")
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "version.json"
+        )
         with open(path) as f:
             data = json.load(f)
             v = data.get("version", "0.1.0")
@@ -21,6 +22,7 @@ def get_app_version() -> str:
             return f"{v}-{s}" if s else v
     except Exception:
         return "0.1.0"
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +36,39 @@ class TTSSettings(BaseModel):
     use_vocal_tags: bool = True
     use_streaming: bool = False
     voice_list: list[str] = [
-        "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede", "Callirrhoe",
-        "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba", "Despina", "Erinome",
-        "Algenib", "Rasalgethi", "Laomedeia", "Achernar", "Alnilam", "Schedar", "Gacrux",
-        "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager"
+        "Zephyr",
+        "Puck",
+        "Charon",
+        "Kore",
+        "Fenrir",
+        "Leda",
+        "Orus",
+        "Aoede",
+        "Callirrhoe",
+        "Autonoe",
+        "Enceladus",
+        "Iapetus",
+        "Umbriel",
+        "Algieba",
+        "Despina",
+        "Erinome",
+        "Algenib",
+        "Rasalgethi",
+        "Laomedeia",
+        "Achernar",
+        "Alnilam",
+        "Schedar",
+        "Gacrux",
+        "Pulcherrima",
+        "Achird",
+        "Zubenelgenubi",
+        "Vindemiatrix",
+        "Sadachbia",
+        "Sadaltager",
     ]
     voice_catalog: list[dict] = []
     speech_rate: float = 1.0
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TaleWeaver"
@@ -61,7 +89,6 @@ class Settings(BaseSettings):
     def allowed_hosts_list(self) -> list[str]:
         """Return ALLOWED_HOSTS as a list, splitting on commas."""
         return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
-
 
     DATA_DIR: str = "data"
     # When set, LLM debug logs are written here (recommended: outside DATA_DIR).
@@ -185,22 +212,29 @@ class Settings(BaseSettings):
 
     def get_env_api_key(self, provider: str) -> Optional[str]:
         """Returns the API key for a provider if set in environment variables."""
-        p = provider.lower()
-        if p == "openai": return self.OPENAI_API_KEY
-        if p == "anthropic": return self.ANTHROPIC_API_KEY
-        if p in ["google", "gemini"]: return self.GOOGLE_API_KEY or self.GEMINI_API_KEY
-        if p == "deepseek": return self.DEEPSEEK_API_KEY
-        if p == "kimi": return self.KIMI_API_KEY
-        if p == "openrouter": return self.OPENROUTER_API_KEY
-        if p == "mistral": return self.MISTRAL_API_KEY
-        if p == "groq": return self.GROQ_API_KEY
-        if p == "black_forest_labs": return self.BLACK_FOREST_LABS_API_KEY
-        if p == "minimax": return self.MINIMAX_API_KEY
-        return None
-    
+        keys = {
+            "openai": self.OPENAI_API_KEY,
+            "anthropic": self.ANTHROPIC_API_KEY,
+            "google": self.GOOGLE_API_KEY or self.GEMINI_API_KEY,
+            "gemini": self.GOOGLE_API_KEY or self.GEMINI_API_KEY,
+            "deepseek": self.DEEPSEEK_API_KEY,
+            "kimi": self.KIMI_API_KEY,
+            "openrouter": self.OPENROUTER_API_KEY,
+            "mistral": self.MISTRAL_API_KEY,
+            "groq": self.GROQ_API_KEY,
+            "black_forest_labs": self.BLACK_FOREST_LABS_API_KEY,
+            "minimax": self.MINIMAX_API_KEY,
+        }
+        return keys.get(provider.lower())
+
     # Resolve .env against the project root so loading does not depend on the CWD
     model_config = {"env_file": PROJECT_ROOT / ".env", "extra": "ignore"}
 
+
 settings = Settings()
-print(f"DEBUG: TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}")
-logger.info(f"TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}")
+print(
+    f"DEBUG: TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}"
+)
+logger.info(
+    f"TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}"
+)

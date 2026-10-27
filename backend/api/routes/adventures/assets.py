@@ -3,20 +3,16 @@ import logging
 import os
 import re
 import uuid
-from io import BytesIO
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.schemas import SuggestPromptRequest, SuggestPromptResponse
 from backend.core.auth import get_current_user
-from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.visual_limits import VISUAL_LIMITS as _VISUAL_UPLOAD_LIMITS
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -26,8 +22,6 @@ from backend.utils.path_security import (
     safe_data_path,
     sanitize_path_component,
 )
-
-_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 __all__ = ["MediaEngine", "router"]
 
@@ -272,8 +266,11 @@ async def upload_visual(
     if not target_id or sanitize_path_component(target_id) != target_id:
         raise HTTPException(status_code=400, detail="Invalid target ID format.")
 
-    from backend.models.avatar import Avatar
-    from backend.models.world_entity import WorldEntity, WorldScene
+    from backend.api.routes.adventures.visual_upload import (
+        resolve_visual_upload_target,
+        validate_visual_upload_content,
+        write_visual_upload,
+    )
 
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
@@ -281,122 +278,24 @@ async def upload_visual(
 
     try:
         content = await file.read()
-
-        # Validate mime type
-        if file.content_type and file.content_type not in _ALLOWED_MIME_TYPES:
-            raise HTTPException(
-                status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP."
-            )
-
-        limits = _VISUAL_UPLOAD_LIMITS.get(target_type)
-        if not limits:
-            raise HTTPException(status_code=400, detail="Invalid visual target type.")
-
-        # Validate raw file bytes size first
-        if limits and len(content) > int(limits["maxBytes"]):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Max file size for this asset is {int(limits['maxBytes']) // (1024 * 1024)} MB.",
-            )
-
-        # Validate image dimensions
-        try:
-            img = Image.open(BytesIO(content))
-            width, height = img.size
-        except Exception:
-            raise HTTPException(status_code=400, detail="Could not read image dimensions.")
-
-        if width > int(limits["maxWidth"]) or height > int(limits["maxHeight"]):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Max size for this asset is {limits['maxWidth']}x{limits['maxHeight']} px. "
-                    f"Uploaded image is {width}x{height} px."
-                ),
-            )
-
-        avatar = None
-        scene = None
-        entity = None
-        trusted_target_token: Optional[str] = None
-
-        if target_type == "protagonist":
-            av_res = await db.execute(
-                select(Avatar)
-                .where(Avatar.template_id == template_id)
-                .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-                .limit(1)
-            )
-            avatar = av_res.scalars().first()
-            if not avatar:
-                raise HTTPException(
-                    status_code=404, detail="Protagonist not found for this adventure"
-                )
-            trusted_target_token = avatar.id
-        elif target_type == "scene":
-            sc_res = await db.execute(
-                select(WorldScene).where(
-                    WorldScene.template_id == template_id,
-                    WorldScene.session_id.is_(None),
-                    WorldScene.id == target_id,
-                )
-            )
-            scene = sc_res.scalars().first()
-            if not scene:
-                raise HTTPException(status_code=404, detail="Scene not found for this adventure")
-            trusted_target_token = scene.id
-        elif target_type in ["npc", "object"]:
-            en_res = await db.execute(
-                select(WorldEntity).where(
-                    WorldEntity.template_id == template_id,
-                    WorldEntity.session_id.is_(None),
-                    WorldEntity.id == target_id,
-                )
-            )
-            entity = en_res.scalars().first()
-            if not entity:
-                raise HTTPException(status_code=404, detail="Entity not found for this adventure")
-            trusted_target_token = entity.id
-
+        validate_visual_upload_content(content, file.content_type, target_type)
+        target = await resolve_visual_upload_target(db, adv, target_type, target_id)
+        trusted_target_token = None if target_type == "cover" else target.id
         full_path = _build_uploaded_visual_path(
             adv.id,
             target_type,
             _extension_from_content_type(file.content_type),
             trusted_target_token=trusted_target_token,
         )
-        safe_parent_dir = ensure_within_data_dir(os.path.dirname(full_path))
-        full_path = ensure_within_base_dir(full_path, safe_parent_dir)
-        # Re-verify containment at the sink so the taint analysis trusts the path.
-        data_root = os.path.realpath(settings.DATA_DIR)
-        if os.path.commonpath([os.path.realpath(full_path), data_root]) != data_root:
-            raise HTTPException(status_code=400, detail="Invalid upload path.")
-        with open(full_path, "wb") as f:
-            f.write(content)
-
-        rel_path = os.path.relpath(full_path, settings.DATA_DIR).replace("\\", "/")
-        relative_url = f"/data/{rel_path}"
-
-        if target_type == "cover":
-            adv.image_url = relative_url
-        elif target_type == "protagonist":
-            if not avatar:
-                raise HTTPException(
-                    status_code=404, detail="Protagonist not found for this adventure"
-                )
-            avatar.profile_image = relative_url
-        elif target_type == "scene":
-            if not scene:
-                raise HTTPException(status_code=404, detail="Scene not found for this adventure")
-            scene.image_url = relative_url
-        elif target_type in ["npc", "object"]:
-            if not entity:
-                raise HTTPException(status_code=404, detail="Entity not found for this adventure")
-            entity.image_url = relative_url
-
+        relative_url = write_visual_upload(full_path, content)
+        if target_type == "protagonist":
+            target.profile_image = relative_url
+        else:
+            target.image_url = relative_url
         await db.commit()
         return {"status": "uploaded", "target_type": target_type, "image_url": relative_url}
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to upload visual for %s", template_id)
         raise HTTPException(status_code=500, detail="Visual upload failed.") from None

@@ -216,4 +216,3 @@ class SwitchService:
         s_script = str(config.get("on_failure_script") or "").strip()
         if s_script:
             runner.execute_code(s_script, scope, script_id=f"switch_{switch_id}_on_failure")
-

@@ -20,6 +20,7 @@ import sys
 def generate_fernet_key() -> str:
     try:
         from cryptography.fernet import Fernet
+
         return Fernet.generate_key().decode("utf-8")
     except ImportError:
         print(

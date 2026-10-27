@@ -1,20 +1,31 @@
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr
 
+from backend.engine.rule_inventory import add_inventory_items, update_inventory_items
 from backend.models.avatar import Avatar
 
 
-class GameOverException(Exception):
+class GameOverError(Exception):
     """Thrown when the Avatar's HP falls to 0 or below during a rule evaluation."""
+
     pass
+
+
+# Preserve the established import name for callers and saved integrations.
+GameOverException = GameOverError
+GameOverError.__name__ = "GameOverException"
+GameOverError.__qualname__ = "GameOverException"
 
 
 class InventoryItem(BaseModel):
     """
     A typed item acquired during gameplay.
     """
-    id: Optional[str] = Field(None, validation_alias=AliasChoices("id", "item_id", "entity_id")) # WorldEntity ID (if linked)
+
+    id: Optional[str] = Field(
+        None, validation_alias=AliasChoices("id", "item_id", "entity_id")
+    )  # WorldEntity ID (if linked)
     name: str
     description: Optional[str] = None
     item_type: Optional[str] = None
@@ -35,18 +46,22 @@ class InventoryItem(BaseModel):
     # For spawned items
     spatial_position: Optional[str] = None
 
+
 class EntityMovement(BaseModel):
     entity_id: str = Field(..., validation_alias=AliasChoices("entity_id", "id"))
     to_scene_id: Optional[str] = None
     to_spatial_position: Optional[str] = None
+
 
 class ExitUpdate(BaseModel):
     from_scene_id: str
     to_scene_id: str
     is_locked: bool
 
+
 class WorldEntityUpdate(BaseModel):
     """Used for changing an entity's name, description or visibility at runtime."""
+
     entity_id: str = Field(..., validation_alias=AliasChoices("entity_id", "id"))
     name: Optional[str] = None
     description: Optional[str] = None
@@ -67,16 +82,20 @@ class WorldEntityUpdate(BaseModel):
     moveable: Optional[bool] = None
     allowed_scenes: Optional[list[str]] = None
 
+
 class AttackRequest(BaseModel):
     """Requested by the GM to perform a combat action."""
-    attacker_id: str # Usually "PLAYER" or NPC ID
-    target_id: str # NPC ID or "PLAYER"
-    hit_stat: str = "dexterity" # The stat used for the hit roll
-    damage_dice: str = "1d6" # e.g. "1d8+2"
+
+    attacker_id: str  # Usually "PLAYER" or NPC ID
+    target_id: str  # NPC ID or "PLAYER"
+    hit_stat: str = "dexterity"  # The stat used for the hit roll
+    damage_dice: str = "1d6"  # e.g. "1d8+2"
     reason: str
+
 
 class AttackResult(BaseModel):
     """Detailed result of an attack."""
+
     attacker_id: str
     target_id: str
     hit_roll: int
@@ -91,14 +110,18 @@ class AttackResult(BaseModel):
     damage_total: int
     reason: str
 
+
 class SkillCheckRequest(BaseModel):
     """Requested by the GM during the mechanics pass."""
+
     stat: str  # strength, dexterity, intelligence, wisdom, charisma, armor_class
     dc: int
     reason: str
 
+
 class SkillCheckResult(BaseModel):
     """Filled by the backend after performing the roll."""
+
     stat: str
     dc: int
     roll: int
@@ -112,6 +135,7 @@ class AdventureGenerationRequest(BaseModel):
     """
     Requested by the GM (NPC) to create a brand new adventure.
     """
+
     rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = None
     title: str
     prompt: str
@@ -143,6 +167,7 @@ class AdventureGenerationRequest(BaseModel):
 
 class ToolResults(BaseModel):
     """Structured backend-filled tool outputs for adventure-generator interactions."""
+
     model_config = ConfigDict(extra="forbid")
 
     available_image_styles: Optional[list[str]] = None
@@ -162,6 +187,7 @@ class WorldMemoryUpdate(BaseModel):
 
 class AdventureGeneratorToolIntent(BaseModel):
     """Lightweight intent payload for adventure-generator tools in chat mode."""
+
     model_config = ConfigDict(extra="forbid")
 
     request_available_image_styles: bool = False
@@ -187,23 +213,24 @@ class AdventureGeneratorToolIntent(BaseModel):
     game_over: bool = False
     game_completed: bool = False
     status_note: Optional[str] = None
-    
+
     # Discovery
-    discovered_entity_ids: Optional[list[str]] = Field(None, description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.")
-    
+    discovered_entity_ids: Optional[list[str]] = Field(
+        None,
+        description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.",
+    )
+
     # World State Updates
     new_scene_id: Optional[str] = None
     exit_label: Optional[str] = None
     moved_entities: Optional[list[EntityMovement]] = None
     updated_entities: Optional[list[WorldEntityUpdate]] = None
     deleted_entities: Optional[list[str]] = None
-    
+
     extra_time_minutes: int = 0
 
     tool_results: Optional[ToolResults] = None
     narrative_description: str = ""
-
-
 
 
 class GameEvent(BaseModel):
@@ -211,6 +238,7 @@ class GameEvent(BaseModel):
     Structured Output Schema for the LLM when in `strict_rules` mode.
     The LLM responds utilizing this strict schema.
     """
+
     _vn_clothing_plan: Any = PrivateAttr(default=None)
     narrative_description: str = ""
     hp_change: int = 0
@@ -218,47 +246,75 @@ class GameEvent(BaseModel):
     mana_change: int = 0
     new_status_effects: Optional[list[str]] = None
     new_inventory_items: Optional[list[InventoryItem]] = None
-    removed_inventory_item_ids: Optional[list[str]] = Field(None, validation_alias=AliasChoices("removed_inventory_item_ids", "removed_item_ids", "removed_items"))
+    removed_inventory_item_ids: Optional[list[str]] = Field(
+        None,
+        validation_alias=AliasChoices(
+            "removed_inventory_item_ids", "removed_item_ids", "removed_items"
+        ),
+    )
     updated_inventory_items: Optional[list[InventoryItem]] = None
     spawned_items: Optional[list[InventoryItem]] = None
-    
+
     # Mapping & Navigation
-    new_scene_id: Optional[str] = Field(None, validation_alias=AliasChoices("new_scene_id", "scene_id")) # Unique ID for the new location (e.g. "FOREST_CLIFF")
+    new_scene_id: Optional[str] = Field(
+        None, validation_alias=AliasChoices("new_scene_id", "scene_id")
+    )  # Unique ID for the new location (e.g. "FOREST_CLIFF")
     scene_label: Optional[str] = None  # Human readable name (e.g. "The Whispering Woods")
-    exit_label: Optional[str] = None   # How the player got here (e.g. "ventured north")
-    
+    exit_label: Optional[str] = None  # How the player got here (e.g. "ventured north")
+
     # Media
-    image_prompt: Optional[str] = None # Short prompt for AI image generation of this scene
-    
+    image_prompt: Optional[str] = None  # Short prompt for AI image generation of this scene
+
     # World State Updates
     moved_entities: Optional[list[EntityMovement]] = None
     updated_exits: Optional[list[ExitUpdate]] = None
     updated_entities: Optional[list[WorldEntityUpdate]] = None
-    deleted_entities: Optional[list[str]] = None # List of IDs to remove
-    discovered_entity_ids: Optional[list[str]] = Field(None, description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.")
-    
+    deleted_entities: Optional[list[str]] = None  # List of IDs to remove
+    discovered_entity_ids: Optional[list[str]] = Field(
+        None,
+        description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.",
+    )
+
     # Skill Checks & Combat
     requested_skill_checks: Optional[list[SkillCheckRequest]] = None
     skill_check_results: Optional[list[SkillCheckResult]] = None
-    
+
     requested_attacks: Optional[list[AttackRequest]] = None
     attack_results: Optional[list[AttackResult]] = None
-    
+
     # Time Management
-    extra_time_minutes: int = Field(0, validation_alias=AliasChoices("extra_time_minutes", "extra_time", "extra_time_units", "time_passed")) # Extra time or units this action takes (added to turn base)
-    time_override_minutes: Optional[int] = Field(None, validation_alias=AliasChoices("time_override_minutes", "time_override", "time_override_units")) # Absolute override for in_game_time
-    start_datetime_override: Optional[str] = None # ISO string for start_datetime (shifts the entire calendar)
-    
+    extra_time_minutes: int = Field(
+        0,
+        validation_alias=AliasChoices(
+            "extra_time_minutes", "extra_time", "extra_time_units", "time_passed"
+        ),
+    )  # Extra time or units this action takes (added to turn base)
+    time_override_minutes: Optional[int] = Field(
+        None,
+        validation_alias=AliasChoices(
+            "time_override_minutes", "time_override", "time_override_units"
+        ),
+    )  # Absolute override for in_game_time
+    start_datetime_override: Optional[str] = (
+        None  # ISO string for start_datetime (shifts the entire calendar)
+    )
+
     # Quest System
     completed_quest_ids: Optional[list[str]] = None
-    
+
     # Award System
     earned_award_keys: Optional[list[str]] = None
-    
-    # Sequence System
-    sequence_completed: bool = Field(False, description="Set to true if the protagonist has met the end condition for the current sequence.")
 
-    combination_intent: bool = Field(False, description="Set to true if the player's message indicates they are attempting to combine, craft, mix, assemble, or use multiple items together (in any language).")
+    # Sequence System
+    sequence_completed: bool = Field(
+        False,
+        description="Set to true if the protagonist has met the end condition for the current sequence.",
+    )
+
+    combination_intent: bool = Field(
+        False,
+        description="Set to true if the player's message indicates they are attempting to combine, craft, mix, assemble, or use multiple items together (in any language).",
+    )
 
     # Notes Tool
     remember_notes: Optional[list[str]] = None
@@ -277,7 +333,6 @@ class GameEvent(BaseModel):
     tool_results: Optional[ToolResults] = None
 
 
-
 # Maximum resource cap
 RESOURCE_CAP = 200
 
@@ -289,6 +344,7 @@ STATUS_EFFECT_TICKS: dict = {
     "Regenerating": {"hp": 5},
     "Resting": {"stamina": 3, "mana": 3},
 }
+
 
 class RuleEngine:
     @staticmethod
@@ -321,6 +377,7 @@ class RuleEngine:
                 messages.append(f"[{effect}] {', '.join(parts)}")
 
         return messages
+
     @staticmethod
     def apply_event(avatar: Avatar, event: GameEvent) -> str:
         """
@@ -330,7 +387,7 @@ class RuleEngine:
         avatar.hp += event.hp_change
         avatar.stamina += event.stamina_change
         avatar.mana += event.mana_change
-        
+
         if event.game_over:
             avatar.hp = 0
             raise GameOverException(event.status_note or f"{avatar.name} has met their end.")
@@ -338,54 +395,28 @@ class RuleEngine:
         if avatar.hp <= 0:
             avatar.hp = 0
             raise GameOverException(f"{avatar.name} has fallen! Game Over.")
-            
+
         avatar.stamina = max(avatar.stamina, 0)
         avatar.mana = max(avatar.mana, 0)
-        
+
         if event.new_status_effects:
             # Prevent duplicates
             current_effects = set(avatar.status_effects)
             current_effects.update(event.new_status_effects)
             avatar.status_effects = list(current_effects)
-            
+
         if event.updated_inventory_items:
-            new_inv = list(avatar.inventory)
-            modified = False
-            for update in event.updated_inventory_items:
-                if not update.id: continue
-                for i, item in enumerate(new_inv):
-                    if item.get("id") == update.id:
-                        # Update fields
-                        update_dict = update.model_dump(exclude_none=True)
-                        new_inv[i] = {**item, **update_dict}
-                        modified = True
-                        break
-            if modified:
-                avatar.inventory = new_inv
+            update_inventory_items(avatar, event.updated_inventory_items)
 
         if event.removed_inventory_item_ids:
-            new_inv = [item for item in list(avatar.inventory) if item.get("id") not in event.removed_inventory_item_ids]
+            new_inv = [
+                item
+                for item in list(avatar.inventory)
+                if item.get("id") not in event.removed_inventory_item_ids
+            ]
             avatar.inventory = new_inv
 
         if event.new_inventory_items:
-            # Reassign for SQLAlchemy state tracking; serialize Pydantic models to dicts
-            new_inv = list(avatar.inventory)
-            for item in event.new_inventory_items:
-                item_dict = item.model_dump(exclude_none=True)
-                
-                # Check for existing ID to perform replacement/update
-                found = False
-                if item.id:
-                    for i, existing in enumerate(new_inv):
-                        if existing.get("id") == item.id:
-                            new_inv[i] = item_dict
-                            found = True
-                            break
-                
-                if not found:
-                    new_inv.append(item_dict)
-            
-            avatar.inventory = new_inv
+            add_inventory_items(avatar, event.new_inventory_items)
 
         return event.narrative_description
-

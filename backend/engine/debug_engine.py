@@ -1,17 +1,47 @@
-from copy import deepcopy
-from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 
-from backend.engine.map_engine import MapEngine
+from backend.engine import debug_inspection, debug_mutations, debug_progression
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from backend.models.user import User
-from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
-from backend.models.world_map import WorldMap
+
+_HANDLERS = {
+    "szene": debug_inspection.debug_szene,
+    "entities": debug_inspection.debug_entities,
+    "plot": debug_inspection.debug_plot,
+    "context": debug_inspection.debug_plot,
+    "map": debug_inspection.debug_map,
+    "session": debug_inspection.debug_session,
+    "log": debug_mutations.debug_log,
+    "on": debug_mutations.debug_on,
+    "off": debug_mutations.debug_off,
+    "npc": debug_mutations.debug_npc,
+    "item": debug_mutations.debug_item,
+    "award": debug_progression.debug_award,
+    "awards": debug_progression.debug_award,
+    "game_won": debug_progression.debug_game_won,
+    "quest_finished": debug_progression.debug_quest_finished,
+    "claim_awards": debug_progression.debug_claim_awards,
+    "delete_item": debug_mutations.debug_delete_item,
+    "heal": debug_mutations.debug_heal,
+    "unhide": debug_mutations.debug_unhide,
+    "npc_note": debug_mutations.debug_npc_note,
+    "note": debug_mutations.debug_npc_note,
+    "moveable": debug_mutations.debug_moveable,
+    "open_exit": debug_mutations.debug_open_exit,
+    "walkthrough": debug_mutations.debug_walkthrough,
+    "game_over": debug_mutations.debug_game_over,
+    "engine": debug_inspection.debug_engine,
+    "exp": debug_progression.debug_exp,
+    "scenes": debug_inspection.debug_scenes,
+    "npcs": debug_inspection.debug_npcs,
+    "items": debug_inspection.debug_items,
+    "exits": debug_inspection.debug_exits,
+    "reveal_map": debug_inspection.debug_reveal_map,
+    "gen_item": debug_mutations.debug_gen_item,
+}
 
 
 class DebugEngine:
@@ -24,490 +54,11 @@ class DebugEngine:
         adventure: Optional[AdventureTemplate] = None,
         avatar: Optional[Any] = None,
     ) -> str:
-        """
-        Processes /debug sub-commands and returns atmospheric yet technical info.
-
-        Optional ``user`` and ``adventure`` objects are required for sub-commands
-        that mutate persistent data (e.g. ``award``).
-        """
+        """Dispatch each debug command to its dedicated implementation."""
         sub = args.split(" ", maxsplit=1)[0].lower() if args else ""
-        adv_id = state.adventure_id
-        scene_id = state.scene_id
-
-        if sub == "szene":
-            res = await db.execute(select(WorldScene).where(WorldScene.id == scene_id, WorldScene.session_id == state.session_id))
-            scene = res.scalars().first()
-            if not scene: return f"DEBUG ERROR: Scene '{scene_id}' not found in session manifest."
-            
-            return f"--- DEBUG: SCENE [{scene_id}] ---\nLabel: {scene.label}\nDescription: {scene.description}"
-
-        elif sub == "entities":
-            res = await db.execute(select(WorldEntity).where(WorldEntity.current_scene_id == scene_id, WorldEntity.session_id == state.session_id))
-            entities = res.scalars().all()
-            
-            overrides = state.entity_states or {}
-            processed = []
-            for e in entities:
-                data = {c.name: getattr(e, c.name) for c in e.__table__.columns}
-                if e.id in overrides: data.update(overrides[e.id])
-                processed.append(data)
-
-            if not processed: return "--- DEBUG: No entities or objects found in this scene. ---"
-            
-            lines = [f"--- DEBUG: ENTITIES IN {scene_id} ---"]
-            for e in processed:
-                pos = f" @ {e.get('spatial_position')}" if e.get('spatial_position') else ""
-                lines.append(f"- [{e.get('entity_type')}] {e.get('name')} (ID: {e.get('id')}){pos}: {str(e.get('description', ''))[:50]}...")
-            return "\n".join(lines)
-
-        elif sub == "plot" or sub == "context":
-            res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == adv_id))
-            adv = res.scalars().first()
-            return f"--- DEBUG: PLOT CONTEXT ---\n{adv.original_prompt}"
-
-        elif sub == "map":
-            # Just some stats
-            s_count = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
-            e_count = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id))
-            ex_count = await db.execute(select(WorldExit).where(WorldExit.session_id == state.session_id))
-            
-            return (
-                f"--- DEBUG: WORLD STATS ---\n"
-                f"AdventureTemplate ID: {adv_id}\n"
-                f"Session ID: {state.session_id}\n"
-                f"Total Scenes: {len(s_count.scalars().all())}\n"
-                f"Total Entities: {len(e_count.scalars().all())}\n"
-                f"Total Connections: {len(ex_count.scalars().all())}"
-            )
-            
-        elif sub == "session":
-            res = await db.execute(select(WorldScene).where(WorldScene.id == scene_id, WorldScene.session_id == state.session_id))
-            scene = res.scalars().first()
-            label = scene.label if scene else "Unknown"
-            
-            return (
-                f"--- DEBUG: SESSION STATE ---\n"
-                f"Session ID: {state.session_id}\n"
-                f"Current Scene: {label} (ID: {scene_id})\n"
-                f"In-Game Time: {state.in_game_time} minutes\n"
-                f"Debug Logging: {'ON' if state.is_debug_enabled else 'OFF'}"
-            )
-            
-        elif sub == "log":
-            # Handle /debug log on/off
-            parts = args.split(" ")
-            if len(parts) >= 2:
-                cmd = parts[1].lower()
-                if cmd == "on":
-                    state.is_debug_enabled = True
-                    return "[DEBUG_LOG_ON] Technical logging enabled. You will now see GameEvent outcomes in chat."
-                elif cmd == "off":
-                    state.is_debug_enabled = False
-                    return "[DEBUG_LOG_OFF] Technical logging disabled."
-
-        elif sub == "on":
-            state.is_debug_enabled = True
-            return "[DEBUG_LOG_ON] Technical logging enabled. You will now see GameEvent outcomes in chat."
-
-        elif sub == "off":
-            state.is_debug_enabled = False
-            return "[DEBUG_LOG_OFF] Technical logging disabled."
-
-        elif sub == "npc":
-            parts = args.split(" ")
-            if len(parts) >= 2 and parts[1].lower() == "drop_items":
-                return "[TRIGGER_NPC_DROP_ITEMS]"
-            return "DEBUG ERROR: Usage: /debug npc drop_items"
-
-        elif sub == "item":
-            parts = args.split(" ")
-            if len(parts) >= 3 and parts[1].lower() == "dynamic":
-                cmd = parts[2].lower()
-                if cmd == "on":
-                    return "DEBUG ERROR: Spontaneous item generation is permanently disabled in this version."
-                elif cmd == "off":
-                    state.allow_dynamic_items = False
-                    return "[DEBUG_DYNAMIC_ITEMS_OFF] Dynamic item generation disabled for this session."
-            return "DEBUG ERROR: Usage: /debug item dynamic [on/off]"
-
-
-        elif sub in {"award", "awards"}:
-            # Grant all awards of the current adventure to the player instantly.
-            if adventure is None or user is None:
-                return "DEBUG ERROR: Award command requires adventure and user context."
-
-            all_awards = adventure.awards or []
-            if not all_awards:
-                return "DEBUG: This adventure has no awards defined."
-
-            updated_awards = deepcopy(all_awards)
-            granted: list[str] = []
-            now = datetime.utcnow().isoformat()
-
-            for award in updated_awards:
-                if award.get("is_earned"):
-                    continue  # already earned — skip
-
-                award["is_earned"] = True
-                a_key = award.get("key", "")
-                granted.append(f"  [{award.get('tier', '?').upper()}] {award.get('title', a_key)}")
-
-                # Persist to user profile (deduplicated)
-                user_awards = list(user.earned_awards or [])
-                title = award.get("title") or a_key or "Unknown Award"
-                dedupe_key = a_key or title
-                if not any(
-                    (ea.get("key") or ea.get("title")) == dedupe_key
-                    and ea.get("adventure_id") == adventure.id
-                    for ea in user_awards
-                ):
-                    user_awards.append({
-                        "key": dedupe_key,
-                        "title": title,
-                        "description": award.get("description"),
-                        "tier": award.get("tier"),
-                        "adventure_id": adventure.id,
-                        "adventure_title": adventure.title,
-                        "session_id": state.id,
-                        "earned_at": now,
-                    })
-                    user.earned_awards = user_awards
-                    flag_modified(user, "earned_awards")
-
-            if not granted:
-                return "DEBUG: All awards are already earned."
-
-            adventure.awards = updated_awards
-            flag_modified(adventure, "awards")
-
-            lines = ["[DEBUG] All adventure awards granted:"] + granted
-            return "\n".join(lines)
-
-        elif sub == "game_won":
-            # Mark all main quests as completed
-            if state.quests:
-                new_quests = deepcopy(state.quests)
-                for q in new_quests:
-                    if q.get("is_main"):
-                        q["status"] = "completed"
-                state.quests = new_quests
-                flag_modified(state, "quests")
-            return "[TRIGGER_GAME_COMPLETED] Debug: Manual victory trigger."
-
-        elif sub == "quest_finished":
-            if not state.quests:
-                return "DEBUG: No quests found in session state."
-            new_quests = deepcopy(state.quests)
-            target = next((q for q in new_quests if q.get("status") == "open"), None)
-            if target:
-                target["status"] = "completed"
-                state.quests = new_quests
-                flag_modified(state, "quests")
-                return f"DEBUG: Quest '{target.get('title') or target.get('id')}' marked as completed."
-            return "DEBUG: No open quests found to finish."
-
-        elif sub == "claim_awards":
-            # Redirect to awards logic
-            return await DebugEngine.handle_debug_command(db, state, "awards", user, adventure, avatar)
-
-        elif sub == "delete_item":
-            parts = args.split(" ")
-            if len(parts) < 2: return "DEBUG ERROR: Usage: /debug delete_item [ITEM_KEY]"
-            item_key = parts[1]
-            if not avatar: return "DEBUG ERROR: Avatar context missing."
-            
-            inv = list(avatar.inventory or [])
-            new_inv = [item for item in inv if item.get("id") != item_key and item.get("key") != item_key]
-            if len(new_inv) == len(inv):
-                return f"DEBUG: Item '{item_key}' not found in inventory."
-            
-            avatar.inventory = new_inv
-            flag_modified(avatar, "inventory")
-            return f"DEBUG: Item '{item_key}' removed from inventory."
-
-            return f"DEBUG: Entity '{target.name}' (ID: {target.id}) HP set to 0."
-
-        elif sub == "heal":
-            parts = args.split(" ")
-            if len(parts) < 2: return "DEBUG ERROR: Usage: /debug heal [NPC_NAME] [AMOUNT?]"
-            
-            # Find the NPC
-            amount = None
-            try:
-                amount = int(parts[-1])
-                npc_name = " ".join(parts[1:-1]).lower()
-            except ValueError:
-                npc_name = " ".join(parts[1:]).lower()
-            
-            # Search in session entities
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id))
-            entities = res.scalars().all()
-            target = next((e for e in entities if e.name.lower() == npc_name or e.id.lower() == npc_name), None)
-            
-            if not target:
-                return f"DEBUG: NPC/Entity '{npc_name}' not found in this session."
-            
-            final_hp = amount if amount is not None else (target.hp or 50)
-            
-            # Update state
-            overrides = dict(state.entity_states or {})
-            if target.id not in overrides: overrides[target.id] = {}
-            overrides[target.id]["hp"] = final_hp
-            state.entity_states = overrides
-            flag_modified(state, "entity_states")
-            return f"DEBUG: Entity '{target.name}' (ID: {target.id}) restored to {final_hp} HP."
-
-        elif sub == "unhide":
-            # Usage: /debug unhide <ENTITY_ID|NAME|all>
-            parts = args.split(" ")
-            if len(parts) < 2:
-                return "DEBUG ERROR: Usage: /debug unhide [ENTITY_ID|NAME|all]"
-            target = " ".join(parts[1:]).strip()
-
-            # If user asked for all, unhide every entity in the session
-            if target.lower() == "all":
-                res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id))
-                ents = res.scalars().all()
-                if not ents:
-                    return "DEBUG: No entities found in this session."
-                states = dict(state.entity_states or {})
-                for e in ents:
-                    if e.id not in states:
-                        states[e.id] = {}
-                    states[e.id]["is_hidden"] = False
-                state.entity_states = states
-                flag_modified(state, "entity_states")
-                await db.commit()
-                return f"DEBUG: Unhid {len(ents)} entities in this session."
-
-            # Otherwise find specific entity by id or name
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id))
-            ents = res.scalars().all()
-            found = None
-            for e in ents:
-                if e.id == target or (isinstance(e.name, str) and e.name.lower() == target.lower()):
-                    found = e
-                    break
-            if not found:
-                return f"DEBUG: Entity '{target}' not found in this session."
-            states = dict(state.entity_states or {})
-            if found.id not in states:
-                states[found.id] = {}
-            states[found.id]["is_hidden"] = False
-            state.entity_states = states
-            flag_modified(state, "entity_states")
-            await db.commit()
-            return f"DEBUG: Entity '{found.name}' (ID: {found.id}) is now visible."
-
-        elif sub in ("npc_note", "note"):
-            parts = args.split(" ", 2)
-            if len(parts) < 3:
-                return "DEBUG ERROR: Usage: /debug npc_note [NPC_ID|NAME] [note text]"
-            target = parts[1].strip()
-            note_val = parts[2].strip()
-
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"))
-            ents = res.scalars().all()
-            found = next((e for e in ents if e.id.upper() == target.upper() or (e.name and e.name.lower() == target.lower())), None)
-            if not found:
-                return f"DEBUG ERROR: NPC '{target}' not found in session."
-
-            states = dict(state.entity_states or {})
-            if found.id not in states:
-                states[found.id] = {}
-            states[found.id]["notes"] = note_val
-            state.entity_states = states
-            flag_modified(state, "entity_states")
-            await db.commit()
-            return f"DEBUG: NPC '{found.name}' notes set to: \"{note_val}\""
-
-        elif sub == "moveable":
-            parts = args.split(" ")
-            if len(parts) < 3:
-                return "DEBUG ERROR: Usage: /debug moveable [NPC_ID|NAME] [true|false]"
-            target = parts[1].strip()
-            val = parts[2].strip().lower() in ("true", "1", "yes")
-
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"))
-            ents = res.scalars().all()
-            found = next((e for e in ents if e.id.upper() == target.upper() or (e.name and e.name.lower() == target.lower())), None)
-            if not found:
-                return f"DEBUG ERROR: NPC '{target}' not found in session."
-
-            states = dict(state.entity_states or {})
-            if found.id not in states:
-                states[found.id] = {}
-            states[found.id]["moveable"] = val
-            state.entity_states = states
-            flag_modified(state, "entity_states")
-            await db.commit()
-            return f"DEBUG: NPC '{found.name}' moveable set to {val}."
-
-        elif sub == "open_exit":
-            parts = args.split(" ")
-            if len(parts) < 2: return "DEBUG ERROR: Usage: /debug open_exit [EXIT_ID]"
-            exit_id = parts[1]
-            
-            overrides = dict(state.exit_states or {})
-            if exit_id not in overrides: overrides[exit_id] = {}
-            overrides[exit_id]["is_locked"] = False
-            state.exit_states = overrides
-            flag_modified(state, "exit_states")
-            return f"DEBUG: Exit '{exit_id}' is now unlocked."
-
-        elif sub == "walkthrough":
-            if not state.walkthrough:
-                return "DEBUG: No walkthrough available for this adventure."
-            return f"[TRIGGER_WALKTHROUGH_REVEAL_FREE] --- DEBUG: WALKTHROUGH ---\n{state.walkthrough}"
-
-        elif sub == "game_over":
-            return "[TRIGGER_GAME_OVER] Debug: Manual game over trigger."
-
-        elif sub == "engine":
-            # Return engine diagnostics
-            import platform
-            import sys
-
-            from backend.core.config import settings
-            
-            lines = [
-                "--- DEBUG: ENGINE DIAGNOSTICS ---",
-                f"TaleWeaver Version: {settings.APP_VERSION}",
-                f"Platform: {platform.platform()}",
-                f"Python Version: {sys.version.split(' ')[0]}",
-                f"Server Time: {datetime.now().isoformat()}",
-                f"Current Session ID: {state.session_id}",
-                f"Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}",
-                f"Data Dir: {settings.DATA_DIR}",
-            ]
-            return "\n".join(lines)
-
-        elif sub == "exp":
-            parts = args.split(" ")
-            if len(parts) < 2: return "DEBUG ERROR: Usage: /debug exp [AMOUNT]"
-            try:
-                amount = int(parts[1])
-            except ValueError:
-                return "DEBUG ERROR: Amount must be an integer."
-            
-            if not avatar: return "DEBUG ERROR: Avatar context missing."
-            avatar.exp = (avatar.exp or 0) + amount
-            return f"DEBUG: Granted {amount} XP to {avatar.name}. New total: {avatar.exp}"
-
-        elif sub == "scenes":
-            res = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
-            scenes = res.scalars().all()
-            if not scenes: return "DEBUG: No scenes found for this session."
-            lines = ["--- DEBUG: ALL SCENES ---"]
-            for s in scenes:
-                lines.append(f"- {s.label} (ID: {s.id})")
-            return "\n".join(lines)
-
-        elif sub == "npcs":
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"))
-            npcs_db = res.scalars().all()
-            if not npcs_db: return "--- DEBUG: No NPCs found for this session. ---"
-            
-            overrides = state.entity_states or {}
-            npcs = []
-            for e in npcs_db:
-                data = {c.name: getattr(e, c.name) for c in e.__table__.columns}
-                if e.id in overrides: data.update(overrides[e.id])
-                npcs.append(data)
-            
-            res_scenes = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
-            scene_map = {s.id: s.label for s in res_scenes.scalars().all()}
-
-            lines = ["--- DEBUG: ALL NPCs ---"]
-            for n in npcs:
-                curr_scene = n.get("current_scene_id")
-                loc_label = scene_map.get(curr_scene, curr_scene)
-                pos = f" ({n.get('spatial_position')})" if n.get('spatial_position') else ""
-                lines.append(f"- {n.get('name')} (ID: {n.get('id')}) @ {loc_label}{pos}")
-            return "\n".join(lines)
-
-        elif sub == "items":
-            res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "OBJECT"))
-            items_db = res.scalars().all()
-            if not items_db: return "--- DEBUG: No items found for this session. ---"
-            
-            overrides = state.entity_states or {}
-            items = []
-            for e in items_db:
-                data = {c.name: getattr(e, c.name) for c in e.__table__.columns}
-                if e.id in overrides: data.update(overrides[e.id])
-                items.append(data)
-            
-            res_scenes = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
-            scene_map = {s.id: s.label for s in res_scenes.scalars().all()}
-
-            lines = ["--- DEBUG: ALL ITEMS ---"]
-            for i in items:
-                if i.get("is_in_inventory"):
-                    loc = "Inventory"
-                else:
-                    curr_scene = i.get("current_scene_id")
-                    loc_label = scene_map.get(curr_scene, curr_scene)
-                    pos = f" ({i.get('spatial_position')})" if i.get('spatial_position') else ""
-                    loc = f"Scene: {loc_label}{pos}"
-                lines.append(f"- {i.get('name')} (ID: {i.get('id')}) @ {loc}")
-            return "\n".join(lines)
-
-        elif sub == "exits":
-            res = await db.execute(select(WorldExit).where(WorldExit.session_id == state.session_id))
-            exits = res.scalars().all()
-            if not exits: return "DEBUG: No exits found for this session."
-            lines = ["--- DEBUG: ALL EXITS ---"]
-            for e in exits:
-                locked = "[LOCKED]" if e.is_locked else "[OPEN]"
-                lines.append(f"- {e.label} (ID: {e.id if hasattr(e, 'id') else 'N/A'}): {e.from_scene_id} -> {e.to_scene_id} {locked}")
-            return "\n".join(lines)
-
-        elif sub == "reveal_map":
-            # 1. Fetch all world data for this session (snapshots)
-            scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
-            exits_res = await db.execute(select(WorldExit).where(WorldExit.session_id == state.session_id))
-            
-            scenes = list(scenes_res.scalars().all())
-            exits = list(exits_res.scalars().all())
-
-            # 2. Also fetch from template to be absolutely sure we have everything
-            if state.template_id:
-                t_scenes_res = await db.execute(select(WorldScene).where(WorldScene.template_id == state.template_id))
-                t_exits_res = await db.execute(select(WorldExit).where(WorldExit.template_id == state.template_id))
-                
-                # Add template scenes/exits if not already in the session list (by ID/label)
-                session_scene_ids = {s.id for s in scenes}
-                for ts in t_scenes_res.scalars().all():
-                    if ts.id not in session_scene_ids:
-                        scenes.append(ts)
-                
-                # For exits, we compare from/to/label to avoid duplicates
-                session_exits = {(e.from_scene_id, e.to_scene_id, e.label) for e in exits}
-                for te in t_exits_res.scalars().all():
-                    if (te.from_scene_id, te.to_scene_id, te.label) not in session_exits:
-                        exits.append(te)
-            
-            # 3. Get or create the TEMPLATE-LEVEL map — this is what the frontend always reads
-            from backend.api.routes.adventures.logic import AdventureLogic
-            world_map = await AdventureLogic.get_or_create_map(db, state.template_id)
-            
-            # 4. Register everything
-            for s in scenes:
-                MapEngine.register_visit(world_map, s.id, label=s.label, description=s.description, image_url=s.image_url)
-            
-            # 5. Restore the actual current position
-            world_map.current_scene_id = MapEngine._safe_id(state.scene_id)
-            
-            for e in exits:
-                MapEngine.register_exit(world_map, e.from_scene_id, e.to_scene_id, exit_label=e.label, is_locked=e.is_locked)
-            
-            return "DEBUG: World Map fully revealed and synchronized."
-
-        elif sub == "gen_item":
-            parts = args.split(" ", 1)
-            if len(parts) < 2: return "DEBUG ERROR: Usage: /debug gen_item [PROMPT]"
-            return f"[TRIGGER_GEN_ITEM] {parts[1]}"
-
+        handler = _HANDLERS.get(sub)
+        if handler is not None:
+            result = await handler(db, state, args, user, adventure, avatar)
+            if result is not None:
+                return result
         return "DEBUG USAGE: /debug [on/off | npc drop_items | item dynamic on/off | session | szene | heal | scenes | npcs | items | exits | plot | context | map | reveal_map | log on/off | walkthrough | engine | award(s) | game_won | game_over | quest_finished | claim_awards | delete_item X | kill NPC | open_exit ID | gen_item PROMPT]"
-

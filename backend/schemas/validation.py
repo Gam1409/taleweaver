@@ -1,9 +1,8 @@
 """Pydantic schemas for the editor validation panel."""
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
-
 
 Severity = Literal["error", "warn"]
 
@@ -18,7 +17,7 @@ class ValidationFinding(BaseModel):
         None,
         description="Optional scope hint (e.g. 'scene:START', 'object:safe_01').",
     )
-    context: Optional[Dict[str, Any]] = Field(
+    context: Optional[dict[str, Any]] = Field(
         None,
         description="Optional machine-readable extras for the UI or future tooling.",
     )
@@ -34,8 +33,8 @@ class ValidationRunRequest(BaseModel):
 
 
 class ValidationRunResponse(BaseModel):
-    structural_findings: List[ValidationFinding] = Field(default_factory=list)
-    ai_findings: List[ValidationFinding] = Field(default_factory=list)
+    structural_findings: list[ValidationFinding] = Field(default_factory=list)
+    ai_findings: list[ValidationFinding] = Field(default_factory=list)
     ai_skipped_reason: Optional[str] = Field(
         None,
         description="When include_ai was True but AI was skipped, this explains why. "
@@ -57,15 +56,13 @@ FixTargetType = Literal[
 class FixProposalEntityPatch(BaseModel):
     """One concrete patch proposal emitted by the AI for a single entity."""
 
-    target_type: FixTargetType = Field(
-        ..., description="Which entity kind the patch targets."
-    )
+    target_type: FixTargetType = Field(..., description="Which entity kind the patch targets.")
     target_id: Optional[str] = Field(
         None,
         description="ID of the targeted scene/object/npc/exit. None for 'adventure' or 'protagonist'.",
     )
     description: str = Field(..., description="Human-readable explanation of this patch.")
-    field_updates: Dict[str, Any] = Field(
+    field_updates: dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "Field name -> new value. Keys must match the editor's patch "
@@ -84,7 +81,7 @@ class FixProposal(BaseModel):
     rationale: Optional[str] = Field(
         None, description="Optional reasoning for why the AI picked this approach."
     )
-    patches: List[FixProposalEntityPatch] = Field(
+    patches: list[FixProposalEntityPatch] = Field(
         default_factory=list,
         description="Concrete patches the engine should apply when this option is accepted.",
     )
@@ -96,12 +93,10 @@ class AIFixSuggestionsRequest(BaseModel):
     finding_location: Optional[str] = Field(
         None, description="Optional location hint, e.g. 'scene:START'."
     )
-    finding_context: Optional[Dict[str, Any]] = Field(
+    finding_context: Optional[dict[str, Any]] = Field(
         None, description="Optional structured context from the original finding."
     )
-    finding_severity: Severity = Field(
-        "warn", description="Severity from the original finding."
-    )
+    finding_severity: Severity = Field("warn", description="Severity from the original finding.")
 
 
 class AIFixSuggestionsResponse(BaseModel):
@@ -109,7 +104,7 @@ class AIFixSuggestionsResponse(BaseModel):
         ...,
         description="Stable signature of the finding the suggestions were generated for.",
     )
-    proposals: List[FixProposal] = Field(
+    proposals: list[FixProposal] = Field(
         default_factory=list,
         description="Up to 3 distinct fix proposals. Empty list means the AI declined to suggest fixes.",
     )
@@ -137,14 +132,14 @@ class AIFixApplyResponse(BaseModel):
     status: Literal["applied", "no_op", "partial"] = Field(
         ..., description="Result of the apply attempt."
     )
-    applied_targets: List[str] = Field(
+    applied_targets: list[str] = Field(
         default_factory=list,
         description="List of '<target_type>:<target_id>' identifiers that were modified.",
     )
     message: Optional[str] = Field(
         None, description="Optional human-readable summary of what was changed."
     )
-    validation_run: Optional[Dict[str, Any]] = Field(
+    validation_run: Optional[dict[str, Any]] = Field(
         None,
         description="The updated latest ValidationRun snapshot after removing the resolved finding.",
     )
@@ -172,7 +167,7 @@ class DeleteValidationFindingRef(BaseModel):
 
 
 class DeleteValidationFindingsRequest(BaseModel):
-    findings: List[DeleteValidationFindingRef] = Field(
+    findings: list[DeleteValidationFindingRef] = Field(
         default_factory=list,
         description=(
             "Findings to remove. Empty list is a no-op. The endpoint only mutates "

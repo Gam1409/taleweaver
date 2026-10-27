@@ -69,31 +69,10 @@ class HardRuleEvaluator:
         inv_ids: set[str] = set()
         inv_names: set[str] = set()
 
-        for item in getattr(avatar, "inventory", None) or []:
-            if isinstance(item, dict):
-                if item.get("id"):
-                    inv_ids.add(str(item["id"]).strip().upper())
-                if item.get("name"):
-                    inv_names.add(str(item["name"]).strip().upper())
-            elif isinstance(item, str) and item.strip():
-                inv_ids.add(item.strip().upper())
-            elif getattr(item, "id", None):
-                inv_ids.add(str(item.id).strip().upper())
-            elif getattr(item, "name", None):
-                inv_names.add(str(item.name).strip().upper())
-
-        for item in new_inventory_items or []:
-            if isinstance(item, dict):
-                if item.get("id"):
-                    inv_ids.add(str(item["id"]).strip().upper())
-                if item.get("name"):
-                    inv_names.add(str(item["name"]).strip().upper())
-            elif isinstance(item, str) and item.strip():
-                inv_ids.add(item.strip().upper())
-            elif getattr(item, "id", None):
-                inv_ids.add(str(item.id).strip().upper())
-            elif getattr(item, "name", None):
-                inv_names.add(str(item.name).strip().upper())
+        cls._collect_inventory_identity(
+            getattr(avatar, "inventory", None) or [], inv_ids, inv_names
+        )
+        cls._collect_inventory_identity(new_inventory_items or [], inv_ids, inv_names)
 
         states = getattr(state, "entity_states", None) or {}
         in_inv_states = {
@@ -105,6 +84,24 @@ class HardRuleEvaluator:
         return (
             req_item_norm in inv_ids or req_item_norm in inv_names or req_item_norm in in_inv_states
         )
+
+    @staticmethod
+    def _collect_inventory_identity(
+        items: list[Any], inv_ids: set[str], inv_names: set[str]
+    ) -> None:
+        """Preserve legacy inventory representations and object ID-before-name precedence."""
+        for item in items:
+            if isinstance(item, dict):
+                if item.get("id"):
+                    inv_ids.add(str(item["id"]).strip().upper())
+                if item.get("name"):
+                    inv_names.add(str(item["name"]).strip().upper())
+            elif isinstance(item, str) and item.strip():
+                inv_ids.add(item.strip().upper())
+            elif getattr(item, "id", None):
+                inv_ids.add(str(item.id).strip().upper())
+            elif getattr(item, "name", None):
+                inv_names.add(str(item.name).strip().upper())
 
     @classmethod
     def check_scene_rule(
@@ -120,7 +117,7 @@ class HardRuleEvaluator:
         req_scene_norm = req_scene.upper()
         curr_scene = str(getattr(state, "current_scene_id", "") or "").strip().upper()
         new_scene = str(new_scene_id or "").strip().upper()
-        return curr_scene == req_scene_norm or new_scene == req_scene_norm
+        return req_scene_norm in (curr_scene, new_scene)
 
     @classmethod
     def check_defeated_npc_rule(
@@ -143,11 +140,8 @@ class HardRuleEvaluator:
                     npc_st = v
                     break
 
-        if isinstance(npc_st, dict):
-            if npc_st.get("is_defeated") is True:
-                return True
-            if npc_st.get("hp") is not None and npc_st.get("hp") <= 0:
-                return True
+        if cls._npc_state_is_defeated(npc_st):
+            return True
 
         for upd in updated_entities or []:
             ent_id = (
@@ -167,6 +161,14 @@ class HardRuleEvaluator:
                 return True
 
         return False
+
+    @staticmethod
+    def _npc_state_is_defeated(npc_st: Any) -> bool:
+        if not isinstance(npc_st, dict):
+            return False
+        return npc_st.get("is_defeated") is True or (
+            npc_st.get("hp") is not None and npc_st.get("hp") <= 0
+        )
 
     @classmethod
     def check_guard_expression(

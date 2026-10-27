@@ -7,8 +7,8 @@ Edges  = Directed exits between scenes.
 Stored as two JSON columns so the graph can be traversed and serialised
 to raw JSON for the frontend.
 """
-import uuid6
 
+import uuid6
 from sqlalchemy import JSON, Column, ForeignKey, String
 from sqlalchemy.orm import synonym
 
@@ -19,7 +19,9 @@ class WorldMap(Base, TimestampMixin):
     __tablename__ = "world_maps"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
-    template_id = Column(String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True)
+    template_id = Column(
+        String(36), ForeignKey("adventure_templates.id", ondelete="SET NULL"), nullable=True
+    )
     session_id = Column(String(36), ForeignKey("game_sessions.id"), nullable=True, index=True)
 
     # {"scene_id": {"label": "...", "description": "..."}, ...}

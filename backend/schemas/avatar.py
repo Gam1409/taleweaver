@@ -22,8 +22,10 @@ class AvatarBase(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class AvatarCreate(AvatarBase):
     user_id: str
+
 
 class AvatarUpdate(BaseModel):
     name: Optional[str] = None
@@ -41,11 +43,13 @@ class AvatarUpdate(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class AvatarInDBBase(AvatarBase):
     id: str
     user_id: str
 
     model_config = {"from_attributes": True}
+
 
 class Avatar(AvatarInDBBase):
     pass

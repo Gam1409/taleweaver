@@ -1,6 +1,6 @@
 """Shared Google TTS voice catalog used across settings and world generation."""
 
-from typing import TypedDict, Optional, Union
+from typing import Optional, TypedDict
 
 from typing_extensions import NotRequired
 
@@ -46,4 +46,3 @@ GOOGLE_TTS_VOICE_CATALOG: list[VoiceCatalogEntry] = [
 
 GOOGLE_TTS_VOICE_LIST: list[str] = [entry["name"] for entry in GOOGLE_TTS_VOICE_CATALOG]
 GOOGLE_TTS_VOICE_NAMES: set[str] = set(GOOGLE_TTS_VOICE_LIST)
-
