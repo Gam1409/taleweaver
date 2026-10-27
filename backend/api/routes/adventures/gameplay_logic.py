@@ -1195,10 +1195,10 @@ class GameTurnManager:
         complex_model = ctx.complex_model
         global_unlock_rules_prompt_block = ctx.global_unlock_rules_prompt_block
 
-        game_event = None
+        game_event: GameEvent | AdventureGeneratorToolIntent | None = None
         pre_inventory_ids = set()
         response_text = ""
-        rule_violations = []
+        rule_violations: list[str] = []
         pending_generator_proposal: dict[str, Any] | None = None
         script_runner = self._get_script_runner()
         script_ctx = None
@@ -1336,39 +1336,39 @@ class GameTurnManager:
 
             # 2. Resolve Skill Checks
             if game_event.requested_skill_checks:
-                results = []
-                for req in game_event.requested_skill_checks:
-                    roll = roll_skill_check(self.avatar, req.stat, req.dc)
-                    res = SkillCheckResult(
-                        stat=req.stat,
-                        dc=req.dc,
-                        roll=roll["d20"],
-                        modifier=roll["modifier"],
-                        total=roll["total"],
-                        success=roll["success"],
-                        reason=req.reason,
+                skill_results: list[SkillCheckResult] = []
+                for skill_request in game_event.requested_skill_checks:
+                    skill_roll = roll_skill_check(self.avatar, skill_request.stat, skill_request.dc)
+                    skill_result = SkillCheckResult(
+                        stat=skill_request.stat,
+                        dc=skill_request.dc,
+                        roll=skill_roll["d20"],
+                        modifier=skill_roll["modifier"],
+                        total=skill_roll["total"],
+                        success=skill_roll["success"],
+                        reason=skill_request.reason,
                     )
-                    results.append(res)
+                    skill_results.append(skill_result)
 
                     # Output as system message for transparency
-                    success_label = "SUCCESS" if res.success else "FAILURE"
+                    success_label = "SUCCESS" if skill_result.success else "FAILURE"
                     roll_msg = (
-                        f"**{req.stat.upper()} CHECK**: {res.reason}\n"
-                        f"Roll: {res.roll} + {res.modifier} = **{res.total}** (vs DC {res.dc}) -> **{success_label}**"
+                        f"**{skill_request.stat.upper()} CHECK**: {skill_result.reason}\n"
+                        f"Roll: {skill_result.roll} + {skill_result.modifier} = **{skill_result.total}** (vs DC {skill_result.dc}) -> **{success_label}**"
                     )
                     await self._save_chat_message("system", roll_msg)
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': roll_msg})}\n\n"
 
-                game_event.skill_check_results = results
+                game_event.skill_check_results = skill_results
 
             # 2.5 Resolve Attack Rolls
             if game_event.requested_attacks:
-                attack_results = []
-                for req in game_event.requested_attacks:
+                attack_results: list[AttackResult] = []
+                for attack_request in game_event.requested_attacks:
                     # Fetch target AC
                     target_ac = 10
                     ac_reason = "Base AC 10"
-                    target_id = req.target_id
+                    target_id = attack_request.target_id
 
                     # Look in session state entities first
                     entity_states = self.state.entity_states or {}
@@ -1394,38 +1394,44 @@ class GameTurnManager:
                             target_ac += mod
                             ac_reason = f"Base 10 + {mod} Mod"
 
-                    roll = roll_attack(self.avatar, req.hit_stat, target_ac, req.damage_dice)
-                    res = AttackResult(
-                        attacker_id=req.attacker_id,
-                        target_id=req.target_id,
-                        hit_roll=roll["hit_roll"],
-                        hit_modifier=roll["hit_modifier"],
-                        hit_total=roll["hit_total"],
-                        target_ac=target_ac,
-                        is_hit=roll["is_hit"],
-                        damage_dice_str=roll["damage_dice_str"],
-                        damage_rolls=roll["damage_rolls"],
-                        damage_dice_total=roll["damage_dice_total"],
-                        damage_bonus=roll["damage_bonus"],
-                        damage_total=roll["damage_total"],
-                        reason=req.reason,
+                    attack_roll = roll_attack(
+                        self.avatar, attack_request.hit_stat, target_ac, attack_request.damage_dice
                     )
-                    attack_results.append(res)
+                    attack_result = AttackResult(
+                        attacker_id=attack_request.attacker_id,
+                        target_id=attack_request.target_id,
+                        hit_roll=attack_roll["hit_roll"],
+                        hit_modifier=attack_roll["hit_modifier"],
+                        hit_total=attack_roll["hit_total"],
+                        target_ac=target_ac,
+                        is_hit=attack_roll["is_hit"],
+                        damage_dice_str=attack_roll["damage_dice_str"],
+                        damage_rolls=attack_roll["damage_rolls"],
+                        damage_dice_total=attack_roll["damage_dice_total"],
+                        damage_bonus=attack_roll["damage_bonus"],
+                        damage_total=attack_roll["damage_total"],
+                        reason=attack_request.reason,
+                    )
+                    attack_results.append(attack_result)
 
                     # Output as system message
-                    hit_label = "HIT" if res.is_hit else "MISS"
+                    hit_label = "HIT" if attack_result.is_hit else "MISS"
                     roll_msg = (
-                        f"**ATTACK**: {res.reason}\n"
-                        f"To-Hit: {res.hit_roll} + {res.hit_modifier} = **{res.hit_total}** (vs AC {res.target_ac}, {ac_reason}) -> **{hit_label}**"
+                        f"**ATTACK**: {attack_result.reason}\n"
+                        f"To-Hit: {attack_result.hit_roll} + {attack_result.hit_modifier} = **{attack_result.hit_total}** (vs AC {attack_result.target_ac}, {ac_reason}) -> **{hit_label}**"
                     )
-                    if res.is_hit:
-                        rolls_str = " + ".join(str(r) for r in res.damage_rolls)
+                    if attack_result.is_hit:
+                        rolls_str = " + ".join(str(r) for r in attack_result.damage_rolls)
                         bonus_str = (
-                            f" + {res.damage_bonus}"
-                            if res.damage_bonus > 0
-                            else (f" - {abs(res.damage_bonus)}" if res.damage_bonus < 0 else "")
+                            f" + {attack_result.damage_bonus}"
+                            if attack_result.damage_bonus > 0
+                            else (
+                                f" - {abs(attack_result.damage_bonus)}"
+                                if attack_result.damage_bonus < 0
+                                else ""
+                            )
                         )
-                        roll_msg += f"\nDamage: {res.damage_dice_str} ({rolls_str}{bonus_str}) = **{res.damage_total}** HP dealt to {target_id}."
+                        roll_msg += f"\nDamage: {attack_result.damage_dice_str} ({rolls_str}{bonus_str}) = **{attack_result.damage_total}** HP dealt to {target_id}."
 
                         # Apply damage to NPC HP in GameEvent for _apply_game_event to pick up
                         if not game_event.updated_entities:
@@ -1447,7 +1453,7 @@ class GameTurnManager:
                             if target_ent and target_ent.hp is not None:
                                 current_hp = target_ent.hp
 
-                        new_hp = max(0, current_hp - res.damage_total)
+                        new_hp = max(0, current_hp - attack_result.damage_total)
                         game_event.updated_entities.append(
                             WorldEntityUpdate(entity_id=target_id, hp=new_hp)
                         )
