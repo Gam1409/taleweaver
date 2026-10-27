@@ -157,7 +157,7 @@ async def get_chat_history(
     include_full_world: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChatResponse:
     """Retrieves full chat history and current UI state for a game session."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state or (state.session and state.session.user_id != current_user.id):
@@ -170,6 +170,8 @@ async def get_chat_history(
 
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
     avatar = cv_res.scalars().first()
+    if avatar is None:
+        raise HTTPException(status_code=404, detail="Avatar not found.")
 
     read_only = bool(db.info.get("snapshot_read_only"))
     map_dict = await build_session_map(db, state, read_only=read_only)
@@ -236,7 +238,7 @@ async def post_chat_message(
     payload: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Processes a user message and returns a streaming response."""
     try:
         manager = GameTurnManager(db, game_id, current_user)

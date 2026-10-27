@@ -300,6 +300,7 @@ class GameTurnManager:
         self.avatar: Avatar | None = avatar
         self.stop_requested = False
         self.turn_language: str | None = None
+        self.turn_id: str | None = None
         self._progression = TurnProgressionBuilder(
             self,
             gm_notes_prompt_max_items=GM_NOTES_PROMPT_MAX_ITEMS,

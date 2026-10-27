@@ -7,7 +7,7 @@ other administrative state edits are outside this narrow turn/pace guard.
 """
 
 import json
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import aclosing, contextmanager
 from functools import wraps
 from typing import Any
@@ -35,12 +35,12 @@ def session_write_lease(session_id: str) -> Iterator[None]:
 
 
 def guard_session_turn(
-    method: Callable[..., AsyncIterator[str]],
-) -> Callable[..., AsyncIterator[str]]:
+    method: Callable[..., AsyncGenerator[str, None]],
+) -> Callable[..., AsyncGenerator[str, None]]:
     """Acquire before manager initialization; close the inner stream on disconnect."""
 
     @wraps(method)
-    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
         try:
             with session_write_lease(manager.game_id):
                 async with aclosing(method(manager, *args, **kwargs)) as stream:

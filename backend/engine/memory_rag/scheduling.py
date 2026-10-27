@@ -7,7 +7,7 @@ turn never waits for a background queue or attempts to cancel remote inference.
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import aclosing, asynccontextmanager
 from functools import wraps
 from typing import Any
@@ -97,12 +97,12 @@ async def _turn_scope(manager: Any) -> AsyncIterator[None]:
 
 
 def foreground_turn(
-    method: Callable[..., AsyncIterator[str]],
-) -> Callable[..., AsyncIterator[str]]:
+    method: Callable[..., AsyncGenerator[str, None]],
+) -> Callable[..., AsyncGenerator[str, None]]:
     """Register before turn initialization and release on errors/disconnects."""
 
     @wraps(method)
-    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
         async with _turn_scope(manager), aclosing(method(manager, *args, **kwargs)) as stream:
             async for chunk in stream:
                 yield chunk
