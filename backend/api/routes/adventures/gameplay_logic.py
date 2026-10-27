@@ -2177,23 +2177,23 @@ class GameTurnManager:
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg_text})}\n\n"
 
             if game_event.updated_inventory_items:
-                for update in game_event.updated_inventory_items:
+                for inventory_update in game_event.updated_inventory_items:
                     # Find old name for the message
-                    old_name = update.name
-                    match = next(
+                    old_name = inventory_update.name
+                    inventory_match = next(
                         (
                             i
                             for i in (self.avatar.inventory or [])
-                            if isinstance(i, dict) and i.get("id") == update.id
+                            if isinstance(i, dict) and i.get("id") == inventory_update.id
                         ),
                         None,
                     )
-                    if match:
-                        old_name = match.get("name", update.name)
+                    if inventory_match:
+                        old_name = inventory_match.get("name", inventory_update.name)
 
                     msg_text = f"Updated {old_name} in your inventory."
-                    if update.name and update.name != old_name:
-                        msg_text = f"Your {old_name} is now a {update.name}."
+                    if inventory_update.name and inventory_update.name != old_name:
+                        msg_text = f"Your {old_name} is now a {inventory_update.name}."
 
                     await self._save_chat_message("system", msg_text)
                     yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg_text})}\n\n"
@@ -2210,7 +2210,7 @@ class GameTurnManager:
                     item_name = item_id
 
                     # 1. Look in avatar's current inventory (which still has items before commit)
-                    match = next(
+                    removed_item_match = next(
                         (
                             i
                             for i in (self.avatar.inventory or [])
@@ -2218,8 +2218,8 @@ class GameTurnManager:
                         ),
                         None,
                     )
-                    if match:
-                        item_name = match.get("name", item_id)
+                    if removed_item_match:
+                        item_name = removed_item_match.get("name", item_id)
                     else:
                         # 2. Fallback: search in template entities if it was a starting object
                         target_res = await self.db.execute(
