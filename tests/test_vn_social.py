@@ -309,7 +309,7 @@ async def test_planner_deadline_cancels_call_and_preserves_state(monkeypatch):
             cancelled.set()
 
     llm = SimpleNamespace(model="small", aexecute_complex_task=slow_call)
-    monkeypatch.setattr("backend.engine.visual_novel.social.PLANNING_TIMEOUT", 0.01)
+    monkeypatch.setattr("backend.engine.visual_novel.social.role_timeout", lambda *_: 0.01)
     with (
         patch("backend.engine.visual_novel.social._present_npcs", AsyncMock(return_value=[npc()])),
         patch(

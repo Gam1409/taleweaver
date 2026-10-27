@@ -195,7 +195,11 @@ async def test_provider_outage_has_hard_budget_and_sql_fallback(monkeypatch):
     async def blocked_provider(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(retrieval, "VECTOR_BUDGET", 0.02)
+    query_settings = retrieval.read_settings(actor.user).model_copy(
+        update={"timeout_seconds": 0.01}
+    )
+    monkeypatch.setattr(retrieval, "read_settings", lambda _: query_settings)
+    monkeypatch.setattr(retrieval, "VECTOR_SEARCH_GRACE", 0.01)
     monkeypatch.setattr(retrieval, "embed_texts", blocked_provider)
     monkeypatch.setattr(retrieval, "collect_documents", AsyncMock(return_value=[document()]))
     started = time.perf_counter()

@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select, update
 
 from backend.core import database
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.documents import (
     MemoryDocument,
@@ -24,7 +25,6 @@ from backend.models.session_state import SessionState
 MIN_NEW_EVENTS = 8
 MAX_EVENTS = 24
 MAX_INPUT_CHARS = 12000
-SUMMARY_TIMEOUT = 30
 
 
 @dataclass
@@ -168,7 +168,7 @@ async def summarize_one_group(
             operation="memory_summary",
             phase=job.layer,
         ),
-        timeout=SUMMARY_TIMEOUT,
+        timeout=role_timeout(user, "compression"),
     )
     if not text or not text.strip():
         raise ValueError("Memory summary model returned no text.")

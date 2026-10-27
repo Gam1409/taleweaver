@@ -17,8 +17,7 @@ from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.models.memory_rag import MemoryIndexState
 
 logger = logging.getLogger(__name__)
-QUERY_TIMEOUT = 2.0
-VECTOR_BUDGET = 2.5
+VECTOR_SEARCH_GRACE = 0.5
 
 
 @dataclass
@@ -66,7 +65,7 @@ async def _index_state(manager: Any) -> Any:
 
 
 async def _query_vectors(manager: Any, query: str, scope: Scope, settings: Any) -> list[dict]:
-    vectors = await embed_texts(manager.user, [query[:4000]], timeout=QUERY_TIMEOUT)
+    vectors = await embed_texts(manager.user, [query[:4000]], timeout=settings.timeout_seconds)
     if embedding_signature(settings, len(vectors[0])) != scope.signature:
         return []
     return await LanceMemoryStore().query(scope, vectors[0], query, limit=32)
@@ -83,9 +82,11 @@ async def _semantic_candidates(manager: Any, query: str) -> tuple[list[dict], Sc
     if index.template_id != manager.state.template_id:
         return [], None
     scope = Scope(str(manager.user.id), str(manager.state.session_id), index.epoch, index.signature)
+    query_settings = read_settings(manager.user)
     try:
         candidates = await asyncio.wait_for(
-            _query_vectors(manager, query, scope, read_settings(manager.user)), VECTOR_BUDGET
+            _query_vectors(manager, query, scope, query_settings),
+            query_settings.timeout_seconds + VECTOR_SEARCH_GRACE,
         )
     except Exception as exc:
         # Provider errors can contain credentials or quoted text. Log only the class.

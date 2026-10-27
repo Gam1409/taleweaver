@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.prompts import recall_block
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
@@ -29,7 +30,6 @@ from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
-PLANNING_TIMEOUT = 45
 MAX_ACTION_CHARS = 4000
 MAX_SCENE_CHARS = 4000
 
@@ -230,7 +230,7 @@ async def _plan(
             phase="reaction_plan",
             metadata={"message_id": message_id},
         ),
-        timeout=PLANNING_TIMEOUT,
+        timeout=role_timeout(manager.user, "small"),
     )
     plan = InteractionPlan.model_validate(result)
     mark_processed(social, message_id)

@@ -85,7 +85,9 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
     )
 
 
-async def claim(db: AsyncSession, message: ChatMessage) -> dict | None:
+async def claim(
+    db: AsyncSession, message: ChatMessage, *, lease_seconds: float = LEASE_SECONDS
+) -> dict | None:
     old = message.npc_journal or {}
     now = time.time()
     if not eligible(old, now):
@@ -112,7 +114,7 @@ async def claim(db: AsyncSession, message: ChatMessage) -> dict | None:
         "status": "running",
         "attempts": int(old.get("attempts", 0)) + 1,
         "token": str(uuid4()),
-        "lease_until": now + LEASE_SECONDS,
+        "lease_until": now + lease_seconds,
         "recovering": old.get("status") == "failed" or bool(old.get("recovering")),
         "gaps": gaps,
     }

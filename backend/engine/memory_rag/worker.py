@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.llm_deadlines import role_timeout
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
@@ -113,6 +114,10 @@ async def _claim(session_id: str, user_id: str) -> Claim | None:
         row = await db.get(MemoryIndexState, session_id)
         if row is None or row.user_id != user_id:
             return None
+        user = await db.get(User, user_id)
+        if user is None:
+            return None
+        lease_seconds = role_timeout(user, "compression") + LEASE_SECONDS
         token = str(uuid4())
         claimed = await db.execute(
             update(MemoryIndexState)
@@ -125,7 +130,7 @@ async def _claim(session_id: str, user_id: str) -> Claim | None:
                     MemoryIndexState.lease_until <= time.time(),
                 ),
             )
-            .values(lease_token=token, lease_until=time.time() + LEASE_SECONDS)
+            .values(lease_token=token, lease_until=time.time() + lease_seconds)
             .execution_options(synchronize_session=False)
         )
         if not claimed.rowcount:
@@ -225,9 +230,7 @@ async def _index_batch(claim: Claim, user: User, documents: list[MemoryDocument]
         return False
     if not scheduler.can_start_background():
         raise BackgroundDeferredError
-    vectors = await embed_texts(
-        user, [document.text[:MAX_TEXT_LENGTH] for document in batch], timeout=30
-    )
+    vectors = await embed_texts(user, [document.text[:MAX_TEXT_LENGTH] for document in batch])
     signature = embedding_signature(settings, len(vectors[0]))
     if claim.signature and claim.signature != signature:
         raise ValueError("Embedding dimensions changed. Rebuild the memory index.")

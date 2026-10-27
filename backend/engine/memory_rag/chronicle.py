@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core import database
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.documents import content_hash
 from backend.engine.memory_rag.persistence import retry_transaction
@@ -118,7 +119,7 @@ async def compress_history_one_group(
             game_id=session_id,
             operation="history_compression",
         ),
-        timeout=30,
+        timeout=role_timeout(user, "compression"),
     )
     if not summary or not summary.strip():
         raise ValueError("Chronicle compression model returned no text.")

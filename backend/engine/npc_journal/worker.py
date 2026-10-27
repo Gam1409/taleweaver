@@ -6,6 +6,7 @@ import time
 
 from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.llm_deadlines import role_timeout
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import queue
@@ -18,7 +19,6 @@ from backend.models.game_session import GameSession
 from backend.models.user import User
 
 logger = logging.getLogger(__name__)
-EXTRACTION_TIMEOUT = 90
 _tasks: dict[str, asyncio.Task] = {}
 _wakeups: dict[str, str] = {}
 _cooldowns: dict[str, float] = {}
@@ -69,7 +69,9 @@ async def _prepare(message_id: str, user_id: str) -> tuple[User, GameSession, di
         if session is None or session.user_id != user_id or user is None:
             return None
         original_content = message.content
-        task = await queue.claim(db, message)
+        task = await queue.claim(
+            db, message, lease_seconds=role_timeout(user, "small") + queue.LEASE_SECONDS
+        )
         if task is None:
             return None
         return user, session, task, original_content
@@ -82,7 +84,7 @@ async def _extract_when_idle(
         await _defer(message_id, task)
         return None
     return await asyncio.wait_for(
-        extract(user, session, message_id, payload), timeout=EXTRACTION_TIMEOUT
+        extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
     )
 
 
