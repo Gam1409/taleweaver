@@ -2103,9 +2103,11 @@ async def test_import_adv_preserves_item_stats_from_starting_inventory_dict(clie
 
 async def test_import_adv_preserves_consumable_effects_in_avatar_inventory(client: AsyncClient):
     """ADV import should keep consumable hp/mana/stamina effects inside protagonist inventory items."""
+    from backend.core.adventure_format import CURRENT_VERSION
+
     adv_payload = {
         "format": "taleweaver.adz",
-        "version": "1.0",
+        "version": CURRENT_VERSION,
         "type": "ADVENTURE_BLUEPRINT",
         "adventure": {
             "title": "ADV Keep Consumable Effects",
@@ -2133,6 +2135,7 @@ async def test_import_adv_preserves_consumable_effects_in_avatar_inventory(clien
         "scenes": [
             {"id": "ROOM_A", "name": "Room A", "description": "First room"},
         ],
+        "sequences": [{"id": "CHAPTER_1", "title": "First chapter", "order": 1, "exp_reward": 0}],
         "exits": [],
         "npcs": [],
         "objects": [
@@ -2188,9 +2191,11 @@ async def test_import_adv_preserves_consumable_effects_in_avatar_inventory(clien
 
 async def test_chat_snapshot_inventory_readable_uses_text_log_content(client: AsyncClient):
     """Session chat payload should include READABLE inventory text from metadata_json."""
+    from backend.core.adventure_format import CURRENT_VERSION
+
     adv_payload = {
         "format": "taleweaver.adz",
-        "version": "1.0",
+        "version": CURRENT_VERSION,
         "type": "ADVENTURE_BLUEPRINT",
         "adventure": {
             "title": "ADV Readable Inventory Snapshot",
@@ -2215,6 +2220,7 @@ async def test_chat_snapshot_inventory_readable_uses_text_log_content(client: As
         "scenes": [
             {"id": "ROOM_A", "name": "Room A", "description": "First room"},
         ],
+        "sequences": [{"id": "CHAPTER_1", "title": "First chapter", "order": 1, "exp_reward": 0}],
         "exits": [],
         "npcs": [],
         "objects": [

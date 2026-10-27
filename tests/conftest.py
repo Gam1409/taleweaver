@@ -69,6 +69,8 @@ def stub_world_generator(monkeypatch):
     ``monkeypatch.setattr`` *inside* the test body – monkeypatch patches
     applied within a test override this fixture's patch.
     """
+    from backend.core.adventure_format import CURRENT_VERSION
+    from backend.core.game_modes import is_vn
     from backend.models.adventure_template import AdventureTemplate
     from backend.models.world_entity import WorldScene
 
@@ -92,9 +94,18 @@ def stub_world_generator(monkeypatch):
                 )
             )
 
-        # Mark template as ready.
+        # Match the real generator's current-format output before marking it ready.
         adv = await db.get(AdventureTemplate, adv_id)
         if adv:
+            if not is_vn(adv) and not adv.sequences:
+                adv.sequences = [
+                    {"id": "TEST_SEQUENCE", "title": "Test chapter", "order": 1, "exp_reward": 0}
+                ]
+            adv.original_manifest = {
+                **(adv.original_manifest or {}),
+                "format_version": CURRENT_VERSION,
+                "sequences": list(adv.sequences or []),
+            }
             adv.is_ready = True
             adv.creation_status = "Ready"
 
