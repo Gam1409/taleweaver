@@ -16,11 +16,13 @@ from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
+from backend.api.routes.adventures.regeneration import router as regeneration_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.session_npcs import router as session_npcs_router
+from backend.api.routes.adventures.session_playtime import router as session_playtime_router
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
@@ -40,6 +42,7 @@ router.include_router(visual_presets_router)
 # 3. Sessions (specific paths like /sessions)
 router.include_router(sessions_router, dependencies=[Depends(session_mutation_lease)])
 router.include_router(session_exports_router)
+router.include_router(session_playtime_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)
@@ -56,6 +59,7 @@ router.include_router(templates_router)
 
 # 7. Gameplay (parameterized paths like /{game_id}/chat)
 router.include_router(gameplay_router, dependencies=[Depends(session_mutation_lease)])
+router.include_router(regeneration_router)
 router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)

@@ -1443,6 +1443,7 @@ onUnmounted(() => {
 
     <!-- ACTION BAR -->
     <GameActionBar 
+      :game-id="props.gameId"
       :active-action-id="props.activeActionId" 
       :mode="props.mode"
       :suggestions="props.promptSuggestions || []"

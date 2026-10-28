@@ -177,6 +177,7 @@ class SessionImporter:
                     status=game_session_data.get("status", "active"),
                     status_note=game_session_data.get("status_note"),
                     content_language=game_session_data.get("content_language"),
+                    playtime_seconds=max(0, int(game_session_data.get("playtime_seconds") or 0)),
                 )
                 db.add(game_session)
 

@@ -11,6 +11,7 @@ import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
 import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
 import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
+import { useSessionPlaytime } from '@/composables/useSessionPlaytime'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
 import WalkthroughModal from '@/components/game/WalkthroughModal.vue'
@@ -231,6 +232,8 @@ const {
   cancelTurnError,
   isLegacyFormat,
 } = useGameSocket()
+
+useSessionPlaytime(() => props.id, () => ['connected', 'loading', 'completed', 'game_over'].includes(status.value))
 
 const {
   portraitTarget, portraitBusy, portraitError, portraitUpdated,

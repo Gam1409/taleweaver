@@ -405,6 +405,7 @@ class GameSessionResponse(BaseModel):
     scene_id: str
     current_scene_name: Optional[str] = None
     in_game_time: int
+    playtime_seconds: int = 0
     is_ready: bool = True
     creation_status: Optional[str] = None
     creation_error: Optional[str] = None

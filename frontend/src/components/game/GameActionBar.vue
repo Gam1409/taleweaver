@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import RegenerateMessageButton from '@/components/game/RegenerateMessageButton.vue'
 
 const props = defineProps<{
   activeActionId?: string | null
   mode?: string
   disabled?: boolean
   suggestions?: string[]
+  gameId?: string
 }>()
 
 const visibleSuggestions = computed(() => {
@@ -51,6 +53,7 @@ const emit = defineEmits<{
         <span class="max-w-[22rem] truncate">{{ suggestion }}</span>
       </button>
     </div>
+    <RegenerateMessageButton :game-id="props.gameId" :disabled="props.disabled" />
   </div>
 </template>
 

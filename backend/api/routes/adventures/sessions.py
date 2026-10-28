@@ -502,6 +502,7 @@ async def list_sessions(
             scene_id=s.current_scene_id if s else "START",
             current_scene_name=scene_label or ("Exploring..." if s else "Archived"),
             in_game_time=s.in_game_time if s else 0,
+            playtime_seconds=g.playtime_seconds,
             is_ready=a.is_ready if a else True,
             creation_status=a.creation_status if a else "Ready",
             creation_error=a.creation_error if a else None,
@@ -947,6 +948,7 @@ async def copy_session(
         status_note=original_session.status_note,
         copied_from_id=original_session.id,
         content_language=original_session.content_language,
+        playtime_seconds=original_session.playtime_seconds,
     )
     db.add(copied_session)
     await db.flush()
@@ -1142,6 +1144,7 @@ async def _get_session_response(
         scene_id=s.current_scene_id if s else "START",
         current_scene_name=scene_label or ("Exploring..." if s else "Archived"),
         in_game_time=s.in_game_time if s else 0,
+        playtime_seconds=g.playtime_seconds,
         is_ready=a.is_ready if a else True,
         creation_status=a.creation_status if a else "Ready",
         creation_error=a.creation_error if a else None,

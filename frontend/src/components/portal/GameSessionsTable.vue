@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { GameSession } from '@/types'
+import { formatPlaytime } from '@/utils/playtime'
 import {
   Play,
   FileText,
@@ -227,7 +228,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
                   </span>
                   <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Clock class="w-3.5 h-3.5" />
-                    <span>Turn {{ session.in_game_time || 0 }}</span>
+                    <span :title="'Time spent playing'">{{ formatPlaytime(session.playtime_seconds) }}</span>
                   </div>
                 </div>
               </td>

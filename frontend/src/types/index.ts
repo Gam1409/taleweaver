@@ -302,6 +302,7 @@ export interface GameSession {
   scene_id: string
   current_scene_name?: string | null
   in_game_time: number
+  playtime_seconds?: number
   is_paused: boolean
   is_ready: boolean
   creation_status?: string | null
