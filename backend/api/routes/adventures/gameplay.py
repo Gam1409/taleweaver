@@ -282,6 +282,11 @@ async def post_chat_message(
                 payload.content,
                 auto_visualize=payload.auto_visualize,
                 language=payload.language,
+                **(
+                    {"replay_message_id": payload.replay_message_id}
+                    if payload.replay_message_id
+                    else {}
+                ),
             )
         except Exception:
             logger.exception("Failed to initialize chat stream for session %s", game_id)

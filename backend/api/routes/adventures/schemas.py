@@ -524,6 +524,7 @@ class ContentLanguageRequest(BaseModel):
 
 
 class ChatRequest(ContentLanguageRequest):
+    replay_message_id: str | None = Field(default=None, max_length=36)
     content: str
     auto_visualize: bool = False
     language: Optional[str] = None

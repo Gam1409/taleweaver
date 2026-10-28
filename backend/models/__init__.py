@@ -11,6 +11,7 @@ from .memory_rag import MemoryIndexState as MemoryIndexState
 from .memory_rag import MemorySummary as MemorySummary
 from .session_checkpoint import SessionCheckpoint
 from .session_state import SessionState
+from .turn_replay import TurnReplay
 from .user import User
 from .validation_run import ValidationRun
 from .world_entity import WorldEntity, WorldExit, WorldScene
@@ -29,6 +30,7 @@ __all__ = [
     "SessionCheckpoint",
     "SessionState",
     "User",
+    "TurnReplay",
     "ValidationRun",
     "WorldEntity",
     "WorldExit",

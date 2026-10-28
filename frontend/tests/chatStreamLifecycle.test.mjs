@@ -205,3 +205,43 @@ test('system debug visibility follows snapshots independently of gameplay debug'
   f.game.disconnect()
   assert.equal(f.game.systemDebugEnabled.value, false)
 })
+
+test('full replay uses the normal stream and replaces the old exchange without duplicating the player message', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  const replacement = snapshot([...initial, { id: 'user-2', role: 'user', content: action }, { id: 'reply-2', role: 'assistant', content: 'New outcome.' }])
+  f.route(async (_url, options) => {
+    if (options.method === 'POST') {
+      assert.equal(JSON.parse(options.body).replay_message_id, 'reply-1')
+      return new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'New outcome.' }) + frame('final', {}))
+    }
+    return new Response(JSON.stringify(replacement))
+  })
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 1)
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-2')
+  assert.equal(f.game.turnError.value, null)
+})
+
+test('failed full replay reloads the restored original and does not offer to repeat it as a fresh action', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'Unfinished' }) + frame('replay_history', { messages: saved().messages }) + frame('error', { detail: 'The previous turn was restored.' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-1')
+  assert.equal(f.game.turnError.value, null)
+})
+
+
+test('interrupted full replay never offers a fresh-action retry', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'Unfinished' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-1')
+  assert.equal(f.game.turnError.value, null)
+})

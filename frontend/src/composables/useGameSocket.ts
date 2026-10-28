@@ -87,7 +87,7 @@ export interface UseGameSocket {
   disconnect: () => void
   haltActiveOperations: () => void
   refreshSession: () => Promise<void>
-  sendMessage: (content: string, isRetry?: boolean) => Promise<void>
+  sendMessage: (content: string, isRetry?: boolean, replayMessageId?: string) => Promise<void>
   retryLastAction: () => Promise<void>
   cancelTurnError: () => void
   emitSystemMessage: (content: string) => void
@@ -468,7 +468,7 @@ export function useGameSocket(): UseGameSocket {
   /**
    * Posts a player message and processes the GM response.
    */
-  async function sendMessage(content: string, isRetry: boolean = false): Promise<void> {
+  async function sendMessage(content: string, isRetry: boolean = false, replayMessageId?: string): Promise<void> {
     if (languageSaving.value) {
       addNotification('Please wait until the game language is saved.', 'info')
       return
@@ -518,7 +518,7 @@ export function useGameSocket(): UseGameSocket {
       addNotification('The Game Master is still processing your last action.', 'info')
       return
     }
-    if (wasGameOver || inputLocked.value) {
+    if ((wasGameOver || inputLocked.value) && !replayMessageId) {
       addNotification('This session is finished. Start a new session to continue playing.', 'info')
       return
     }
@@ -531,7 +531,7 @@ export function useGameSocket(): UseGameSocket {
     // Command handlers may intentionally acknowledge without storing a chat message.
     const requiresActionReceipt = !!normalizedContent && !normalizedContent.startsWith('/')
 
-    if (normalizedContent && !isSilent) {
+    if (normalizedContent && !isSilent && !replayMessageId) {
       lastUserAction.value = normalizedContent
       if (!isRetry) {
         _pushMessage('user', normalizedContent)
@@ -598,6 +598,13 @@ export function useGameSocket(): UseGameSocket {
         addNotification(detail, 'info')
         return
       }
+      if (replayMessageId) {
+        if (snapshot) applySessionSnapshot(snapshot, true)
+        turnError.value = null
+        lastUserAction.value = ''
+        addNotification(`${reason} Reopen the session to check recovery before regenerating again.`, 'error')
+        return
+      }
       reportTurnError(`${reason} Saving could not be confirmed. Your message was kept here; check the latest history before retrying.`)
     }
     resetIdleTimeout()
@@ -609,6 +616,7 @@ export function useGameSocket(): UseGameSocket {
         signal: controller.signal,
         body: JSON.stringify({ 
           content: normalizedContent,
+          replay_message_id: replayMessageId,
           auto_visualize: autoVisualize.value
         })
       })
@@ -673,7 +681,10 @@ export function useGameSocket(): UseGameSocket {
 
           if (!data) continue
 
-          if (event === 'status') {
+          if (event === 'replay_history') {
+            messages.value = data.messages.map((m: ChatMessage) => ({ ...m, timestamp: new Date() }))
+            if (data.content) _pushMessage('user', data.content)
+          } else if (event === 'status') {
             statusText.value = data.content
             debugLogs.value.push({
               timestamp: new Date().toLocaleTimeString(),
@@ -770,6 +781,12 @@ export function useGameSocket(): UseGameSocket {
     } finally {
       window.clearTimeout(timeoutId)
       if (ownsRequest()) {
+        if (replayMessageId && receivedErrorEvent) {
+          const restored = await fetchSessionSnapshot(gameId)
+          if (ownsRequest() && restored) applySessionSnapshot(restored, true)
+          turnError.value = null
+          lastUserAction.value = ''
+        }
         activeChatController = null
         isSceneTransitioning.value = false
         status.value = finalStatus

@@ -26,6 +26,7 @@ from backend.api.routes.adventures.session_playtime import router as session_pla
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
+from backend.api.routes.adventures.turn_replay import router as replay_router
 from backend.api.routes.adventures.visual_presets import router as visual_presets_router
 from backend.api.routes.adventures.vn_settings import router as vn_settings_router
 
@@ -60,6 +61,7 @@ router.include_router(templates_router)
 # 7. Gameplay (parameterized paths like /{game_id}/chat)
 router.include_router(gameplay_router, dependencies=[Depends(session_mutation_lease)])
 router.include_router(regeneration_router)
+router.include_router(replay_router)
 router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)

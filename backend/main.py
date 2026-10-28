@@ -71,9 +71,14 @@ async def lifespan(_app: FastAPI):
     # Database schema is managed exclusively by Alembic.
     await asyncio.to_thread(run_db_migrations)
 
+    from backend.core.database import AsyncSessionLocal
+    from backend.engine.turn_replay.service import recover_interrupted
+
+    async with AsyncSessionLocal() as recovery_db:
+        await recover_interrupted(recovery_db)
+
     # Auto-import adventures
     from backend.api.routes.adventures.sessions import _cleanup_stale_empty_session_dirs
-    from backend.core.database import AsyncSessionLocal
     from backend.engine.adventure_importer import AdventureTemplateImporter
 
     async with AsyncSessionLocal() as db:

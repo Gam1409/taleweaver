@@ -15,7 +15,7 @@ def test_upgrade_from_either_parent(tmp_path, monkeypatch, parent):
     monkeypatch.setattr(settings, "DATABASE_URL", url)
     config = Config("alembic.ini")
     config.attributes["configure_logger"] = False
-    assert ScriptDirectory.from_config(config).get_current_head() == "1c8a6f3e7b20"
+    assert ScriptDirectory.from_config(config).get_current_head() == "2d9b7a4c8e31"
     command.upgrade(config, parent)
     command.upgrade(config, "head")
     engine = create_engine(url)
@@ -29,7 +29,7 @@ def test_upgrade_from_either_parent(tmp_path, monkeypatch, parent):
         }
         with engine.connect() as connection:
             assert (
-                connection.scalar(text("SELECT version_num FROM alembic_version")) == "1c8a6f3e7b20"
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == "2d9b7a4c8e31"
             )
     finally:
         engine.dispose()

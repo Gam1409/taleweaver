@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from contextlib import aclosing
 from inspect import isawaitable
 import json
 import logging
@@ -69,6 +70,8 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.memory_rag.scheduling import foreground_turn
+from backend.engine.turn_replay.service import record_before
+from backend.engine.turn_replay.stream import run as run_replayable_turn
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.dynamic_locations.prompts import intent_schema, prompt_block
@@ -808,16 +811,19 @@ class GameTurnManager:
     @guard_session_turn
     @foreground_turn
     async def process_turn(
-        self, message: str, auto_visualize: bool = False, language: str | None = None
+        self,
+        message: str,
+        auto_visualize: bool = False,
+        language: str | None = None,
+        replay_message_id: str | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Runs one turn and applies post-turn hooks (special unlocks, NPC attacks) before its final event."""
+        """Run one replayable turn with the same normal post-turn hooks."""
         hooks = PostTurnHooks(self)
-        async for chunk in self._process_turn_inner(message, auto_visualize, language):
-            if not chunk.startswith("event: final"):
+        async with aclosing(
+            run_replayable_turn(self, message, auto_visualize, language, replay_message_id, hooks)
+        ) as stream:
+            async for chunk in stream:
                 yield chunk
-                continue
-            async for hooked in hooks.process_final(chunk):
-                yield hooked
 
     async def _process_turn_inner(
         self, message: str, auto_visualize: bool = False, language: str | None = None
@@ -1122,6 +1128,7 @@ class GameTurnManager:
         is_silent = any(actual_user_input.lower().startswith(cmd) for cmd in silent_commands)
 
         if actual_user_input and not is_silent:
+            await record_before(self, actual_user_input)
             player_message = await self._save_chat_message("user", actual_user_input)
             self._vn_player_message_id = player_message.id
             await self.db.flush()
