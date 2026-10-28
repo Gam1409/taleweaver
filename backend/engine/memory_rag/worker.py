@@ -225,6 +225,16 @@ async def _index_batch(claim: Claim, user: User, documents: list[MemoryDocument]
     pending = [
         document for document in documents if existing.get(document.id) != document.source_hash
     ]
+    priority = {
+        "npc_journal": 0,
+        "world_memory": 1,
+        "session_note": 1,
+        "npc_summary": 2,
+        "scene_summary": 2,
+        "story_summary": 2,
+        "chronicle_summary": 2,
+    }
+    pending.sort(key=lambda doc: priority.get(getattr(doc, "layer", "dialogue"), 3))
     batch = pending[:BATCH_SIZE]
     if not batch:
         return False
@@ -259,13 +269,14 @@ async def _step(claim: Claim) -> bool:
         await _release(claim)
         return False
     enabled = read_settings(user).enabled and not claim.paused
-    if enabled and await _index_batch(claim, user, documents):
-        await _release(claim)
-        return True
     if await _summarize(claim, chronicle=True):
         await _release(claim)
         return True
     if enabled and await _summarize(claim, chronicle=False):
+        await _release(claim)
+        return True
+    # Canonical summaries must progress even when the optional embedder is unavailable.
+    if enabled and await _index_batch(claim, user, documents):
         await _release(claim)
         return True
     if enabled:

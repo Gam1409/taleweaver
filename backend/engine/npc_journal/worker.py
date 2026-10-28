@@ -9,7 +9,7 @@ from backend.core.diagnostic_operations import diagnostic_job
 from backend.core.llm_deadlines import role_timeout
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
-from backend.engine.npc_journal import queue
+from backend.engine.npc_journal import progress, queue
 from backend.engine.npc_journal.apply import apply_extraction
 from backend.engine.npc_journal.extract import extract, extraction_context
 from backend.engine.npc_journal.portraits import resume_pending, schedule_portrait
@@ -22,22 +22,28 @@ logger = logging.getLogger(__name__)
 _tasks: dict[str, asyncio.Task] = {}
 _wakeups: dict[str, str] = {}
 _cooldowns: dict[str, float] = {}
+_timers: dict[str, asyncio.TimerHandle] = {}
 
 
 async def process_message(message_id: str, user_id: str) -> bool:
     """Claim once; retries re-read current NPC rows before applying facts."""
     task = None
+    session = None
     try:
         prepared = await _prepare(message_id, user_id)
         if prepared is None:
             return False
         user, session, task, original_content = prepared
+        progress.set_phase(session.id, message_id, "preparing")
         async with database.AsyncSessionLocal() as db:
             message = await db.get(ChatMessage, message_id)
             if message is None:
                 return False
             payload, player_name = await extraction_context(db, message, session)
         result = await _extract_when_idle(user, session, message_id, payload, task)
+        progress.set_phase(
+            session.id, message_id, "waiting_to_save" if scheduler.active_turns else "saving"
+        )
         created = await _save(message_id, original_content, player_name, result, task["token"])
         if created is None:
             return False
@@ -56,6 +62,8 @@ async def process_message(message_id: str, user_id: str) -> bool:
         if task:
             await _fail(message_id, task)
         return False
+    finally:
+        progress.finish(getattr(session, "id", ""), message_id)
 
 
 @retry_transaction
@@ -83,6 +91,7 @@ async def _extract_when_idle(
     if not scheduler.can_start_background():
         await _defer(message_id, task)
         return None
+    progress.set_phase(session.id, message_id, "extracting")
     return await asyncio.wait_for(
         extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
     )
@@ -102,6 +111,7 @@ async def _save(
         message = await db.get(ChatMessage, message_id)
         if message is None or message.content != original_content:
             return None
+        progress.set_phase(message.session_id, message_id, "saving")
         if not await queue.fence(db, message, token):
             return None
         created = await apply_extraction(db, message, result, player_name)
@@ -174,13 +184,31 @@ async def _run(session_id: str, user_id: str) -> None:
         async with scheduler.background():
             message_id = await _next_message(session_id)
             if message_id is None:
+                await _schedule_retry(session_id, user_id)
                 return
             success = await process_message(message_id, user_id)
             consecutive_failures = 0 if success else consecutive_failures + 1
             if consecutive_failures >= 2:
                 # A failing provider must not consume the backlog on every UI poll.
                 _cooldowns[session_id] = time.monotonic() + queue.RETRY_DELAY
+                _wake_later(session_id, user_id, queue.RETRY_DELAY)
                 return
+
+
+async def _schedule_retry(session_id: str, user_id: str) -> None:
+    async with database.AsyncSessionLocal() as db:
+        when = await queue.next_retry_at(db, session_id)
+    if when is not None:
+        _wake_later(session_id, user_id, max(1, when - time.time()))
+
+
+def _wake_later(session_id: str, user_id: str, delay: float) -> None:
+    previous = _timers.pop(session_id, None)
+    if previous:
+        previous.cancel()
+    _timers[session_id] = asyncio.get_running_loop().call_later(
+        delay, schedule, session_id, user_id
+    )
 
 
 def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:
@@ -188,6 +216,9 @@ def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:
         _cooldowns.pop(session_id, None)
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return
+    timer = _timers.pop(session_id, None)
+    if timer:
+        timer.cancel()
     if session_id in _tasks:
         _wakeups[session_id] = user_id
         return
@@ -213,6 +244,9 @@ async def shutdown() -> None:
     from backend.engine.npc_journal.portraits import shutdown as stop_portraits
 
     _wakeups.clear()
+    for timer in _timers.values():
+        timer.cancel()
+    _timers.clear()
     tasks = list(_tasks.values())
     for task in tasks:
         task.cancel()

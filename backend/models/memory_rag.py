@@ -48,3 +48,5 @@ class MemorySummary(Base, TimestampMixin):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     source_message_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     source_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    # None denotes legacy whole-message coverage; keys identify bounded source fragments.
+    source_keys: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)

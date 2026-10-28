@@ -46,6 +46,15 @@ def tokens(text: str) -> set[str]:
 
 
 def _importance(document: MemoryDocument) -> float:
+    if document.significance in {
+        "boundary",
+        "commitment",
+        "decision",
+        "relationship_change",
+        "durable_fact",
+        "meaningful_consequence",
+    }:
+        return 1.7
     # Journal categories are structured English labels, irrespective of story language.
     category = document.text.split(" — ", 1)[-1].split("/", 1)[0]
     if category in {"preference", "relationship", "promise", "background", "personality", "fact"}:

@@ -170,3 +170,32 @@ test('history tabs paginate independently, preserve profile while loading and ig
   await tick()
   assert.deepEqual(f.details.value.entries.map(entry => entry.id), ['g1'])
 })
+
+test('directory exposes save waiting without treating it as a model failure', async t => {
+  t.mock.method(globalThis, 'fetch', async () => reply({
+    characters: [], pending: 3, failed: 0,
+    learning: { phase: 'waiting_to_save', elapsed_seconds: 25 },
+  }))
+  const f = fixture(t)
+  await tick()
+  assert.equal(f.learning.value.phase, 'waiting_to_save')
+  assert.equal(f.learning.value.elapsed_seconds, 25)
+  assert.equal(f.failed.value, 0)
+})
+
+test('changing session clears the previous learning status while loading', async t => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => reply({
+    characters: [], pending: 3, failed: 1,
+    learning: { phase: 'extracting', elapsed_seconds: 20 },
+  }))
+  const f = fixture(t)
+  await tick()
+  fetch.mock.mockImplementation((url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+  }))
+  f.session.value = 'another-session'
+  await nextTick()
+  assert.equal(f.learning.value, null)
+  assert.equal(f.pending.value, 0)
+  assert.equal(f.failed.value, 0)
+})

@@ -85,6 +85,25 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
     )
 
 
+async def next_retry_at(db: AsyncSession, session_id: str) -> float | None:
+    """Wake failed/abandoned work without requiring the Characters dialog to stay open."""
+    rows = await db.scalars(
+        select(ChatMessage.npc_journal).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.npc_journal["status"].as_string().in_(["failed", "running"]),
+            or_(
+                ChatMessage.npc_journal["attempts"].as_integer() < MAX_ATTEMPTS,
+                ChatMessage.npc_journal["status"].as_string() == "running",
+            ),
+        )
+    )
+    times = [
+        float(task.get("lease_until" if task["status"] == "running" else "retry_after", 0))
+        for task in rows
+    ]
+    return min(times) if times else None
+
+
 async def claim(
     db: AsyncSession, message: ChatMessage, *, lease_seconds: float = LEASE_SECONDS
 ) -> dict | None:
