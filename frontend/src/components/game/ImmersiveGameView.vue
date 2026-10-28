@@ -338,6 +338,8 @@ defineExpose({
     <!-- 4. BOTTOM ACTION BAR & USER INPUT -->
     <footer class="relative z-20 flex flex-col bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
       <ImmersiveActionBar
+        :game-id="props.gameId"
+        :is-evaluating="isEvaluating"
         :mode="props.mode"
         :inventory="props.inventory"
         :tracked-quest="props.trackedQuest"

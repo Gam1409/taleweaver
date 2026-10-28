@@ -8,7 +8,6 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import type { ComicTurn } from '@/composables/useComicTurns'
 import VnMomentIllustration from '@/components/game/VnMomentIllustration.vue'
-import ResponseActions from '@/components/game/ResponseActions.vue'
 import LicenseInfoBlock from '@/components/game/LicenseInfoBlock.vue'
 import ImmersiveStoryExchange from '@/components/game/immersive/ImmersiveStoryExchange.vue'
 import { Sparkles, ChevronLeft, ChevronRight, Compass } from 'lucide-vue-next'
@@ -135,7 +134,6 @@ function isLatestExchange(exIdx: number): boolean {
           @npc-leave="emit('npcLeave')"
           @npc-contextmenu="(entity, event) => emit('npcContextmenu', entity, event)"
         />
-        <ResponseActions v-if="exchange.assistantMessage?.id && exchange.assistantMessage.id === latestAssistantId" :game-id="props.gameId" :disabled="props.isEvaluating" />
         <VnMomentIllustration
           v-if="props.mode === 'vn' && props.gameId && exchange.assistantMessage?.id"
           :session-id="props.gameId"

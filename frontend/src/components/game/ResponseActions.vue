@@ -5,7 +5,7 @@ import { apiFetch } from '@/services/http'
 import { useGameSocket } from '@/composables/useGameSocket'
 import RegenerateMessageButton from './RegenerateMessageButton.vue'
 
-const props = defineProps<{ gameId?: string; disabled?: boolean }>()
+const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean }>()
 const socket = useGameSocket()
 const latest = computed(() => [...socket.messages.value].reverse().find(m => m.role === 'user' || m.role === 'assistant'))
 const busy = computed(() => ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
@@ -39,13 +39,14 @@ async function replay() {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-2 p-2" aria-label="Response actions">
-    <RegenerateMessageButton :game-id="gameId" :disabled="disabled" show-label />
+  <div class="flex items-center gap-2" :class="compact ? 'shrink-0' : 'flex-wrap p-2'" aria-label="Response actions">
+    <RegenerateMessageButton :game-id="gameId" :disabled="disabled" :compact="compact" show-label />
     <button type="button" :disabled="busy || !available" :title="reason"
-      class="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 disabled:opacity-40"
+      class="flex shrink-0 items-center gap-2 border text-xs text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+      :class="compact ? 'rounded-xl border-slate-700/80 bg-slate-900/90 px-3 py-1.5 font-bold hover:border-amber-400' : 'rounded-lg border-slate-600 px-3 py-2'"
       @click="replay">
-      <RotateCcw :size="15" /> Regenerate turn
+      <RotateCcw :size="15" /> <span :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Regenerate' : 'Regenerate turn' }}</span>
     </button>
-    <span v-if="!available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
+    <span v-if="!compact && !available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
   </div>
 </template>

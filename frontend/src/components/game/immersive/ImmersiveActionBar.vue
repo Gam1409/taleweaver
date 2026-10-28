@@ -6,6 +6,7 @@
  * and Hints/Walkthrough, plus dynamic LLM prompt suggestion popup list.
  */
 import { ref, onBeforeUnmount } from 'vue'
+import ResponseActions from '@/components/game/ResponseActions.vue'
 import {
   Scroll,
   Map as MapIcon,
@@ -22,6 +23,8 @@ import {
 } from 'lucide-vue-next'
 
 const props = defineProps<{
+  gameId?: string
+  isEvaluating?: boolean
   mode?: string
   inventory?: any[]
   trackedQuest?: any
@@ -178,6 +181,8 @@ onBeforeUnmount(() => {
           {{ props.worldMemories.length }}
         </span>
       </button>
+
+      <ResponseActions :game-id="props.gameId" :disabled="props.isEvaluating" compact />
 
       <!-- Debug Panel Button (Debug Mode Only) -->
       <button
