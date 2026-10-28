@@ -39,7 +39,7 @@ Do not narrate dialogue here. An empty reactions list is valid and often appropr
 """
 
 FALLBACK_CONTEXT = """[PRIVATE VN DIRECTION]
-No new social outcome has been established. React conservatively to the player's actual
+React conservatively to the player's actual
 words/actions, respecting existing characterization and boundaries. Do not assume trust,
 affection, consent, a transfer or disclosure succeeded. Do not reveal hidden state.
 """
