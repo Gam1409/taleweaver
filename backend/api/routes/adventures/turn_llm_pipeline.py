@@ -25,6 +25,7 @@ from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
 from backend.engine.memory_rag.recent import recent_dialogue
 from backend.engine.memory_rag.retrieval import prepare_recall
+from backend.engine.npc_presence import physically_present, presence_context
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,8 @@ class TurnLlmContextBuilder:
         scene_entities = [
             e
             for e in all_entities
-            if e.current_scene_id == self.manager.state.current_scene_id
+            if physically_present(e, self.manager.state)
+            and e.current_scene_id == self.manager.state.current_scene_id
             and not getattr(e, "is_in_inventory", False)
             and str(e.id or "") not in contained_item_ids
         ]
@@ -320,6 +322,9 @@ class TurnLlmContextBuilder:
                 + self.manager._build_compressed_history_prompt_block()
                 + self.manager._build_world_memories_prompt_block()
             )
+        availability = presence_context(world.all_entities, state)
+        mechanics_state_block += availability
+        narration_state_block += availability
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
             narration_state_block + session_memory_block + clothing_block,

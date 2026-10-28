@@ -13,6 +13,7 @@ ENTITY_OVERRIDE_ATTRIBUTES: dict[str, str] = {
     "mana": "mana",
     "stamina": "stamina",
     "spatial_position": "spatial_position",
+    "presence": "presence",
     "name": "name",
     "description": "description",
     "current_scene_id": "current_scene_id",

@@ -6,6 +6,7 @@ better maintainability and documentation.
 
 from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
+from backend.engine.npc_presence import PRESENCE_INSTRUCTION
 
 PUZZLE_JSON_ENFORCEMENT_BLOCK = (
     "PUZZLE ENGINE CONTRACT (CRITICAL):\n"
@@ -974,3 +975,9 @@ AGENT_PLAYER_TURN_SYSTEM_PROMPT = (
 System prompt for the autonomous play agent (incl. Monkey Mode robustness tests).
 Output is expected to be a strict JSON action object. Variables are pre-formatted by the caller.
 """
+
+
+# Availability is operational state, never a journal fact.
+
+GM_MECHANICS_SUFFIX += "\n" + PRESENCE_INSTRUCTION
+GM_CHAT_PROGRESSION_RULES_PROMPT += "\n" + PRESENCE_INSTRUCTION

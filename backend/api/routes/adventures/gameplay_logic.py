@@ -23,6 +23,7 @@ from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
 from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warning
 from backend.engine.visual_novel.narration import narration_suffix
+from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
@@ -1656,7 +1657,10 @@ class GameTurnManager:
                 progression_state,
                 user_msg,
                 history,
-                extra_blocks=(global_unlock_rules_prompt_block,),
+                extra_blocks=(
+                    global_unlock_rules_prompt_block,
+                    "" if policy.vn else presence_context(all_entities, self.state),
+                ),
             )
 
             progression_start = time.perf_counter()
@@ -1782,11 +1786,15 @@ class GameTurnManager:
             async for turn_event in advance_in_game_turn(self, script_runner, game_event):
                 yield turn_event
             self._turn_anchor = turn_anchor(self.state)
-        if turn_advanced or (
-            policy.vn
-            and (
-                self.state.in_game_time != time_before_turn
-                or getattr(self, "_vn_wardrobe_changed", False)
+        if (
+            (game_event and (game_event.updated_entities or game_event.moved_entities))
+            or turn_advanced
+            or (
+                policy.vn
+                and (
+                    self.state.in_game_time != time_before_turn
+                    or getattr(self, "_vn_wardrobe_changed", False)
+                )
             )
         ):
             # Narrate from the resolved location and clock, including same-room VN waits.

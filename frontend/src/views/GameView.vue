@@ -1172,7 +1172,7 @@ const handleContainerDropToScene = async () => {
 
 // Split entities into NPCs and Objects, and inject the player as the top-listed NPC
 const npcs = computed(() => {
-  const worldNpcs = entities.value.filter(e => e.entity_type === 'NPC')
+  const worldNpcs = entities.value.filter(e => e.entity_type === 'NPC' && (!e.presence || e.presence === 'present'))
   if (sheet.value && sheet.value.name) {
     const playerEntity = {
       id: 'PLAYER',

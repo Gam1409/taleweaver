@@ -10,6 +10,7 @@ from sqlalchemy import select
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.prompts import recall_block
+from backend.engine.npc_presence import physically_present
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
@@ -41,7 +42,12 @@ def _visible(npc: Any, state: Any) -> bool:
     scene = overrides.get("current_scene_id", npc.current_scene_id)
     hidden = overrides.get("is_hidden", npc.is_hidden)
     defeated = overrides.get("is_defeated", getattr(npc, "is_defeated", False))
-    return scene == state.current_scene_id and not hidden and not defeated
+    return (
+        scene == state.current_scene_id
+        and not hidden
+        and not defeated
+        and physically_present(npc, state)
+    )
 
 
 async def _present_npcs(manager: Any, social: SocialState, user_msg: str) -> list[Any]:

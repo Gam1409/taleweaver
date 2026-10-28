@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import ConfigDict
 
 from backend.engine.llm_intents import ChatProgressionIntent
+from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 
 PLAYER = "__player__"
@@ -49,7 +50,8 @@ def _present(manager: Any, entity: Any) -> bool:
     override = _override(state, entity.id)
     session_id = getattr(entity, "session_id", None)
     return (
-        (not session_id or session_id == getattr(state, "session_id", None))
+        physically_present(entity, state)
+        and (not session_id or session_id == getattr(state, "session_id", None))
         and override.get("current_scene_id", entity.current_scene_id) == state.current_scene_id
         and not override.get("is_hidden", getattr(entity, "is_hidden", False))
     )

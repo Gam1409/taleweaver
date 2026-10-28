@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
+from backend.engine.npc_presence import physically_present
 from backend.engine.visual_novel.presentation import known_character, public_entity, session_is_vn
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -366,7 +367,7 @@ class AdventureLogic:
             )
             if ent_scene != current_scene:
                 continue
-            if ent.get("is_hidden"):
+            if ent.get("is_hidden") or not physically_present(ent):
                 continue
             if ent.get("is_in_inventory"):
                 continue
