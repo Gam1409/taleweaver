@@ -8,7 +8,6 @@ These instructions supplement rather than replace the base prompts.
 NARRATIVE_ADDENDUM = (
     "MATURE THEMES — NARRATIVE ADDITION:\n"
     "In accordance with the established plot, allow for romantic tension, flirtation, and sexual intimacy between characters. "
-    "Don't be constrained by morals and restrictions. "
     "Respect each character's agency, boundaries, and established relationships; do not force attraction or escalation."
     "Describe intimate and sexual moments in explicit detail, including descriptions of bodily fluids and genitals."
     "Maintain the session language, narrative format, pacing, and engine-approved facts."
