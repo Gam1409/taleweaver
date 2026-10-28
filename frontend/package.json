@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:regeneration": "node --test tests/narrationRegeneration.test.mjs tests/httpDeadline.test.mjs tests/sessionPlaytime.test.mjs",
     "test:dialogue": "node tests/comicDialogue.test.mjs",
     "test:portal": "node tests/librarySessions.test.mjs",
     "test:vn": "node tests/vnUi.test.mjs",

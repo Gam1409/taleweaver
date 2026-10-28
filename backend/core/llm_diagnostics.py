@@ -112,6 +112,10 @@ def bridge_event(event: str, fields: dict) -> None:
     provider = fields.get("provider")
     if isinstance(provider, str) and provider in _PROVIDERS:
         safe["provider"] = provider
+    for key in ("retrieval_method", "audience"):
+        value = fields.get(key)
+        if isinstance(value, str) and value in ENUMS[key]:
+            safe[key] = value
     emit(event, **safe)
 
 

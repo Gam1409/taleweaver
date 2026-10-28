@@ -66,6 +66,7 @@ class WorldEntityUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     spatial_position: Optional[str] = None
+    presence: Literal["present", "audible", "absent"] | None = None
     is_hidden: Optional[bool] = None
     is_defeated: Optional[bool] = None  # Marks NPC as permanently inert after defeat
     hp: Optional[int] = None

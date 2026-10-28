@@ -18,6 +18,7 @@ PUBLIC_NPC_FIELDS = {
     "image_url",
     "current_scene_id",
     "spatial_position",
+    "presence",
     "npc_type",
     "voice",
     "is_defeated",

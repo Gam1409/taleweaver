@@ -5,7 +5,7 @@ import { apiFetch } from '@/services/http'
 import { runVisualJob } from '@/services/visualJobs'
 import { getOriginalImageUrl } from '@/utils/game_icons'
 
-const props = defineProps<{ sessionId: string; messageId: string; canGenerate: boolean }>()
+const props = defineProps<{ sessionId: string; messageId: string; messageContent?: string; canGenerate: boolean }>()
 interface MomentState {
   available: boolean
   reason: string | null
@@ -80,7 +80,7 @@ async function generate(): Promise<void> {
   }
 }
 watch(
-  () => [props.sessionId, props.messageId],
+  () => [props.sessionId, props.messageId, props.messageContent],
   () => {
     void load()
   },

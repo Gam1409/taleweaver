@@ -22,6 +22,7 @@ class TurnEventEntities:
                 states[eid] = {}
             if move.to_scene_id:
                 states[eid]["current_scene_id"] = move.to_scene_id
+                states[eid]["presence"] = "present"
                 # If moving to a new scene, clear spatial position unless a new one is provided
                 if not move.to_spatial_position:
                     states[eid]["spatial_position"] = None
@@ -85,6 +86,8 @@ class TurnEventEntities:
             states[eid]["name"] = update.name
         if update.description is not None:
             states[eid]["description"] = update.description
+        if update.presence is not None:
+            states[eid]["presence"] = update.presence
         if update.spatial_position is not None:
             states[eid]["spatial_position"] = update.spatial_position
         if update.is_hidden is not None:

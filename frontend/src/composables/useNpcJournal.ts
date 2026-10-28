@@ -55,7 +55,13 @@ export interface NpcCard {
   insights?: NpcInsights | null
 }
 
+export interface LearningProgress {
+  phase: 'queued' | 'preparing' | 'extracting' | 'waiting_to_save' | 'saving' | 'recovering' | 'retry_pending' | 'up_to_date'
+  elapsed_seconds: number
+}
+
 interface NpcJournalController {
+  learning: Ref<LearningProgress | null>
   characters: Ref<NpcCard[]>
   details: Ref<NpcCard | null>
   loading: Ref<boolean>
@@ -67,6 +73,7 @@ interface NpcJournalController {
 }
 
 export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefined>, showState?: Readonly<Ref<boolean>>, history?: Ref<NpcHistoryKind>): NpcJournalController {
+  const learning = ref<LearningProgress | null>(null)
   const characters = ref<NpcCard[]>([])
   const details = ref<NpcCard | null>(null)
   const loading = ref(false)
@@ -106,11 +113,12 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
         if (token !== revision) return
         details.value = visibleCard({ ...data, entries: more ? [...(details.value?.entries || []), ...(data.entries || [])] : data.entries })
       } else {
-        const data = await request('npcs', controller.signal) as { characters: NpcCard[]; pending: number; failed: number }
+        const data = await request('npcs', controller.signal) as { characters: NpcCard[]; pending: number; failed: number; learning?: LearningProgress }
         if (token !== revision) return
         characters.value = data.characters.map(visibleCard)
         pending.value = data.pending
         failed.value = data.failed
+        learning.value = data.learning ?? null
       }
     } catch (cause) {
       if (token === revision) error.value = cause instanceof Error && cause.name !== 'AbortError'
@@ -154,6 +162,9 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     if (current[0] !== previous?.[0] || current[1] !== previous?.[1]) {
       details.value = null
       characters.value = []
+      learning.value = null
+      pending.value = 0
+      failed.value = 0
     } else if (details.value && current[2] !== previous?.[2]) {
       // Keep the profile visible while replacing only this tab's history page.
       details.value = { ...details.value, entries: [], has_more: false, history_kind: history?.value }
@@ -167,5 +178,5 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     } else void load()
   })
   onScopeDispose(stop)
-  return { characters, details, loading, error, pending, failed, load, retryLearning }
+  return { learning, characters, details, loading, error, pending, failed, load, retryLearning }
 }

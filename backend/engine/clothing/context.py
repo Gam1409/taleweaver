@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.visuals import canonical_inventory, detailed_for_state
+from backend.engine.npc_presence import physically_present
 from backend.engine.visual_novel.continuity import PLAYER, possession_snapshot
 
 
@@ -53,6 +54,9 @@ def actor_records(manager: Any, entities: list[Any], states: dict | None = None)
             override = {}
         if (
             entity.entity_type != "NPC"
+            or not physically_present(
+                {"entity_type": "NPC", "presence": override.get("presence", "present")}
+            )
             or override.get("current_scene_id", entity.current_scene_id)
             != manager.state.current_scene_id
             or override.get("is_hidden", getattr(entity, "is_hidden", False))

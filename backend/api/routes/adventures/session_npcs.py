@@ -16,6 +16,7 @@ from backend.engine.npc_cards.presentation import (
 )
 from backend.engine.npc_cards.settings import card_insights_enabled
 from backend.engine.npc_journal.portraits import portrait_status
+from backend.engine.npc_journal.progress import snapshot as learning_progress
 from backend.engine.npc_journal.records import journal_of
 from backend.engine.npc_journal.relationships import player_relationship
 from backend.engine.npc_journal.worker import schedule
@@ -115,6 +116,7 @@ async def list_characters(
         "characters": [_card(npc, state) for npc in npcs if _known(npc, state)],
         "pending": sum(s in ("pending", "running") for s in statuses),
         "failed": statuses.count("failed"),
+        "learning": learning_progress(game_id, tasks),
     }
 
 

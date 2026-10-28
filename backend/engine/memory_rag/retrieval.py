@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core.llm_logger import log_structured_event
+from backend.engine.memory_rag.core import context_fallback, working_memory
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import embed_texts
 from backend.engine.memory_rag.ranking import rank_documents
@@ -27,12 +28,13 @@ class TurnRecall:
     method: str = "disabled"
     elapsed_ms: float = 0
     usage: dict[str, dict] = field(default_factory=dict)
+    core_documents: list[MemoryDocument] = field(default_factory=list)
 
     def record_usage(
         self, manager: Any, audience: str, block: str, selected: list[MemoryDocument]
     ) -> None:
         audit = {
-            "method": self.method,
+            "retrieval_method": self.method,
             "duration_ms": self.elapsed_ms,
             "source_ids": [doc.source_id for doc in selected],
             "source_message_ids": sorted(
@@ -135,10 +137,20 @@ async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRe
         ):
             scores = _canonical_scores(documents, candidates, scope)
     ranked = rank_documents(documents, query, npc_ids, manager.state.current_scene_id, scores)
-    return TurnRecall(enabled=True, documents=ranked, method="hybrid" if scores else "sql_lexical")
+    core = working_memory(documents, npc_ids)
+    if not ranked:
+        ranked = context_fallback(documents)
+    return TurnRecall(
+        enabled=True,
+        documents=ranked,
+        core_documents=core,
+        method="hybrid" if scores else "sql_lexical",
+    )
 
 
-async def prepare_recall(manager: Any, user_msg: str, entities: list[Any]) -> TurnRecall:
+async def prepare_recall(
+    manager: Any, user_msg: str, entities: list[Any], *, history: list[dict] | None = None
+) -> TurnRecall:
     """Cache the result through state-context rebuilds and every actual turn audience."""
     token = (manager.state.session_id, getattr(manager, "_vn_player_message_id", None), user_msg)
     if getattr(manager, "_memory_recall_token", None) == token:
@@ -149,7 +161,9 @@ async def prepare_recall(manager: Any, user_msg: str, entities: list[Any]) -> Tu
         if read_settings(manager.user).enabled:
             npcs = [entity for entity in entities if entity.entity_type == "NPC"]
             names = " ".join(str(npc.name or npc.id) for npc in npcs)
-            query = user_msg[:3500] + "\nPresent characters: " + names[:500]
+            previous = " ".join(str(row.get("content", "")) for row in (history or [])[-2:])
+            query = user_msg[:2400] + "\nRecent context: " + previous[-1000:]
+            query += "\nPresent characters: " + names[:500]
             recall = await _collect_recall(manager, query, {str(npc.id) for npc in npcs})
     except Exception as exc:
         logger.warning(

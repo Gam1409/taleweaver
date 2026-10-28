@@ -35,6 +35,9 @@ class MemoryDocument:
     provenance: str
     source_message_ids: list[str]
     created_at: str
+    topic: str | None = None
+    significance: str | None = None
+    category: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -77,8 +80,17 @@ def summary_sources(
     return [doc for doc in documents if doc.layer == "dialogue"]
 
 
-def sources_hash(documents: list[MemoryDocument], message_ids: list[str]) -> str:
+def sources_hash(
+    documents: list[MemoryDocument], message_ids: list[str], source_keys: list[str] | None = None
+) -> str:
     selected = set(message_ids)
+    if source_keys is not None:
+        if not source_keys:
+            return ""
+        keys = set(source_keys)
+        documents = [doc for doc in documents if doc.source_id in keys]
+        if {doc.source_id for doc in documents} != keys:
+            return ""
     return content_hash(
         sorted(
             (doc.id, doc.text, doc.provenance, tuple(doc.source_message_ids))
@@ -146,6 +158,9 @@ def _journal_documents(
                 provenance=source,
                 source_message_ids=[message.id],
                 created_at=message.created_at.isoformat(),
+                topic=entry.get("topic"),
+                significance=entry.get("significance"),
+                category=entry.get("category"),
             )
         )
     return documents
@@ -264,7 +279,10 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
         if not summary.source_message_ids or not set(summary.source_message_ids) <= messages.keys():
             continue
         sources = summary_sources(raw_documents, summary.layer, summary.npc_id, summary.scene_id)
-        if sources_hash(sources, summary.source_message_ids) != summary.source_hash:
+        if (
+            sources_hash(sources, summary.source_message_ids, summary.source_keys)
+            != summary.source_hash
+        ):
             continue
         documents.append(
             _document(

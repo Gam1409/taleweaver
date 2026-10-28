@@ -39,7 +39,8 @@ Follow the approved outcome, including any social reaction or scene direction.
 Never narrate an unapproved relationship commitment, disclosure, item transfer,
 time jump or location change. Private hopes are not evidence of mutual feelings.
 NPC PRESENCE: A character's arrival or departure between locations requires an
-approved NPC movement in TURN RESOLUTION. Do not narrate a completed exit, return,
+approved NPC movement in TURN RESOLUTION. Leaving or returning within the same
+map location requires an approved presence update (present/audible/absent). Do not narrate a completed exit, return,
 or off-screen errand just to close a conversation. If no movement was approved,
 keep it an intention or an unfinished gesture within the current location.
 An emotional intention to withdraw means disengaging from the conversation; it

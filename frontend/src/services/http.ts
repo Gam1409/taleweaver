@@ -18,7 +18,7 @@ export function authHeaders(includeJson = false): Record<string, string> {
 }
 
 export interface ApiFetchInit extends RequestInit {
-  timeoutMs?: number
+  timeoutMs?: number | null
   includeJson?: boolean
 }
 
@@ -49,7 +49,8 @@ export async function apiFetch(path: string, init: ApiFetchInit = {}): Promise<R
     }
   }
 
-  const timeoutId = window.setTimeout(() => controller.abort('request-timeout'), timeoutMs)
+  // null delegates the deadline to the backend (long-running model requests).
+  const timeoutId = timeoutMs === null ? undefined : window.setTimeout(() => controller.abort('request-timeout'), timeoutMs)
   try {
     return await fetch(buildApiUrl(path), {
       ...rest,

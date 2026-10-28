@@ -33,6 +33,7 @@ test('regeneration locks input, prevents double clicks and replaces the same mes
   assert.equal(f.busy.value, true)
   await f.regenerate()
   assert.equal(globalThis.fetch.mock.callCount(), 1)
+  assert.equal(globalThis.fetch.mock.calls[0].arguments[1].timeoutMs, null)
   finish(new Response(JSON.stringify({ id: 'reply', role: 'assistant', content: 'Replacement' })))
   await pending
   assert.deepEqual(f.socket.messages.value, [{ id: 'reply', role: 'assistant', content: 'Replacement' }])

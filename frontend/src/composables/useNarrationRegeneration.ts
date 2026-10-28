@@ -31,7 +31,7 @@ export function useNarrationRegeneration(gameId: () => string | undefined, socke
         method: 'POST',
         includeJson: true,
         body: JSON.stringify({ message_id: message.id }),
-        timeoutMs: 190_000,
+        timeoutMs: null,
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))

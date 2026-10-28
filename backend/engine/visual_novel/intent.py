@@ -10,6 +10,7 @@ from backend.engine.clothing.actions import CLOTHING_PROMPT, GarmentCreation, Wa
 from backend.engine.clothing.context import build_clothing_context
 from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled
+from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 
 _ITEM_FIELDS = frozenset(
@@ -21,6 +22,7 @@ _ENTITY_FIELDS = frozenset(
         "name",
         "description",
         "spatial_position",
+        "presence",
         "is_hidden",
         "locked",
         "switch_state",
@@ -142,6 +144,7 @@ clear_notes is only for an explicit whole-notebook reset. Keep narrative_descrip
 to one brief internal sentence. Leave unsupported or uncertain changes empty.
 """
     + "\n"
+    + PRESENCE_INSTRUCTION
     + CLOTHING_PROMPT
 )
 
@@ -201,6 +204,7 @@ def build_progression_context(
         )
     payload = {
         "current_location": current,
+        "npc_presence": presence_context(entities or [], state),
         "current_game_time_minutes": getattr(state, "in_game_time", 0),
         "present_characters": [
             _npc(npc) for npc in npcs if npc.get("scene_id") == state.current_scene_id

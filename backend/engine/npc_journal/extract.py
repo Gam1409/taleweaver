@@ -15,6 +15,8 @@ from backend.models.game_session import GameSession
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 
+MAX_KNOWN_CHARACTERS_CHARS = 12000
+
 
 def _known_facts(npc: WorldEntity) -> list[dict]:
     """Expose bounded distinct prior facts, including older legacy general topics."""
@@ -35,6 +37,35 @@ def _known_facts(npc: WorldEntity) -> list[dict]:
     return list(reversed(facts))
 
 
+def _bounded_known(npcs: list[WorldEntity], message: ChatMessage) -> list[dict]:
+    """Prioritize this scene; a growing cast must not grow the extraction prompt forever."""
+    narration = message.content.casefold()
+
+    def relevant(npc: WorldEntity) -> bool:
+        return npc.current_scene_id == message.scene_id or bool(
+            npc.name and npc.name.casefold() in narration
+        )
+
+    known = []
+    remaining = MAX_KNOWN_CHARACTERS_CHARS - 2
+    for npc in sorted(npcs, key=lambda npc: (not relevant(npc), str(npc.id))):
+        row = {"npc_id": npc.id, "name": npc.name, "scene_id": npc.current_scene_id}
+        if relevant(npc):
+            row.update(
+                aliases=journal_of(npc).get("aliases", [])[:5],
+                appearance=(npc.description or "")[:1000],
+                learned=_known_facts(npc),
+            )
+        size = len(json.dumps(row, ensure_ascii=False)) + 2
+        if size > remaining:
+            row = {"npc_id": npc.id, "name": npc.name}
+            size = len(json.dumps(row, ensure_ascii=False)) + 2
+        if size <= remaining:
+            known.append(row)
+            remaining -= size
+    return known
+
+
 async def extraction_context(
     db: AsyncSession, message: ChatMessage, session: GameSession
 ) -> tuple[str, str]:
@@ -51,17 +82,7 @@ async def extraction_context(
             )
         ).all()
     )
-    known = [
-        {
-            "npc_id": npc.id,
-            "name": npc.name,
-            "scene_id": npc.current_scene_id,
-            "aliases": journal_of(npc).get("aliases", []),
-            "appearance": npc.description,
-            "learned": _known_facts(npc),
-        }
-        for npc in npcs
-    ]
+    known = _bounded_known(npcs, message)
     previous = await db.scalar(
         select(ChatMessage.content)
         .where(

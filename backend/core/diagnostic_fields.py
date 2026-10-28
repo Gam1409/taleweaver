@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 EVENTS = {
+    "npc.learning.phase",
     "http.started",
     "http.completed",
     "http.failed",
@@ -139,6 +140,9 @@ ENUMS = {
     "method": {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
 }
 
+ENUMS["retrieval_method"] = {"disabled", "hybrid", "sql_lexical"}
+ENUMS["audience"] = {"narrator", "vn_continuity", "vn_social"}
+
 ENUMS["purpose"] = {
     "generate_world",
     "translate_text_log",
@@ -154,6 +158,13 @@ ENUMS["purpose"] = {
     "memory_summary",
 }
 ENUMS["phase"] = {
+    "preparing",
+    "extracting",
+    "waiting_to_save",
+    "saving",
+    "npc_summary",
+    "scene_summary",
+    "story_summary",
     "prompt_suggestions",
     "apply_manifest",
     "chat_progression",

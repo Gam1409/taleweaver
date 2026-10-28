@@ -23,8 +23,9 @@ from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
 from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
+from backend.engine.memory_rag.recent import recent_dialogue
 from backend.engine.memory_rag.retrieval import prepare_recall
-from backend.models.chat import ChatMessage
+from backend.engine.npc_presence import physically_present, presence_context
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Only the tail of the chat log is needed for Pass 1 context and generator tool intents;
 # Pass 2 loads its own memory window.
-RECENT_HISTORY_LIMIT = 12
 
 
 @dataclass
@@ -167,15 +167,7 @@ class TurnLlmContextBuilder:
         )
 
     async def _load_recent_history(self) -> list[dict[str, str]]:
-        hist_res = await self.manager.db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == self.manager.state.session_id)
-            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-            .limit(RECENT_HISTORY_LIMIT)
-        )
-        return [
-            {"role": m.role, "content": m.content} for m in reversed(list(hist_res.scalars().all()))
-        ]
+        return await recent_dialogue(self.manager.db, self.manager.state)
 
     async def _load_world(self) -> _WorldSnapshot:
         db = self.manager.db
@@ -227,7 +219,8 @@ class TurnLlmContextBuilder:
         scene_entities = [
             e
             for e in all_entities
-            if e.current_scene_id == self.manager.state.current_scene_id
+            if physically_present(e, self.manager.state)
+            and e.current_scene_id == self.manager.state.current_scene_id
             and not getattr(e, "is_in_inventory", False)
             and str(e.id or "") not in contained_item_ids
         ]
@@ -329,6 +322,9 @@ class TurnLlmContextBuilder:
                 + self.manager._build_compressed_history_prompt_block()
                 + self.manager._build_world_memories_prompt_block()
             )
+        availability = presence_context(world.all_entities, state)
+        mechanics_state_block += availability
+        narration_state_block += availability
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
             narration_state_block + session_memory_block + clothing_block,
@@ -340,7 +336,7 @@ class TurnLlmContextBuilder:
         world = await self._load_world()
         visible, hidden = self._partition_scene_entities(world.all_entities)
         await self._remember_scene_npcs(visible)
-        await prepare_recall(self.manager, user_msg, visible)
+        await prepare_recall(self.manager, user_msg, visible, history=history)
         global_unlock_rules_prompt_block = self._build_global_unlock_rules_prompt_block(
             all_entities=world.all_entities,
             all_exits=world.all_exits,

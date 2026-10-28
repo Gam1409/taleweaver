@@ -4,7 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import update
+from sqlalchemy import and_, case, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
@@ -39,23 +39,26 @@ async def record_playtime(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     """Update only timing columns, without acquiring the long-running game-turn lease."""
-    session = await db.get(GameSession, game_id)
-    if session is None or session.user_id != current_user.id:
-        raise HTTPException(404, "Session not found.")
     now = int(time.time())
-    elapsed = elapsed_playtime(session.playtime_last_seen, now, start=payload.start)
-    # Compare-and-swap prevents overlapping tabs from counting the same interval twice.
-    await db.execute(
+    delta = now - GameSession.playtime_last_seen
+    elapsed = (
+        0
+        if payload.start
+        else case((and_(delta > 0, delta <= MAX_HEARTBEAT_GAP_SECONDS), delta), else_=0)
+    )
+    # One authorized SQL write: concurrent tabs cannot upgrade a stale read snapshot.
+    result = await db.execute(
         update(GameSession)
-        .where(
-            GameSession.id == game_id,
-            GameSession.playtime_last_seen == session.playtime_last_seen,
-        )
+        .where(GameSession.id == game_id, GameSession.user_id == current_user.id)
         .values(
             playtime_seconds=GameSession.playtime_seconds + elapsed,
             playtime_last_seen=now if payload.active else None,
-            updated_at=session.updated_at,
+            updated_at=GameSession.updated_at,
         )
+        .returning(GameSession.id)
+        .execution_options(synchronize_session=False)
     )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(404, "Session not found.")
     await db.commit()
     return {"ok": True}
