@@ -750,6 +750,11 @@ const testAdvanced = () => {
       </div>
     </div>
 
+    <label class="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm text-slate-200">
+      <input v-model="localForm.show_generation_progress" type="checkbox" class="mt-1" />
+      <span>Show generation progress<span class="mt-1 block text-xs text-slate-400">Show image preparation, provider queue and saving stages. No prompts or technical details are displayed.</span></span>
+    </label>
+
     <!-- GLOBAL VISUAL SETTINGS (Format, Quality, Endpoints) -->
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
       <div class="flex items-center gap-3 pb-3 border-b border-slate-800/80">

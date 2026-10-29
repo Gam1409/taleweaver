@@ -24,6 +24,8 @@ export interface NpcJournalEntry {
 }
 
 export interface NpcInsights {
+  source_created_at?: string | null
+  newer_responses?: number
   available: boolean
   relationship: { trust: number; affinity: number; respect: number; tension: number } | null
   emotion: string | null

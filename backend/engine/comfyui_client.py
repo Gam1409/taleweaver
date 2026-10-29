@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from backend.engine.visual_progress import report
 from backend.utils.path_security import validate_provider_url
 
 MAX_IMAGE_BYTES = 32 * 1024 * 1024
@@ -94,12 +95,15 @@ class ComfyClient:
         return f"{subfolder}/{name}" if subfolder else name
 
     async def execute(self, graph: dict, output_node: str, timeout: int) -> bytes:
+        report("submitting")
         result = await self.json("POST", "/prompt", json={"prompt": graph})
         prompt_id = result.get("prompt_id")
         if not isinstance(prompt_id, str) or not prompt_id:
             raise ValueError("ComfyUI did not accept the workflow.")
         try:
+            report("waiting")
             output = await self._wait(prompt_id, output_node, timeout)
+            report("downloading")
             return await self._download(output)
         except (asyncio.CancelledError, TimeoutError, httpx.TimeoutException):
             # Dequeue only this job. An already running job may continue remotely.

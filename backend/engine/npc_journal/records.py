@@ -3,9 +3,9 @@
 import hashlib
 import unicodedata
 from copy import deepcopy
-from typing import Any
+from typing import Any, get_args
 
-from backend.engine.npc_journal.schema import CharacterObservation, Observation
+from backend.engine.npc_journal.schema import CharacterObservation, Observation, Significance
 
 JOURNAL_KEY = "npc_journal"
 _PHYSICAL_CATEGORIES = {"appearance", "equipment", "belongings"}
@@ -65,7 +65,8 @@ def _repeats_known_fact(entries: list[dict], record: dict, message_id: str) -> b
         return True
     # A -> B -> A is a meaningful reversal for a specific topic. Legacy "general"
     # mixes unrelated facts, so an intervening unrelated entry is not a reversal.
-    candidates = matching if record["topic"] == "general" else matching[-1:]
+    broad_topic = record["topic"] in ("general", *get_args(Significance))
+    candidates = matching if broad_topic else matching[-1:]
     return any(
         normalized(entry.get("text", "")) == normalized(record["text"]) for entry in candidates
     )
@@ -106,6 +107,17 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
     npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}
 
 
+def fact_topic(entry: dict) -> str:
+    """Broad legacy labels are not identities: preserve their distinct facts."""
+    topic = str(entry.get("topic") or "general")
+    if topic == "general" or topic in get_args(Significance):
+        return (
+            "fact_"
+            + hashlib.sha256(normalized(str(entry.get("text", ""))).encode()).hexdigest()[:16]
+        )
+    return topic
+
+
 def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) -> str:
     """Keep the full journal in storage, but cap material repeated in model prompts."""
     journal = journal_of(npc)
@@ -121,12 +133,12 @@ def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) ->
         group = (
             "physical" if category in _PHYSICAL_CATEGORIES and subject != "general" else category
         )
-        topic = f"{group}/{subject}"
+        topic = f"{group}/{fact_topic(entry)}"
         latest.pop(topic, None)
         latest[topic] = entry
     facts = [
-        f"{category} ({e.get('source', 'observed')}): {e.get('text', '')}"
-        for category, e in reversed(list(latest.items()))
+        f"{e.get('category', 'event')} ({e.get('source', 'observed')}): {e.get('text', '')}"
+        for e in reversed(list(latest.values()))
     ]
     prefix = " Last learned information (may be outdated; live state takes precedence): "
     if visual_only:

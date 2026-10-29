@@ -10,6 +10,7 @@ from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.image_profiles import advanced_for
+from backend.engine.visual_progress import report
 
 # Compatibility export for callers importing the former instruction constant.
 MATURE_THEMES_INSTRUCTION = mature_content_prompts.IMAGE_PROMPT_ADDENDUM
@@ -56,6 +57,7 @@ async def adapt_body(
         return description.strip()
     if user is None:
         raise ValueError("Prompt adaptation requires configured Small/Utility LLM settings.")
+    report("prompt")
     llm = GameMasterLLM.for_role(user, "small")
     policy = rules.model_dump(include={"format", "language", "max_words", "instructions"})
     system = (

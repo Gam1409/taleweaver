@@ -317,6 +317,7 @@ _T2I_FALLBACK: dict[str, Any] = {
     "simple_min_long_edge": None,
     "advanced_min_long_edge": None,
     "seed": None,
+    "show_generation_progress": False,
     "image_format": "jpeg",
     "image_quality": 85,
     "negative_prompt": None,
@@ -334,6 +335,7 @@ _T2I_DERIVED_DEFAULTS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
 
 # Keys filled with their fallback value when missing from stored settings.
 _T2I_STATIC_DEFAULT_KEYS = (
+    "show_generation_progress",
     "comfyui_url",
     "comfyui_timeout",
     "comfyui_profiles",

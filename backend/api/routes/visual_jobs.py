@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, ValidationError
 from backend.core import database
 from backend.core.auth import get_current_user
 from backend.core.llm_deadlines import role_timeout
+from backend.engine.visual_progress import Stage, reporting
 from backend.models.user import User
 
 router = APIRouter(prefix="/visual-jobs", tags=["Visual jobs"])
@@ -37,16 +38,21 @@ class VisualJob:
     owner: str
     request: VisualJobRequest
     state: str = "queued"
+    stage: str | None = None
     result: dict | None = None
     message: str = "Waiting to generate an image."
     created: float = field(default_factory=time.monotonic)
     finished: float | None = None
     task: asyncio.Task | None = None
 
+    def set_stage(self, stage: Stage) -> None:
+        self.stage = stage
+
     def public(self) -> dict:
         return {
             "id": str(self.request.id),
             "state": self.state,
+            "stage": self.stage,
             "result": self.result,
             "message": self.message,
         }
@@ -119,7 +125,13 @@ async def _run(job: VisualJob) -> None:
                 if job.request.operation == "session_illustration"
                 else 0
             )
-            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=timeout)
+            callback = (
+                job.set_stage
+                if (user.t2i_settings or {}).get("show_generation_progress") is True
+                else None
+            )
+            with reporting(callback):
+                result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=timeout)
         _complete(job, result)
     except asyncio.CancelledError:
         job.state = "abandoned"

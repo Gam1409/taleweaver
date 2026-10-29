@@ -31,6 +31,9 @@ def remap_social_state(entity_states: dict | None, message_ids: dict[str, str]) 
     ]
     for npc_id, character in social.characters.items():
         character.last_source_message_id = message_ids.get(character.last_source_message_id, "")
+        character.emotion_source_message_id = message_ids.get(
+            character.emotion_source_message_id, ""
+        )
         character.memories = [
             memory for memory in character.memories if memory.source_message_id in message_ids
         ]

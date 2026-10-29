@@ -69,6 +69,7 @@ class CharacterState(StrictModel):
     relationship: Relationship = Field(default_factory=Relationship)
     emotion: Emotion = "neutral"
     emotion_cause: str = Field(default="", max_length=700)
+    emotion_source_message_id: str = Field(default="", max_length=64)
     next_intention: Intention = "listen"
     pinned: bool = False
     meaningful_events: int = Field(default=0, ge=0, le=1000)

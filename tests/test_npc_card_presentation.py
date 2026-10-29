@@ -202,6 +202,8 @@ async def test_opt_in_returns_only_sourced_estimates_without_mutating_state(
         "emotion": "guarded",
         "evidence": EVIDENCE,
         "source_message_id": "SOURCE",
+        "source_created_at": card["insights"]["source_created_at"],
+        "newer_responses": 0,
     }
     assert await saved_state() == before
     await set_visible(False)
@@ -310,3 +312,35 @@ async def test_unknown_hidden_npc_is_not_exposed_even_with_opt_in(auth_client, p
         npc.metadata_json = {}
         await db.commit()
     assert (await auth_client.get(URL)).status_code == 404
+
+
+async def test_card_marks_old_emotion_even_when_newer_text_repeats_quote(
+    auth_client, portrait_world
+):
+    from datetime import timedelta
+
+    await configure(visible=True, emotion_only=True)
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        from backend.engine.visual_novel.state import load_state
+
+        social = load_state(state)
+        social.characters["NPC_NEW"].emotion_source_message_id = "SOURCE"
+        social.reviewed_scene_message_ids.append("NEWER")
+        save_state(state, social)
+        source = await db.get(ChatMessage, "SOURCE")
+        db.add(
+            ChatMessage(
+                id="NEWER",
+                session_id=state.session_id,
+                role="assistant",
+                content=EVIDENCE,
+                created_at=source.created_at + timedelta(minutes=1),
+            )
+        )
+        await db.commit()
+    insight = (await auth_client.get(URL)).json()["insights"]
+    assert insight["source_message_id"] == "SOURCE"
+    assert insight["newer_responses"] == 1

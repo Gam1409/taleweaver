@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
+from backend.engine.visual_progress import report
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,8 @@ def _validate_ollama_model(provider_key, model, prompt):
 
 
 def _record_prompt_details(provider_options, provider_key, model, prompt):
+    if provider_key != "comfyui":
+        report("submitting")
     details = (provider_options or {}).get("_generation_details")
     if isinstance(details, dict) and provider_key != "comfyui":
         details.update(provider=provider_key, model=model, positive_prompt=prompt)

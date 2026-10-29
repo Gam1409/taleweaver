@@ -11,6 +11,7 @@ from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.engine.comfyui_client import ComfyClient
 from backend.engine.comfyui_output import bounded_dimensions, prepare_generated_image
 from backend.engine.image_prompt_adapter import prepare_prompt
+from backend.engine.visual_progress import report
 from backend.utils.path_security import (
     data_url_to_local_path,
     ensure_within_data_dir,
@@ -99,6 +100,7 @@ async def generate_comfy_image(
     )
     extension = "jpg" if image_format.lower() in ("jpeg", "jpg") else "png"
     filepath = _build_output_filepath(_resolve_output_dir(target_dir), filename, extension)
+    report("saving")
     await asyncio.to_thread(_write_binary_file, filepath, prepared)
     await MediaEngine._generate_thumbnail(filepath)
     return local_path_to_data_url(filepath)

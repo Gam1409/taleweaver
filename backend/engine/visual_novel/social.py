@@ -169,6 +169,7 @@ def apply_plan(
             # A witnessed emotion need not earn points or pass the positive-event
             # cooldown. It remains separate from scores, promotion and memories.
             _set_direction(character, proposal)
+            character.emotion_source_message_id = source_message_id
         social.reviewed_scene_message_ids = (
             social.reviewed_scene_message_ids + [source_message_id]
         )[-MAX_PROCESSED:]

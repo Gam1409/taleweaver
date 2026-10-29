@@ -6,6 +6,7 @@ import { configState, refreshConfig } from '@/store/config'
 import { api } from '@/composables/useApi'
 import { isPublicRoute } from '@/router'
 import GlobalHeader from '@/components/GlobalHeader.vue'
+import VisualJobProgress from '@/components/VisualJobProgress.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -105,6 +106,7 @@ onUnmounted(() => {
 <template>
   <div class="h-app flex flex-col bg-[#050b14] overflow-hidden">
     <GlobalHeader />
+    <VisualJobProgress />
     <main class="flex-1 min-h-0 relative overflow-hidden">
       <RouterView />
     </main>

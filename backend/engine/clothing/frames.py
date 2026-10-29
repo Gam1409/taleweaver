@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.visual_progress import report
 
 
 class Figure(BaseModel):
@@ -67,6 +68,7 @@ Unspecified details stay unspecified. This extraction cannot change clothing or 
 
 async def extract_frame(user, passage: str, characters: list[dict]) -> VisibleFrame:
     """Only enum values and validated IDs leave the model that sees raw story text."""
+    report("analyzing")
     llm = GameMasterLLM.for_role(user, "small")
     cast = [{"id": person["id"], "name": person.get("name", "")} for person in characters]
     result = await asyncio.wait_for(

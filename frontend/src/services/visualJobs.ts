@@ -1,8 +1,10 @@
 import { apiFetch } from '@/services/http'
+import { updateVisualProgress, clearVisualProgress, visualStageLabel } from './visualJobProgress'
 
 interface JobStatus {
   id: string
   state: 'queued' | 'running' | 'succeeded' | 'failed' | 'abandoned'
+  stage?: string | null
   message: string
   result: Record<string, unknown> | null
 }
@@ -32,14 +34,20 @@ export async function runVisualJob(
       method: 'POST', includeJson: true, signal,
       body: JSON.stringify({ id, operation, template_id: templateId, session_id: sessionId, payload }),
     }))
+    updateVisualProgress(id, job.stage)
     while (job.state === 'queued' || job.state === 'running') {
       await new Promise(resolve => window.setTimeout(resolve, 1000))
       if (signal?.aborted) throw new DOMException('Generation abandoned', 'AbortError')
       job = await readResponse(await apiFetch(path, { signal }))
+      updateVisualProgress(id, job.stage)
     }
-    if (job.state !== 'succeeded' || !job.result) throw new Error(job.message)
+    if (job.state !== 'succeeded' || !job.result) {
+      const stage = visualStageLabel(job.stage)
+      throw new Error(stage ? `${stage} ${job.message}` : job.message)
+    }
     return job.result
   } finally {
+    clearVisualProgress(id)
     signal?.removeEventListener('abort', cancel)
   }
 }
