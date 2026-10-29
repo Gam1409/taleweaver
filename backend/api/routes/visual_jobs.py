@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from backend.core import database
 from backend.core.auth import get_current_user
+from backend.core.llm_deadlines import role_timeout
 from backend.models.user import User
 
 router = APIRouter(prefix="/visual-jobs", tags=["Visual jobs"])
@@ -112,7 +113,13 @@ async def _run(job: VisualJob) -> None:
             user = await db.get(User, job.owner)
             if not user:
                 raise HTTPException(404, "User no longer exists.")
-            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=4000)
+            # Image generation retains its own budget after two sequential LLM calls.
+            timeout = 4000 + (
+                2 * role_timeout(user, "small")
+                if job.request.operation == "session_illustration"
+                else 0
+            )
+            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=timeout)
         _complete(job, result)
     except asyncio.CancelledError:
         job.state = "abandoned"

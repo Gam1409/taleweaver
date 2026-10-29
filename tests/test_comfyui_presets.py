@@ -222,7 +222,7 @@ async def test_prompt_timeout_does_not_submit_image_job(
 
     llm = SimpleNamespace(model="fake", aexecute_simple_task=slow)
     monkeypatch.setattr(GameMasterLLM, "for_role", lambda *_args: llm)
-    monkeypatch.setattr(image_prompt_adapter, "PROMPT_TIMEOUT", 0.01)
+    monkeypatch.setattr(image_prompt_adapter, "role_timeout", lambda user, role: 0.01)
     options = preset_options(comfy_options, workflow)
     options["_prompt_user"] = object()
     with pytest.raises(asyncio.TimeoutError, match="Small/Utility LLM image-prompt preparation"):

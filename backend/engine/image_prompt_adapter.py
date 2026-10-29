@@ -7,10 +7,10 @@ import re
 from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.image_profiles import advanced_for
 
-PROMPT_TIMEOUT = 90
 # Compatibility export for callers importing the former instruction constant.
 MATURE_THEMES_INSTRUCTION = mature_content_prompts.IMAGE_PROMPT_ADDENDUM
 
@@ -71,16 +71,17 @@ async def adapt_body(
     )
     if mature_themes:
         system += "\n" + mature_content_prompts.IMAGE_PROMPT_ADDENDUM
+    timeout = role_timeout(user, "small")
     try:
         body = await asyncio.wait_for(
             llm.aexecute_simple_task(
                 system_prompt=system, user_prompt=description, model=llm.model
             ),
-            timeout=PROMPT_TIMEOUT,
+            timeout=timeout,
         )
     except TimeoutError as exc:
         raise TimeoutError(
-            f"Small/Utility LLM image-prompt preparation timed out (limit: {PROMPT_TIMEOUT}s). "
+            f"Small/Utility LLM image-prompt preparation timed out (limit: {timeout:g}s). "
             "No ComfyUI image job was submitted."
         ) from exc
     if not isinstance(body, str) or not body.strip() or len(body) > 12000:

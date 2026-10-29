@@ -1,6 +1,5 @@
 """Build a moment illustration using the story's existing image provider and style."""
 
-import asyncio
 import json
 from uuid import uuid4
 
@@ -8,7 +7,7 @@ from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.engine.clothing.frames import compose_frame, extract_frame
 from backend.engine.image_profiles import advanced_for
-from backend.engine.image_prompt_adapter import PROMPT_TIMEOUT, adapt_body
+from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
 from backend.utils.path_security import safe_data_path
@@ -86,18 +85,7 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
 
 
 async def prepare_moment_prompt(request: dict) -> None:
-    """Share one total deadline across frame extraction and profile formatting."""
-    try:
-        await asyncio.wait_for(_prepare_moment_prompt(request), timeout=PROMPT_TIMEOUT)
-    except TimeoutError as exc:
-        raise TimeoutError(
-            f"Visual prompt preparation timed out (total limit: {PROMPT_TIMEOUT}s). "
-            "No image job was submitted."
-        ) from exc
-
-
-async def _prepare_moment_prompt(request: dict) -> None:
-    """Distill once, retaining model-specific rules and final-frame instructions together."""
+    """Each sequential LLM call uses its own configured Small/Utility deadline."""
     options = request["provider_options"]
     source = options.pop("_managed_frame_source", None)
     if source is not None:

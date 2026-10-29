@@ -163,7 +163,7 @@ async def test_managed_frame_failure_never_submits_image(
     assert illustration_world == []
 
 
-async def test_shared_preparation_timeout_covers_both_steps(monkeypatch):
+async def test_preparation_does_not_share_one_deadline_between_steps(monkeypatch):
     async def frame(*args):
         await asyncio.sleep(0.03)
         return VisibleFrame(figures=[])
@@ -172,7 +172,6 @@ async def test_shared_preparation_timeout_covers_both_steps(monkeypatch):
         await asyncio.sleep(0.03)
         return "safe"
 
-    monkeypatch.setattr(render, "PROMPT_TIMEOUT", 0.05)
     monkeypatch.setattr(render, "extract_frame", frame)
     monkeypatch.setattr(render, "adapt_body", adapt)
     request = {
@@ -183,8 +182,8 @@ async def test_shared_preparation_timeout_covers_both_steps(monkeypatch):
             "_managed_frame_source": {"passage": HIDDEN, "visible_facts": {"characters": []}},
         },
     }
-    with pytest.raises(TimeoutError, match="total limit"):
-        await render.prepare_moment_prompt(request)
+    await render.prepare_moment_prompt(request)
+    assert request["prompt"] == "safe"
     assert "_managed_frame_source" not in request["provider_options"]
 
 

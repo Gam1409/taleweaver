@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.image_prompt_adapter import PROMPT_TIMEOUT
 
 
 class Figure(BaseModel):
@@ -77,7 +77,7 @@ async def extract_frame(user, passage: str, characters: list[dict]) -> VisibleFr
             llm.model,
             operation="visible_frame",
         ),
-        timeout=PROMPT_TIMEOUT,
+        timeout=role_timeout(user, "small"),
     )
     frame = VisibleFrame.model_validate(result)
     allowed = {person["id"] for person in cast}
