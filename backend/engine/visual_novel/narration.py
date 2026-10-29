@@ -67,6 +67,15 @@ never substitute technical IDs, descriptive sentences or an invented alias for a
 known speaker. Use IDs only for internal identity matching, never in visible prose.
 If voice directions are enabled, use only their supplied English catalog tags,
 outside the quotation marks: Character Name: [tag] "Dialogue". Do not invent tags.
+VOICE DIRECTION CONTINUITY:
+Voice tags describe this particular line and its current circumstances, not a
+permanent character trait or a pattern to copy from recent replies. Choose them
+afresh from the present action and established condition. Earlier use alone does
+not justify repeating a tag, and not every line needs one. When its cause has
+ended, stop carrying the reaction forward. Repetition remains appropriate while
+the cause genuinely continues; do not invent recovery or a state change merely
+to vary the tags. For example, exerted breathing may continue during a run, but
+should not persist by imitation after the story establishes rest and recovery.
 Write all prose and speech in the session's content language while preserving
 existing names and technical voice tags. Reserve colons for speaker attribution;
 use periods or dashes in narration. Return only narrative text, with no JSON,
