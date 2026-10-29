@@ -160,10 +160,16 @@ async def test_rewrite_refreshes_visuals_and_memory_without_deleting_npc(auth_cl
                 WorldEntity.session_id == session.id, WorldEntity.id == "NPC_NEW"
             )
         )
+        npc.description = "A red scarf"
         npc.metadata_json = {
             "npc_journal": {
                 "origin": "introduced",
                 "introduced_message_id": message_id,
+                "introduction": "Old introduction",
+                "aliases": ["Old alias", "Earlier alias"],
+                "alias_sources": {"Old alias": message_id, "Earlier alias": "earlier"},
+                "description_source": message_id,
+                "observed_description": "A red scarf",
                 "entries": [
                     {"message_id": message_id, "text": "Old extracted detail"},
                     {"message_id": "earlier", "text": "Earlier detail"},
@@ -207,6 +213,12 @@ async def test_rewrite_refreshes_visuals_and_memory_without_deleting_npc(auth_cl
             )
         )
         assert npc is not None and npc.image_url
+        assert npc.description == ""
+        journal = npc.metadata_json["npc_journal"]
+        assert journal["aliases"] == ["Earlier alias"]
+        assert journal["alias_sources"] == {"Earlier alias": "earlier"}
+        assert "introduction" not in journal
+        assert "description_source" not in journal
         assert npc.metadata_json["npc_journal"]["entries"] == [
             {"message_id": "earlier", "text": "Earlier detail"}
         ]
@@ -250,3 +262,106 @@ async def test_rewrite_uses_saved_vn_pace_and_optional_addendum(
     assert "PACING: LEISURELY" in system
     assert ("OPTIONAL NARRATION TEST MARKER" in system) is enabled
     assert "CURRENT NPC PRESENCE" in system
+
+
+@pytest.mark.parametrize("history_kind", ["affected", "earlier", "legacy", "partial"])
+async def test_rewrite_invalidates_only_potentially_affected_chronicle(
+    auth_client, narration, history_kind
+):
+    from datetime import timedelta
+
+    message_id, _ = narration
+    async with TestSessionLocal() as db:
+        message = await db.get(ChatMessage, message_id)
+        earlier = ChatMessage(
+            session_id=message.session_id,
+            role="assistant",
+            content="Earlier fact",
+            created_at=message.created_at - timedelta(minutes=1),
+        )
+        db.add(earlier)
+        await db.flush()
+        history = {
+            "summary": "History",
+            "last_compressed_msg_id": earlier.id
+            if history_kind in {"earlier", "partial"}
+            else message_id,
+        }
+        if history_kind == "partial":
+            history["pending_message_id"] = message_id
+        if history_kind == "legacy":
+            history = {"summary": "Unknown provenance"}
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == message.session_id)
+        )
+        state.compressed_history = history
+        await db.commit()
+    assert (await auth_client.post(PATH, json={"message_id": message_id})).status_code == 200
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        assert state.compressed_history == (history if history_kind == "earlier" else {})
+
+
+async def test_late_memory_workers_cannot_restore_replaced_response(auth_client, narration):
+    from backend.engine.memory_rag.summaries import SummaryJob, _save_summary
+    from backend.engine.npc_journal.schema import JournalExtraction
+    from backend.engine.npc_journal.worker import _save
+    from backend.models.memory_rag import MemoryIndexState, MemorySummary
+
+    message_id, _ = narration
+    async with TestSessionLocal() as db:
+        message = await db.get(ChatMessage, message_id)
+        original = message.content
+        message.npc_journal = {"status": "running", "token": "old-npc", "attempts": 1}
+        session = await db.get(regeneration.GameSession, message.session_id)
+        owner = session.user_id
+        db.add(
+            MemoryIndexState(session_id=session.id, user_id=owner, epoch=3, lease_token="old-rag")
+        )
+        await db.commit()
+    assert (await auth_client.post(PATH, json={"message_id": message_id})).status_code == 200
+    assert (
+        await _save(message_id, original, "Hero", JournalExtraction(characters=[]), "old-npc")
+        is None
+    )
+    job = SummaryJob("story_summary", None, None, [message_id], "old", "old")
+    await _save_summary("portrait-session", owner, 3, "old-rag", job, "Discarded fact")
+    async with TestSessionLocal() as db:
+        assert (
+            await db.scalar(
+                select(MemorySummary.id).where(MemorySummary.session_id == "portrait-session")
+            )
+            is None
+        )
+        assert (await db.get(ChatMessage, message_id)).npc_journal["status"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "description,expected", [("A red scarf", ""), ("Manually edited", "Manually edited")]
+)
+def test_legacy_appearance_retraction_preserves_manual_description(description, expected):
+    from types import SimpleNamespace
+
+    from backend.engine.npc_journal.retraction import retract_reply
+
+    npc = SimpleNamespace(
+        description=description,
+        metadata_json={
+            "npc_journal": {
+                "origin": "introduced",
+                "entries": [
+                    {
+                        "message_id": "old",
+                        "category": "appearance",
+                        "source": "observed",
+                        "text": "A red scarf",
+                    }
+                ],
+            }
+        },
+    )
+    retract_reply(npc, "old")
+    assert npc.description == expected
+    assert npc.metadata_json["npc_journal"]["entries"] == []
