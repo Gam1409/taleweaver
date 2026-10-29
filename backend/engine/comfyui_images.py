@@ -69,11 +69,19 @@ async def generate_comfy_image(
     async with ComfyClient(settings.comfyui_url) as client:
         if reference:
             values["image"] = await client.upload(await asyncio.to_thread(reference_png, reference))
+        graph = workflow.render(values)
+        details = options.get("_generation_details")
+        if isinstance(details, dict):
+            details.update(provider="comfyui", workflow=workflow.name)
+            # Capture only mapped inputs, never the graph, URLs or credentials.
+            for name, binding in workflow.bindings.items():
+                if name == "image":
+                    continue
+                key = "positive_prompt" if name == "prompt" else name
+                details[key] = graph[binding.node_id]["inputs"][binding.input_name]
         try:
             data = await asyncio.wait_for(
-                client.execute(
-                    workflow.render(values), workflow.output_node, settings.comfyui_timeout
-                ),
+                client.execute(graph, workflow.output_node, settings.comfyui_timeout),
                 timeout=settings.comfyui_timeout,
             )
         except TimeoutError as exc:

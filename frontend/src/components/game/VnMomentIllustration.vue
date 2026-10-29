@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ImagePlus, LoaderCircle } from 'lucide-vue-next'
 import { apiFetch } from '@/services/http'
 import { runVisualJob } from '@/services/visualJobs'
+import ImageGenerationDetails from './ImageGenerationDetails.vue'
 import { getOriginalImageUrl } from '@/utils/game_icons'
 
 const props = defineProps<{ sessionId: string; messageId: string; messageContent?: string; canGenerate: boolean }>()
@@ -10,6 +11,7 @@ interface MomentState {
   available: boolean
   reason: string | null
   image_url: string | null
+  generation_details?: Record<string, unknown> | null
 }
 const state = ref<MomentState | null>(null)
 const loading = ref(false)
@@ -71,6 +73,7 @@ async function generate(): Promise<void> {
       if (typeof result.image_url !== 'string')
         throw new Error('The image job finished without an illustration.')
       state.value.image_url = result.image_url
+      state.value.generation_details = result.generation_details as Record<string, unknown> | null ?? null
     }
   } catch (cause) {
     if (revision === token)
@@ -112,9 +115,10 @@ onBeforeUnmount(() => {
         class="max-h-80 rounded-lg object-contain"
       />
     </a>
-    <p v-if="imageUrl" class="text-xs text-slate-400">
-      Saved with this reply. Later changes to the scene do not update this image.
-    </p>
+    <div v-if="imageUrl" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p class="text-xs text-slate-400">Saved with this reply. Later changes to the scene do not update this image.</p>
+      <ImageGenerationDetails :key="imageUrl" :details="state?.generation_details" />
+    </div>
     <p v-if="loading" role="status" class="text-xs text-slate-400">Loading illustration…</p>
     <button
       v-if="canGenerate && state?.available"

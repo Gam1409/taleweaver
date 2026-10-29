@@ -53,6 +53,9 @@ def illustration_status(state: SessionState, message: ChatMessage) -> dict:
         if available
         else "No matching visual snapshot remains for this message. New narrator turns keep the latest 100 snapshots.",
         "image_url": image.get("image_url") if image.get("content_hash") == digest else None,
+        "generation_details": image.get("generation_details")
+        if image.get("content_hash") == digest
+        else None,
         "snapshot_source": "message_time" if available else None,
     }
 

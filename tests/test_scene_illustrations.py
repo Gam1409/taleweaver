@@ -120,6 +120,9 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
 
     async def generate(**kwargs):
         calls.append(kwargs)
+        kwargs["provider_options"]["_generation_details"].update(
+            provider="stable_diffusion", positive_prompt="A quiet cafe", negative_prompt="blur"
+        )
         target = Path(kwargs["target_dir"], kwargs["filename"])
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"fake image")
@@ -169,6 +172,8 @@ async def test_snapshot_not_current_state_drives_generation(auth_client, illustr
     assert response.status_code == 200, response.text
     assert response.json()["image_url"] == result["result"]["image_url"]
     assert response.json()["snapshot_source"] == "message_time"
+    assert response.json()["generation_details"] == result["result"]["generation_details"]
+    assert response.json()["generation_details"]["positive_prompt"] == "A quiet cafe"
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
         assert state.current_scene_id == "CAFE"

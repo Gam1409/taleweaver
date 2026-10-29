@@ -26,7 +26,13 @@ class SceneIllustrationRequest(BaseModel):
 
 
 async def _try_attach(
-    db: AsyncSession, session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    db: AsyncSession,
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
 ) -> bool:
     state, message = await owned_context(db, session_id, message_id, owner_id)
     current = require_snapshot(state, message)
@@ -38,6 +44,7 @@ async def _try_attach(
     registry["images"][message_id] = {
         "image_url": url,
         "content_hash": current["content_hash"],
+        "generation_details": deepcopy(details) if details else None,
     }
     after[REGISTRY_KEY] = registry
     # Compare-and-swap keeps unrelated concurrent state changes intact.
@@ -56,17 +63,27 @@ async def _try_attach(
 
 @retry_transaction
 async def _attach_once(
-    session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
 ) -> bool:
     async with database.AsyncSessionLocal() as db:
-        return await _try_attach(db, session_id, message_id, owner_id, snapshot, url)
+        return await _try_attach(db, session_id, message_id, owner_id, snapshot, url, details)
 
 
 async def _attach(
-    session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
 ) -> None:
     for _attempt in range(3):
-        if await _attach_once(session_id, message_id, owner_id, snapshot, url):
+        if await _attach_once(session_id, message_id, owner_id, snapshot, url, details):
             return
     raise HTTPException(409, "The session changed while attaching the illustration. Try again.")
 
@@ -83,12 +100,14 @@ async def generate_scene_illustration(
         # The provider queue must not hold a database transaction open.
         await db.commit()
         await prepare_moment_prompt(request)
+        details: dict = {}
+        request["provider_options"]["_generation_details"] = details
         url = await asyncio.wait_for(
             MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
         )
         if not url:
             raise HTTPException(502, "No illustration was returned. Any previous image was kept.")
-        await _attach(session_id, payload.message_id, owner_id, snapshot, url)
+        await _attach(session_id, payload.message_id, owner_id, snapshot, url, details)
     except TimeoutError as exc:
         raise HTTPException(
             504, "Illustration generation timed out. A remote task may still be running."
@@ -100,4 +119,9 @@ async def generate_scene_illustration(
             # The unique path was created by this request, never supplied by a client.
             Path(request["target_dir"], request["filename"]).unlink(missing_ok=True)
         raise
-    return {"status": "success", "message_id": payload.message_id, "image_url": url}
+    return {
+        "status": "success",
+        "message_id": payload.message_id,
+        "image_url": url,
+        "generation_details": details or None,
+    }

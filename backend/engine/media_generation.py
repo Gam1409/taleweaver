@@ -35,6 +35,8 @@ async def generate_image(
 
     prompt = _prepare_prompt(engine, prompt, provider_key, provider_options, style_instruction)
 
+    _record_prompt_details(provider_options, provider_key, model, prompt)
+
     if provider_key not in ("ollama", "stable_diffusion", "comfyui") and not api_key:
         # Try to resolve from ENV if not passed
         api_key = settings.get_env_api_key(provider_key)
@@ -282,3 +284,11 @@ def _validate_ollama_model(provider_key, model, prompt):
                 f"Provider is 'ollama' but image model '{model}' looks like a remote/cloud model. "
                 "Configure a local Ollama image model (for example: x/flux2-klein)."
             )
+
+
+def _record_prompt_details(provider_options, provider_key, model, prompt):
+    details = (provider_options or {}).get("_generation_details")
+    if isinstance(details, dict) and provider_key != "comfyui":
+        details.update(provider=provider_key, model=model, positive_prompt=prompt)
+        if provider_key in {"ollama", "stable_diffusion"}:
+            details["negative_prompt"] = (provider_options or {}).get("negative_prompt") or ""
