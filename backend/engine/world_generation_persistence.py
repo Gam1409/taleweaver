@@ -5,6 +5,7 @@ from sqlalchemy import select
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.settings import preserve_clothing_settings
 from backend.engine.npc_cards.settings import preserve_card_settings
+from backend.engine.nsfw.settings import preserve_nsfw_settings
 from backend.models.adventure_template import AdventureTemplate
 
 
@@ -35,11 +36,17 @@ async def persist_generated_narrative(
             "visual_presets",
             "npc_card_settings",
             "clothing_settings",
+            "nsfw_settings",
         }:
             from backend.engine.story_visual_presets import preserve_story_presets
 
-            adventure.original_manifest = preserve_clothing_settings(
-                preserve_card_settings(preserve_story_presets(manifest_dict, adventure), adventure),
+            adventure.original_manifest = preserve_nsfw_settings(
+                preserve_clothing_settings(
+                    preserve_card_settings(
+                        preserve_story_presets(manifest_dict, adventure), adventure
+                    ),
+                    adventure,
+                ),
                 adventure,
             )  # type: ignore[assignment]
         from backend.engine.generation_control import guard_generation_write

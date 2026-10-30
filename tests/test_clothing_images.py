@@ -261,7 +261,7 @@ async def test_managed_comfy_prompt_keeps_style_policy_and_tokens_once(monkeypat
     assert source.count("STYLE_ONCE") == 1
     assert policy.format == "tags"
     assert "Policy" in policy.instructions
-    assert kwargs == {"mature_themes": True}
+    assert kwargs == {"mature_themes": True, "nsfw_enabled": False, "nsfw_level": "hard"}
     assert prepared["positive"] == "PREFIX, safe visible coat, SUFFIX"
 
 

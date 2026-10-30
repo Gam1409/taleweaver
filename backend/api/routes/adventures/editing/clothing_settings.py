@@ -22,7 +22,13 @@ def apply_nsfw_update(adventure, updates: dict) -> None:
 
 
 async def apply_clothing_update(db, adventure, user, updates: dict) -> None:
+    # Prepare model-dependent data before dirtying the template. Otherwise an
+    # ORM read can autoflush preferences and hold a SQLite writer during inference.
+    await _apply_clothing_update(db, adventure, user, updates)
     apply_nsfw_update(adventure, updates)
+
+
+async def _apply_clothing_update(db, adventure, user, updates: dict) -> None:
     requested = updates.pop("detailed_clothing", None)
     mode = updates.get("rule_enforcement_mode") or adventure.rule_enforcement_mode
     if requested is True and not mode_policy(mode).vn:
