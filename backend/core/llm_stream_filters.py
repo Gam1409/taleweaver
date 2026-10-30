@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Callable
+from copy import deepcopy
 from typing import Any
+
+from backend.core.voice_repetition import VoiceRepetitionFilter
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +114,7 @@ def _voice_prefix_ready(buffer: str) -> bool:
     )
 
 
-async def clean_stream_voice_tags(
+async def _normalize_stream_voice_prefix(
     stream: AsyncIterator[Any], normalize: Callable[[str], str]
 ) -> AsyncIterator[Any]:
     """Buffers the start of the stream and normalizes a leading voice tag once."""
@@ -123,6 +126,13 @@ async def clean_stream_voice_tags(
     try:
         async for chunk in stream:
             delta = chunk_delta(chunk)
+            choices = getattr(chunk, "choices", None)
+            finished = choices and getattr(choices[0], "finish_reason", None)
+            if finished and not prefix_processed:
+                set_chunk_delta(chunk, normalize(buffer + (delta or "")))
+                prefix_processed = True
+                yield chunk
+                continue
             if delta is None or prefix_processed:
                 yield chunk
                 continue
@@ -140,5 +150,34 @@ async def clean_stream_voice_tags(
         set_chunk_delta(last_chunk, normalize(buffer))
         yield last_chunk
 
+    if stream_error is not None:
+        raise stream_error
+
+
+async def clean_stream_voice_tags(
+    stream: AsyncIterator[Any], normalize: Callable[[str], str]
+) -> AsyncIterator[Any]:
+    """Preserve normal vocal cues while bounding repeated runs throughout the stream."""
+    cleaner = VoiceRepetitionFilter()
+    last_chunk = None
+    stream_error = None
+    try:
+        async for chunk in _normalize_stream_voice_prefix(stream, normalize):
+            delta = chunk_delta(chunk)
+            if delta is not None:
+                last_chunk = deepcopy(chunk)
+                set_chunk_delta(chunk, cleaner.feed(delta))
+            choices = getattr(chunk, "choices", None)
+            if choices and getattr(choices[0], "finish_reason", None):
+                tail = cleaner.finish()
+                if tail:
+                    set_chunk_delta(chunk, (chunk_delta(chunk) or "") + tail)
+            yield chunk
+    except Exception as error:
+        stream_error = error
+    tail = cleaner.finish()
+    if tail and last_chunk is not None:
+        set_chunk_delta(last_chunk, tail)
+        yield last_chunk
     if stream_error is not None:
         raise stream_error

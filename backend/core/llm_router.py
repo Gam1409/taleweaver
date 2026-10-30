@@ -28,6 +28,7 @@ from backend.core.llm_request_tuning import apply_prompt_cache_markers
 from backend.core.llm_roles import resolve_llm_role
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.security import encryption_util
+from backend.core.voice_repetition import clean_voice_history, clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
 from backend.models.user import User
 
@@ -468,7 +469,7 @@ class GameMasterLLM:
 
             normalized_lines.append(line)
 
-        return "\n".join(normalized_lines)
+        return clean_voice_repetition("\n".join(normalized_lines))
 
     @staticmethod
     async def _clean_stream_voice_tags(stream):
@@ -917,7 +918,7 @@ class GameMasterLLM:
 
         kwargs = {
             "model": normalized_model,
-            "messages": messages,
+            "messages": clean_voice_history(messages),
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
@@ -986,7 +987,7 @@ class GameMasterLLM:
 
         kwargs = {
             "model": normalized_model,
-            "messages": messages,
+            "messages": clean_voice_history(messages),
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
@@ -1057,7 +1058,7 @@ class GameMasterLLM:
 
         kwargs = {
             "model": normalized_model,
-            "messages": messages,
+            "messages": clean_voice_history(messages),
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
             "stream": True,
