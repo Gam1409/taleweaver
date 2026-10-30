@@ -29,6 +29,12 @@ from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
+from backend.engine.visual_novel.story_director import (
+    direction_reminder,
+    record_direction,
+    stage_direction,
+)
+from backend.engine.visual_novel.story_prompts import PROGRESS_REMINDER
 from backend.engine.visual_novel.continuity import prepare_intent
 from backend.engine.visual_novel.concurrency import guard_session_turn
 from backend.engine.visual_novel.intent import (
@@ -1189,6 +1195,7 @@ class GameTurnManager:
         `narration_only` skips Pass 1 for pure reaction narrations that must not change state.
         """
         _ = auto_visualize
+        self._vn_story_beat = None
         cycle_start = time.perf_counter()
         scene_id_before_turn = self.state.current_scene_id
         time_before_turn = self.state.in_game_time
@@ -1750,6 +1757,15 @@ class GameTurnManager:
                 await prepare_wardrobe_plan(
                     self, game_event, clothing_proposal, user_msg, all_entities, all_scenes
                 )
+                stage_direction(
+                    self,
+                    clothing_proposal,
+                    game_event,
+                    all_entities,
+                    reduced_exits,
+                    user_msg,
+                    history,
+                )
 
             try:
                 if script_runner.scripts:
@@ -1895,6 +1911,8 @@ class GameTurnManager:
 
         if policy.vn and not narration_only:
             reminders.append(await plan_interaction(self, user_msg, history, game_event))
+            reminders.append(direction_reminder(self, game_event))
+            reminders.append(PROGRESS_REMINDER)
 
         turn_context = build_narration_turn_block(
             ctx.narration_state_block,
@@ -2003,6 +2021,7 @@ class GameTurnManager:
         applied_correction = correction_applied(
             self.narration_correction, response_text, narration_warning
         )
+        narration_completed = bool(response_text.strip()) and not narration_warning
         if not (response_text or "").strip():
             if run_generator_tool_intent_pass:
                 fallback = (
@@ -2263,6 +2282,11 @@ class GameTurnManager:
         # see advance_in_game_turn above.
 
         if policy.vn:
+            record_direction(
+                self,
+                assistant_chat.id,
+                completed=narration_completed,
+            )
             await capture_completed_moment(self, assistant_chat)
         from backend.engine.memory_rag.worker import mark_dirty
 

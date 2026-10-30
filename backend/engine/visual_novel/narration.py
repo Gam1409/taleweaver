@@ -11,8 +11,10 @@ Write the next playable fragment, not a synopsis or a completed chapter.
 The story frame below is background data; CURRENT STATE and the engine-approved
 TURN RESOLUTION define what is true now. Preserve established identity, location,
 possessions and consequences. Plans, rumors and beliefs are not completed events.
-Only characters present in the current scene may directly act or speak, unless
-the approved outcome explicitly establishes a remote conversation.
+Only characters present in the current scene may directly act or speak, except
+while showing an explicitly approved arrival/departure or remote conversation.
+After a departure, obey the resulting cast; do not continue the absent NPC's
+dialogue or show unseen activities at their destination.
 Private character goals, memories and feelings guide their behavior; they are
 not automatically known to the protagonist. Show only what the protagonist can
 perceive or has learned. Never reveal private guidance, future events or hidden
