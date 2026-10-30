@@ -1,9 +1,9 @@
 # Neutral visual quality experiment
 
 Status: implementation and mocked regression verification only. No live image-quality
-claim. The default remains the established bounded pipeline. This experiment is for
-non-graphic illustrations. Context-mode selection is independent of the adventure's
-content setting; existing profile/adventure addendum gates still apply in both modes.
+claim. Source-rich context is now the default; no environment setting is required. This path is for
+non-graphic illustrations. The single preparation path is independent of the adventure's
+content setting; existing profile/adventure addendum gates still apply.
 The source-mode instructions still request non-graphic illustrations, so forwarding
 an addendum does not remove that restriction. Adult-content prompt files were not changed.
 
@@ -40,7 +40,7 @@ validate, not a result already demonstrated by these publications on TaleWeaver.
 → existing checkpoint formatting, prefix/suffix and workflow mapping
 → ComfyUI
 
-The source is not replaced with an enum frame in this mode. It includes the full
+The source is not replaced with an enum frame. It includes the full
 verified message, even if the historical snapshot kept only its final 16,000 chars.
 More than 48,000 cleaned characters fails explicitly; no truncation or retry loop is
 used. This bound is not a token-limit guarantee. The configured LLM context still
@@ -53,19 +53,15 @@ people and to keep the output non-graphic. This is instruction-based interpretat
 not a formal proof that every returned fact is correct. No game state is changed.
 
 Query continues to capture the actual LLM request/response. Image details records
-`context_mode` so the baseline and experiment can be distinguished after a restart.
+`context_mode=neutral_source` for newly generated illustrations; older metadata stays readable.
 
-## Enable the experiment
+## Use
 
-In `.env`:
-
-```dotenv
-VISUAL_SCENE_CONTEXT_MODE=neutral_source
-```
-
-Restart the backend. Use a neutral VN adventure with adult content disabled. Select
-an existing valid ComfyUI workflow and checkpoint policy. For the baseline, set
-`VISUAL_SCENE_CONTEXT_MODE=bounded` and restart. The default is `bounded`.
+Restart the backend after updating. There is one scene-illustration preparation path,
+with no environment selector. The former `VISUAL_SCENE_CONTEXT_MODE` setting is removed.
+Use a neutral VN adventure and an existing valid ComfyUI workflow and checkpoint policy
+for evaluation. A legacy comparison requires a separate checkout of the earlier version.
+Portrait-specific frame extraction remains in use and is not removed by this change.
 
 ## Evaluation protocol
 
@@ -95,10 +91,10 @@ Eight cases × two modes × three prompt samples × three image seeds = 144 imag
 This is a small pilot, not a statistically conclusive benchmark. Run a smaller smoke
 check first to catch configuration errors before spending GPU time on the full pilot.
 
-Do not switch the default if the experiment swaps identities/wardrobes, invents
+Investigate and fix any case where the path swaps identities/wardrobes, invents
 possessions, corrupts session state, exposes private inventory, or fails provider
-compatibility. Promote only after prompt-level omissions improve and image-level
-accuracy does not regress across the tested model families. Document model-specific
+compatibility. Assess prompt-level omissions and image-level accuracy across the
+tested model families. Document model-specific
 failures instead of adding a universal workaround to every checkpoint.
 
 No live KoboldCPP/ComfyUI endpoints were used during implementation. That part

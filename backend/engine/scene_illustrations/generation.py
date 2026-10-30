@@ -109,9 +109,7 @@ async def generate_scene_illustration(
         # The provider queue must not hold a database transaction open.
         await db.commit()
         details: dict = {"trace_id": current_id()} if current_id() else {}
-        details["context_mode"] = (
-            "neutral_source" if request["provider_options"].get("_neutral_source") else "bounded"
-        )
+        details["context_mode"] = "neutral_source"
         request["provider_options"]["_generation_details"] = details
         with collect_queries() as queries:
             await prepare_moment_prompt(request)

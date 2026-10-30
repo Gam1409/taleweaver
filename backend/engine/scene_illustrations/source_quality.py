@@ -2,8 +2,6 @@
 
 import json
 
-from backend.core.config import settings
-
 from .visual_context import VisualContext
 
 MAX_SCENE_CHARS = 48000
@@ -27,11 +25,6 @@ INSTRUCTIONS = (
     "Put the main visible action and character relationships before aesthetic embellishment. "
     "Follow the selected checkpoint format; do not add invented details to fill its word budget."
 )
-
-
-def enabled() -> bool:
-    """Select context transport independently of existing content settings."""
-    return settings.VISUAL_SCENE_CONTEXT_MODE == "neutral_source"
 
 
 def build_prompt(context: VisualContext, style: str = "") -> str:

@@ -1,6 +1,6 @@
-"""Managed image requests consume only projected clothing and bounded scene composition."""
+"""Image requests preserve frozen wardrobe facts and provider contracts."""
 
-import asyncio
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,11 +10,13 @@ from sqlalchemy import select
 
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.clothing.frames import VisibleFrame, extract_frame
+from backend.engine.clothing.frames import extract_frame
 from backend.engine.clothing.visuals import canonical_inventory, character_visuals
 from backend.engine.media_engine import MediaEngine
 from backend.engine.scene_illustrations import capture_scene_snapshot, render
 from backend.engine.scene_illustrations.snapshots import registry_of
+from backend.engine.scene_illustrations.source_quality import build_prompt
+from backend.engine.scene_illustrations.visual_context import VisualContext
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
@@ -61,7 +63,7 @@ async def managed_snapshot():
         await db.commit()
 
 
-async def test_managed_moment_keeps_hidden_layers_out_of_adapter_and_provider(
+async def test_moment_uses_frozen_public_clothing_and_source_in_one_adaptation(
     auth_client, illustration_world, monkeypatch
 ):
     llm = frame_model(monkeypatch)
@@ -69,7 +71,7 @@ async def test_managed_moment_keeps_hidden_layers_out_of_adapter_and_provider(
 
     async def adapt(description, rules, user, **kwargs):
         adapted.append(description)
-        return description
+        return "Lina in a Red coat, withdrawing from the window."
 
     monkeypatch.setattr(render, "adapt_body", adapt)
     await managed_snapshot()
@@ -80,10 +82,13 @@ async def test_managed_moment_keeps_hidden_layers_out_of_adapter_and_provider(
         await db.commit()
     assert (await finish(auth_client))["state"] == "succeeded"
     request = illustration_world[0]
-    assert llm.aexecute_complex_task.await_count == 1
-    assert HIDDEN in llm.aexecute_complex_task.call_args.args[1]
+    llm.aexecute_complex_task.assert_not_awaited()
     assert len(adapted) == 1
-    assert HIDDEN not in adapted[0]
+    # Story text remains available to the adapter, but private wardrobe state is not added.
+    assert HIDDEN in adapted[0]
+    assert "Red coat" in adapted[0]
+    source_data = json.loads(adapted[0].split("\nSCENE DATA:\n", 1)[1])
+    assert HIDDEN not in str(source_data["message_time_state"])
     assert HIDDEN not in str(request)
     assert "FUTURE_HAIR" not in request["prompt"]
     assert "Red coat" in request["prompt"]
@@ -154,37 +159,28 @@ async def test_frame_rejects_free_text_and_unknown_cast(monkeypatch):
         await extract_frame(object(), HIDDEN, [{"id": "LINA"}])
 
 
-async def test_managed_frame_failure_never_submits_image(
+async def test_source_adapter_failure_never_submits_image(
     auth_client, illustration_world, monkeypatch
 ):
-    frame_model(monkeypatch, character_id="UNKNOWN")
+    monkeypatch.setattr(render, "adapt_body", AsyncMock(side_effect=TimeoutError("test timeout")))
     await managed_snapshot()
     assert (await finish(auth_client))["state"] == "failed"
     assert illustration_world == []
 
 
-async def test_preparation_does_not_share_one_deadline_between_steps(monkeypatch):
-    async def frame(*args):
-        await asyncio.sleep(0.03)
-        return VisibleFrame(figures=[])
-
-    async def adapt(*args, **kwargs):
-        await asyncio.sleep(0.03)
-        return "safe"
-
-    monkeypatch.setattr(render, "extract_frame", frame)
+async def test_preparation_adapts_source_once(monkeypatch):
+    adapt = AsyncMock(return_value="safe")
     monkeypatch.setattr(render, "adapt_body", adapt)
     request = {
-        "prompt": "safe",
+        "prompt": "Complete scene and frozen state",
         "provider": "stable_diffusion",
-        "provider_options": {
-            "_prompt_user": object(),
-            "_managed_frame_source": {"passage": HIDDEN, "visible_facts": {"characters": []}},
-        },
+        "provider_options": {"_prompt_user": object()},
     }
     await render.prepare_moment_prompt(request)
     assert request["prompt"] == "safe"
-    assert "_managed_frame_source" not in request["provider_options"]
+    adapt.assert_awaited_once()
+    assert adapt.call_args.args[0] == "Complete scene and frozen state"
+    assert request["provider_options"]["_prompt_prepared"] is True
 
 
 def test_invalid_managed_profile_does_not_fall_back_to_description():
@@ -225,7 +221,6 @@ def test_unknown_owned_outer_garment_prevents_inner_layer_disclosure():
 async def test_managed_comfy_prompt_keeps_style_policy_and_tokens_once(monkeypatch):
     from backend.engine import image_prompt_adapter
 
-    frame_model(monkeypatch)
     rules = ImagePromptRules(format="tags", prefix="PREFIX", suffix="SUFFIX", instructions="Policy")
     calls = []
 
@@ -239,17 +234,12 @@ async def test_managed_comfy_prompt_keeps_style_policy_and_tokens_once(monkeypat
     monkeypatch.setattr(image_prompt_adapter, "prompt_rules", lambda _: rules)
     monkeypatch.setattr(image_prompt_adapter, "negative_prompt", lambda *args: "NEGATIVE")
     character = character_visuals({"id": "LINA", "name": "Lina", "visual_profile": PROFILE}, ITEMS)
+    context = VisualContext("Lina steps back.", {"characters": [character]}, "")
     request = {
-        "prompt": "safe",
+        "prompt": build_prompt(context, "STYLE_ONCE"),
         "provider": "comfyui",
         "style_instruction": "STYLE_ONCE",
-        "provider_options": {
-            "_prompt_user": object(),
-            "_managed_frame_source": {
-                "passage": HIDDEN,
-                "visible_facts": {"characters": [character]},
-            },
-        },
+        "provider_options": {"_prompt_user": object()},
     }
     await render.prepare_moment_prompt(request)
     prepared = await image_prompt_adapter.prepare_prompt(

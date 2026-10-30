@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings
@@ -102,7 +102,6 @@ class Settings(BaseSettings):
     SESSION_EMPTY_DIR_CLEANUP_DAYS: int = 7
 
     # Local visual traces are private, opt-in and separate from system debug logs.
-    VISUAL_SCENE_CONTEXT_MODE: Literal["bounded", "neutral_source"] = "bounded"
     VISUAL_TRACE_ENABLED: bool = False
     VISUAL_TRACE_CONTENT_ENABLED: bool = False
 

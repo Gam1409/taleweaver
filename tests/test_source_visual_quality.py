@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.core.config import settings
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.engine import image_prompt_adapter
 from backend.engine.scene_illustrations import render, source_quality
@@ -14,13 +13,6 @@ from backend.engine.scene_illustrations.visual_context import VisualContext
 from tests.test_scene_illustrations import illustration_world
 
 __all__ = ["illustration_world"]
-
-
-def test_experiment_is_opt_in(monkeypatch):
-    monkeypatch.setattr(settings, "VISUAL_SCENE_CONTEXT_MODE", "bounded")
-    assert not source_quality.enabled()
-    monkeypatch.setattr(settings, "VISUAL_SCENE_CONTEXT_MODE", "neutral_source")
-    assert source_quality.enabled()
 
 
 def test_source_contains_full_scene_and_canonical_clothing_without_mutation():
@@ -46,7 +38,6 @@ def test_oversize_source_fails_explicitly_without_cutting():
 
 @pytest.mark.asyncio
 async def test_source_mode_uses_one_adaptation_and_no_enum_extraction(monkeypatch):
-    monkeypatch.setattr(settings, "VISUAL_SCENE_CONTEXT_MODE", "neutral_source")
     monkeypatch.setattr(
         render,
         "_settings",
@@ -54,7 +45,7 @@ async def test_source_mode_uses_one_adaptation_and_no_enum_extraction(monkeypatc
     )
     extract = AsyncMock(side_effect=AssertionError("Source mode must not discard the passage"))
     adapt = AsyncMock(return_value="Two adults standing apart beside a table with a red notebook.")
-    monkeypatch.setattr(render, "extract_frame", extract)
+    monkeypatch.setattr("backend.engine.clothing.frames.extract_frame", extract)
     monkeypatch.setattr(render, "adapt_body", adapt)
     snapshot = {
         "narration": "old suffix",
@@ -85,21 +76,18 @@ async def test_source_mode_uses_one_adaptation_and_no_enum_extraction(monkeypatc
 async def test_owner_route_records_selected_mode(auth_client, illustration_world, monkeypatch):
     from tests.test_scene_illustrations import finish
 
-    monkeypatch.setattr(settings, "VISUAL_SCENE_CONTEXT_MODE", "neutral_source")
     result = await finish(auth_client)
     assert result["state"] == "succeeded", result
     assert result["result"]["generation_details"]["context_mode"] == "neutral_source"
-    assert illustration_world[0]["provider_options"]["_neutral_source"] is True
+    assert "_managed_frame_source" not in illustration_world[0]["provider_options"]
 
 
-@pytest.mark.parametrize("mode", ["bounded", "neutral_source"])
 @pytest.mark.parametrize("story_enabled", [False, True])
 @pytest.mark.parametrize("profile_enabled", [False, True])
 async def test_context_mode_preserves_existing_addendum_gates(
-    monkeypatch, mode, story_enabled, profile_enabled
+    monkeypatch, story_enabled, profile_enabled
 ):
     """Exercise real prompt assembly with a harmless marker, not content instructions."""
-    monkeypatch.setattr(settings, "VISUAL_SCENE_CONTEXT_MODE", mode)
     options = {"provider": "comfyui", "_nsfw_enabled": story_enabled, "_nsfw_level": "soft"}
     monkeypatch.setattr(render, "_settings", AsyncMock(return_value=(options, "watercolor", "")))
     monkeypatch.setattr(render, "prompt_rules", lambda _: ImagePromptRules())
@@ -126,7 +114,7 @@ async def test_context_mode_preserves_existing_addendum_gates(
         SimpleNamespace(encrypted_api_keys={}),
         {"narration": "An adult stands beside a window.", "visible_facts": {}},
     )
-    assert bool(request["provider_options"].get("_neutral_source")) == (mode == "neutral_source")
+    assert "_managed_frame_source" not in request["provider_options"]
     await render.prepare_moment_prompt(request)
     builder.assert_awaited_once()
     system = builder.call_args.kwargs["system_prompt"]
