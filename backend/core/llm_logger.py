@@ -99,7 +99,23 @@ def log_llm_interaction(
     False. The standard Python logging system (LOG_LEVEL) is independent and
     continues to emit its own messages to stdout/stderr.
     """
+    from backend.core.visual_queries import capture_query
     from backend.core.visual_trace import record
+
+    raw_choices = raw_response.get("choices") if isinstance(raw_response, dict) else None
+    raw_message = (
+        raw_choices[0].get("message", {})
+        if raw_choices and isinstance(raw_choices[0], dict)
+        else {}
+    )
+    raw_content = raw_message.get("content") if isinstance(raw_message, dict) else None
+    capture_query(
+        system_prompt,
+        user_prompt,
+        raw_content if isinstance(raw_content, str) else response_content,
+        model,
+        operation,
+    )
 
     record("llm.response", system=system_prompt, user=user_prompt, response=response_content)
     usage = raw_response.get("usage") if isinstance(raw_response, dict) else None

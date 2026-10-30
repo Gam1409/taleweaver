@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { Info, X } from 'lucide-vue-next'
 
 const props = defineProps<{ details?: Record<string, unknown> | null }>()
+const activeTab = ref<'image' | 'query'>('image')
+const queries = computed(() => Array.isArray(props.details?.queries) ? props.details.queries.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object') : [])
 const dialog = ref<HTMLDialogElement | null>(null)
 const fields = computed(() => [
   ['provider', 'Provider'], ['model', 'Model'], ['workflow', 'Workflow'],
@@ -24,7 +26,28 @@ const fields = computed(() => [
         <h2 class="text-base font-semibold">Generation details</h2>
         <button type="button" aria-label="Close generation details" autofocus class="rounded p-2 hover:bg-white/10" @click="dialog?.close()"><X :size="18" /></button>
       </header>
-      <template v-if="details">
+      <div class="mb-4 flex gap-2" role="group" aria-label="Generation details view">
+        <button v-for="tab in (['image', 'query'] as const)" :key="tab" type="button"
+          :aria-pressed="activeTab === tab" @click="activeTab = tab"
+          class="rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-sky-400"
+          :class="activeTab === tab ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'">
+          {{ tab === 'image' ? 'Image' : 'Query' }}
+        </button>
+      </div>
+      <section v-if="activeTab === 'query'" aria-label="LLM query details" class="space-y-4">
+        <p class="text-xs text-slate-400">Requests and replies saved for this image. May contain private story text.</p>
+        <p v-if="!queries.length" class="text-sm text-slate-400">No LLM query was recorded for this image. Generate a new illustration to capture it.</p>
+        <details v-for="(query, index) in queries" :key="index" :open="queries.length === 1"
+          class="rounded-lg border border-slate-700 p-3">
+          <summary class="cursor-pointer text-sm font-semibold">{{ index + 1 }}. {{ query.operation || 'LLM call' }} · {{ query.model }}</summary>
+          <p v-if="query.truncated" class="mt-2 text-xs text-amber-300">This saved preview exceeded the storage limit and was shortened.</p>
+          <div v-for="[key, label] in [['system_prompt', 'System prompt'], ['user_prompt', 'User prompt'], ['response', 'LLM response']]" :key="key" class="mt-3">
+            <h3 class="mb-2 text-sm font-semibold">{{ label }}</h3>
+            <pre class="max-h-80 select-text overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-sans text-sm">{{ query[key] || '(Empty)' }}</pre>
+          </div>
+        </details>
+      </section>
+      <template v-else-if="details">
         <p class="mb-4 text-xs text-slate-400">Saved for this image when it was generated. Current settings may differ.</p>
         <dl class="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <template v-for="[key, label] in fields" :key="key">

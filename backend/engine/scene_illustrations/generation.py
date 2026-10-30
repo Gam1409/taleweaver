@@ -10,6 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
+from backend.core.visual_queries import collect_queries
 from backend.core.visual_trace import current_id, record, traced
 from backend.engine.image_profiles import image_timeout
 from backend.engine.media_engine import MediaEngine
@@ -103,12 +104,14 @@ async def generate_scene_illustration(
         request, t2i = await image_request(db, state, user, snapshot)
         # The provider queue must not hold a database transaction open.
         await db.commit()
-        await prepare_moment_prompt(request)
         details: dict = {"trace_id": current_id()} if current_id() else {}
         request["provider_options"]["_generation_details"] = details
-        url = await asyncio.wait_for(
-            MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
-        )
+        with collect_queries() as queries:
+            await prepare_moment_prompt(request)
+            url = await asyncio.wait_for(
+                MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
+            )
+        details["queries"] = queries
         if not url:
             raise HTTPException(502, "No illustration was returned. Any previous image was kept.")
         await _attach(session_id, payload.message_id, owner_id, snapshot, url, details)

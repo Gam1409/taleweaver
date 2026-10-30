@@ -137,3 +137,18 @@ scene illustrations, session portraits, custom OpenAI transport, ComfyUI and pre
 from that final run after separately confirming the same failure on the original
 checkout. Its profile/story preference expectation predates this change; prompt
 content and that test were left untouched. Frontend production build and Ruff passed.
+
+
+## Generation details: Query
+
+New moment illustrations keep up to four LLM exchanges with the image's private
+session metadata. The Query view shows system/user prompts and the returned reply,
+including scene analysis when used. It works without debug logging and does not read
+local trace files. Each text field is capped at 32,000 characters, with a visible
+truncation notice; this preview limit does not truncate the actual model input or
+image prompt. Older images have no retroactively reconstructed query.
+
+Queries may include private scene text and custom instructions. They are subject to
+the same session ownership checks as the illustration, and can travel with an exported
+session. No API headers or credentials are captured. Query capture does not change
+the prompts or make additional LLM calls.
