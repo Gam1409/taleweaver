@@ -28,8 +28,7 @@ INSTRUCTIONS = (
     "Use visual_mood as an atmospheric cue only where compatible with the established scene. "
     "Neither field may change time of day, weather, established lighting, clothing, actions "
     "or spatial relationships. Mood alone does not establish a character's emotion or pose. "
-    "Omit sexual acts, intimate anatomical details and graphic injuries; retain ordinary "
-    "non-graphic interaction and setting. Do not output sound tags, dialogue or captions. "
+    "Do not output sound tags, dialogue or captions. "
     "Put the main visible action and character relationships before aesthetic embellishment. "
     "Follow the selected checkpoint format; do not add invented details to fill its word budget."
 )
