@@ -3,6 +3,7 @@ import type { UseGameSocket } from '@/composables/useGameSocket'
 import type { ChatMessage } from '@/types'
 import { apiFetch } from '@/services/http'
 import { useNotifications } from '@/composables/useNotifications'
+import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
 
 /** Replace prose in place; never resend the player's committed action. */
 export function useNarrationRegeneration(gameId: () => string | undefined, socket: UseGameSocket) {
@@ -22,6 +23,7 @@ export function useNarrationRegeneration(gameId: () => string | undefined, socke
     if (!canRegenerate.value || !latest.value) return
     const id = gameId()
     const message = latest.value
+    const correction = getCorrection(id)
     const previousStatus = socket.status.value
     busy.value = true
     socket.status.value = 'loading'
@@ -30,17 +32,18 @@ export function useNarrationRegeneration(gameId: () => string | undefined, socke
       const response = await apiFetch(`/adventures/${encodeURIComponent(id!)}/chat/regenerate`, {
         method: 'POST',
         includeJson: true,
-        body: JSON.stringify({ message_id: message.id }),
+        body: JSON.stringify({ message_id: message.id, narration_correction: correction?.text }),
         timeoutMs: null,
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
         throw new Error(error.detail || 'Could not regenerate the response.')
       }
-      const replacement: ChatMessage = await response.json()
+      const replacement: ChatMessage & { narration_correction_applied?: boolean } = await response.json()
       if (replacement.id !== message.id || !replacement.content?.trim()) {
         throw new Error('The server returned an invalid response.')
       }
+      acknowledgeCorrection(id!, correction, replacement.narration_correction_applied)
       if (disposed || gameId() !== id) return
       socket.messages.value = socket.messages.value.map(item => item.id === message.id ? replacement : item)
     } catch (error) {

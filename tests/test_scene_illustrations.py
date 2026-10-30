@@ -335,8 +335,8 @@ async def test_comfy_story_preset_is_used(
     assert adaptations[0].format == ("tags" if adapt_with_llm else "description")
     if adapt_with_llm:
         assert "Use visual tags for this checkpoint." in adaptations[0].instructions
-    assert "final visible moment" in adaptations[0].instructions
-    assert "later departure" in adaptations[0].instructions
+    assert "final visible instant" in adaptations[0].instructions
+    assert "only characters visible at the final instant" in adaptations[0].instructions
 
     from backend.engine import image_prompt_adapter
 

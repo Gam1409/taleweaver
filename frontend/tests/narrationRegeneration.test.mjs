@@ -5,16 +5,19 @@ import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { effectScope, ref } from 'vue'
 import ts from 'typescript'
+import { correctionModuleUrl, corrections } from './correctionModule.mjs'
 
 const source = readFileSync(new URL('../src/composables/useNarrationRegeneration.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace(/import .* from '@\/services\/http';/, 'const apiFetch = (...args) => globalThis.fetch(...args);')
   .replace(/import .* from '@\/composables\/useNotifications';/, 'export const notices = []; const useNotifications = () => ({ addNotification: (...args) => notices.push(args) });')
 const { useNarrationRegeneration, notices } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 function fixture(t) {
+  corrections.clearCorrection('session')
   const socket = {
     messages: ref([{ id: 'reply', role: 'assistant', content: 'Original' }]),
     status: ref('connected'), statusText: ref(''), inputLocked: ref(false), sheet: ref({}),
@@ -67,4 +70,23 @@ test('leaving the view prevents late writes to a different session', async t => 
   await pending
   assert.deepEqual(f.socket.messages.value, [])
   assert.equal(f.socket.status.value, 'connecting')
+})
+
+test('rewrite sends queued feedback separately and consumes only acknowledged success', async t => {
+  const f = fixture(t)
+  corrections.queueCorrection('session', 'Sounds', 'Fewer sound tags.')
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { message_id: 'reply', narration_correction: 'Fewer sound tags.' })
+    return new Response(JSON.stringify({ id: 'reply', content: 'Replacement', role: 'assistant', narration_correction_applied: true }))
+  })
+  await f.regenerate()
+  assert.equal(corrections.getCorrection('session'), null)
+})
+
+test('rewrite failure retains queued feedback', async t => {
+  const f = fixture(t)
+  corrections.queueCorrection('session', 'Sounds', 'Fewer sound tags.')
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 502 }))
+  await f.regenerate()
+  assert.equal(corrections.getCorrection('session').text, 'Fewer sound tags.')
 })

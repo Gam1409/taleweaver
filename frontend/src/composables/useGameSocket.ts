@@ -8,6 +8,7 @@ import { ref, watch, type Ref } from 'vue'
 import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
+import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -524,6 +525,7 @@ export function useGameSocket(): UseGameSocket {
     }
 
     const gameId = currentGameId
+    const correction = getCorrection(gameId)
     snapshotRevision += 1
     const knownMessageIds = new Set(messages.value.map(message => message.id).filter(Boolean))
     const silentCommands = ['/take_direct', '/rule-pass', '/equip', '/unequip', '/consume', '/shuffle', '/suggest', '/suggestions', '/traverse_exit']
@@ -617,6 +619,7 @@ export function useGameSocket(): UseGameSocket {
         body: JSON.stringify({ 
           content: normalizedContent,
           replay_message_id: replayMessageId,
+          narration_correction: correction?.text,
           auto_visualize: autoVisualize.value
         })
       })
@@ -718,6 +721,7 @@ export function useGameSocket(): UseGameSocket {
             lastMsg.content += data.content
           } else if (event === 'final') {
             receivedFinalEvent = true
+            acknowledgeCorrection(gameId, correction, data.narration_correction_applied)
             if (data.narration_incomplete) {
               narrationWarning = data.narration_warning || 'The model stopped before finishing its response. The turn was saved; do not repeat the action.'
             }

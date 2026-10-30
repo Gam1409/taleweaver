@@ -95,7 +95,11 @@ async def generate_scene_illustration(
     session_id: str, payload: SceneIllustrationRequest, db: AsyncSession, user: User
 ) -> dict:
     state, message = await owned_context(db, session_id, payload.message_id, user.id)
-    snapshot = {**require_snapshot(state, message), "narration": message.content[-MAX_NARRATION:]}
+    snapshot = {
+        **require_snapshot(state, message),
+        "narration": message.content[-MAX_NARRATION:],
+        "full_narration": message.content,
+    }
     # The hash-verified message also repairs old snapshots that retained the beginning.
     record("snapshot", narration=snapshot["narration"], visible_facts=snapshot["visible_facts"])
     request = None
@@ -105,6 +109,7 @@ async def generate_scene_illustration(
         # The provider queue must not hold a database transaction open.
         await db.commit()
         details: dict = {"trace_id": current_id()} if current_id() else {}
+        details["context_mode"] = "neutral_source"
         request["provider_options"]["_generation_details"] = details
         with collect_queries() as queries:
             await prepare_moment_prompt(request)

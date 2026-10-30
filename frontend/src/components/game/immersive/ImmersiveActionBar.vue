@@ -7,6 +7,7 @@
  */
 import { ref, onBeforeUnmount } from 'vue'
 import ResponseActions from '@/components/game/ResponseActions.vue'
+import NarrationCorrectionButton from '@/components/game/NarrationCorrectionButton.vue'
 import {
   Scroll,
   Map as MapIcon,
@@ -202,6 +203,7 @@ onBeforeUnmount(() => {
     </button>
 
     <!-- Ideas Section with Animated Popup List -->
+    <NarrationCorrectionButton :game-id="gameId" />
     <div ref="ideasWrapperRef" class="relative shrink-0">
       <!-- Ideas Trigger Button (Always in English) -->
       <button

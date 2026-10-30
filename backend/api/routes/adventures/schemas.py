@@ -4,6 +4,7 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
+from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
 
 
@@ -538,6 +539,7 @@ class ContentLanguageRequest(BaseModel):
 
 
 class ChatRequest(ContentLanguageRequest):
+    narration_correction: NarrationCorrection | None = None
     replay_message_id: str | None = Field(default=None, max_length=36)
     content: str
     auto_visualize: bool = False

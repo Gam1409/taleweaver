@@ -4,34 +4,14 @@ from uuid import uuid4
 
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.image_prompt_rules import ImagePromptRules
-from backend.core.visual_trace import record
-from backend.engine.clothing.frames import extract_frame
 from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
 from backend.utils.path_security import safe_data_path
 
-from .visual_context import STATE_AUTHORITY, VisualContext
-
-MOMENT_INSTRUCTIONS = (
-    "Depict only the final visible moment of the completed passage, never a montage. "
-    "Resolve its actions chronologically before writing the prompt. A later departure, "
-    "step back, released hand or changed pose supersedes an earlier approach or contact. "
-    "The frozen cast supplies identity and appearance, not a requirement to show everyone: "
-    "omit anyone who has left or is off-screen at the end. Use the latest explicit visible "
-    "action over an older stored position; otherwise retain the known position. "
-    "Start with the final action, visible character count and spatial arrangement, then "
-    "appearance and setting. Describe each person's distinct pose and position relative "
-    "to the others and nearby landmarks. Preserve distance and lack of contact explicitly "
-    "when established; do not turn withdrawal into an embrace or intimate pose. "
-    "Keep separate coherent bodies and distinct identities and clothing. "
-    "Exclude dialogue, vocal-direction tags, thoughts, memories, plans, hypothetical events "
-    "and off-screen people. Do not turn figurative language into literal objects. "
-    "An unspecified posture is unknown, not standing: omit it instead of inventing a pose. "
-    "Unknown clothing remains unknown; never fill it from the job title or setting. "
-    "Leave unspecified details neutral. No captions, speech bubbles or written text."
-)
+from . import source_quality
+from .visual_context import VisualContext
 
 
 async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
@@ -54,10 +34,12 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
             "SCENE", t2i.get(f"{profile}_min_long_edge")
         )
         options.update(width=width, height=height)
-    context = VisualContext.from_snapshot(snapshot, tone)
-    if context.managed:
-        options["_managed_frame_source"] = context.pending()
-    prompt = context.prompt(MOMENT_INSTRUCTIONS, context.initial_data())
+    selected_snapshot = {
+        **snapshot,
+        "narration": snapshot.get("full_narration", snapshot["narration"]),
+    }
+    context = VisualContext.from_snapshot(selected_snapshot, tone)
+    prompt = source_quality.build_prompt(context, style)
     ext = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
     return {
         "prompt": prompt,
@@ -75,42 +57,22 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
 
 
 async def prepare_moment_prompt(request: dict) -> None:
-    """Each sequential LLM call uses its own configured Small/Utility deadline."""
+    """One adaptation uses the configured Small/Utility deadline."""
     options = request["provider_options"]
-    source = options.pop("_managed_frame_source", None)
-    if source is not None:
-        context = VisualContext.from_pending(source)
-        frame = await extract_frame(
-            options["_prompt_user"], context.passage, context.facts.get("characters", [])
-        )
-        public_frame = context.composed_data(frame)
-        record("frame.composed", frame=public_frame)
-        request["prompt"] = context.prompt(MOMENT_INSTRUCTIONS, public_frame)
     rules = prompt_rules(options) if request["provider"] == "comfyui" else None
+    instructions = source_quality.INSTRUCTIONS
     policy = ImagePromptRules(
         format="description",
         language="English",
         max_words=150,
-        instructions=MOMENT_INSTRUCTIONS + "\n" + STATE_AUTHORITY,
+        instructions=instructions,
     )
     kwargs = {}
     if rules and rules.adapt_with_llm:
-        policy = rules.model_copy(
-            update={
-                "instructions": MOMENT_INSTRUCTIONS
-                + "\n"
-                + STATE_AUTHORITY
-                + "\n"
-                + rules.instructions
-            }
-        )
+        policy = rules.model_copy(update={"instructions": instructions + "\n" + rules.instructions})
         kwargs["mature_themes"] = getattr(select_profile(options), "mature_themes", False)
         kwargs["nsfw_enabled"] = bool(options.get("_nsfw_enabled", False))
         kwargs["nsfw_level"] = str(options.get("_nsfw_level") or "hard")
-    # Prepared ComfyUI prompts skip MediaEngine's style injection. Include
-    # the story's selected style in this single adaptation instead.
-    if rules and request.get("style_instruction"):
-        request["prompt"] += f"\nVisual style: {request['style_instruction']}"
     request["prompt"] = await adapt_body(
         request["prompt"], policy, options["_prompt_user"], **kwargs
     )

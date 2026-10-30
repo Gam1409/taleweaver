@@ -23,6 +23,7 @@ from backend.api.routes.adventures.agent_commands import (
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
 from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warning
+from backend.engine.narration_correction import append_correction, correction_applied
 from backend.engine.visual_novel.narration import narration_suffix
 from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.social import plan_interaction
@@ -305,6 +306,7 @@ class GameTurnManager:
         self.stop_requested = False
         self.turn_language: str | None = None
         self.turn_id: str | None = None
+        self.narration_correction: str | None = None
         self._progression = TurnProgressionBuilder(
             self,
             gm_notes_prompt_max_items=GM_NOTES_PROMPT_MAX_ITEMS,
@@ -1872,6 +1874,7 @@ class GameTurnManager:
             prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode and not policy.vn else "",
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
+        narration_prompt = append_correction(narration_prompt, self.narration_correction)
 
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
@@ -1997,6 +2000,9 @@ class GameTurnManager:
             duration_ms=round((time.perf_counter() - cycle_start) * 1000, 2),
         )
 
+        applied_correction = correction_applied(
+            self.narration_correction, response_text, narration_warning
+        )
         if not (response_text or "").strip():
             if run_generator_tool_intent_pass:
                 fallback = (
@@ -2319,6 +2325,7 @@ class GameTurnManager:
                 **self._build_prompt_suggestions_payload(),
                 **self._build_terminal_flags_payload(),
                 "narration_incomplete": bool(narration_warning),
+                "narration_correction_applied": applied_correction,
                 "narration_warning": narration_warning,
                 "narration_end_reason": narration_end_reason,
                 "status": "success",
