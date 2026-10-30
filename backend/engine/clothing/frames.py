@@ -140,7 +140,9 @@ def compose_frame(
             continue
         person = by_id[figure.character_id]
         facts = {
-            key: person[key] for key in ("id", "name", "appearance", "clothing") if key in person
+            key: person[key]
+            for key in ("id", "name", "appearance", "clothing", "clothing_detail_limited")
+            if key in person
         }
         composition = figure.model_dump(exclude={"character_id"})
         if figure.position == "unspecified" and person.get("position"):

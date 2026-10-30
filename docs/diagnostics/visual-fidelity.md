@@ -177,3 +177,18 @@ emotion tags literal text to draw in the image.
 81 focused regression tests passed, including lighting/presence, canonical clothing,
 voice preservation, portraits and scene illustrations. Model output was mocked; the
 schema and data-flow checks do not establish live Artemis accuracy.
+
+## Visual context ownership
+
+`scene_illustrations/visual_context.py` now owns preparation of the frozen source,
+request-local copies and composition with a validated frame. `render.py` orchestrates
+LLM/provider selection rather than separately assembling the same context twice.
+The state authority instruction distinguishes canonical appearance/wardrobe from
+extracted visibility/action/lighting. `clothing_detail_limited` is retained in the
+composed frame so incomplete wardrobe information cannot appear complete by omission.
+
+This is a behavior-preserving separation of the managed source boundary, with an
+uncertainty-propagation fix. It does not forward the entire passage through that
+boundary, remove the frame-extraction call, or resolve all semantic losses described
+above. Adult-content instructions and their injection are unchanged. 73 targeted
+regression tests passed; no live model/image generation was performed for this change.
