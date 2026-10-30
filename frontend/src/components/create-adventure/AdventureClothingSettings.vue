@@ -67,17 +67,19 @@ function openNsfwGate() {
       </label>
 
       <!-- Level selector -->
-      <div v-if="nsfwEnabled" class="ml-7 flex flex-wrap gap-2">
+      <div v-if="nsfwEnabled" role="group" aria-label="Content level"
+        class="mt-3 ml-7 flex rounded-2xl border border-white/5 bg-black/40 p-1 shadow-inner">
         <button
           v-for="level in (['soft', 'medium', 'hard'] as const)"
           :key="level"
           type="button"
           :class="[
-            'rounded-lg px-3 py-1 text-xs font-bold uppercase tracking-widest transition-all',
+            'flex-1 rounded-xl px-3 py-3 text-xs font-black uppercase tracking-widest transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-400 disabled:cursor-not-allowed disabled:opacity-50',
             nsfwLevel === level
               ? 'bg-pink-600 text-white shadow-lg'
-              : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              : 'text-slate-500 hover:text-slate-300'
           ]"
+          :aria-pressed="nsfwLevel === level"
           @click="emit('update:nsfwLevel', level)"
         >
           {{ level }}
