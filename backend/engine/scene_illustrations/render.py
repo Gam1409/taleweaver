@@ -12,6 +12,7 @@ from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
 from backend.utils.path_security import safe_data_path
 
+from . import source_quality
 from .visual_context import STATE_AUTHORITY, VisualContext
 
 MOMENT_INSTRUCTIONS = (
@@ -54,10 +55,20 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
             "SCENE", t2i.get(f"{profile}_min_long_edge")
         )
         options.update(width=width, height=height)
-    context = VisualContext.from_snapshot(snapshot, tone)
-    if context.managed:
-        options["_managed_frame_source"] = context.pending()
-    prompt = context.prompt(MOMENT_INSTRUCTIONS, context.initial_data())
+    source_mode = source_quality.enabled(options)
+    selected_snapshot = (
+        {**snapshot, "narration": snapshot.get("full_narration", snapshot["narration"])}
+        if source_mode
+        else snapshot
+    )
+    context = VisualContext.from_snapshot(selected_snapshot, tone)
+    if source_mode:
+        options["_neutral_source"] = True
+        prompt = source_quality.build_prompt(context, style)
+    else:
+        if context.managed:
+            options["_managed_frame_source"] = context.pending()
+        prompt = context.prompt(MOMENT_INSTRUCTIONS, context.initial_data())
     ext = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
     return {
         "prompt": prompt,
@@ -87,29 +98,26 @@ async def prepare_moment_prompt(request: dict) -> None:
         record("frame.composed", frame=public_frame)
         request["prompt"] = context.prompt(MOMENT_INSTRUCTIONS, public_frame)
     rules = prompt_rules(options) if request["provider"] == "comfyui" else None
+    instructions = (
+        source_quality.INSTRUCTIONS
+        if options.get("_neutral_source")
+        else MOMENT_INSTRUCTIONS + "\n" + STATE_AUTHORITY
+    )
     policy = ImagePromptRules(
         format="description",
         language="English",
         max_words=150,
-        instructions=MOMENT_INSTRUCTIONS + "\n" + STATE_AUTHORITY,
+        instructions=instructions,
     )
     kwargs = {}
     if rules and rules.adapt_with_llm:
-        policy = rules.model_copy(
-            update={
-                "instructions": MOMENT_INSTRUCTIONS
-                + "\n"
-                + STATE_AUTHORITY
-                + "\n"
-                + rules.instructions
-            }
-        )
+        policy = rules.model_copy(update={"instructions": instructions + "\n" + rules.instructions})
         kwargs["mature_themes"] = getattr(select_profile(options), "mature_themes", False)
         kwargs["nsfw_enabled"] = bool(options.get("_nsfw_enabled", False))
         kwargs["nsfw_level"] = str(options.get("_nsfw_level") or "hard")
     # Prepared ComfyUI prompts skip MediaEngine's style injection. Include
     # the story's selected style in this single adaptation instead.
-    if rules and request.get("style_instruction"):
+    if rules and request.get("style_instruction") and not options.get("_neutral_source"):
         request["prompt"] += f"\nVisual style: {request['style_instruction']}"
     request["prompt"] = await adapt_body(
         request["prompt"], policy, options["_prompt_user"], **kwargs

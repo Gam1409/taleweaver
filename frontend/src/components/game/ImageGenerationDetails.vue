@@ -9,7 +9,7 @@ const dialog = ref<HTMLDialogElement | null>(null)
 const fields = computed(() => [
   ['provider', 'Provider'], ['model', 'Model'], ['workflow', 'Workflow'],
   ['seed', 'Seed'], ['width', 'Width'], ['height', 'Height'],
-  ['trace_id', 'Local trace ID'],
+  ['trace_id', 'Local trace ID'], ['context_mode', 'Scene context'],
 ].filter(([key]) => props.details?.[key] !== undefined))
 </script>
 
