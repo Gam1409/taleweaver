@@ -55,7 +55,7 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
             "SCENE", t2i.get(f"{profile}_min_long_edge")
         )
         options.update(width=width, height=height)
-    source_mode = source_quality.enabled(options)
+    source_mode = source_quality.enabled()
     selected_snapshot = (
         {**snapshot, "narration": snapshot.get("full_narration", snapshot["narration"])}
         if source_mode

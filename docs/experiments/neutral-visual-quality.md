@@ -2,8 +2,10 @@
 
 Status: implementation and mocked regression verification only. No live image-quality
 claim. The default remains the established bounded pipeline. This experiment is for
-non-graphic illustrations; adult-enabled stories retain their existing route and
-existing addendum behavior. Adult-content prompt files were not changed.
+non-graphic illustrations. Context-mode selection is independent of the adventure's
+content setting; existing profile/adventure addendum gates still apply in both modes.
+The source-mode instructions still request non-graphic illustrations, so forwarding
+an addendum does not remove that restriction. Adult-content prompt files were not changed.
 
 ## Evidence and limits
 

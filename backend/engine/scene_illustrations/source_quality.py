@@ -29,11 +29,9 @@ INSTRUCTIONS = (
 )
 
 
-def enabled(options: dict) -> bool:
-    """Existing adult-content routing is outside this experimental neutral path."""
-    return settings.VISUAL_SCENE_CONTEXT_MODE == "neutral_source" and not options.get(
-        "_nsfw_enabled", False
-    )
+def enabled() -> bool:
+    """Select context transport independently of existing content settings."""
+    return settings.VISUAL_SCENE_CONTEXT_MODE == "neutral_source"
 
 
 def build_prompt(context: VisualContext, style: str = "") -> str:
