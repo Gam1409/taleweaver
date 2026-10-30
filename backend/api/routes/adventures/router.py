@@ -18,6 +18,7 @@ from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
 from backend.api.routes.adventures.regeneration import router as regeneration_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
+from backend.api.routes.adventures.session_content_settings import router as content_settings_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
@@ -71,4 +72,5 @@ router.include_router(npc_card_settings_router)
 router.include_router(dynamic_locations_router)
 
 router.include_router(vn_settings_router)
+router.include_router(content_settings_router)
 router.include_router(scene_illustrations_router)
