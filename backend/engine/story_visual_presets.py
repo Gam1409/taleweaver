@@ -2,6 +2,7 @@
 
 from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.core.comfyui_presets import normalize_comfy_presets
+from backend.engine.nsfw.settings import nsfw_settings
 
 
 def preserve_story_presets(manifest: dict, adventure) -> dict:
@@ -23,6 +24,9 @@ def story_selection(adventure) -> dict[str, str]:
 
 def story_t2i(t2i: dict | None, adventure) -> dict:
     result = normalize_comfy_presets(t2i or {})
+    nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
+    result["_nsfw_enabled"] = nsfw["enabled"]
+    result["_nsfw_level"] = nsfw["level"]
     selection = story_selection(adventure)
     if not selection:
         return result

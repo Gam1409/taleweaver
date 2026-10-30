@@ -3,7 +3,7 @@
 from typing import Any
 
 from backend.core import mature_content_prompts
-from backend.engine.clothing.settings import clothing_settings
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.visual_novel.config import read_settings
 
 _BASE = """You are the narrator and character writer for an interactive visual novel.
@@ -131,6 +131,10 @@ def narration_suffix(state: Any) -> str:
     states = getattr(state, "entity_states", None)
     snapshot = states.get("__manifest_snapshot__") if isinstance(states, dict) else None
     manifest = snapshot.get("original_manifest") if isinstance(snapshot, dict) else None
-    if clothing_settings(manifest)["detailed"]:
-        prompt += "\n\n" + mature_content_prompts.NARRATIVE_ADDENDUM
-    return prompt
+    nsfw = nsfw_settings(manifest)
+    if not nsfw["enabled"]:
+        return prompt
+    addendum = mature_content_prompts.narrative_addendum(nsfw["level"])
+    if not addendum:
+        return prompt
+    return prompt + "\n\n" + addendum

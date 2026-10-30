@@ -29,6 +29,8 @@ class CreateAdventureTemplatePayload(BaseModel):
     generate_item_images: bool = False
     show_npc_state: bool = False
     detailed_clothing: bool = False
+    nsfw_enabled: bool = False
+    nsfw_level: Optional[Literal["soft", "medium", "hard"]] = "soft"
     automatic_npc_voice_assignment: bool = True
     time_per_turn: int = 5
     pacing_minutes: Optional[int] = None
@@ -312,6 +314,18 @@ class AdventureTemplateResponse(BaseModel):
         default=False,
         validation_alias=AliasChoices(
             "detailed_clothing", AliasPath("original_manifest", "clothing_settings", "detailed")
+        ),
+    )
+    nsfw_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "nsfw_enabled", AliasPath("original_manifest", "nsfw_settings", "enabled")
+        ),
+    )
+    nsfw_level: Literal["soft", "medium", "hard"] = Field(
+        default="soft",
+        validation_alias=AliasChoices(
+            "nsfw_level", AliasPath("original_manifest", "nsfw_settings", "level")
         ),
     )
     rule_enforcement_mode: str
@@ -626,6 +640,8 @@ class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
     detailed_clothing: Optional[bool] = None
+    nsfw_enabled: Optional[bool] = None
+    nsfw_level: Optional[Literal["soft", "medium", "hard"]] = None
     title: Optional[str] = None
     teaser: Optional[str] = None
     version: Optional[str] = None

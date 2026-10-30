@@ -51,7 +51,13 @@ def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
 
 
 async def adapt_body(
-    description: str, rules: ImagePromptRules, user, *, mature_themes: bool = False
+    description: str,
+    rules: ImagePromptRules,
+    user,
+    *,
+    mature_themes: bool = False,
+    nsfw_enabled: bool = False,
+    nsfw_level: str = "hard",
 ) -> str:
     if not rules.adapt_with_llm:
         return description.strip()
@@ -71,8 +77,10 @@ async def adapt_body(
         "analysis, technical settings, weights, LoRA syntax or trigger/quality tokens; "
         "mandatory tokens are added separately. Avoid lettering unless explicitly requested."
     )
-    if mature_themes:
-        system += "\n" + mature_content_prompts.IMAGE_PROMPT_ADDENDUM
+    if mature_themes and nsfw_enabled:
+        addendum = mature_content_prompts.image_prompt_addendum(nsfw_level)
+        if addendum:
+            system += "\n" + addendum
     timeout = role_timeout(user, "small")
     try:
         body = await asyncio.wait_for(
@@ -122,6 +130,8 @@ async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
             rules,
             options.get("_prompt_user"),
             mature_themes=getattr(select_profile(options), "mature_themes", False),
+            nsfw_enabled=bool(options.get("_nsfw_enabled", False)),
+            nsfw_level=str(options.get("_nsfw_level") or "hard"),
         )
     return {
         "body": body,

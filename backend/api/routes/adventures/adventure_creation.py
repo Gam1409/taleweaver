@@ -29,6 +29,7 @@ from backend.engine.generation_control import (
     unregister_generation,
 )
 from backend.engine.npc_cards.settings import creation_manifest
+from backend.engine.nsfw.settings import with_nsfw_settings
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
 from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.avatar import Avatar
@@ -170,9 +171,13 @@ def build_template(
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         is_ready=bool(payload.skip_generation),
         creation_status="Ready" if payload.skip_generation else "Initializing...",
-        original_manifest=with_clothing_settings(
-            creation_manifest(payload.original_manifest, payload.show_npc_state),
-            payload.detailed_clothing,
+        original_manifest=with_nsfw_settings(
+            with_clothing_settings(
+                creation_manifest(payload.original_manifest, payload.show_npc_state),
+                payload.detailed_clothing,
+            ),
+            payload.nsfw_enabled,
+            payload.nsfw_level,
         ),
         teaser=payload.teaser,
         version=payload.version,

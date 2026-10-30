@@ -385,6 +385,8 @@ export interface AdventureTemplateSummary {
 export interface CreateAdventurePayload {
   show_npc_state?: boolean
   detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   id?: string
   title: string
   context?: string

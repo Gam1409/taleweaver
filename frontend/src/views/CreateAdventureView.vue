@@ -39,6 +39,8 @@ const form = ref({
   rule_enforcement_mode: 'story' as RuleMode,
   show_npc_state: false,
   detailed_clothing: false,
+  nsfw_enabled: false,
+  nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
   selected_style_id: '',
   selected_tone_id: '',
   min_scenes: null as number | null,
@@ -306,6 +308,8 @@ async function handleCreate() {
     ...form.value,
     show_npc_state: form.value.rule_enforcement_mode === 'vn' && form.value.show_npc_state,
     detailed_clothing: form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing,
+    nsfw_enabled: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled,
+    nsfw_level: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled ? form.value.nsfw_level : undefined,
     id: crypto.randomUUID(),
     title: (form.value.title.trim() || 'Untitled Odyssey').slice(0, 50),
     original_prompt: promptStr,
@@ -669,7 +673,12 @@ onMounted(() => {
           />
           <AdventureClothingSettings
             v-if="form.rule_enforcement_mode === 'vn'"
-            v-model="form.detailed_clothing"
+            :clothing-value="form.detailed_clothing"
+            :nsfw-enabled="form.nsfw_enabled"
+            :nsfw-level="form.nsfw_level"
+            @update:clothing-value="form.detailed_clothing = $event"
+            @update:nsfw-enabled="form.nsfw_enabled = $event"
+            @update:nsfw-level="form.nsfw_level = $event as any"
           />
         </div>
 
@@ -774,7 +783,12 @@ onMounted(() => {
             />
             <AdventureClothingSettings
               v-if="form.rule_enforcement_mode === 'vn'"
-              v-model="form.detailed_clothing"
+              :clothing-value="form.detailed_clothing"
+              :nsfw-enabled="form.nsfw_enabled"
+              :nsfw-level="form.nsfw_level"
+              @update:clothing-value="form.detailed_clothing = $event"
+              @update:nsfw-enabled="form.nsfw_enabled = $event"
+              @update:nsfw-level="form.nsfw_level = $event as any"
             />
           </div>
         </div>

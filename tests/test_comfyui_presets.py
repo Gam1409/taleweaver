@@ -187,7 +187,10 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     options["comfyui_presets"]["art"]["mature_themes"] = enabled
     options["comfyui_presets"]["detailed"]["mature_themes"] = not enabled
     story = SimpleNamespace(
-        original_manifest={"visual_presets": {"advanced": "detailed"}},
+        original_manifest={
+            "visual_presets": {"advanced": "detailed"},
+            "nsfw_settings": {"enabled": enabled, "level": "hard"},
+        },
         selected_image_styles=[],
         selected_tone=None,
     )

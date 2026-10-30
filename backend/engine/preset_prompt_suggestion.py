@@ -8,6 +8,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.story_visual_presets import story_t2i
 
 
@@ -49,11 +50,14 @@ async def suggest_preset_prompt(
         tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
         source = f"Asset: {payload.target_type}. Name: {name}. Description: {description}. Style: {style}. Mood: {tone}."
         # Return the editable body. Mandatory prefix/suffix are added only at generation.
+        nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
         return await adapt_body(
             source,
             rules,
             user,
             mature_themes=getattr(select_profile(options), "mature_themes", False),
+            nsfw_enabled=nsfw["enabled"],
+            nsfw_level=nsfw["level"],
         )
     except Exception as exc:
         raise HTTPException(

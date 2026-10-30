@@ -112,6 +112,8 @@ async def prepare_moment_prompt(request: dict) -> None:
             update={"instructions": MOMENT_INSTRUCTIONS + "\n" + rules.instructions}
         )
         kwargs["mature_themes"] = getattr(select_profile(options), "mature_themes", False)
+        kwargs["nsfw_enabled"] = bool(options.get("_nsfw_enabled", False))
+        kwargs["nsfw_level"] = str(options.get("_nsfw_level") or "hard")
     # Prepared ComfyUI prompts skip MediaEngine's style injection. Include
     # the story's selected style in this single adaptation instead.
     if rules and request.get("style_instruction"):

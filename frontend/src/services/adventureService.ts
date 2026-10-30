@@ -12,6 +12,8 @@ export interface Adventure {
   original_prompt?: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -68,6 +70,8 @@ export interface AdventureFormData {
   original_prompt: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
   detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null

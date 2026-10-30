@@ -226,6 +226,8 @@ async def test_mature_theme_rule_is_opt_in_and_does_not_change_workflow(enabled,
         "comfyui_presets": {"art": preset.model_dump()},
         "comfyui_assignments": {"simple": "art"},
         "_prompt_user": object(),
+        "_nsfw_enabled": enabled,
+        "_nsfw_level": "hard",
     }
     llm = SimpleNamespace(
         model="fake", aexecute_simple_task=AsyncMock(return_value="Two adults dancing.")

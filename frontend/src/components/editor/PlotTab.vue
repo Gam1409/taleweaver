@@ -18,6 +18,8 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'save-changes'): void
   (e: 'update:detailed-clothing', val: boolean): void
+  (e: 'update:nsfw-enabled', val: boolean): void
+  (e: 'update:nsfw-level', val: 'soft' | 'medium' | 'hard'): void
   (e: 'start-edit', field: string, value: string): void
   (e: 'save-field'): void
   (e: 'cancel-edit'): void
@@ -67,7 +69,13 @@ const emit = defineEmits<{
         :model-value="form.detailed_clothing === true"
         :saved-value="adventure?.detailed_clothing === true"
         :is-saving="isSaving"
+        :nsfw-enabled="form.nsfw_enabled === true"
+        :nsfw-saved-enabled="adventure?.nsfw_enabled === true"
+        :nsfw-level="form.nsfw_level || 'soft'"
+        :nsfw-saved-level="adventure?.nsfw_level || 'soft'"
         @update:model-value="emit('update:detailed-clothing', $event)"
+        @update:nsfw-enabled="emit('update:nsfw-enabled', $event)"
+        @update:nsfw-level="emit('update:nsfw-level', $event)"
         @save="emit('save-changes')"
       />
 

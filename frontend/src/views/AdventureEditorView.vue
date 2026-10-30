@@ -632,6 +632,8 @@ const form = ref({
   original_prompt: '',
   rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
   detailed_clothing: false,
+  nsfw_enabled: false,
+  nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
   time_per_turn: 5,
   max_time_per_turn: null as number | null,
   max_memory_turns: 10,
@@ -834,6 +836,8 @@ async function fetchAdventure() {
     form.value.original_prompt = data.original_prompt || ''
     form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
     form.value.detailed_clothing = data.detailed_clothing === true
+    form.value.nsfw_enabled = data.nsfw_enabled === true
+    form.value.nsfw_level = (data.nsfw_level as 'soft' | 'medium' | 'hard') || 'soft'
     form.value.time_per_turn = data.time_per_turn || 5
     form.value.max_time_per_turn = data.max_time_per_turn !== undefined ? data.max_time_per_turn : null
     form.value.max_memory_turns = typeof data.max_memory_turns === 'number' ? data.max_memory_turns : 10
@@ -1411,22 +1415,28 @@ async function saveChanges() {
 
     const detailedClothing = form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing
     const clothingChanged = detailedClothing !== (adventure.value?.detailed_clothing === true)
+    const nsfwEnabled = form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled
+    const nsfwChanged =
+      nsfwEnabled !== (adventure.value?.nsfw_enabled === true) ||
+      (nsfwEnabled && form.value.nsfw_level !== (adventure.value?.nsfw_level || 'soft'))
     const fullStyleObj = imageStylesCatalog.value.find(s => s.id === form.value.selected_style_id) || { id: form.value.selected_style_id, name: form.value.selected_style_id }
     const fullToneObj = toneCatalog.value.find(t => t.id === form.value.selected_tone_id) || { id: form.value.selected_tone_id, name: form.value.selected_tone_id }
     const payload = {
       ...form.value,
       detailed_clothing: clothingChanged ? detailedClothing : undefined,
+      nsfw_enabled: nsfwChanged ? nsfwEnabled : undefined,
+      nsfw_level: nsfwChanged && nsfwEnabled ? form.value.nsfw_level : undefined,
       selected_image_styles: form.value.selected_style_id ? [fullStyleObj] : [],
       selected_tone: form.value.selected_tone_id ? fullToneObj : null
     }
     await adventureService.updateAdventure(props.adventureId, payload as any)
     await fetchAdventure()
-    if (teaserOrPlotChanged || clothingChanged) {
+    if (teaserOrPlotChanged || clothingChanged || nsfwChanged) {
       await fetchDebugInfo()
     }
     addNotification('Adventure configuration updated.', 'success')
-    if (clothingChanged) {
-      addNotification('Clothing settings apply to this adventure and new games only. Existing saved sessions keep their previous settings.', 'info')
+    if (clothingChanged || nsfwChanged) {
+      addNotification('Settings apply to this adventure and new games only. Existing saved sessions keep their previous settings.', 'info')
     }
 
     // Auto-run structural validation after every save. Only structural —
@@ -2615,6 +2625,8 @@ watch(
               @update:calendar-max-unit="form.time_config = { ...(form.time_config || {}), calendar_max_unit: $event }"
               @update:mode="form.rule_enforcement_mode = $event as any"
               @update:detailed-clothing="form.detailed_clothing = $event"
+              @update:nsfw-enabled="form.nsfw_enabled = $event"
+              @update:nsfw-level="form.nsfw_level = $event as any"
               @save-changes="saveChanges"
               @notify="addNotification"
             />

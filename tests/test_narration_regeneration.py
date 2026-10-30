@@ -239,7 +239,9 @@ async def test_rewrite_uses_saved_vn_pace_and_optional_addendum(
 
     message_id, llm = narration
     monkeypatch.setattr(
-        mature_content_prompts, "NARRATIVE_ADDENDUM", "OPTIONAL NARRATION TEST MARKER"
+        mature_content_prompts,
+        "narrative_addendum",
+        lambda level: "OPTIONAL NARRATION TEST MARKER",
     )
     async with TestSessionLocal() as db:
         adventure = await db.get(AdventureTemplate, "portrait-template")
@@ -251,7 +253,7 @@ async def test_rewrite_uses_saved_vn_pace_and_optional_addendum(
             **state.entity_states,
             "__vn_settings__": {"pace": "leisurely"},
             "__manifest_snapshot__": {
-                "original_manifest": {"clothing_settings": {"detailed": enabled}}
+                "original_manifest": {"nsfw_settings": {"enabled": enabled, "level": "hard"}}
             },
         }
         await db.commit()
