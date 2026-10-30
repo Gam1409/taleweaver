@@ -4,11 +4,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
+import { correctionModuleUrl, corrections } from './correctionModule.mjs'
 
 const source = readFileSync(new URL('../src/composables/useGameSocket.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace(/import .* from '@\/composables\/usePromptSuggestions';/, `const usePromptSuggestions = () => ({ suggestionsLoading: ref(false), suggestionsError: ref(''), suggestionsNotice: ref(''), refreshSuggestions: async () => {}, resetSuggestionsRequest: () => {} });`)
   .replace(/import .* from '@\/composables\/useSessionContentLanguage';/, `const useSessionContentLanguage = () => ({ language: ref('English'), languageSaving: ref(false), setLanguage: async () => true });`)
   .replace(/import .* from '@\/composables\/useNotifications';/, `export const notifications = []; const useNotifications = () => ({ addNotification: (...args) => notifications.push(args) });`)
@@ -24,6 +26,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve))
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
 
 async function fixture(t) {
+  corrections.clearCorrection('session-a')
   globalThis.window = {
     setTimeout: (...args) => globalThis.setTimeout(...args),
     clearTimeout: id => globalThis.clearTimeout(id),
@@ -49,6 +52,36 @@ function stream(signal) {
   return { response: new Response(body), send: text => controller.enqueue(new TextEncoder().encode(text)), end: () => controller.close() }
 }
 const completed = (final = {}) => new Response(frame('chunk', { content: 'A complete answer.' }) + frame('final', final))
+
+test('normal turns and full replay carry correction outside the player message', async t => {
+  for (const replay of [false, true]) {
+    const f = await fixture(t)
+    corrections.queueCorrection('session-a', 'Sounds', 'Reduce vocal repetition.')
+    f.route(async (_url, options) => {
+      if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+      const payload = JSON.parse(options.body)
+      assert.equal(payload.content, action)
+      assert.equal(payload.narration_correction, 'Reduce vocal repetition.')
+      assert.equal(payload.replay_message_id, replay ? 'opening' : undefined)
+      return completed({ narration_correction_applied: true })
+    })
+    await f.game.sendMessage(action, replay, replay ? 'opening' : undefined)
+    assert.equal(corrections.getCorrection('session-a'), null)
+    assert.ok(f.game.messages.value.every(m => !m.content.includes('Reduce vocal repetition.')))
+    f.game.disconnect()
+  }
+})
+
+test('incomplete replies and non-narrative commands retain queued correction', async t => {
+  for (const final of [{ narration_incomplete: true, narration_correction_applied: false }, {}]) {
+    const f = await fixture(t)
+    corrections.queueCorrection('session-a', 'Sounds', 'Reduce vocal repetition.')
+    f.route(async (_url, options) => options.method === 'POST' ? completed(final) : new Response(JSON.stringify(saved())))
+    await f.game.sendMessage(action)
+    assert.equal(corrections.getCorrection('session-a').text, 'Reduce vocal repetition.')
+    f.game.disconnect()
+  }
+})
 
 test('input stays busy through history reload and second send cannot abort first', async t => {
   const f = await fixture(t), reload = deferred()

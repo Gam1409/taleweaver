@@ -242,6 +242,7 @@ async def post_chat_message(
     """Processes a user message and returns a streaming response."""
     try:
         manager = GameTurnManager(db, game_id, current_user)
+        manager.narration_correction = payload.narration_correction
         turn_id = uuid4().hex
         manager.turn_id = turn_id
 
