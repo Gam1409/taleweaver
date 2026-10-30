@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.visual_trace import record
 from backend.engine.clothing.frames import compose_frame, extract_frame
 from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
@@ -93,7 +94,13 @@ async def prepare_moment_prompt(request: dict) -> None:
         frame = await extract_frame(
             options["_prompt_user"], source["passage"], facts.get("characters", [])
         )
-        public_frame = compose_frame(frame, facts.get("characters", []), facts.get("setting", ""))
+        public_frame = compose_frame(
+            frame,
+            facts.get("characters", []),
+            facts.get("setting", ""),
+            lighting=facts.get("lighting", ""),
+        )
+        record("frame.composed", frame=public_frame)
         request["prompt"] = (
             MOMENT_INSTRUCTIONS + "\n" + json.dumps(public_frame, ensure_ascii=False)
         )

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.visual_trace import record
 from backend.engine.visual_progress import report
 
 
@@ -19,6 +20,7 @@ class Figure(BaseModel):
         "unspecified", "standing", "seated", "lying", "walking", "leaning", "kneeling"
     ] = "unspecified"
     action: Literal[
+        "unspecified",
         "still",
         "speaking",
         "gesturing",
@@ -28,7 +30,7 @@ class Figure(BaseModel):
         "holding",
         "reading",
         "waving",
-    ] = "still"
+    ] = "unspecified"
     position: Literal["unspecified", "left", "center", "right", "foreground", "background"] = (
         "unspecified"
     )
@@ -71,16 +73,18 @@ async def extract_frame(user, passage: str, characters: list[dict]) -> VisibleFr
     report("analyzing")
     llm = GameMasterLLM.for_role(user, "small")
     cast = [{"id": person["id"], "name": person.get("name", "")} for person in characters]
+    record("frame.request", passage=passage[-16000:], truncated=len(passage) > 16000, cast=cast)
     result = await asyncio.wait_for(
         llm.aexecute_complex_task(
             FRAME_INSTRUCTIONS,
-            json.dumps({"passage": passage[:16000], "characters": cast}, ensure_ascii=False),
+            json.dumps({"passage": passage[-16000:], "characters": cast}, ensure_ascii=False),
             VisibleFrame,
             llm.model,
             operation="visible_frame",
         ),
         timeout=role_timeout(user, "small"),
     )
+    record("frame.parsed", result=result)
     frame = VisibleFrame.model_validate(result)
     allowed = {person["id"] for person in cast}
     shown = [figure.character_id for figure in frame.figures]
@@ -94,7 +98,9 @@ async def extract_frame(user, passage: str, characters: list[dict]) -> VisibleFr
     return frame
 
 
-def compose_frame(frame: VisibleFrame, characters: list[dict], setting: str = "") -> dict:
+def compose_frame(
+    frame: VisibleFrame, characters: list[dict], setting: str = "", *, lighting: str = ""
+) -> dict:
     """Combine bounded actions with the previously frozen visible appearance only."""
     by_id = {person["id"]: person for person in characters}
     figures = []
@@ -103,9 +109,13 @@ def compose_frame(frame: VisibleFrame, characters: list[dict], setting: str = ""
         facts = {
             key: person[key] for key in ("id", "name", "appearance", "clothing") if key in person
         }
-        figures.append({**facts, **figure.model_dump(exclude={"character_id"})})
+        composition = figure.model_dump(exclude={"character_id"})
+        if figure.position == "unspecified" and person.get("position"):
+            composition["position"] = person["position"]
+        figures.append({**facts, **composition})
     return {
         "setting": setting[:2000],
+        "lighting": lighting[:2000],
         "characters": figures,
         "relations": [relation.model_dump() for relation in frame.relations],
     }

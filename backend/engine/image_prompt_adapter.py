@@ -9,6 +9,7 @@ from backend.core.comfyui_config import prompt_rules, select_profile, select_wor
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.visual_trace import record
 from backend.engine.image_profiles import advanced_for
 from backend.engine.visual_progress import report
 
@@ -81,6 +82,7 @@ async def adapt_body(
         addendum = mature_content_prompts.image_prompt_addendum(nsfw_level)
         if addendum:
             system += "\n" + addendum
+    record("prompt.request", system=system, user=description)
     timeout = role_timeout(user, "small")
     try:
         body = await asyncio.wait_for(
@@ -96,8 +98,17 @@ async def adapt_body(
         ) from exc
     if not isinstance(body, str) or not body.strip() or len(body) > 12000:
         raise ValueError("The prompt adapter returned an empty or invalid description.")
-    # This is a word budget, not a model-specific tokenizer/context guarantee.
-    return " ".join(body.strip().split()[: rules.max_words])
+    # The word budget guides the LLM; slicing can remove a final action or negation.
+    # Keep the valid response intact within the independent 12,000-character cap.
+    prepared = body.strip()
+    record(
+        "prompt.budget",
+        response=body,
+        prepared=prepared,
+        over_budget=len(body.split()) > rules.max_words,
+        truncated=False,
+    )
+    return prepared
 
 
 def assemble_prompt(body: str, rules: ImagePromptRules) -> str:

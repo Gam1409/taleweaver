@@ -10,6 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
+from backend.core.visual_trace import current_id, record, traced
 from backend.engine.image_profiles import image_timeout
 from backend.engine.media_engine import MediaEngine
 from backend.engine.memory_rag.persistence import retry_transaction
@@ -18,7 +19,7 @@ from backend.models.user import User
 
 from .context import owned_context, require_snapshot
 from .render import image_request, prepare_moment_prompt
-from .snapshots import REGISTRY_KEY, registry_of
+from .snapshots import MAX_NARRATION, REGISTRY_KEY, registry_of
 
 
 class SceneIllustrationRequest(BaseModel):
@@ -88,11 +89,14 @@ async def _attach(
     raise HTTPException(409, "The session changed while attaching the illustration. Try again.")
 
 
+@traced
 async def generate_scene_illustration(
     session_id: str, payload: SceneIllustrationRequest, db: AsyncSession, user: User
 ) -> dict:
     state, message = await owned_context(db, session_id, payload.message_id, user.id)
-    snapshot = require_snapshot(state, message)
+    snapshot = {**require_snapshot(state, message), "narration": message.content[-MAX_NARRATION:]}
+    # The hash-verified message also repairs old snapshots that retained the beginning.
+    record("snapshot", narration=snapshot["narration"], visible_facts=snapshot["visible_facts"])
     request = None
     owner_id = user.id
     try:
@@ -100,7 +104,7 @@ async def generate_scene_illustration(
         # The provider queue must not hold a database transaction open.
         await db.commit()
         await prepare_moment_prompt(request)
-        details: dict = {}
+        details: dict = {"trace_id": current_id()} if current_id() else {}
         request["provider_options"]["_generation_details"] = details
         url = await asyncio.wait_for(
             MediaEngine.generate_image(**request), timeout=image_timeout(t2i)

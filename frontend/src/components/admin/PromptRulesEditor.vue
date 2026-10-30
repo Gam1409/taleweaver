@@ -37,9 +37,9 @@ function update<K extends keyof ImagePromptRules>(key: K, value: ImagePromptRule
           <label class="block text-sm">Output format<select :value="modelValue.format" class="control" @change="update('format', ($event.target as HTMLSelectElement).value as ImagePromptRules['format'])"><option value="description">Connected description</option><option value="tags">Comma-separated tags</option><option value="hybrid">Description and tags</option></select></label>
           <div class="grid sm:grid-cols-2 gap-4">
             <label class="block text-sm">Prompt language<input :value="modelValue.language" maxlength="80" class="control" @input="update('language', ($event.target as HTMLInputElement).value)" /></label>
-            <label class="block text-sm">Body word budget<input type="number" min="10" max="300" :value="modelValue.max_words" class="control" @input="update('max_words', Number(($event.target as HTMLInputElement).value))" /></label>
+            <label class="block text-sm">Target body word count<input type="number" min="10" max="300" :value="modelValue.max_words" class="control" @input="update('max_words', Number(($event.target as HTMLInputElement).value))" /></label>
           </div>
-          <p class="text-xs text-slate-400">A word budget is not the text encoder's token limit. Check your model and workflow.</p>
+          <p class="text-xs text-slate-400">This guides the LLM; valid responses are not cut to this length. It is not the text encoder's token limit. Check your model and workflow.</p>
           <label class="block text-sm">Required prefix / trigger words<textarea :value="modelValue.prefix" maxlength="2000" rows="2" class="control" @input="update('prefix', ($event.target as HTMLTextAreaElement).value)" /></label>
           <label class="block text-sm">Required suffix<textarea :value="modelValue.suffix" maxlength="2000" rows="2" class="control" @input="update('suffix', ($event.target as HTMLTextAreaElement).value)" /></label>
           <label class="block text-sm">Additional negative prompt<textarea :value="modelValue.negative_prompt" maxlength="4000" rows="2" class="control" @input="update('negative_prompt', ($event.target as HTMLTextAreaElement).value)" /></label>

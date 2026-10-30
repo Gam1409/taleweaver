@@ -124,6 +124,14 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         return _stream(router, kwargs)
     from openai import AsyncOpenAI
 
+    from backend.core.visual_trace import record
+
+    record(
+        "custom_openai.request",
+        messages=kwargs.get("messages"),
+        model=kwargs.get("model"),
+        response_format=kwargs.get("response_format"),
+    )
     async with (
         httpx.AsyncClient(follow_redirects=False) as transport,
         AsyncOpenAI(
@@ -133,9 +141,11 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
             max_retries=0,
         ) as client,
     ):
-        return await router._get_litellm().acompletion(
+        response = await router._get_litellm().acompletion(
             **kwargs, client=client, request_timeout=router.request_timeout
         )
+        record("custom_openai.response", content=response.choices[0].message.content)
+        return response
 
 
 async def _stream(router: Any, kwargs: dict) -> Any:

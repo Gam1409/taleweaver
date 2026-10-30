@@ -92,7 +92,7 @@ async def capture_scene_snapshot(
         "content_hash": content_hash(message),
         "scene_id": message.scene_id,
         "sequence_id": message.sequence_id,
-        "narration": message.content[:MAX_NARRATION],
+        "narration": message.content[-MAX_NARRATION:],
         "visible_facts": _visible_facts(public_visual_facts),
     }
     registry["snapshots"] = dict(list(registry["snapshots"].items())[-MAX_SNAPSHOTS:])

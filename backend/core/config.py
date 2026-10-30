@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     LLM_TELEMETRY_ENABLED: bool = False
     SESSION_EMPTY_DIR_CLEANUP_DAYS: int = 7
 
+    # Local visual traces are private, opt-in and separate from system debug logs.
+    VISUAL_TRACE_ENABLED: bool = False
+    VISUAL_TRACE_CONTENT_ENABLED: bool = False
+
     VISUAL_TIMEOUT: int = 300
     INTELLIGENCE_TIMEOUT: int = 60
     # Deprecated compatibility fields: stream waits use the resolved model timeout.

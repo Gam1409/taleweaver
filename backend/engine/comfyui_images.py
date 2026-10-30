@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from backend.core.comfyui_config import ComfySettings, select_workflow
+from backend.core.visual_trace import record
 from backend.engine.comfyui_client import ComfyClient
 from backend.engine.comfyui_output import bounded_dimensions, prepare_generated_image
 from backend.engine.image_prompt_adapter import prepare_prompt
@@ -71,6 +72,14 @@ async def generate_comfy_image(
         if reference:
             values["image"] = await client.upload(await asyncio.to_thread(reference_png, reference))
         graph = workflow.render(values)
+        record(
+            "comfy.mapped_inputs",
+            inputs={
+                name: graph[binding.node_id]["inputs"][binding.input_name]
+                for name, binding in workflow.bindings.items()
+                if name in {"prompt", "negative_prompt", "width", "height", "seed"}
+            },
+        )
         details = options.get("_generation_details")
         if isinstance(details, dict):
             details.update(provider="comfyui", workflow=workflow.name)

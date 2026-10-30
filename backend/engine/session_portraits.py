@@ -15,6 +15,7 @@ from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import database, prompts
 from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
+from backend.core.visual_trace import traced
 from backend.engine.clothing.frames import compose_frame, extract_frame
 from backend.engine.clothing.visuals import npc_visuals, portrait_description
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
@@ -182,6 +183,7 @@ async def _portrait_change(user, change: str, visible: dict | None) -> str:
     return json.dumps(compose_frame(frame, [visible]), ensure_ascii=False)
 
 
+@traced
 async def regenerate_session_portrait(
     session_id: str, payload: SessionPortraitRequest, db: AsyncSession, user: User
 ) -> dict:
