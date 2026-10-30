@@ -33,6 +33,8 @@ const emit = defineEmits<{
   (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
   (e: 'save-changes'): void
   (e: 'update:detailed-clothing', val: boolean): void
+  (e: 'update:nsfw-enabled', val: boolean): void
+  (e: 'update:nsfw-level', val: 'soft' | 'medium' | 'hard'): void
   (e: 'update:pacing', val: number): void
   (e: 'update:max-time-per-turn', val: number | null): void
   (e: 'update:clock-enabled', val: boolean): void
@@ -1187,6 +1189,8 @@ const licenseUrlInvalid = computed(() => {
       @update:temp-value="emit('update:tempValue', $event)"
       @update:mode="emit('update:mode', $event)"
       @update:detailed-clothing="emit('update:detailed-clothing', $event)"
+      @update:nsfw-enabled="emit('update:nsfw-enabled', $event)"
+      @update:nsfw-level="emit('update:nsfw-level', $event)"
       @start-edit="(field, value) => emit('start-edit', field, value)"
       @save-field="emit('save-field')"
       @cancel-edit="emit('cancel-edit')"
