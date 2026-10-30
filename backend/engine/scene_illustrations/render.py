@@ -11,6 +11,7 @@ from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
+from backend.engine.visual_text import visual_text
 from backend.utils.path_security import safe_data_path
 
 MOMENT_INSTRUCTIONS = (
@@ -27,6 +28,8 @@ MOMENT_INSTRUCTIONS = (
     "Keep separate coherent bodies and distinct identities and clothing. "
     "Exclude dialogue, vocal-direction tags, thoughts, memories, plans, hypothetical events "
     "and off-screen people. Do not turn figurative language into literal objects. "
+    "An unspecified posture is unknown, not standing: omit it instead of inventing a pose. "
+    "Unknown clothing remains unknown; never fill it from the job title or setting. "
     "Leave unspecified details neutral. No captions, speech bubbles or written text."
 )
 
@@ -53,7 +56,7 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
         options.update(width=width, height=height)
     facts = snapshot["visible_facts"]
     managed = any(person.get("managed_clothing") for person in facts.get("characters", []))
-    source = {"passage": snapshot["narration"], "visible_facts": facts}
+    source = {"passage": visual_text(snapshot["narration"]), "visible_facts": facts}
     if managed:
         options["_managed_frame_source"] = {**source, "tone": tone}
         source = {"visible_facts": facts}

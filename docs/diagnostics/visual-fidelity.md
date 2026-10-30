@@ -152,3 +152,28 @@ Queries may include private scene text and custom instructions. They are subject
 the same session ownership checks as the illustration, and can travel with an exported
 session. No API headers or credentials are captured. Query capture does not change
 the prompts or make additional LLM calls.
+
+## Neutral scene context follow-up
+
+The structured frame now includes bounded lighting and explicit character presence
+(visible/off-screen/uncertain), plus entering/leaving actions. The extractor is told
+to distinguish an actual arrival from footsteps, dialogue mentions or a future visit.
+Only visible figures may participate in spatial relations. An unspecified posture is
+explicitly unknown, never a reason to invent a standing pose.
+
+Managed NPC snapshots now retain known spatial position. Player/NPC clothing resolves
+canonical session item overrides using the existing wardrobe resolver, and NPCs use
+the same legacy-inventory fallback as wardrobe logic. Explicit empty inventories stay
+empty; the change cannot invent possessions or restore a removed garment. These
+snapshot corrections apply to new completed turns. Old snapshots keep their historical
+wardrobe data rather than replacing it with today's inventory.
+
+Image preparation removes known sound/pause cues from a copy of the passage before
+extraction/adaptation. Emotional markers such as `[angry]`, `[playful]`, `[surprised]`
+remain available as context. Story text, speaker attribution and unknown markers stay
+intact; chat messages, TTS and persisted history are not modified. This does not make
+emotion tags literal text to draw in the image.
+
+81 focused regression tests passed, including lighting/presence, canonical clothing,
+voice preservation, portraits and scene illustrations. Model output was mocked; the
+schema and data-flow checks do not establish live Artemis accuracy.

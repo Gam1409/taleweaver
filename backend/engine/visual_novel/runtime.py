@@ -4,8 +4,8 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.clothing.context import resolved_inventory
 from backend.engine.clothing.visuals import (
-    canonical_inventory,
     character_visuals,
     detailed_for_state,
     session_objects,
@@ -36,15 +36,20 @@ def _npc_facts(entity: dict, rows: dict, state: Any, detailed: bool) -> dict:
     npc = rows.get(entity.get("id"))
     override = (state.entity_states or {}).get(entity.get("id")) or {}
     profile = override.get("visual_profile", getattr(npc, "visual_profile", None))
-    inventory = override.get("inventory", getattr(npc, "inventory", [])) or []
+    metadata = getattr(npc, "metadata_json", None) or {}
+    inventory = (
+        override.get("inventory", getattr(npc, "inventory", None) or metadata.get("inventory", []))
+        or []
+    )
     projected = character_visuals(
         npc,
-        canonical_inventory(inventory, list(rows.values())),
+        resolved_inventory(inventory, list(rows.values()), state.entity_states or {}),
         profile=profile,
         detailed=detailed,
     )
     if projected is not None:
         projected["name"] = entity.get("name", projected["name"])
+        projected["position"] = entity.get("spatial_position")
         return projected
     return {
         "id": entity.get("id"),
@@ -75,7 +80,9 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     detailed = detailed_for_state(manager.state)
     player = character_visuals(
         manager.avatar,
-        canonical_inventory(manager.avatar.inventory or [], list(rows.values())),
+        resolved_inventory(
+            manager.avatar.inventory or [], list(rows.values()), manager.state.entity_states or {}
+        ),
         detailed=detailed,
     )
     player = player or {

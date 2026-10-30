@@ -87,12 +87,19 @@ async def session_objects(db, session_id: str) -> list[WorldEntity]:
 
 
 async def npc_visuals(db, state, npc) -> dict | None:
+    from backend.engine.clothing.context import resolved_inventory
+
     override = (state.entity_states or {}).get(npc.id) or {}
     profile = override.get("visual_profile", value(npc, "visual_profile"))
     if profile is None:
         return None
-    inventory = override.get("inventory", npc.inventory) or []
-    owned = canonical_inventory(inventory, await session_objects(db, state.session_id))
+    inventory = (
+        override.get("inventory", npc.inventory or (npc.metadata_json or {}).get("inventory", []))
+        or []
+    )
+    owned = resolved_inventory(
+        inventory, await session_objects(db, state.session_id), state.entity_states or {}
+    )
     facts = character_visuals(npc, owned, profile=profile, detailed=detailed_for_state(state))
     if facts is not None:
         facts["name"] = override.get("name", npc.name)

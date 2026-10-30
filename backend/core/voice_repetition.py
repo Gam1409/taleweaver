@@ -1,20 +1,8 @@
 """Bound runaway vocal-tag runs without deleting speech or ordinary delivery cues."""
 
-from backend.core.voice_tags import VOICE_TAG_SET
+from backend.core.voice_tags import VOCAL_BURST_SET, VOICE_TAG_SET
 
-_BURSTS = VOICE_TAG_SET | {
-    "cough",
-    "sigh",
-    "breath",
-    "heavy breath",
-    "laugh",
-    "chuckle",
-    "throat-clearing",
-    "short pause",
-    "long pause",
-    "gasp",
-    "groan",
-}
+_BURSTS = VOICE_TAG_SET | VOCAL_BURST_SET
 MAX_RUN_TAGS = 8
 MAX_SAME_TAG = 2
 MAX_TAG_CHARS = 64
