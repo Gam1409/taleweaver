@@ -110,15 +110,20 @@ by the current rules runner.
 - Stage 5: preview controls, API/lifecycle tests and documentation implemented.
   Real-browser E2E, private-journal screen and autonomous acceptance demo remain.
 
-The blocker to enabling stage 3 safely is concrete: `memory_rag/scheduling.py` admits
+The initial blocker to enabling stage 3 safely was concrete: `memory_rag/scheduling.py` admits
 maintenance on idle state, but cannot guarantee that an already-running remote call
 has stopped when foreground work starts or a local timeout fires. The current session
 write lease serializes one session's mutations, not inference across sessions sharing
 the same Ollama/KoboldCpp endpoint. A new simulation loop would amplify that race.
 
-Required next change: an endpoint-scoped shared inference reservation used by both
-foreground and background callers; persist or quarantine indeterminate remote work;
-then add bounded deliberation with timeline/revision checks before applying a result.
-Do not reserve a SQLite write transaction while waiting. Afterward implement private
-NPC observations/beliefs and the optional Python >=3.12 Concordia group. These are
-cross-cutting scheduler changes, deliberately outside the tested rules-only slice.
+The experimental inference prerequisite is now implemented: see
+[inference-queue.md](inference-queue.md). Opt-in endpoint reservations cover text and
+embedding calls, persist indeterminate remote work, and require explicit administrator
+recovery after a timeout. Streaming reservations follow the actual response lifetime.
+This remains single-worker and does not automatically enable NPC reasoning.
+
+Next: bounded deliberation with timeline/revision checks before applying a result,
+private NPC observations/beliefs, and then the optional Python >=3.12 Concordia group.
+The deliberation path must require inference admission to be enabled and must not
+hold a SQLite write transaction while waiting. The runtime inference journal is
+independent of game snapshots because rewind cannot rewind a remote GPU request.

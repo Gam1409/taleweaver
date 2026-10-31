@@ -112,7 +112,7 @@ Concordia adapter is shipped. Movement is an adjacent-scene rule and does not ex
 player traversal scripts or infer access to scripted areas. Use simple unscripted
 test locations.
 
-Before adding autonomous inference, implement a shared reservation for foreground
-and maintenance calls, including an unresolved-remote-request state after timeout.
-The existing idle scheduler cannot prove remote computation stopped on cancellation.
-See the architecture document for the precise integration boundaries and next stages.
+The optional [shared inference queue](inference-queue.md) now supplies the transport
+reservation prerequisite, including an unresolved-remote-request state after timeout.
+It is disabled by default and does not enable autonomous decisions. Private NPC state,
+deliberation budgets and timeline-fenced result application are the next stage.

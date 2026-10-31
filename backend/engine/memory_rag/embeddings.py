@@ -7,6 +7,12 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from backend.core.inference import admission
+from backend.core.inference.registry import (
+    InferenceQueueError,
+    InferenceUncertainError,
+    endpoint_key,
+)
 from backend.core.llm_diagnostics import async_operation
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
@@ -120,6 +126,8 @@ async def embed_with_settings(
         raise EmbeddingError("Embedding request timeout must be positive and finite.")
     try:
         return await asyncio.wait_for(_embed(settings, texts, duration, api_key), timeout=duration)
+    except (InferenceQueueError, InferenceUncertainError) as exc:
+        raise EmbeddingError(str(exc)) from exc
     except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as exc:
         if isinstance(exc, EmbeddingError):
             raise
@@ -135,7 +143,14 @@ async def _embed(
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     body = {"model": settings.model, "input": texts}
     async with httpx.AsyncClient(timeout=duration, follow_redirects=False) as client:
-        response = await client.post(_request_url(settings, base), json=body, headers=headers)
+        if admission.enabled():
+            async with admission.reserve(endpoint_key(base), duration) as lease:
+                response = await client.post(
+                    _request_url(settings, base), json=body, headers=headers
+                )
+                lease.certain = True
+        else:
+            response = await client.post(_request_url(settings, base), json=body, headers=headers)
     response.raise_for_status()
     return _parse_vectors(response.json(), settings.provider, len(texts))
 

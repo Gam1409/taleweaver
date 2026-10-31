@@ -36,6 +36,7 @@ const openMenuId = ref<string | null>(null)
 import ProviderKeysSection from '@/components/admin/ProviderKeysSection.vue'
 import IntelligenceSection from '@/components/admin/IntelligenceSection.vue'
 import MemoryRagSettings from '@/components/admin/MemoryRagSettings.vue'
+import InferenceQueue from '@/components/admin/InferenceQueue.vue'
 import VisualsSection from '@/components/admin/VisualsSection.vue'
 import SpeechSection from '@/components/admin/SpeechSection.vue'
 import SpeechToTextSection from '@/components/admin/SpeechToTextSection.vue'
@@ -418,6 +419,7 @@ const navCategories: NavCategory[] = [
         />
 
         <MemoryRagSettings v-if="activeSection === 'llm'" />
+        <InferenceQueue v-if="activeSection === 'llm'" />
 
         <VisualsSection 
           v-if="activeSection === 't2i'"

@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "TaleWeaver"
     APP_VERSION: str = Field(default_factory=get_app_version)
     DATABASE_URL: str = ""
+    # Experimental single-worker admission for self-hosted completion/embedding APIs.
+    INFERENCE_SERIALIZATION_ENABLED: bool = False
     BACKEND_PORT: int = 8000
     FRONTEND_PORT: int = 5173
     LOG_LEVEL: str = "INFO"

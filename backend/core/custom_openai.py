@@ -10,6 +10,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from backend.core.inference.admission import timeout_for
 from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
@@ -114,7 +115,7 @@ def complete(router: Any, kwargs: dict) -> Any:
         ) as client,
     ):
         return router._get_litellm().completion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
 
 
@@ -142,7 +143,7 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         ) as client,
     ):
         response = await router._get_litellm().acompletion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
         record("custom_openai.response", content=response.choices[0].message.content)
         return response
@@ -161,7 +162,7 @@ async def _stream(router: Any, kwargs: dict) -> Any:
         ) as client,
     ):
         stream = await router._get_litellm().acompletion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
         try:
             async for chunk in stream:

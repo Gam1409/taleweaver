@@ -39,6 +39,7 @@ from backend.api.routes import (
     tts_api,
     users_api,
 )
+from backend.api.routes.inference_queue import router as inference_queue_router
 from backend.api.routes.system_diagnostics import router as diagnostics_router
 from backend.core.config import settings
 from backend.core.database import run_db_migrations
@@ -213,6 +214,7 @@ async def add_security_headers(request, call_next):
 
 app.include_router(config_api.router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
+app.include_router(inference_queue_router, prefix="/api")
 app.include_router(memory_settings.router, prefix="/api")
 app.include_router(memory_index.router, prefix="/api")
 app.include_router(adventures.router, prefix="/api")

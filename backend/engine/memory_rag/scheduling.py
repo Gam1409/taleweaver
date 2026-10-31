@@ -1,8 +1,8 @@
 """Give streamed turns priority over bounded, cooperative maintenance work.
 
 Priority is process-local, matching the application's single-worker launcher.
-An already submitted HTTP request may still occupy the remote model; beginning a
-turn never waits for a background queue or attempts to cancel remote inference.
+When experimental inference admission is enabled, transport calls also share an
+endpoint reservation. Already submitted background inference is not preempted.
 """
 
 import asyncio
@@ -11,6 +11,8 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import aclosing, asynccontextmanager
 from functools import wraps
 from typing import Any
+
+from backend.core.inference.registry import background_call
 
 IDLE_GRACE_SECONDS = 15.0
 
@@ -38,11 +40,13 @@ class IdleScheduler:
 
     @asynccontextmanager
     async def foreground(self) -> AsyncIterator[None]:
+        priority = background_call.set(False)
         self.active_turns += 1
         self._touch()
         try:
             yield
         finally:
+            background_call.reset(priority)
             self.active_turns -= 1
             self._touch()
 
@@ -62,9 +66,11 @@ class IdleScheduler:
     async def background(self) -> AsyncIterator[None]:
         async with self.capacity:
             await self.wait_idle()
+            priority = background_call.set(True)
             try:
                 yield
             finally:
+                background_call.reset(priority)
                 self._touch()
 
 

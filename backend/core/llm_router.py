@@ -10,6 +10,8 @@ from typing import Any, Optional, TypeVar
 import litellm
 from pydantic import BaseModel, ValidationError
 
+from backend.core.inference.admission import timeout_for
+from backend.core.inference.transport import guarded_async, guarded_sync, owned_stream, target
 from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
@@ -133,6 +135,7 @@ class GameMasterLLM:
         retry_kwargs["extra_body"] = extra_body
         return retry_kwargs
 
+    @guarded_sync
     def _completion_with_openrouter_fallback(self, kwargs: dict):
         """Call LiteLLM completion and retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
         if self.provider == "custom_openai":
@@ -142,9 +145,7 @@ class GameMasterLLM:
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
-                return self._get_litellm().completion(
-                    **kwargs, request_timeout=self.request_timeout
-                )
+                return self._get_litellm().completion(**kwargs, request_timeout=timeout_for(self))
             except Exception as exc:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
@@ -159,7 +160,7 @@ class GameMasterLLM:
                             kwargs, available_providers
                         )
                         return self._get_litellm().completion(
-                            **retry_kwargs, request_timeout=self.request_timeout
+                            **retry_kwargs, request_timeout=timeout_for(self)
                         )
 
                     err_str = str(exc)
@@ -176,10 +177,14 @@ class GameMasterLLM:
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
                             return self._get_litellm().completion(
-                                **retry_kwargs, request_timeout=self.request_timeout
+                                **retry_kwargs, request_timeout=timeout_for(self)
                             )
 
-                if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
+                if (
+                    attempt < max_transient_retries - 1
+                    and self._is_transient_llm_error(exc)
+                    and target(self) is None
+                ):
                     backoff_delay = 0.75 * (attempt + 1)
                     retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
@@ -197,6 +202,7 @@ class GameMasterLLM:
 
                 raise
 
+    @guarded_async
     async def _acompletion_with_openrouter_fallback(self, kwargs: dict):
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
         if self.provider == "custom_openai":
@@ -214,7 +220,7 @@ class GameMasterLLM:
                     max_transient_retries,
                 )
                 return await self._get_litellm().acompletion(
-                    **kwargs, request_timeout=self.request_timeout
+                    **kwargs, request_timeout=timeout_for(self)
                 )
             except Exception as exc:
                 if self.provider == "openrouter":
@@ -235,7 +241,7 @@ class GameMasterLLM:
                             kwargs.get("model"),
                         )
                         return await self._get_litellm().acompletion(
-                            **retry_kwargs, request_timeout=self.request_timeout
+                            **retry_kwargs, request_timeout=timeout_for(self)
                         )
 
                     err_str = str(exc)
@@ -252,10 +258,14 @@ class GameMasterLLM:
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
                             return await self._get_litellm().acompletion(
-                                **retry_kwargs, request_timeout=self.request_timeout
+                                **retry_kwargs, request_timeout=timeout_for(self)
                             )
 
-                if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
+                if (
+                    attempt < max_transient_retries - 1
+                    and self._is_transient_llm_error(exc)
+                    and target(self) is None
+                ):
                     backoff_delay = 0.75 * (attempt + 1)
                     retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
@@ -1090,7 +1100,8 @@ class GameMasterLLM:
             chunk_timeout=float(self.request_timeout),
         )
         stream = self._clean_stream_thinking(timed_stream)
-        return self._clean_stream_voice_tags(stream)
+        output = self._clean_stream_voice_tags(stream)
+        return owned_stream(output, stream, timed_stream, raw_stream)
 
     @staticmethod
     def _structured_response_format(json_mode: bool, minimax: bool, response_model: type[T]) -> Any:
