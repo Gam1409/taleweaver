@@ -9,6 +9,7 @@ import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
+import { createFailedTurnDrafts } from '@/services/failedTurnDrafts'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -109,6 +110,7 @@ export function useGameSocket(): UseGameSocket {
   const BASE = '/api'
   const { addNotification } = useNotifications()
   const messages = ref<ChatMessage[]>([])
+  const failedTurnDrafts = createFailedTurnDrafts()
   const sheet = ref<CharacterSheet | null>(null)
   const mapData = ref<any | null>(null)
   const nodes = ref<Record<string, any>>({})
@@ -372,6 +374,7 @@ export function useGameSocket(): UseGameSocket {
    * If history is empty, triggers the initial world description.
    */
   async function connect(gameId: string): Promise<void> {
+    failedTurnDrafts.clear()
     haltActiveOperations()
     const revision = ++snapshotRevision
     turnError.value = null
@@ -410,6 +413,7 @@ export function useGameSocket(): UseGameSocket {
   }
 
   function disconnect(): void {
+    failedTurnDrafts.clear()
     haltActiveOperations()
     snapshotRevision += 1
     turnError.value = null
@@ -526,6 +530,9 @@ export function useGameSocket(): UseGameSocket {
 
     const gameId = currentGameId
     const correction = getCorrection(gameId)
+    const draft = failedTurnDrafts.prepare(messages.value, normalizedContent)
+    messages.value = draft.messages
+    const beforeAttempt = new Set(messages.value)
     snapshotRevision += 1
     const knownMessageIds = new Set(messages.value.map(message => message.id).filter(Boolean))
     const silentCommands = ['/take_direct', '/rule-pass', '/equip', '/unequip', '/consume', '/shuffle', '/suggest', '/suggestions', '/traverse_exit']
@@ -533,9 +540,9 @@ export function useGameSocket(): UseGameSocket {
     // Command handlers may intentionally acknowledge without storing a chat message.
     const requiresActionReceipt = !!normalizedContent && !normalizedContent.startsWith('/')
 
-    if (normalizedContent && !isSilent && !replayMessageId) {
+    if (normalizedContent && !isSilent && !replayMessageId && !draft.reusePlayer) {
       lastUserAction.value = normalizedContent
-      if (!isRetry) {
+      if (!isRetry && !draft.retry) {
         _pushMessage('user', normalizedContent)
       } else {
         const lastMsg = messages.value[messages.value.length - 1]
@@ -569,7 +576,7 @@ export function useGameSocket(): UseGameSocket {
     const reportTurnError = (reason: string) => {
       if (!ownsRequest()) return
       const detail = reason
-      _pushMessage('system', detail)
+      failedTurnDrafts.record(normalizedContent, messages.value, beforeAttempt)
       addNotification(detail, 'error')
       if (normalizedContent) turnError.value = { message: detail, action: normalizedContent }
     }

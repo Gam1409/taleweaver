@@ -6,11 +6,17 @@ import { Buffer } from 'node:buffer'
 import ts from 'typescript'
 import { correctionModuleUrl, corrections } from './correctionModule.mjs'
 
+const draftSource = readFileSync(new URL('../src/services/failedTurnDrafts.ts', import.meta.url), 'utf8')
+const draftModule = ts.transpileModule(draftSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
+}).outputText
+const draftModuleUrl = `data:text/javascript;base64,${Buffer.from(draftModule).toString('base64')}`
 const source = readFileSync(new URL('../src/composables/useGameSocket.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
+  .replace("from '@/services/failedTurnDrafts'", `from '${draftModuleUrl}'`)
   .replace(/import .* from '@\/composables\/usePromptSuggestions';/, `const usePromptSuggestions = () => ({ suggestionsLoading: ref(false), suggestionsError: ref(''), suggestionsNotice: ref(''), refreshSuggestions: async () => {}, resetSuggestionsRequest: () => {} });`)
   .replace(/import .* from '@\/composables\/useSessionContentLanguage';/, `const useSessionContentLanguage = () => ({ language: ref('English'), languageSaving: ref(false), setLanguage: async () => true });`)
   .replace(/import .* from '@\/composables\/useNotifications';/, `export const notifications = []; const useNotifications = () => ({ addNotification: (...args) => notifications.push(args) });`)
@@ -277,4 +283,51 @@ test('interrupted full replay never offers a fresh-action retry', async t => {
   await f.game.sendMessage(action, true, 'reply-1')
   assert.equal(f.game.messages.value.at(-1).id, 'reply-1')
   assert.equal(f.game.turnError.value, null)
+})
+
+for (const manual of [false, true]) {
+  test(`failed attempts keep one player message and one retry banner (manual=${manual})`, async t => {
+    const f = await fixture(t)
+    f.route(async () => new Response(frame('error', { detail: 'Please try again.' })))
+    await f.game.sendMessage(action)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (manual) await f.game.sendMessage(action)
+      else await f.game.retryLastAction()
+    }
+    assert.deepEqual(f.game.messages.value.map(m => m.content), ['Opening', action])
+    assert.equal(f.game.turnError.value.message, 'Please try again.')
+    assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 4)
+  })
+}
+
+test('retry removes only failed local output while retaining persisted messages', async t => {
+  const f = await fixture(t)
+  let attempt = 0
+  f.route(async (_url, options) => {
+    if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+    if (attempt++ === 0) return new Response(
+      frame('system', { id: 'saved-note', content: 'Saved note' }) +
+      frame('chunk', { content: 'Unfinished failed answer' }) +
+      frame('error', { detail: 'Please try again.' })
+    )
+    assert.ok(f.game.messages.value.some(m => m.id === 'saved-note'))
+    assert.ok(!f.game.messages.value.some(m => m.content === 'Unfinished failed answer'))
+    assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 1)
+    return completed()
+  })
+  await f.game.sendMessage(action)
+  assert.ok(f.game.messages.value.some(m => m.content === 'Unfinished failed answer'))
+  await f.game.retryLastAction()
+  assert.equal(f.game.turnError.value, null)
+  assert.deepEqual(f.game.messages.value.map(m => m.content), ['Opening', action, 'A complete answer.'])
+})
+
+test('a successful turn does not suppress an intentional repeated player message', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  f.route(async () => new Response(frame('error', { detail: 'Please try again.' })))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 2)
+  assert.ok(f.game.messages.value.some(m => m.id === 'reply-1'))
 })
