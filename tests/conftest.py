@@ -44,16 +44,28 @@ async def override_get_db():
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
-async def setup_test_db():
+async def setup_test_db(monkeypatch):
     """Creates all tables before each test and drops them afterwards."""
     original_session_local = core_database.AsyncSessionLocal
+    from backend.api.routes.adventures import regeneration
+    from backend.engine.memory_rag import chronicle, scheduling, summaries, worker
+    from backend.engine.npc_journal import worker as journal_worker
+
+    # Each test owns a new event loop; production uses one application loop.
+    scheduler = scheduling.IdleScheduler()
+    for module in (scheduling, summaries, chronicle, worker, journal_worker, regeneration):
+        monkeypatch.setattr(module, "scheduler", scheduler)
     core_database.AsyncSessionLocal = TestSessionLocal
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    core_database.AsyncSessionLocal = original_session_local
+    try:
+        yield
+    finally:
+        await journal_worker.shutdown()
+        await worker.shutdown()
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        core_database.AsyncSessionLocal = original_session_local
 
 
 @pytest.fixture(autouse=True)
