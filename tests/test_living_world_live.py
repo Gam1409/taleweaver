@@ -94,3 +94,66 @@ def test_live_clock_does_not_advance_from_reading_time():
     simulation = Simulation()
     assert not live.due(simulation)
     assert not live.active({"clients": {"old": {"active": True, "seen": 1}}})
+
+
+async def test_stop_before_first_heartbeat_survives_until_manual_resume(ready, monkeypatch):
+    calls = decisions.fake(monkeypatch)
+    await enable(ready)
+    assert "session-1" not in live.runtimes
+    await ready.post(BASE + "/stop")
+    await beat(ready)
+    assert not calls
+    assert (await ready.get(BASE)).json()["live_paused"]
+    response = await decisions.post(ready, "/cycle")
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
+    assert not (await ready.get(BASE)).json()["live_paused"]
+
+
+async def test_stale_decision_defers_and_next_heartbeat_can_process_new_work(ready, monkeypatch):
+    from sqlalchemy import select
+
+    from backend.core.llm_router import GameMasterLLM
+    from backend.engine.living_world.schema import Event
+    from backend.engine.living_world.state import load, save
+    from backend.models.session_state import SessionState
+
+    async def stale(*args, **kwargs):
+        async with TestSessionLocal() as db:
+            state = await db.scalar(
+                select(SessionState).where(SessionState.session_id == "session-1")
+            )
+            state.in_game_time = 11
+            await db.commit()
+        return decisions.Decision(action="WAIT", goal="Wait.", belief="Unsure.").model_dump_json()
+
+    monkeypatch.setattr(GameMasterLLM, "aexecute_simple_task", stale)
+    await enable(ready)
+    await beat(ready)
+    assert not (await ready.get(BASE)).json()["live_paused"]
+    async with TestSessionLocal() as db:
+        state = await db.scalar(select(SessionState).where(SessionState.session_id == "session-1"))
+        simulation = load(state)
+        assert simulation.events[0].status == "CANCELLED"
+        assert not simulation.private_notes
+        simulation.events.append(
+            Event(event_id="new-choice", due=12, kind="DECISION", actor="LILI")
+        )
+        save(state, simulation)
+        await db.commit()
+    calls = decisions.fake(monkeypatch)
+    live.runtimes["session-1"].next_check = 0
+    await beat(ready)
+    assert len(calls) == 1
+    assert not (await ready.get(BASE)).json()["live_paused"]
+
+
+async def test_stop_after_settings_change_keeps_pause_on_next_heartbeat(ready, monkeypatch):
+    calls = decisions.fake(monkeypatch)
+    await enable(ready)
+    await beat(ready)
+    await enable(ready, live_interval_seconds=120)
+    await ready.post(BASE + "/stop")
+    await beat(ready)
+    assert len(calls) == 1
+    assert (await ready.get(BASE)).json()["live_paused"]

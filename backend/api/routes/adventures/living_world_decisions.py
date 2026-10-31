@@ -83,7 +83,12 @@ async def cycle(
     await owned(db, game_id, user)
     if game_id in cycles.pending:
         raise HTTPException(409, "A Living World batch is already running.")
-    live.reset(game_id)
+    runtime = live.runtimes.get(game_id)
+    if runtime and runtime.task is asyncio.current_task():
+        if runtime.paused:
+            return public_status(read_simulation(await owned(db, game_id, user)))
+    else:
+        live.reset(game_id)
     stop = asyncio.Event()
     cycles.pending[game_id] = stop
     try:

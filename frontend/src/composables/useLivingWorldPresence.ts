@@ -6,31 +6,54 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
   const clientId = createPresenceId()
   let tracked: string | null = null
   let disposed = false
-  let pending = Promise.resolve()
+  let running = false
+  let requested = false
+  let generation = 0
   let timer: ReturnType<typeof setInterval> | undefined
 
+  function currentId(): string | null {
+    return !disposed && !document.hidden && ready() ? gameId() : null
+  }
+
+  async function update(version: number): Promise<void> {
+    const id = currentId()
+    if (tracked && tracked !== id) {
+      await livingWorldRequest(tracked, '/presence', 'POST', { client_id: clientId, active: false })
+      tracked = null
+    }
+    const current = () => generation === version && currentId() === id
+    if (!id || !current()) return
+    const first = tracked !== id
+    const status = await livingWorldRequest<LivingWorldStatus>(id)
+    if (!current()) return
+    if (!status.settings.living_world_enabled) { tracked = null; return }
+    await livingWorldRequest(id, '/presence', 'POST', { client_id: clientId, active: true })
+    tracked = id
+    if (!current()) return
+    if (first && status.settings.auto_catchup_on_resume && !status.settings.live_enabled) {
+      const latest = await livingWorldRequest<LivingWorldStatus>(id)
+      if (!current() || !latest.settings.living_world_enabled || !latest.settings.auto_catchup_on_resume || latest.settings.live_enabled) return
+      // Presence remains independent of the bounded model batch.
+      void livingWorldRequest(id, latest.settings.deliberation_enabled ? '/cycle' : '/resume', 'POST', { expected_revision: latest.revision })
+        .catch(cause => console.warn('Living World batch could not complete:', cause))
+    }
+  }
+
+  async function drain(): Promise<void> {
+    running = true
+    try {
+      while (requested) {
+        requested = false
+        try { await update(generation) }
+        catch (cause) { console.warn('Living World presence could not be updated:', cause) }
+      }
+    } finally { running = false }
+  }
+
   function enqueue(): void {
-    const id = !disposed && !document.hidden && ready() ? gameId() : null
-    pending = pending.then(async () => {
-      try {
-        if (tracked && tracked !== id) {
-          await livingWorldRequest(tracked, '/presence', 'POST', { client_id: clientId, active: false })
-          tracked = null
-        }
-        if (!id) return
-        const first = tracked !== id
-        const status = await livingWorldRequest<LivingWorldStatus>(id)
-        if (!status.settings.living_world_enabled) { tracked = null; return }
-        await livingWorldRequest(id, '/presence', 'POST', { client_id: clientId, active: true })
-        tracked = id
-        if (first && !disposed && gameId() === id && ready() && status.settings.auto_catchup_on_resume && !status.settings.live_enabled) {
-          const current = await livingWorldRequest<LivingWorldStatus>(id)
-          // Keep presence heartbeats flowing while the bounded model batch runs.
-          void livingWorldRequest(id, current.settings.deliberation_enabled ? '/cycle' : '/resume', 'POST', { expected_revision: current.revision })
-            .catch(cause => console.warn('Living World batch could not complete:', cause))
-        }
-      } catch (cause) { console.warn('Living World presence could not be updated:', cause) }
-    })
+    generation++
+    requested = true
+    if (!running) void drain()
   }
 
   function leaving(): void { disposed = true; enqueue() }

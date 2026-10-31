@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from backend.core.database import AsyncSessionLocal
 from backend.engine.living_world import cycles, deliberation, runner
+from backend.engine.living_world.conflicts import SimulationConflict
 from backend.engine.living_world.presence import PRESENCE_GRACE_SECONDS
 from backend.engine.living_world.schema import Command, Simulation
 from backend.engine.living_world.state import load, reconcile
@@ -78,10 +79,11 @@ def reset(game_id: str) -> None:
         runtime.next_check = 0
 
 
-def pause(game_id: str) -> None:
-    runtime = runtimes.get(game_id)
-    if runtime:
-        runtime.paused = True
+def pause(game_id: str, simulation: Simulation) -> None:
+    runtime = runtimes.setdefault(game_id, Runtime(signature(simulation)))
+    runtime.signature = signature(simulation)
+    runtime.interval = simulation.settings.live_interval_seconds
+    runtime.paused = True
 
 
 def notify(game_id: str, user_id: str, simulation: Simulation) -> None:
@@ -134,6 +136,8 @@ async def _tick(game_id: str, user_id: str, runtime: Runtime) -> None:
             logger.info("Living World automatic batch started: session=%s", game_id)
             await cycle(game_id, Command(expected_revision=simulation.revision), db, user)
             logger.info("Living World automatic batch completed: session=%s", game_id)
+    except SimulationConflict:
+        logger.info("Living World automatic batch deferred after state change: session=%s", game_id)
     except HTTPException as exc:
         # Conflicting turns are expected; all other failures need explicit recovery.
         from backend.engine.visual_novel.concurrency import BUSY_DETAIL

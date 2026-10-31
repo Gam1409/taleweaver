@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
+from backend.core.inference.player_errors import retryable
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -209,6 +210,11 @@ def _is_invalid_llm_payload_error(exc: Exception) -> bool:
 
 def _friendly_llm_error_message(exc: Exception) -> str | None:
     from backend.core.error_diagnostics import diagnose_provider_error
+    from backend.core.inference.player_errors import player_message
+
+    admission_error = player_message(exc)
+    if admission_error:
+        return admission_error
 
     lower_text = str(exc or "").lower()
 
@@ -1094,7 +1100,7 @@ class GameTurnManager:
                             _friendly_llm_error_message(exc)
                             or _friendly_llm_unexpected_error_message()
                         )
-                        yield f"event: error\ndata: {json.dumps({'detail': user_safe_error, 'retryable': True})}\n\n"
+                        yield f"event: error\ndata: {json.dumps({'detail': user_safe_error, 'retryable': retryable(exc)})}\n\n"
                 return
 
         blocked_message = await self._guard_non_visible_inspect_or_search(user_msg)
@@ -1157,7 +1163,7 @@ class GameTurnManager:
             if not user_safe_error:
                 logger.exception("[Turn %s] Turn pipeline aborted unexpectedly", self.game_id)
                 user_safe_error = _friendly_llm_unexpected_error_message()
-            yield f"event: error\ndata: {json.dumps({'detail': user_safe_error, 'retryable': True})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'detail': user_safe_error, 'retryable': retryable(exc)})}\n\n"
             return
 
         turn_end = time.perf_counter()

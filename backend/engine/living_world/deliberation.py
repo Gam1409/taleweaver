@@ -12,6 +12,7 @@ from backend.core.inference import admission
 from backend.core.inference.transport import target
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.living_world import concordia_adapter, rules, runner
+from backend.engine.living_world.conflicts import SimulationConflict
 from backend.engine.living_world.decision_context import context_for, fingerprint
 from backend.engine.living_world.decisions import INSTRUCTION, Decision, PrivateNotes
 from backend.engine.living_world.request_slot import decision_slot
@@ -30,6 +31,7 @@ class Prepared:
     max_tokens: int
     engine: str
     concurrent: bool = False
+    timeline: str = ""
 
 
 def require_enabled(simulation: Simulation, llm: GameMasterLLM) -> None:
@@ -80,6 +82,7 @@ async def prepare(
         simulation.settings.decision_max_tokens,
         simulation.settings.decision_engine,
         simulation.settings.allow_concurrent_requests,
+        simulation.timeline,
     )
     # Release even the read transaction before queue admission or remote inference.
     await db.rollback()
@@ -141,12 +144,19 @@ async def apply(
 ) -> None:
     event = next((item for item in simulation.events if item.event_id == prepared.event_id), None)
     if event is None:
-        raise HTTPException(409, "The decision timeline changed. The late result was discarded.")
-    context = await context_for(db, state, simulation, event)
+        raise SimulationConflict("The decision timeline changed. The late result was discarded.")
     check_stop(state.session_id)
-    if fingerprint(state, context) != prepared.fence:
-        raise HTTPException(
-            409, "The world changed during inference. The late result was discarded."
+    # Check the saved state before resolving actors: a foreground turn may have
+    # already moved or removed the NPC while its old decision was in flight.
+    state_changed = fingerprint(state, prepared.context) != prepared.fence
+    context = prepared.context if state_changed else await context_for(db, state, simulation, event)
+    if state_changed or fingerprint(state, context) != prepared.fence:
+        if simulation.timeline == prepared.timeline and event.status == "WAITING_FOR_LLM":
+            rules.cancel(event, "Decision superseded by a newer world state.")
+            save(state, simulation)
+            await db.commit()
+        raise SimulationConflict(
+            "The world changed during inference. The late result was discarded."
         )
     if decision.action == "MOVE" and decision.destination not in context["destinations"]:
         raise HTTPException(

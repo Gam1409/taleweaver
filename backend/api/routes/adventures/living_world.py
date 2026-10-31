@@ -16,6 +16,7 @@ from backend.engine.living_world import (
     presence,
     runner,
 )
+from backend.engine.living_world.conflicts import SimulationConflict
 from backend.engine.living_world.schema import (
     Command,
     Event,
@@ -54,7 +55,7 @@ def read_simulation(state: SessionState) -> Simulation:
 
 def check_revision(simulation: Simulation, expected: int) -> None:
     if simulation.revision != expected:
-        raise HTTPException(409, "Living World changed. Reload its status before retrying.")
+        raise SimulationConflict("Living World changed. Reload its status before retrying.")
 
 
 async def game_row(db: AsyncSession, game_id: str) -> GameSession:
@@ -152,8 +153,8 @@ async def resume(
 async def stop(
     game_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
-    await owned(db, game_id, user)
-    live.pause(game_id)
+    state = await owned(db, game_id, user)
+    live.pause(game_id, read_simulation(state))
     requests = [
         deliberation.pending.get(game_id),
         runner.running.get(game_id),
