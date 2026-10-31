@@ -43,13 +43,15 @@ def _record(document: MemoryDocument, available: int, *, core: bool = False) -> 
     room = min(650, available - overhead)
     if room < 40:
         return ""
-    fields["evidence"] = text[:room]
+    evidence = text[:room]
+    fields["evidence"] = evidence
     record = json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n"
     # JSON escaping consumes space too; never exceed the shared budget.
     if len(record) > available:
-        fields["evidence"] = fields["evidence"][: max(0, room - (len(record) - available))]
+        evidence = evidence[: max(0, room - (len(record) - available))]
+        fields["evidence"] = evidence
         record = json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n"
-    return record if fields["evidence"] and len(record) <= available else ""
+    return record if evidence and len(record) <= available else ""
 
 
 def project(

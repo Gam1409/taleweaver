@@ -1,7 +1,6 @@
 """Embedding-only HTTP clients, deliberately independent from completion routing."""
 
 import asyncio
-import ipaddress
 import math
 from typing import Any
 from urllib.parse import urlsplit
@@ -23,11 +22,13 @@ class EmbeddingError(ValueError):
 
 def validate_embedding_url(base_url: str) -> str:
     normalized = validate_provider_url(base_url).rstrip("/")
-    addresses = _resolve_host_ips(urlsplit(normalized).hostname)
+    hostname = urlsplit(normalized).hostname
+    if hostname is None:
+        raise EmbeddingError("Embedding URL must include a hostname.")
+    addresses = _resolve_host_ips(hostname)
     if not addresses:
         raise EmbeddingError("Could not resolve embedding endpoint hostname.")
-    for address in addresses:
-        ip = ipaddress.ip_address(address)
+    for ip in addresses:
         forbidden = ip.is_link_local or ip.is_multicast or ip.is_unspecified
         if (
             forbidden

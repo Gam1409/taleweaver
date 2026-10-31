@@ -280,6 +280,23 @@ async def test_timeout_dequeues_own_job(fake_comfy, workflow, monkeypatch, error
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("model", [None, ""])
+async def test_comfy_direct_generation_accepts_workflow_owned_model(
+    fake_comfy, comfy_options, tmp_path, monkeypatch, model
+):
+    monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
+    result = await MediaEngine.generate_image(
+        prompt="A portrait",
+        model=model,
+        api_key=None,
+        provider="comfyui",
+        provider_options=comfy_options,
+        target_dir=str(tmp_path),
+    )
+    assert result and result.startswith("/data/")
+
+
+@pytest.mark.asyncio
 async def test_comfy_needs_workflow_not_model_or_key(
     fake_comfy, comfy_options, tmp_path, monkeypatch
 ):

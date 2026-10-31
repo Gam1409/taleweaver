@@ -62,8 +62,8 @@ def schema(dimension: int) -> Any:
     )
 
 
-def row(scope: Scope, document: dict, vector: list[float]) -> dict:
-    result = {
+def row(scope: Scope, document: dict, vector: list[float]) -> dict[str, str | int | list[float]]:
+    result: dict[str, str | int | list[float]] = {
         name: str(document.get(name) or "")
         for name in [
             "id",

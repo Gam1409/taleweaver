@@ -29,6 +29,7 @@ from backend.models.session_state import SessionState
 MIN_NEW_EVENTS = 8
 MAX_EVENTS = 24
 MAX_INPUT_CHARS = 12000
+SummaryKey = tuple[str, str | None, str | None]
 
 
 @dataclass
@@ -76,7 +77,7 @@ async def lock_fence(
 
 
 def _job(
-    documents: list[MemoryDocument], key: tuple, existing: list[MemorySummary]
+    documents: list[MemoryDocument], key: SummaryKey, existing: list[MemorySummary]
 ) -> SummaryJob | None:
     sources = summary_sources(documents, *key)
     pending, continuing = pending_parts(sources, existing)
@@ -104,10 +105,10 @@ async def _select_job(db: Any, state: Any, user_id: str) -> SummaryJob | None:
             )
         )
     )
-    by_key: dict[tuple, list[MemorySummary]] = defaultdict(list)
+    by_key: dict[SummaryKey, list[MemorySummary]] = defaultdict(list)
     for row in existing:
         by_key[row.layer, row.npc_id, row.scene_id].append(row)
-    keys = {("story_summary", None, None)}
+    keys: set[SummaryKey] = {("story_summary", None, None)}
     keys.update(("npc_summary", doc.npc_id, None) for doc in documents if doc.npc_id)
     keys.update(("scene_summary", None, doc.scene_id) for doc in documents if doc.scene_id)
     ordered = sorted(

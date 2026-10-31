@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def generate_image(
     engine,
     prompt: str,
-    model: str,
+    model: str | None,
     api_key: Optional[str],
     provider: str = "openai",
     adventure_id: Optional[str] = None,

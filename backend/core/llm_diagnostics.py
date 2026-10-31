@@ -3,14 +3,17 @@
 import asyncio
 import math
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import aclosing
 from functools import wraps
 from inspect import signature
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 from uuid import UUID, uuid4
 
 from backend.core.diagnostic_fields import ENUMS
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 _EVENTS = {
     "adventure.generation.apply_manifest.complete",
@@ -91,7 +94,10 @@ def _purpose(fields: dict) -> dict:
 
 
 def retry(router: Any, attempt: int, delay: float = 0, error: BaseException | None = None) -> None:
-    fields = {"attempt": attempt, "delay_ms": delay * 1000}
+    fields: dict[str, float | str | BaseException] = {
+        "attempt": attempt,
+        "delay_ms": delay * 1000,
+    }
     provider = getattr(router, "provider", None)
     if isinstance(provider, str) and provider in _PROVIDERS:
         fields["provider"] = provider
@@ -107,7 +113,11 @@ def bridge_event(event: str, fields: dict) -> None:
     safe = {**_identifiers(fields), **_purpose(fields)}
     for key in _NUMBERS:
         value = fields.get(key)
-        if type(value) in (int, float) and abs(value) <= 10**15 and math.isfinite(value):
+        if (
+            (type(value) is int or type(value) is float)
+            and abs(value) <= 10**15
+            and math.isfinite(value)
+        ):
             safe[key] = value
     provider = fields.get("provider")
     if isinstance(provider, str) and provider in _PROVIDERS:
@@ -204,14 +214,18 @@ def sync_call(kind: str) -> Callable:
     return decorate
 
 
-def async_operation(kind: str) -> Callable:
+def async_operation(
+    kind: str,
+) -> Callable[[Callable[_P, Coroutine[Any, Any, _R]]], Callable[_P, Coroutine[Any, Any, _R]]]:
     """Observe embedding/image calls without copying their arguments into diagnostics."""
 
-    def decorate(method: Callable) -> Callable:
+    def decorate(
+        method: Callable[_P, Coroutine[Any, Any, _R]],
+    ) -> Callable[_P, Coroutine[Any, Any, _R]]:
         call_signature = signature(method)
 
         @wraps(method)
-        async def observed(*args: Any, **kwargs: Any) -> Any:
+        async def observed(*args: _P.args, **kwargs: _P.kwargs) -> _R:
             arguments = call_signature.bind(*args, **kwargs)
             arguments.apply_defaults()
             values = arguments.arguments

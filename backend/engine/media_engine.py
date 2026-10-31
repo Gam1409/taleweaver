@@ -493,7 +493,7 @@ class MediaEngine:
     @async_operation("image")
     async def generate_image(
         prompt: str,
-        model: str,
+        model: str | None,
         api_key: Optional[str],
         provider: str = "openai",
         adventure_id: Optional[str] = None,
