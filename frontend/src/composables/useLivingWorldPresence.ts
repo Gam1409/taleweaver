@@ -1,7 +1,7 @@
 import { onMounted, onBeforeUnmount, watch } from 'vue'
 import { createPresenceId, livingWorldRequest, type LivingWorldStatus } from '@/services/livingWorld'
 
-/** Presence is independent of inference and never advances the world by itself. */
+/** Heartbeats trigger optional server-side batches without waiting for inference. */
 export function useLivingWorldPresence(gameId: () => string, ready: () => boolean): void {
   const clientId = createPresenceId()
   let tracked: string | null = null
@@ -10,7 +10,7 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
   let timer: ReturnType<typeof setInterval> | undefined
 
   function enqueue(): void {
-    const id = !disposed && ready() ? gameId() : null
+    const id = !disposed && !document.hidden && ready() ? gameId() : null
     pending = pending.then(async () => {
       try {
         if (tracked && tracked !== id) {
@@ -23,7 +23,7 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
         if (!status.settings.living_world_enabled) { tracked = null; return }
         await livingWorldRequest(id, '/presence', 'POST', { client_id: clientId, active: true })
         tracked = id
-        if (first && !disposed && gameId() === id && ready() && status.settings.auto_catchup_on_resume) {
+        if (first && !disposed && gameId() === id && ready() && status.settings.auto_catchup_on_resume && !status.settings.live_enabled) {
           const current = await livingWorldRequest<LivingWorldStatus>(id)
           // Keep presence heartbeats flowing while the bounded model batch runs.
           void livingWorldRequest(id, current.settings.deliberation_enabled ? '/cycle' : '/resume', 'POST', { expected_revision: current.revision })
@@ -38,6 +38,7 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
   watch([gameId, ready], enqueue)
   onMounted(() => {
     enqueue()
+    document.addEventListener('visibilitychange', enqueue)
     window.addEventListener('pagehide', leaving)
     window.addEventListener('pageshow', returning)
     window.addEventListener('living-world-settings-changed', enqueue)
@@ -45,6 +46,7 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
   })
   onBeforeUnmount(() => {
     clearInterval(timer)
+    document.removeEventListener('visibilitychange', enqueue)
     window.removeEventListener('pagehide', leaving)
     window.removeEventListener('pageshow', returning)
     window.removeEventListener('living-world-settings-changed', enqueue)

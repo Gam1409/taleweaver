@@ -79,6 +79,7 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 * **Living World · Experimental:** Let NPCs follow small routines, move between connected locations, and speak to one another. Choose **VN → Living World** when creating or editing an adventure to configure Concordia defaults, or adjust each saved session separately.
 * **Pause or Catch Up:** Keep the world paused while you are away, or process a limited amount of activity when you return. You control the pace and the number of AI requests.
 * **Private Motivations:** Characters keep their own short goals, beliefs, and observations. Intentions do not become facts until an action succeeds, and private thoughts stay out of player-facing memories.
+* **Automatic NPC Activity:** Enable bounded background routines while playing, or private NPC choices at important conversation branches. Parallel model requests are optional and off by default.
 * **Choose the Engine:** Use TaleWeaver's built-in decisions or the optional **Concordia** integration. Both use your configured Utility model and the same world rules and request limits.
 * **Inspect & Recover:** Administrators can inspect the private simulation journal. Chronicles restore the world and its character memories together. See the [Living World guide](docs/living-world-usage.md) for setup and experimental limits.
 

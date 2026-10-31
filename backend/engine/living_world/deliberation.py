@@ -14,9 +14,9 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.living_world import concordia_adapter, rules, runner
 from backend.engine.living_world.decision_context import context_for, fingerprint
 from backend.engine.living_world.decisions import INSTRUCTION, Decision, PrivateNotes
+from backend.engine.living_world.request_slot import decision_slot
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.living_world.state import save
-from backend.engine.memory_rag.scheduling import scheduler
 from backend.models.session_state import SessionState
 
 pending: dict[str, asyncio.Event] = {}
@@ -29,6 +29,7 @@ class Prepared:
     context: dict[str, Any]
     max_tokens: int
     engine: str
+    concurrent: bool = False
 
 
 def require_enabled(simulation: Simulation, llm: GameMasterLLM) -> None:
@@ -78,6 +79,7 @@ async def prepare(
         context,
         simulation.settings.decision_max_tokens,
         simulation.settings.decision_engine,
+        simulation.settings.allow_concurrent_requests,
     )
     # Release even the read transaction before queue admission or remote inference.
     await db.rollback()
@@ -87,7 +89,7 @@ async def prepare(
 async def infer(llm: GameMasterLLM, prepared: Prepared, game_id: str) -> Decision:
     llm.max_tokens = min(llm.max_tokens, prepared.max_tokens)
     llm.enable_thinking = False
-    async with scheduler.background():
+    async with decision_slot(prepared.concurrent):
         result = await llm.aexecute_simple_task(
             INSTRUCTION,
             json.dumps(prepared.context, ensure_ascii=False),

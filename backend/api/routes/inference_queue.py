@@ -15,7 +15,7 @@ router = APIRouter(prefix="/inference-queue", tags=["Inference queue"])
 
 class AcknowledgeStopped(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    endpoint_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    endpoint_id: str = Field(pattern=r"^[a-f0-9]{64}(?::concurrent)?$")
     token: str = Field(min_length=1, max_length=36)
     confirmation: Literal["REMOTE_GENERATION_STOPPED"]
 

@@ -18,6 +18,10 @@ class Settings(BaseModel):
     max_events: int = Field(default=16, ge=0, le=128)
     max_wall_seconds: float = Field(default=2, ge=0, le=10)
     auto_catchup_on_resume: bool = False
+    dialogue_choices_enabled: bool = False
+    live_enabled: bool = False
+    live_interval_seconds: int = Field(default=60, ge=20, le=600)
+    allow_concurrent_requests: bool = False
     deliberation_enabled: bool = False
     decision_engine: Literal["native", "concordia"] = "native"
     auto_schedule: bool = False

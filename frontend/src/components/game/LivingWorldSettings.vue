@@ -27,6 +27,11 @@ async function save(): Promise<boolean> {
   busy.value = true
   try {
     const available = status.value?.concordia_available
+    const current = await livingWorldRequest<LivingWorldStatus>(props.sessionId)
+    if (JSON.stringify(current.settings) !== JSON.stringify(status.value.settings)) {
+      throw new Error('Settings changed elsewhere. Refresh status before saving.')
+    }
+    status.value.revision = current.revision
     status.value = await livingWorldRequest<LivingWorldStatus>(props.sessionId, '', 'PATCH', {
       settings: draft.value, expected_revision: status.value.revision,
     })
@@ -58,7 +63,7 @@ async function resume(): Promise<void> {
 }
 
 async function stop(): Promise<void> {
-  try { await livingWorldRequest(props.sessionId, '/stop', 'POST') }
+  try { await livingWorldRequest(props.sessionId, '/stop', 'POST'); await load() }
   catch (cause) { error.value = cause instanceof Error ? cause.message : 'Could not stop simulation.' }
 }
 
@@ -67,8 +72,9 @@ defineExpose({ save })
 </script>
 
 <template>
-  <section class="space-y-3 rounded-xl border border-teal-500/30 p-4" aria-labelledby="living-world-title">
-    <h4 id="living-world-title" class="font-bold text-teal-300">Living World · Experimental</h4>
+  <details class="rounded-xl border border-teal-500/30 p-4">
+    <summary class="cursor-pointer font-bold text-teal-300">Living World · Experimental</summary>
+    <div class="mt-3 space-y-3">
     <p class="text-xs text-slate-400">A persistent world with bounded NPC routines, private memories and optional Concordia decisions. Disabled until you opt in.</p>
     <template v-if="draft && status">
       <label class="flex items-center gap-2 text-sm"><input v-model="draft.living_world_enabled" type="checkbox" :disabled="busy"> Enable Living World for this session</label>
@@ -87,6 +93,8 @@ defineExpose({ save })
           <label>Seconds per run<input v-model.number="draft.max_wall_seconds" type="number" min="0" max="10" step="0.5" :disabled="busy" class="mt-1 w-full rounded bg-slate-800 p-2"></label>
         </div>
         <label class="flex items-center gap-2"><input v-model="draft.auto_catchup_on_resume" type="checkbox" :disabled="busy"> Run one bounded batch when returning</label>
+        <p v-if="status.live_paused" role="status" class="text-xs text-amber-300">Automatic processing paused. {{ status.live_error }} Use Continue catch-up to retry.</p>
+        <p v-else-if="status.settings.live_enabled" class="text-xs text-teal-300">{{ status.live_running ? 'Automatic batch running…' : 'Automatic processing enabled while playing.' }}</p>
         <p role="status">{{ busy ? 'Working…' : status.status }} · Game minute {{ status.cursor }} / {{ status.target }}</p>
         <p class="text-xs text-slate-400">{{ status.pending_events }} pending events · {{ status.last_run_events }} processed last run · {{ status.llm_calls }} decision attempts</p>
         <p v-if="status.status === 'WAITING_FOR_LLM'" class="text-xs text-amber-300">A decision is waiting. Continue with private decisions enabled, or disable the experiment to resume normal play. No outcome has been invented.</p>
@@ -102,5 +110,6 @@ defineExpose({ save })
     </template>
     <p v-if="error" role="alert" class="text-sm text-red-300">{{ error }}</p>
     <button type="button" :disabled="busy" class="text-xs underline" @click="load">Refresh status</button>
-  </section>
+    </div>
+  </details>
 </template>

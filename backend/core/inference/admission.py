@@ -26,7 +26,7 @@ def enabled() -> bool:
 
 
 def ready(ticket: Ticket) -> bool:
-    if not ticket.background:
+    if not ticket.background or ticket.concurrent:
         return True
     from backend.engine.memory_rag.scheduling import scheduler
 

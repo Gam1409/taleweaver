@@ -19,9 +19,10 @@ sequential engine. Neither runs a perpetual agent swarm or a second RAG database
    returning** preserves the unprocessed absence backlog.
 4. Enable **Allow bounded NPC decisions**. Enable **Schedule recurring NPC decisions**
    to generate small routines automatically; otherwise only explicit API events run.
-5. Choose budgets, save, and press **Continue catch-up**. The optional return setting
-   runs one bounded batch on reconnect, not an endless background loop. Presence
-   heartbeats continue while inference waits.
+5. Choose budgets and save. Enable **Run automatically while playing** to start
+   bounded background batches from presence heartbeats; **Continue catch-up** remains
+   available for manual processing. The optional return setting applies when automatic
+   processing is off. Heartbeats continue while inference waits.
 
 ### Adventure defaults for VN
 
@@ -65,6 +66,56 @@ Concordia executes one real `Sequential.run_loop(..., max_steps=1)` per decision
 Its NPC entity receives a local observation, acts through TaleWeaver's async model
 router, and submits a proposal to the deterministic game master. The GM does not
 make extra LLM calls. SQL validation and timeline fencing remain the final authority.
+
+## Automatic play and concurrent inference
+
+**Run automatically while playing** checks for due work while the session tab is
+visible, at the configured interval (20–600 seconds, default 60). Heartbeats arrive
+about every 20 seconds, so this is an approximate minimum interval. Only one batch
+per session runs at a time. Closing/hiding the tab stops new batches; an already
+started request can finish. Other open tabs can keep the session active.
+
+The game clock follows narrated events. Reading or typing for a long time does not
+advance the fictional scene. Offline Catch up is still controlled separately.
+NPC actions and private notes are consumed by subsequent narration; the simulation
+does not insert extra chat replies. Automatic mode lets foreground play continue
+without requiring manual backlog processing; stale model replies are discarded.
+
+By default, decisions wait for a quiet inference opportunity. **Allow concurrent
+LLM requests** permits one Living World request alongside the normal endpoint
+request (two maximum across those lanes). Enable it only if the model server supports
+parallel requests and has sufficient resources. It does not make the server parallel
+by itself. Both slots retain durable timeout/crash fences; an uncertain request
+blocks new admission until administrator recovery. SQL writes remain serialized.
+
+**Stop after current event** pauses automatic scheduling in this backend process.
+Failures also pause it rather than repeatedly consuming attempts. See the status
+and error in session settings; **Continue catch-up** retries and resumes automatic
+processing. Saving settings also clears this runtime pause. Restarting the backend
+clears runtime pauses, but preserves settings, events and spent request budgets.
+
+## Choices during player conversations
+
+**NPC choices in important conversations** optionally adds one Utility-model request
+before narration at recognized conversational branches. The initial trigger supports
+English/Russian requests, offers, promises, trust questions and choices. It requires
+one unambiguous present NPC (named in the message, or the sole present NPC); ordinary
+chatter and ambiguous group conversations are skipped. This conservative trigger
+is not a semantic classifier for every language or possible phrasing.
+
+The NPC receives its character description, its own private notes, at most three
+committed observations and the current player request as an unverified statement.
+The chosen stance is accept, refuse, negotiate, evade, ask for clarification or defer,
+with a short private motive and intention. Concordia uses one sequential step when
+selected; the native engine can also produce the same structured choice.
+
+The result is turn-local guidance for narration, not an executed action or a RAG fact.
+It cannot force the player or override mechanics. The extra request uses the Utility
+timeout and shared timeline allowance, adds latency, and runs before narration even
+when concurrent background requests are allowed. Invalid output falls back to normal
+narration without inventing a choice. Existing saved settings keep these new options
+off until enabled; newly configured adventure defaults enable automatic processing
+and conversation choices, while concurrent requests remain off.
 
 ## What NPCs can do
 

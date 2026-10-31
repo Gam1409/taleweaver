@@ -2,6 +2,8 @@ import type { LivingWorldPreferences } from '@/services/livingWorld'
 
 export const concordiaDefaults = (): LivingWorldPreferences => ({
   living_world_enabled: false, deliberation_enabled: false, decision_engine: 'concordia',
+  dialogue_choices_enabled: true,
+  live_enabled: true, live_interval_seconds: 60, allow_concurrent_requests: false,
   mode: 'PAUSE', offline_time_scale: 1, max_catchup_game_hours: 6, max_events: 16,
   max_wall_seconds: 2, auto_catchup_on_resume: false, auto_schedule: true,
   schedule_interval_minutes: 60, max_npcs: 4, max_decisions_per_run: 1,

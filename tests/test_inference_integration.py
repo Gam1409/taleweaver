@@ -143,13 +143,22 @@ async def test_closing_filtered_stream_releases_all_layers_immediately(reservati
     assert reservations.status()[0]["status"] == "UNCERTAIN"
 
 
-async def test_admin_recovery_requires_confirmation_and_current_token(auth_client, reservations):
-    ticket = reservations.enqueue(KEY)
+@pytest.mark.parametrize("parallel", [False, True])
+async def test_admin_recovery_requires_confirmation_and_current_token(
+    auth_client, reservations, parallel
+):
+    from backend.core.inference.registry import concurrent_call
+
+    context_token = concurrent_call.set(parallel)
+    try:
+        ticket = reservations.enqueue(KEY)
+    finally:
+        concurrent_call.reset(context_token)
     assert reservations.try_acquire(ticket)
     path = "/api/inference-queue"
     status = await auth_client.get(path)
     assert status.status_code == 200
-    payload = {"endpoint_id": KEY, "token": ticket.token}
+    payload = {"endpoint_id": ticket.record_key, "token": ticket.token}
     assert (await auth_client.post(path + "/acknowledge-stopped", json=payload)).status_code == 422
     payload["confirmation"] = "REMOTE_GENERATION_STOPPED"
     assert (await auth_client.post(path + "/acknowledge-stopped", json=payload)).status_code == 409

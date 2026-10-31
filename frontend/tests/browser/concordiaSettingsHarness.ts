@@ -1,5 +1,6 @@
 import { createApp, defineComponent, h, ref } from 'vue'
 import AdventureGameSettings from '../../src/components/create-adventure/AdventureGameSettings.vue'
+import LivingWorldSettings from '../../src/components/game/LivingWorldSettings.vue'
 import LivingWorldAdventureButton from '../../src/components/living-world/LivingWorldAdventureButton.vue'
 import '../../src/assets/main.css'
 const Harness = defineComponent({
@@ -10,6 +11,7 @@ const Harness = defineComponent({
       h('div', { class: 'mx-auto max-w-3xl space-y-6' }, [
         h(AdventureGameSettings, { modelValue: form.value, 'onUpdate:modelValue': value => { form.value = value } }),
         h('h2', 'Editor preview'),
+        h(LivingWorldSettings, { sessionId: 'test-session' }),
         form.value.rule_enforcement_mode === 'vn' ? h(LivingWorldAdventureButton, {
           existing: true, modelValue: form.value.living_world_settings,
           'onUpdate:modelValue': value => { form.value.living_world_settings = value },

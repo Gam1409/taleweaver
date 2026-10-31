@@ -9,6 +9,12 @@ defineProps<{ busy: boolean; concordiaAvailable: boolean }>()
     <legend class="text-teal-300">Private NPC decisions · Experimental</legend>
     <label class="flex gap-2"><input v-model="draft.deliberation_enabled" type="checkbox"> Allow bounded NPC decisions</label>
     <p class="text-xs text-slate-400">Uses the Utility model during idle opportunities. Requires shared inference serialization and an Ollama or OpenAI-compatible endpoint. Plans and beliefs remain private; only validated actions change the world.</p>
+    <label class="flex gap-2"><input v-model="draft.live_enabled" type="checkbox"> Run automatically while playing</label>
+    <label class="block">Automatic batch interval (seconds)<input v-model.number="draft.live_interval_seconds" type="number" min="20" max="600" class="ml-2 w-24 rounded bg-slate-800 p-2"></label>
+    <label class="flex gap-2"><input v-model="draft.allow_concurrent_requests" type="checkbox"> Allow concurrent LLM requests</label>
+    <p class="text-xs text-slate-400">Concurrent mode allows one Living World request alongside normal inference on the same endpoint (two total). Enable only if your server supports parallel requests. Changes to the same world still apply one at a time.</p>
+    <label class="flex gap-2"><input v-model="draft.dialogue_choices_enabled" type="checkbox"> NPC choices in important conversations</label>
+    <p class="text-xs text-slate-400">At most one extra Utility request before narration for an unambiguous NPC at a recognized English/Russian conversational branch. Shares the timeline allowance; intentions are never recorded as completed events.</p>
     <template v-if="draft.deliberation_enabled">
       <label class="block">Decision engine
         <select v-model="draft.decision_engine" class="mt-1 w-full rounded bg-slate-800 p-2">
@@ -25,7 +31,7 @@ defineProps<{ busy: boolean; concordiaAvailable: boolean }>()
         <label>Request budget for this timeline<input v-model.number="draft.max_deliberations" type="number" min="0" max="128" class="mt-1 w-full rounded bg-slate-800 p-2"></label>
         <label>Output tokens per decision<input v-model.number="draft.decision_max_tokens" type="number" min="128" max="1024" class="mt-1 w-full rounded bg-slate-800 p-2"></label>
       </div>
-      <p class="text-xs text-slate-400">One batch runs when requested or once when returning if enabled above. Failed attempts also consume the budget. Stop discards a pending result; remote inference may still need administrator recovery.</p>
+      <p class="text-xs text-slate-400">Automatic mode runs bounded batches while the session is open. Game time follows narration. Without it, batches run manually or on return. Failed attempts also consume the budget. Stop discards a pending result; remote inference may still need administrator recovery.</p>
     </template>
   </fieldset>
 </template>

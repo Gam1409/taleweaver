@@ -8,9 +8,11 @@ import threading
 from collections.abc import Callable, Coroutine
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import Any, Generic, TypeVar
 
-from backend.engine.living_world.decisions import Decision
+from pydantic import BaseModel
+
+Proposal = TypeVar("Proposal", bound=BaseModel)
 
 
 def available() -> bool:
@@ -20,17 +22,17 @@ def available() -> bool:
         return False
 
 
-class Bridge:
+class Bridge(Generic[Proposal]):
     """One remote action maximum; cancellation cannot start another request."""
 
-    def __init__(self, callback: Callable[[], Coroutine[Any, Any, Decision]]) -> None:
+    def __init__(self, callback: Callable[[], Coroutine[Any, Any, Proposal]]) -> None:
         self.loop = asyncio.get_running_loop()
         self.callback = callback
         self.lock = threading.Lock()
         self.closed = False
-        self.future: concurrent.futures.Future[Decision] | None = None
+        self.future: concurrent.futures.Future[Proposal] | None = None
 
-    def act(self) -> Decision:
+    def act(self) -> Proposal:
         with self.lock:
             if self.closed or self.future is not None:
                 raise RuntimeError("Concordia exceeded the single-action boundary.")
@@ -45,12 +47,12 @@ class Bridge:
                 self.future.cancel()
 
 
-class Actor:
-    def __init__(self, name: str, bridge: Bridge) -> None:
+class Actor(Generic[Proposal]):
+    def __init__(self, name: str, bridge: Bridge[Proposal]) -> None:
         self.name = name
         self.bridge = bridge
         self.observation = ""
-        self.result: Decision | None = None
+        self.result: Proposal | None = None
 
     def observe(self, observation: str) -> None:
         self.observation = observation
@@ -64,12 +66,12 @@ class Actor:
         return result
 
 
-class GameMaster:
+class GameMaster(Generic[Proposal]):
     """Concordia orchestration is deterministic; SQL remains the final authority."""
 
     name = "TaleWeaver"
 
-    def __init__(self, context: dict[str, Any], actor: Actor) -> None:
+    def __init__(self, context: dict[str, Any], actor: Actor[Proposal]) -> None:
         self.context = context
         self.actor = actor
         self.resolved = False
@@ -94,13 +96,16 @@ class GameMaster:
         if kind != "resolve" or self.actor.result is None:
             raise ValueError("Unsupported Concordia game-master action.")
         decision = self.actor.result
-        if decision.action == "MOVE" and decision.destination not in self.context["destinations"]:
+        if (
+            getattr(decision, "action", None) == "MOVE"
+            and getattr(decision, "destination", "") not in self.context["destinations"]
+        ):
             raise ValueError("Concordia action selected an unavailable destination.")
         self.resolved = True
         return decision.model_dump_json()
 
 
-def _run(context: dict[str, Any], bridge: Bridge) -> Decision:
+def _run(context: dict[str, Any], bridge: Bridge[Proposal]) -> Proposal:
     sequential = import_module("concordia.environment.engines.sequential").Sequential
 
     actor = Actor(context["actor"]["id"], bridge)
@@ -112,8 +117,8 @@ def _run(context: dict[str, Any], bridge: Bridge) -> Decision:
 
 
 async def decide(
-    context: dict[str, Any], callback: Callable[[], Coroutine[Any, Any, Decision]]
-) -> Decision:
+    context: dict[str, Any], callback: Callable[[], Coroutine[Any, Any, Proposal]]
+) -> Proposal:
     if not available():
         raise ValueError(
             "Install the concordia extra on Python 3.12 or 3.13 (gdm-concordia 2.4.0)."

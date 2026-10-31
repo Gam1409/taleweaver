@@ -7,6 +7,10 @@ export interface LivingWorldPreferences {
   max_catchup_game_hours: number
   max_events: number
   max_wall_seconds: number
+  dialogue_choices_enabled?: boolean
+  live_enabled?: boolean
+  live_interval_seconds?: number
+  allow_concurrent_requests?: boolean
   auto_catchup_on_resume: boolean
   deliberation_enabled: boolean
   decision_engine: 'native' | 'concordia'
@@ -29,6 +33,9 @@ export interface LivingWorldStatus {
   llm_calls: number
   concordia_available?: boolean
   decision_running?: boolean
+  live_running?: boolean
+  live_paused?: boolean
+  live_error?: string
   recap: string[]
 }
 

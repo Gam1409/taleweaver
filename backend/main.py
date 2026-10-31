@@ -118,6 +118,9 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        from backend.engine.living_world.live import shutdown as stop_living_world
+
+        await stop_living_world()
         from backend.engine.npc_journal.worker import shutdown as stop_npc_journal
 
         await stop_npc_journal()

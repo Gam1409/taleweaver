@@ -18,6 +18,8 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
+concurrent_call: ContextVar[bool] = ContextVar("inference_concurrent", default=False)
+
 background_call: ContextVar[bool] = ContextVar("inference_background", default=False)
 
 
@@ -46,6 +48,11 @@ class Ticket:
     key: str
     token: str
     background: bool
+    concurrent: bool = False
+
+    @property
+    def record_key(self) -> str:
+        return self.key + (":concurrent" if self.concurrent else "")
 
 
 class Registry:
@@ -87,7 +94,7 @@ class Registry:
         with self.lock:
             if len(self.waiters) >= 256:
                 raise InferenceQueueError("Inference queue is full; try again later.")
-            ticket = Ticket(key, str(uuid4()), background_call.get())
+            ticket = Ticket(key, str(uuid4()), background_call.get(), concurrent_call.get())
             self.waiters.append(ticket)
             return ticket
 
@@ -99,8 +106,9 @@ class Registry:
     def try_acquire(self, ticket: Ticket, *, background_ready: bool = True) -> bool:
         with self.lock:
             records = self._load()
-            current = records.get(ticket.key)
-            if current and current["token"] not in self.active:
+            current = records.get(ticket.record_key)
+            siblings = [records.get(ticket.key), records.get(ticket.key + ":concurrent")]
+            if any(row and row["token"] not in self.active for row in siblings):
                 raise InferenceUncertainError(
                     "The AI server may still be processing a previous request. "
                     "Ask the administrator to check Inference queue before retrying."
@@ -108,14 +116,16 @@ class Registry:
             if current or (ticket.background and not background_ready):
                 return False
             eligible = sorted(
-                (item for item in self.waiters if item.key == ticket.key),
+                (item for item in self.waiters if item.record_key == ticket.record_key),
                 key=lambda item: item.background,
             )
             if not eligible or eligible[0] != ticket:
                 return False
             if len(records) >= 256:
                 raise InferenceQueueError("Too many unresolved inference servers.")
-            self._write({**records, ticket.key: {"token": ticket.token, "started": time.time()}})
+            self._write(
+                {**records, ticket.record_key: {"token": ticket.token, "started": time.time()}}
+            )
             self.active.add(ticket.token)
             logger.info("Inference admitted: endpoint=%s request=%s", ticket.key, ticket.token)
             self.waiters.remove(ticket)
@@ -124,7 +134,7 @@ class Registry:
     def finish(self, ticket: Ticket, *, certain: bool) -> None:
         with self.lock:
             records = self._load()
-            current = records.get(ticket.key)
+            current = records.get(ticket.record_key)
             self.active.discard(ticket.token)
             logger.info(
                 "Inference released: endpoint=%s request=%s certain=%s",
@@ -133,7 +143,7 @@ class Registry:
                 certain,
             )
             if certain and current and current["token"] == ticket.token:
-                self._write({key: row for key, row in records.items() if key != ticket.key})
+                self._write({key: row for key, row in records.items() if key != ticket.record_key})
 
     def status(self) -> list[dict]:
         with self.lock:

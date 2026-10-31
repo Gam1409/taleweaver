@@ -76,13 +76,14 @@ async def cycle(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    from backend.engine.living_world import cycles
+    from backend.engine.living_world import cycles, live
 
     if user in db:
         db.expunge(user)
     await owned(db, game_id, user)
     if game_id in cycles.pending:
         raise HTTPException(409, "A Living World batch is already running.")
+    live.reset(game_id)
     stop = asyncio.Event()
     cycles.pending[game_id] = stop
     try:

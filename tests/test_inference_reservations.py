@@ -276,3 +276,43 @@ def test_journal_contains_no_endpoint_credentials_or_content(reservations):
     assert "private.example" not in stored
     assert set(json.loads(stored)[ticket.key]) == {"token", "started"}
     reservations.finish(ticket, certain=True)
+
+
+def test_parallel_opt_in_allows_two_slots_and_fences_both(reservations):
+    from backend.core.inference.registry import concurrent_call
+
+    normal = reservations.enqueue(KEY)
+    assert reservations.try_acquire(normal)
+    token = concurrent_call.set(True)
+    try:
+        parallel = reservations.enqueue(KEY)
+        extra = reservations.enqueue(KEY)
+    finally:
+        concurrent_call.reset(token)
+    assert reservations.try_acquire(parallel)
+    assert not reservations.try_acquire(extra)
+    reservations.finish(parallel, certain=False)
+    with pytest.raises(InferenceUncertainError):
+        reservations.try_acquire(extra)
+    reservations.finish(normal, certain=True)
+    following = reservations.enqueue(KEY)
+    with pytest.raises(InferenceUncertainError):
+        reservations.try_acquire(following)
+    reservations.acknowledge_stopped(parallel.record_key, parallel.token)
+    assert reservations.try_acquire(following)
+    reservations.finish(following, certain=True)
+    assert reservations.try_acquire(extra)
+    reservations.finish(extra, certain=True)
+    assert reservations.status() == []
+
+
+async def test_concurrent_decision_can_enter_during_foreground(reservations):
+    from backend.engine.living_world.request_slot import decision_slot
+    from backend.engine.memory_rag.scheduling import scheduler
+
+    async with scheduler.foreground(), admission.reserve(KEY, 1) as foreground:
+        async with decision_slot(True), admission.reserve(KEY, 1) as parallel:
+            assert len(reservations.active) == 2
+            parallel.certain = True
+        foreground.certain = True
+    assert not reservations.status()

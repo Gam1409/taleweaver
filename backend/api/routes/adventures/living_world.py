@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.living_world import concordia_adapter, cycles, deliberation, presence, runner
+from backend.engine.living_world import (
+    concordia_adapter,
+    cycles,
+    deliberation,
+    live,
+    presence,
+    runner,
+)
 from backend.engine.living_world.schema import (
     Command,
     Event,
@@ -67,6 +74,7 @@ async def status(
     if simulation.settings.living_world_enabled:
         reconcile(simulation, int(state.in_game_time or 0), game.living_world_presence)
     result = public_status(simulation)
+    result.update(live.status(game_id))
     result["concordia_available"] = concordia_adapter.available()
     result["decision_running"] = game_id in deliberation.pending or game_id in cycles.pending
     if result["status"] == "RUNNING" and game_id not in runner.running:
@@ -94,6 +102,7 @@ async def configure(
     ):
         game.living_world_presence = None
         simulation.offline_total_seen = 0
+    live.reset(game_id)
     simulation.settings = payload.settings
     if not simulation.settings.living_world_enabled or simulation.target == simulation.cursor:
         simulation.status = "PAUSED"
@@ -110,8 +119,12 @@ async def heartbeat(
     user: User = Depends(get_current_user),
 ) -> dict:
     state = await owned(db, game_id, user)
-    if read_simulation(state).settings.living_world_enabled:
-        await presence.record(db, game_id, user.id, payload.client_id, payload.active)
+    simulation = read_simulation(state)
+    if simulation.settings.living_world_enabled:
+        user_id = user.id
+        await presence.record(db, game_id, user_id, payload.client_id, payload.active)
+        if payload.active:
+            live.notify(game_id, user_id, simulation)
     return {"ok": True}
 
 
@@ -140,6 +153,7 @@ async def stop(
     game_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await owned(db, game_id, user)
+    live.pause(game_id)
     requests = [
         deliberation.pending.get(game_id),
         runner.running.get(game_id),

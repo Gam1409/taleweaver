@@ -28,8 +28,10 @@ async def check(db: AsyncSession, session_id: str, user_id: str) -> None:
         event.status in {"PLANNED", "WAITING_FOR_LLM"} and event.due <= simulation.target
         for event in simulation.events
     )
-    if simulation.settings.mode == "CATCH_UP" and (
-        simulation.target > simulation.cursor or due_events
+    if (
+        not simulation.settings.live_enabled
+        and simulation.settings.mode == "CATCH_UP"
+        and (simulation.target > simulation.cursor or due_events)
     ):
         save(state, simulation)
         await db.commit()

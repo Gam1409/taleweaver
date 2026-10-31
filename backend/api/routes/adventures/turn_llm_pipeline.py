@@ -21,6 +21,7 @@ from backend.api.routes.adventures.turn_context_helpers import (
 from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
+from backend.engine.living_world.conversation import prepare_choice
 from backend.engine.living_world.narration import private_context
 from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
@@ -357,6 +358,7 @@ class TurnLlmContextBuilder:
         mechanics_state_block, narration_state_block = self._build_state_blocks(
             world, visible, hidden, global_unlock_rules_prompt_block
         )
+        narration_state_block += await prepare_choice(self.manager, user_msg, visible)
         narration_static_prompt = static_prompt
         if language:
             logger.info(
