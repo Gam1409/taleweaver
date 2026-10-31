@@ -9,7 +9,7 @@ import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
-import { createFailedTurnDrafts } from '@/services/failedTurnDrafts'
+import { createFailedTurnDrafts, savedActionIndex } from '@/services/failedTurnDrafts'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -534,7 +534,11 @@ export function useGameSocket(): UseGameSocket {
     messages.value = draft.messages
     const beforeAttempt = new Set(messages.value)
     snapshotRevision += 1
-    const knownMessageIds = new Set(messages.value.map(message => message.id).filter(Boolean))
+    const knownMessageIds = new Set(messages.value.map(message => message.id).filter((id): id is string => !!id))
+    const lastSavedMessage = [...messages.value].reverse().find(message => message.id)
+    const reusableInputId = lastSavedMessage?.role === 'user' && lastSavedMessage.content.trim() === normalizedContent
+      ? lastSavedMessage.id : undefined
+
     const silentCommands = ['/take_direct', '/rule-pass', '/equip', '/unequip', '/consume', '/shuffle', '/suggest', '/suggestions', '/traverse_exit']
     const isSilent = silentCommands.some(cmd => normalizedContent.toLowerCase().startsWith(cmd))
     // Command handlers may intentionally acknowledge without storing a chat message.
@@ -557,6 +561,7 @@ export function useGameSocket(): UseGameSocket {
       statusText.value = 'Considering...'
     }
     let receivedFinalEvent = false
+    let savedUserMessageId: string | undefined
     let receivedErrorEvent = false
     const controller = new AbortController()
     activeChatController = controller
@@ -592,8 +597,7 @@ export function useGameSocket(): UseGameSocket {
       }
       if (!ownsRequest()) return
       const history: ChatMessage[] = Array.isArray(snapshot?.messages) ? snapshot.messages : []
-      const actionIndex = history.findIndex(message => message.role === 'user' &&
-        message.content.trim() === normalizedContent && message.id && !knownMessageIds.has(message.id))
+      const actionIndex = savedActionIndex(history, normalizedContent, knownMessageIds, reusableInputId)
       const freshAssistant = (message: ChatMessage) => message.role === 'assistant' &&
         message.id && !knownMessageIds.has(message.id)
       const confirmed = normalizedContent ? actionIndex >= 0 && history.slice(actionIndex + 1).some(freshAssistant) :
@@ -727,6 +731,7 @@ export function useGameSocket(): UseGameSocket {
             }
             lastMsg.content += data.content
           } else if (event === 'final') {
+            savedUserMessageId = typeof data.saved_user_message_id === 'string' ? data.saved_user_message_id : undefined
             receivedFinalEvent = true
             acknowledgeCorrection(gameId, correction, data.narration_correction_applied)
             if (data.narration_incomplete) {
@@ -763,8 +768,9 @@ export function useGameSocket(): UseGameSocket {
         const snapshot = await fetchSessionSnapshot(gameId, controller.signal)
         if (!ownsRequest()) return
         const confirmedAction = !requiresActionReceipt || !snapshot ||
-          snapshot.messages?.some((message: ChatMessage) => message.role === 'user' &&
-            message.content === normalizedContent && message.id && !knownMessageIds.has(message.id))
+          (savedUserMessageId
+            ? snapshot.messages?.some((message: ChatMessage) => message.role === 'user' && message.id === savedUserMessageId)
+            : savedActionIndex(snapshot.messages || [], normalizedContent, knownMessageIds, reusableInputId) >= 0)
         if (!confirmedAction) {
           reportTurnError('The server did not confirm saving your action. Your message was kept here; check the latest history before retrying.')
         } else {

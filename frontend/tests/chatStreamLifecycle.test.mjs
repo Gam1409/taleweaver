@@ -331,3 +331,49 @@ test('a successful turn does not suppress an intentional repeated player message
   assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 2)
   assert.ok(f.game.messages.value.some(m => m.id === 'reply-1'))
 })
+
+for (const final of [true, false]) {
+  test(`retry accepts reused durable input only with a fresh saved reply (final=${final})`, async t => {
+    const f = await fixture(t)
+    f.game.messages.value = [...initial, { id: 'user-1', role: 'user', content: action }]
+    f.route(async (_url, options) => options.method === 'POST'
+      ? new Response(frame('chunk', { content: 'A complete answer.' }) + (final ? frame('final', {}) : ''))
+      : new Response(JSON.stringify(saved())))
+    await f.game.sendMessage(action, true)
+    assert.equal(f.game.turnError.value, null)
+    assert.equal(f.game.messages.value.filter(message => message.role === 'user').length, 1)
+    assert.ok(f.game.messages.value.some(message => message.id === 'reply-1'))
+  })
+}
+
+test('an old completed exchange cannot confirm a new identical action', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('final', {}))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.ok(f.game.turnError.value)
+})
+
+test('normal turn verifies the committed input receipt even when stored text differs', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'Done.' }) + frame('final', { saved_user_message_id: 'committed-user' }))
+    : new Response(JSON.stringify(snapshot([...initial,
+      { id: 'committed-user', role: 'user', content: 'Normalized input.' },
+      { id: 'committed-reply', role: 'assistant', content: 'Done.' }
+    ]))))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.equal(f.game.messages.value.at(-1).id, 'committed-reply')
+})
+
+test('a receipt missing from saved history still reports an unconfirmed turn', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('final', { saved_user_message_id: 'missing' }))
+    : new Response(JSON.stringify(snapshot())))
+  await f.game.sendMessage(action)
+  assert.ok(f.game.turnError.value)
+})

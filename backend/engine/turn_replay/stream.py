@@ -25,6 +25,15 @@ async def history_event(manager: Any, content: str | None = None) -> str:
     return f"event: replay_history\ndata: {json.dumps(data)}\n\n"
 
 
+def with_input_receipt(chunk: str, manager: Any) -> str:
+    input_id = getattr(manager, "_vn_player_message_id", None)
+    if not isinstance(input_id, str) or not input_id:
+        return chunk
+    payload = json.loads(chunk.split("data: ", 1)[1])
+    payload["saved_user_message_id"] = input_id
+    return f"event: final\ndata: {json.dumps(payload)}\n\n"
+
+
 async def run(
     manager: Any,
     message: str,
@@ -44,6 +53,7 @@ async def run(
             with_hooks(manager, message, auto_visualize, language, hooks)
         ) as stream:
             async for chunk in stream:
+                outgoing = chunk
                 if chunk.startswith("event: error") or (replay_id and replay_failed(chunk)):
                     error = (
                         chunk
@@ -53,8 +63,9 @@ async def run(
                     break
                 if chunk.startswith("event: final"):
                     await service.finish(manager)
+                    outgoing = with_input_receipt(chunk, manager)
                     succeeded = True
-                yield chunk
+                yield outgoing
     except (asyncio.CancelledError, GeneratorExit):
         raise
     except service.ReplayUnavailableError as exc:

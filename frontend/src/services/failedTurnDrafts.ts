@@ -24,3 +24,16 @@ export function createFailedTurnDrafts() {
     }
   }
 }
+
+/** A retry may reuse its durable player input, but must save a new reply after it. */
+export function savedActionIndex(
+  history: ChatMessage[], action: string, knownIds: ReadonlySet<string>, reusableInputId?: string
+): number {
+  return history.findIndex((message, index) => {
+    if (message.role !== 'user' || message.content.trim() !== action || !message.id) return false
+    if (!knownIds.has(message.id)) return true
+    return message.id === reusableInputId && history.slice(index + 1).some(reply =>
+      reply.role === 'assistant' && !!reply.id && !knownIds.has(reply.id)
+    )
+  })
+}

@@ -1,5 +1,7 @@
 """Full retries restore canonical state rather than executing the action twice."""
 
+import json
+
 import pytest
 from sqlalchemy import select
 
@@ -70,8 +72,11 @@ async def messages(db):
 async def complete(db, user):
     manager = GameTurnManager(db, "session-1", user)
     chunks = [chunk async for chunk in manager.process_turn("Я открываю дверь.")]
-    assert any(chunk.startswith("event: final") for chunk in chunks)
-    return (await messages(db))[-1].id
+    final = next(chunk for chunk in chunks if chunk.startswith("event: final"))
+    receipt = json.loads(final.split("data: ", 1)[1])["saved_user_message_id"]
+    history = await messages(db)
+    assert history[0].role == "user" and receipt == history[0].id
+    return history[-1].id
 
 
 async def test_full_retry_does_not_double_apply_time_damage_or_items(setup_test_db, monkeypatch):
