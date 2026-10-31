@@ -10,7 +10,8 @@ from backend.core.auth import get_current_admin
 from backend.core.database import get_db
 from backend.core.security import encryption_util
 from backend.engine.memory_rag.control import ensure_index_states, invalidate
-from backend.engine.memory_rag.embeddings import EmbeddingError, embed_with_settings
+from backend.engine.memory_rag.diagnostics import embedding_test_diagnostic
+from backend.engine.memory_rag.embeddings import embed_with_settings
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.models.user import User
 
@@ -105,11 +106,8 @@ async def test_memory_settings(
             key = encryption_util.decrypt_key(encrypted)
     try:
         vectors = await embed_with_settings(config, ["Memory connection test."], api_key=key)
-    except EmbeddingError as exc:
-        raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        logger.warning("Memory embedding test failed: %s", type(exc).__name__)
-        raise HTTPException(
-            400, "Embedding connection failed. Check the endpoint and model."
-        ) from exc
+        diagnostic = embedding_test_diagnostic(exc)
+        logger.warning("Memory embedding test failed: %s (%s)", diagnostic, type(exc).__name__)
+        return {"ok": False, "message": diagnostic}
     return {"ok": True, "message": "Embedding connection succeeded.", "dimensions": len(vectors[0])}
