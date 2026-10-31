@@ -24,7 +24,7 @@ class SessionState(Base, TimestampMixin):
 
     # Current Runtime State
     current_scene_id: Mapped[str] = mapped_column(String(100), nullable=False, default="START")
-    in_game_time = Column(Integer, default=0, nullable=False)
+    in_game_time: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_memory_turns = Column(Integer, default=10, nullable=False)
     time_system = Column(String(20), default="calendar", nullable=False)
     time_config = Column(JSON, nullable=True)
@@ -44,6 +44,7 @@ class SessionState(Base, TimestampMixin):
     compressed_history: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, default=None
     )
+    living_world: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=None)
     enable_history_compression = Column(Boolean, default=True, nullable=False)
     start_datetime = Column(String(36), nullable=True)
 

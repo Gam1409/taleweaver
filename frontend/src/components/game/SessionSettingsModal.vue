@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import VnNarrationSettings from './VnNarrationSettings.vue'
 import SessionContentSettings from './SessionContentSettings.vue'
 import DynamicLocationSettings from './DynamicLocationSettings.vue'
+import LivingWorldSettings from './LivingWorldSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 const vnNarration = ref<InstanceType<typeof VnNarrationSettings> | null>(null)
 const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(null)
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
+const livingWorld = ref<InstanceType<typeof LivingWorldSettings> | null>(null)
 const savingExploration = ref(false)
 async function saveAll(): Promise<void> {
   if (savingExploration.value || props.isSaving) return
@@ -31,6 +33,7 @@ async function saveAll(): Promise<void> {
     if (contentSettings.value && !await contentSettings.value.save()) return
     if (vnNarration.value && !await vnNarration.value.save()) return
     if (exploration.value && !await exploration.value.save()) return
+    if (livingWorld.value && !await livingWorld.value.save()) return
     emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
   } finally { savingExploration.value = false }
 }
@@ -113,6 +116,7 @@ function handleInput(event: Event) {
         <VnNarrationSettings v-if="sessionId && mode === 'vn'" ref="vnNarration" :session-id="sessionId" />
         <SessionContentSettings v-if="sessionId" ref="contentSettings" :session-id="sessionId" />
         <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
+        <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
         <!-- Memory Turns Slider Panel -->
         <div class="space-y-4">
           <div class="flex justify-between items-start gap-4">

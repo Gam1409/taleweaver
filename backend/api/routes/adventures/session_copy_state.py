@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from sqlalchemy import select
 
+from backend.engine.living_world.state import fork as fork_simulation
 from backend.models.session_state import SessionState
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ async def clone_saved_session_state(
             time_config=deepcopy(original_state.time_config),
             inventory=deepcopy(original_state.inventory),
             entity_states=entity_states,
+            living_world=fork_simulation(original_state.living_world),
             exit_states=deepcopy(original_state.exit_states),
             discovered_scenes=deepcopy(original_state.discovered_scenes),
             quests=deepcopy(original_state.quests),

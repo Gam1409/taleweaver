@@ -46,10 +46,10 @@ def guard_session_turn(
                 async with aclosing(method(manager, *args, **kwargs)) as stream:
                     async for chunk in stream:
                         yield chunk
-        except SessionBusyError:
+        except SessionBusyError as exc:
             yield (
                 "event: error\ndata: "
-                + json.dumps({"detail": BUSY_DETAIL, "retryable": True})
+                + json.dumps({"detail": str(exc), "retryable": True})
                 + "\n\n"
             )
 

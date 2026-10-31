@@ -12,6 +12,7 @@ import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
 import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
 import { useSessionPlaytime } from '@/composables/useSessionPlaytime'
+import { useLivingWorldPresence } from '@/composables/useLivingWorldPresence'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
 import WalkthroughModal from '@/components/game/WalkthroughModal.vue'
@@ -234,6 +235,7 @@ const {
 } = useGameSocket()
 
 useSessionPlaytime(() => props.id, () => ['connected', 'loading', 'completed', 'game_over'].includes(status.value))
+useLivingWorldPresence(() => props.id, () => status.value !== 'disconnected')
 
 const {
   portraitTarget, portraitBusy, portraitError, portraitUpdated,

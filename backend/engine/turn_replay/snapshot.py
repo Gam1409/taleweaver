@@ -8,6 +8,8 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import DateTime, Table, and_, delete, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.living_world.state import fork as fork_simulation
+from backend.engine.living_world.state import offline_total
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -113,6 +115,12 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
     """Caller owns one write transaction and the foreground/session lease."""
     if snapshot.get("version") != 1 or snapshot["state"]["session_id"] != session_id:
         raise ValueError("Invalid turn snapshot")
+    restored_state = decoded(SessionState.__table__, snapshot["state"])
+    game = await db.get(GameSession, session_id)
+    restored_state["living_world"] = fork_simulation(
+        restored_state.get("living_world"),
+        absence_total=offline_total(game.living_world_presence if game else None),
+    )
     await db.execute(
         delete(ChatMessage).where(ChatMessage.session_id == session_id, after(snapshot["boundary"]))
     )
@@ -127,7 +135,7 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
     await db.execute(
         update(cast(Table, SessionState.__table__))
         .where(SessionState.session_id == session_id)
-        .values(**decoded(SessionState.__table__, snapshot["state"]))
+        .values(**restored_state)
     )
     await db.execute(
         update(cast(Table, Avatar.__table__))

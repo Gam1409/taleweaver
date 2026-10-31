@@ -1,6 +1,8 @@
+from typing import Any
+
 import uuid6
-from sqlalchemy import Column, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base, TimestampMixin
 
@@ -26,6 +28,7 @@ class GameSession(Base, TimestampMixin):
     content_language = Column(String(20), nullable=True)
     playtime_seconds = Column(Integer, nullable=False, default=0, server_default="0")
     playtime_last_seen = Column(Integer, nullable=True)
+    living_world_presence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     copied_from_id = Column(
         String(36), ForeignKey("game_sessions.id", ondelete="SET NULL"), nullable=True
     )

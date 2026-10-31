@@ -14,6 +14,8 @@ from backend.engine.clothing.lifecycle import (
 )
 from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
 from backend.engine.dynamic_locations.schema import registry
+from backend.engine.living_world.state import fork as fork_simulation
+from backend.engine.living_world.state import offline_total
 from backend.engine.memory_rag.lifecycle import invalidate_memory, memory_snapshot, restore_memory
 from backend.engine.npc_journal.lifecycle import rewind_journals
 from backend.models.avatar import Avatar
@@ -108,6 +110,7 @@ class SessionCheckpointService:
                 "time_config": deepcopy(state.time_config or {}),
                 "inventory": deepcopy(state.inventory or []),
                 "entity_states": deepcopy(state.entity_states or {}),
+                "living_world": deepcopy(state.living_world),
                 "exit_states": deepcopy(state.exit_states or {}),
                 "discovered_scenes": deepcopy(state.discovered_scenes or []),
                 "quests": deepcopy(state.quests or []),
@@ -191,7 +194,7 @@ class SessionCheckpointService:
         if not checkpoint:
             raise ValueError("Checkpoint not found.")
 
-        _, state, avatar = await SessionCheckpointService._load_context(db, session_id)
+        game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         snapshot = checkpoint.state_snapshot or {}
         avatar_snapshot = snapshot.get("avatar") or {}
         state_snapshot = snapshot.get("session_state") or {}
@@ -224,6 +227,10 @@ class SessionCheckpointService:
         state.inventory = deepcopy(state_snapshot.get("inventory") or [])
         previous_places = deepcopy(registry(state))
         state.entity_states = deepcopy(state_snapshot.get("entity_states") or {})
+        state.living_world = fork_simulation(
+            state_snapshot.get("living_world"),
+            absence_total=offline_total(game_session.living_world_presence),
+        )
         await rewind_places(db, state, previous_places)
         state.exit_states = deepcopy(state_snapshot.get("exit_states") or {})
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])

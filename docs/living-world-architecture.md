@@ -56,3 +56,69 @@ break supported Python versions. Use an optional, version-pinned adapter on Pyth
 Sources: https://pypi.org/pypi/gdm-concordia/json and
 https://github.com/google-deepmind/concordia . Metadata verification is not an
 integration test; no claim of a working Concordia adapter is made at this stage.
+
+The published 2.4.0 wheel was also inspected: the real integration surface is
+`concordia.environment.engines.sequential.Sequential.run_loop(game_masters=...,
+entities=..., max_steps=...)`, with entity `name`, `observe` and `act(ActionSpec)`
+methods. Even this sequential engine prepares observations through Concordia's
+concurrency utilities. A future adapter must bound those calls through TaleWeaver's
+inference reservation, not let independent NPCs issue competing remote requests.
+
+## Implemented schema and state machine
+
+Migration `9a0c4e7b1d62` adds two nullable JSON columns, preserving old rows:
+
+| Column | Contents | Snapshot policy |
+| --- | --- | --- |
+| session_states.living_world | Version, timeline UUID, revision, settings, cursor/target, consumed absence, fractional minutes, bounded event journal | Included in replay/export/Chronicles; fork timeline on restore/copy/import |
+| game_sessions.living_world_presence | Browser clients, UTC last-seen values, cumulative absence and accounting watermark | Independent conditional update; not rewound with game state |
+
+Events use unique IDs within a timeline; prerequisites must precede dependents in
+the stored list and game time. Each event's canonical changes and committed status
+share one SQL transaction. No SQL transaction waits for an LLM in this preview.
+Concurrent gameplay/catch-up uses the existing session lease; duplicate commands
+also require a matching revision. Presence uses compare-and-swap independently.
+
+```mermaid
+stateDiagram-v2
+    [*] --> PAUSED
+    PAUSED --> PARTIAL: CATCH_UP absence creates target
+    PAUSED --> RUNNING: manual run of due rules
+    PARTIAL --> RUNNING: continue
+    RUNNING --> PARTIAL: budget or stop between events
+    RUNNING --> COMPLETE: target reached
+    RUNNING --> WAITING_FOR_LLM: unresolved DECISION or SOCIAL
+    WAITING_FOR_LLM --> RUNNING: manual retry
+    COMPLETE --> PARTIAL: further absence
+    PARTIAL --> PAUSED: disable feature, retain queue
+```
+
+WAITING_FOR_LLM retries do not contact a provider in this preview. A crash after a
+commit can leave RUNNING persisted; the status endpoint reports PARTIAL if no runner
+exists. FAILED is reserved for a future persisted job-error lifecycle, not emitted
+by the current rules runner.
+
+## Stage ledger and next prerequisite
+
+- Stage 0: architecture/source inspection complete; no changes to main.
+- Stage 1: SQL migration, PAUSE, presence, ownership/revision controls, settings UI,
+  and snapshot lifecycle implemented and tested.
+- Stage 2: explicit event schedules, bounded rules catch-up, retained backlog,
+  cancellation and crash recovery implemented. Recurring schedule generation remains
+  unimplemented. See usage documentation for the executable mechanical demo.
+- Stages 3–4: not implemented; no pretend deliberation or Concordia wrapper.
+- Stage 5: preview controls, API/lifecycle tests and documentation implemented.
+  Real-browser E2E, private-journal screen and autonomous acceptance demo remain.
+
+The blocker to enabling stage 3 safely is concrete: `memory_rag/scheduling.py` admits
+maintenance on idle state, but cannot guarantee that an already-running remote call
+has stopped when foreground work starts or a local timeout fires. The current session
+write lease serializes one session's mutations, not inference across sessions sharing
+the same Ollama/KoboldCpp endpoint. A new simulation loop would amplify that race.
+
+Required next change: an endpoint-scoped shared inference reservation used by both
+foreground and background callers; persist or quarantine indeterminate remote work;
+then add bounded deliberation with timeline/revision checks before applying a result.
+Do not reserve a SQLite write transaction while waiting. Afterward implement private
+NPC observations/beliefs and the optional Python >=3.12 Concordia group. These are
+cross-cutting scheduler changes, deliberately outside the tested rules-only slice.

@@ -826,6 +826,10 @@ class GameTurnManager:
         replay_message_id: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Run one replayable turn with the same normal post-turn hooks."""
+        from backend.engine.living_world.foreground import check
+
+        if replay_message_id is None:
+            await check(self.db, self.game_id, self.user.id)
         hooks = PostTurnHooks(self)
         async with aclosing(
             run_replayable_turn(self, message, auto_visualize, language, replay_message_id, hooks)

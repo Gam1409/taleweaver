@@ -5,6 +5,7 @@ from copy import deepcopy
 from backend.core.game_modes import normalize_vn_template
 from backend.engine.import_build_session_template import build_session_template
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.world_generator import WorldGenerator
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -120,6 +121,7 @@ async def restore_session_bundle(db, payload, user, origin_id):
                 in_game_time=old_state.get("in_game_time", 0),
                 inventory=old_state.get("inventory", []),
                 entity_states=restored_entity_states,
+                living_world=fork_simulation(old_state.get("living_world")),
                 exit_states=old_state.get("exit_states", {}),
                 discovered_scenes=old_state.get("discovered_scenes", []),
             )

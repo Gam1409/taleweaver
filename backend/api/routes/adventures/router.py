@@ -15,6 +15,7 @@ from backend.api.routes.adventures.editor_special_actions import (
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.living_world import router as living_world_router
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
 from backend.api.routes.adventures.regeneration import router as regeneration_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
@@ -74,3 +75,4 @@ router.include_router(dynamic_locations_router)
 router.include_router(vn_settings_router)
 router.include_router(content_settings_router)
 router.include_router(scene_illustrations_router)
+router.include_router(living_world_router)
