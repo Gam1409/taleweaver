@@ -41,7 +41,9 @@ class SessionState(Base, TimestampMixin):
     world_rumors: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True, default=[]
     )
-    compressed_history = Column(JSON, nullable=True, default=None)
+    compressed_history: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, default=None
+    )
     enable_history_compression = Column(Boolean, default=True, nullable=False)
     start_datetime = Column(String(36), nullable=True)
 

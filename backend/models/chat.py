@@ -1,6 +1,9 @@
+from collections.abc import Iterable
+from typing import Any
+
 import uuid6
-from sqlalchemy import JSON, Column, ForeignKey, String, Text, event, inspect
-from sqlalchemy.orm import Session
+from sqlalchemy import JSON, ForeignKey, String, Text, event, inspect
+from sqlalchemy.orm import Mapped, Session, UOWTransaction, mapped_column
 
 from backend.models.base import Base, TimestampMixin
 from backend.models.session_state import SessionState
@@ -13,24 +16,28 @@ class ChatMessage(Base, TimestampMixin):
 
     __tablename__ = "chat_messages"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
-    session_id = Column(String(36), ForeignKey("game_sessions.id"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid6.uuid7())
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("game_sessions.id"), nullable=False
+    )
 
     # "user", "assistant", or "system"
-    role = Column(String(20), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # The actual message payload
-    content = Column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Scene and sequence the message was written in. The client groups the story into
     # one page per scene/sequence. Stamped automatically on flush (see below).
-    scene_id = Column(String(100), nullable=True)
-    sequence_id = Column(String(100), nullable=True)
+    scene_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sequence_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Durable optional background extraction task; old narration is not rescanned implicitly.
-    npc_journal = Column(JSON, nullable=True)
+    npc_journal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
-    def to_client_dict(self) -> dict:
+    def to_client_dict(self) -> dict[str, str | None]:
         """Chat history entry as sent to the client."""
         return {
             "id": self.id,
@@ -51,7 +58,9 @@ def _loaded_session_states(session: Session) -> dict[str, SessionState]:
 
 
 @event.listens_for(Session, "before_flush")
-def _stamp_chat_scene_context(session: Session, _flush_context, _instances) -> None:
+def _stamp_chat_scene_context(
+    session: Session, _flush_context: UOWTransaction, _instances: Iterable[object] | None
+) -> None:
     """Stamps new chat messages with the session's current scene and sequence.
 
     Uses the SessionState already loaded in this DB session (the turn pipeline always has
