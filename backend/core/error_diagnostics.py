@@ -24,6 +24,14 @@ def diagnose_provider_error(
     if credential_error:
         return credential_error
 
+    if provider.lower() in {"ollama", "ollama_chat"} and "does not support thinking" in lower_text:
+        return (
+            "This model does not support Ollama's thinking mode. "
+            "Disable Reasoning / Thinking Mode in this role's Advanced Parameters, "
+            "save the settings, and test again; or select a model that supports thinking. "
+            "Enabling the option in another client does not add model support."
+        )
+
     # 4. Model Not Found / Unsupported Model / No Endpoints (404)
     if (
         any(
