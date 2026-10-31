@@ -13,11 +13,11 @@ test('movement and permitted scenes do not prevent saving a valid NPC', () => {
   assert.deepEqual(entityFormErrors({ ...npc, moveable: true, allowed_scenes_input: ['HOSPITAL_CORRIDOR'] }, options), [])
 })
 test('loaded over-limit biography and personality explain why movement edits cannot save', () => {
-  assert.deepEqual(entityFormErrors({ ...npc, description: 'я'.repeat(1001), character: 'x'.repeat(201) }, options), [
+  assert.deepEqual(entityFormErrors({ ...npc, description: 'я'.repeat(1001), character: 'x'.repeat(301) }, options), [
     'Description / Biography: 1001 characters; maximum 1000.',
-    'Character / Traits: 201 characters; maximum 200.',
+    'Character / Traits: 301 characters; maximum 300.',
   ])
-  assert.deepEqual(entityFormErrors({ ...npc, description: 'я'.repeat(1000), character: 'x'.repeat(200) }, options), [])
+  assert.deepEqual(entityFormErrors({ ...npc, description: 'я'.repeat(1000), character: 'x'.repeat(300) }, options), [])
 })
 test('missing required fields and duplicate IDs have visible reasons', () => {
   assert.deepEqual(entityFormErrors({ ...npc, name: ' ', description: '' }, { ...options, entityIdError: 'ID already exists.' }), [

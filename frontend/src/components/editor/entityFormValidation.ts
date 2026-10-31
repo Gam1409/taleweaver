@@ -24,8 +24,8 @@ export function entityFormErrors(form: EntityForm, options: ValidationOptions): 
   const fields = [
     ['name', 'Name', 50, true],
     ['description', 'Description / Biography', 1000, true],
-    ['goal', 'Goal / Motivation', 200, false],
-    ['character', 'Character / Traits', 200, false],
+    ['goal', 'Goal / Motivation', 300, false],
+    ['character', 'Character / Traits', 300, false],
     ['teaser', 'Teaser', 300, false],
   ] as const
   for (const [key, label, limit, required] of fields) {

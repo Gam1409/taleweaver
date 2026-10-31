@@ -280,11 +280,11 @@ class WorldNPCSchema(WorldBaseSchema):
     )
     goal: str = Field(
         ...,
-        description="Concise description of the NPC's primary motivation or intention, max 200 characters.",
+        description="Concise description of the NPC's primary motivation or intention, max 300 characters.",
     )
     character: str = Field(
         ...,
-        description="Concise description of the NPC's personality, demeanor, or character traits, max 200 characters.",
+        description="Concise description of the NPC's personality, demeanor, or character traits, max 300 characters.",
     )
     start_scene_id: str = Field(..., description="The ID of the scene where the NPC starts.")
     spatial_position: str = Field(
@@ -818,11 +818,11 @@ class ProtagonistSchema(WorldBaseSchema):
     description: str = Field(..., description="Narrative description of appearance and backstory.")
     goal: str = Field(
         ...,
-        description="The protagonist's primary motivation or personal driving goal, max 200 characters.",
+        description="The protagonist's primary motivation or personal driving goal, max 300 characters.",
     )
     character: str = Field(
         ...,
-        description="Concise description of the protagonist's personality, quirks, and character traits, max 200 characters.",
+        description="Concise description of the protagonist's personality, quirks, and character traits, max 300 characters.",
     )
     strength: int = Field(..., description="Base strength stat (1-99)")
     dexterity: int = Field(..., description="Base dexterity stat (1-99)")

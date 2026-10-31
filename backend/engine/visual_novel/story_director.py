@@ -107,7 +107,7 @@ def direction_context(manager: Any, entities: list[Any], exits: list[dict]) -> d
     cast = [
         {
             "id": npc.id,
-            "character": str(getattr(npc, "character", "") or "")[:200],
+            "character": str(getattr(npc, "character", "") or "")[:300],
             "goal": str(getattr(npc, "goal", "") or "")[:300],
             "departure_destinations": sorted(
                 destination for destination in destinations if _movable(state, npc, destination)

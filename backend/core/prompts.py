@@ -69,7 +69,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "NPC & OBJECT SPATIAL LOGIC:\n"
     "Every NPC and Object must have a 'spatial_position' relative to items in the room.\n"
     "NPC 'description' (bio) MUST be max 400 characters.\n"
-    "NPC 'goal' (motivation) and 'character' (traits) fields MUST be concise (max 200 characters each).\n"
+    "NPC 'goal' (motivation) and 'character' (traits) fields MUST be concise (max 300 characters each).\n"
     "For OBJECTS, assign a specific 'item_type': CONSUMABLE, WEARABLE, STATIC, CONSTRUCTABLE, PICKABLE, WEAPON, TOOL, KEY, READABLE, CONTAINER, SWITCH. (COMBINABLE is deprecated — use CONSTRUCTABLE for any combine/craft puzzle.)\n"
     "If an OBJECT has item_type READABLE, include text_log_content (max 1000 characters, MUST be non-empty) and text_log_format (DOCUMENT, SCROLL, BOOK, SIGN).\n"
     "If an OBJECT has item_type CONTAINER, decide whether it is open or locked based on story context.\n"
@@ -87,7 +87,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "For NPCs, assign an 'npc_type': HUMANOID, ANIMAL, MONSTER, BEING.\n"
     "Every NPC MUST also have a 'goal' and a 'character' description (both strings).\n\n"
     "PROTAGONIST:\n"
-    "The protagonist must also have a 'goal' (primary motivation, max 200 chars) and 'character' (personality traits, max 200 chars).\n"
+    "The protagonist must also have a 'goal' (primary motivation, max 300 chars) and 'character' (personality traits, max 300 chars).\n"
     "These help the GM understand how the player character thinks and acts.\n\n"
     "STATS & RESOURCES:\n"
     "For NPCs, always assign 'hp' (range 40-100) and 'stamina' (range 50-100). Default to 0 if not relevant.\n"
@@ -543,8 +543,8 @@ TRAIT_GENERATION_SYSTEM_PROMPT = (
     "concise and evocative 'Goal/Motivation' and 'Character/Traits' based on a character's description.\n\n"
     "JSON STRUCTURE:\n"
     "Respond with a single JSON object containing:\n"
-    "- 'goal': A short string describing what drives the character (max 200 chars).\n"
-    "- 'character': A short string describing personality and behavior (max 200 chars)."
+    "- 'goal': A short string describing what drives the character (max 300 chars).\n"
+    "- 'character': A short string describing personality and behavior (max 300 chars)."
 )
 
 TRAIT_GENERATION_USER_PROMPT_TEMPLATE = (

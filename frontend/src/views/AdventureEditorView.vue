@@ -1301,8 +1301,8 @@ async function saveEntityText(data: any) {
 
   // Persona validation (NPC and Protagonist)
   if (['npc', 'protagonist'].includes(editEntityContext.value.type)) {
-    if ((data.goal || '').length > 200 || (data.character || '').length > 200) {
-      addNotification('Motivation and traits must be under 200 characters.', 'error')
+    if ((data.goal || '').length > 300 || (data.character || '').length > 300) {
+      addNotification('Motivation and traits must be at most 300 characters.', 'error')
       return
     }
   }

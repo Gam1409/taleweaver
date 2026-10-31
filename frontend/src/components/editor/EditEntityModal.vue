@@ -810,13 +810,13 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Motivation / Goal</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.goal || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.goal || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
-                    :maxlength="200"
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
@@ -835,13 +835,13 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Personality / Traits</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.character || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.character || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
-                    :maxlength="200"
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
@@ -863,13 +863,13 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">NPC Goal / Motivation</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.goal || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.goal || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
-                    :maxlength="200"
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
@@ -888,13 +888,13 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">NPC Character / Traits</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.character || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.character || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
-                    :maxlength="200"
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
