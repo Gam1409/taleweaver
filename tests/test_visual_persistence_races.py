@@ -45,7 +45,13 @@ async def test_portrait_cas_preserves_edit_between_read_and_write(portrait_world
     monkeypatch.setattr(session_portraits, "_context", context)
     async with TestSessionLocal() as db:
         owner = (await db.scalars(select(User))).first().id
-    await session_portraits._save_portrait("portrait-session", "NPC_NEW", owner, "/data/new.png")
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        token = await session_portraits._reserve_portrait(db, state, "NPC_NEW")
+    await session_portraits._save_portrait(
+        "portrait-session", "NPC_NEW", owner, "/data/new.png", token
+    )
     assert calls == 2
     async with TestSessionLocal() as db:
         state = await db.scalar(

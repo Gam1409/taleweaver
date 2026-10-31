@@ -232,7 +232,7 @@ async def test_sql_is_reloaded_after_network_and_rewind_epoch_rejects_semantics(
         collected.append("network")
         return [vector_row(old)], scope
 
-    async def current_documents(*args):
+    async def current_documents(*args, **kwargs):
         assert collected == ["network"]
         return [changed]
 

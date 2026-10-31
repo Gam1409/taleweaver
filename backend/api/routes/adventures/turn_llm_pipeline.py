@@ -336,6 +336,9 @@ class TurnLlmContextBuilder:
         world = await self._load_world()
         visible, hidden = self._partition_scene_entities(world.all_entities)
         await self._remember_scene_npcs(visible)
+        from backend.engine.turn_replay.transactions import release_for_model
+
+        await release_for_model(self.manager)
         await prepare_recall(self.manager, user_msg, visible, history=history)
         global_unlock_rules_prompt_block = self._build_global_unlock_rules_prompt_block(
             all_entities=world.all_entities,

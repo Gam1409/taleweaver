@@ -77,7 +77,8 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.memory_rag.scheduling import foreground_turn
-from backend.engine.turn_replay.service import record_before
+from backend.engine.turn_replay.service import record_input
+from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.turn_replay.stream import run as run_replayable_turn
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
@@ -432,10 +433,7 @@ class GameTurnManager:
         """
         cm = ChatMessage(session_id=self.state.session_id, role=role, content=content)
         self.db.add(cm)
-        try:
-            await self.db.flush()
-        except Exception:
-            logger.exception("Failed to flush ChatMessage to DB")
+        await self.db.flush()
         # Attempt to unhide any referenced entities inside the message text
         try:
             await self._unhide_entities_in_text(content)
@@ -1140,8 +1138,7 @@ class GameTurnManager:
         is_silent = any(actual_user_input.lower().startswith(cmd) for cmd in silent_commands)
 
         if actual_user_input and not is_silent:
-            await record_before(self, actual_user_input)
-            player_message = await self._save_chat_message("user", actual_user_input)
+            player_message = await record_input(self, actual_user_input)
             self._vn_player_message_id = player_message.id
             await self.db.flush()
 
@@ -1206,6 +1203,7 @@ class GameTurnManager:
         time_before_turn = self.state.in_game_time
         if self._turn_anchor is None:
             self._turn_anchor = turn_anchor(self.state)
+        await release_for_model(self)
         ctx = await self._llm_context_builder.build_context(user_msg=user_msg, language=language)
         history = ctx.history
         entities = ctx.entities
@@ -1318,6 +1316,7 @@ class GameTurnManager:
                 f"[Turn {self.game_id}] [Pass 1] Calling small model: {small_model} via {small_model_provider}"
             )
             try:
+                await release_for_model(self)
                 mechanics_intent = await llm.aexecute_complex_task(
                     mechanics_prompt,
                     mechanics_user_prompt,
@@ -1574,6 +1573,7 @@ class GameTurnManager:
             )
             try:
                 generator_intent_start = time.perf_counter()
+                await release_for_model(self)
                 game_event = await llm.aexecute_complex_task(
                     tool_intent_prompt,
                     user_msg,
@@ -1687,6 +1687,7 @@ class GameTurnManager:
 
             progression_start = time.perf_counter()
             try:
+                await release_for_model(self)
                 progression_intent = await llm.aexecute_complex_task(
                     (
                         VN_PROGRESSION_PROMPT
@@ -1828,6 +1829,7 @@ class GameTurnManager:
             )
         ):
             # Narrate from the resolved location and clock, including same-room VN waits.
+            await release_for_model(self)
             ctx = await self._llm_context_builder.build_context(
                 user_msg=user_msg, language=language
             )
@@ -1911,6 +1913,7 @@ class GameTurnManager:
             exits_task = build_exit_description_task(await self._build_scene_exits_context_json())
 
         if policy.vn and not narration_only:
+            await release_for_model(self)
             reminders.append(await plan_interaction(self, user_msg, history, game_event))
             reminders.append(direction_reminder(self, game_event))
             reminders.append(PROGRESS_REMINDER)
@@ -1936,6 +1939,7 @@ class GameTurnManager:
         narration_warning: str | None = None
         narration_end_reason: str | None = None
         try:
+            await release_for_model(self)
             stream = await llm.stream_simple_task(
                 narration_prompt,
                 user_msg,
@@ -2087,7 +2091,10 @@ class GameTurnManager:
             session_id=self.state.session_id,
             role="assistant",
             content=response_text,
-            npc_journal={"status": "pending", "attempts": 0},
+            npc_journal={
+                "status": "pending" if narration_completed else "incomplete",
+                "attempts": 0,
+            },
         )
         self.db.add(assistant_chat)
 

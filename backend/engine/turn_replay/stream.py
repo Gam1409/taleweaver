@@ -44,7 +44,7 @@ async def run(
             with_hooks(manager, message, auto_visualize, language, hooks)
         ) as stream:
             async for chunk in stream:
-                if replay_id and replay_failed(chunk):
+                if chunk.startswith("event: error") or (replay_id and replay_failed(chunk)):
                     error = (
                         chunk
                         if chunk.startswith("event: error")
@@ -60,7 +60,9 @@ async def run(
     except service.ReplayUnavailableError as exc:
         error = f"event: error\ndata: {json.dumps({'detail': str(exc)})}\n\n"
     finally:
-        if getattr(manager, "_replaying", False) and not succeeded:
+        if (
+            getattr(manager, "_replaying", False) or getattr(manager, "_recoverable_turn", False)
+        ) and not succeeded:
             # The backup remains durable if the process dies during cleanup.
             with CancelScope(shield=True):
                 await manager.db.rollback()
@@ -68,7 +70,7 @@ async def run(
                 await manager.db.refresh(manager.user)
                 manager.state = manager.avatar = manager.adventure = None
     if error:
-        if getattr(manager, "_replaying", False):
+        if getattr(manager, "_replaying", False) or getattr(manager, "_recoverable_turn", False):
             yield await history_event(manager)
         yield error
 

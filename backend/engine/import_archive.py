@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.adventure_format import validate_manifest_version
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
+from backend.engine.archive_safety import validate_archive
 from backend.engine.import_archive_world import build_archive_world
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
@@ -177,6 +178,7 @@ async def import_adz(
         zip_buffer = io.BytesIO(adz_data)
 
         with zipfile.ZipFile(zip_buffer, "r") as zip_file:
+            validate_archive(zip_file)
             if not _archive_sizes_allowed(zip_file):
                 return False
 

@@ -30,7 +30,12 @@ def _bounded(rows: list[ChatMessage], history: dict) -> dict | None:
     remaining = MAX_INPUT_CHARS
     last_id = history.get("last_compressed_msg_id")
     pending_id, pending_offset = None, 0
-    for row in rows[:MAX_EVENTS]:
+    complete_rows = [
+        row
+        for row in rows
+        if (getattr(row, "npc_journal", None) or {}).get("status") != "incomplete"
+    ]
+    for row in complete_rows[:MAX_EVENTS]:
         offset = (
             int(history.get("pending_offset", 0))
             if row.id == history.get("pending_message_id")

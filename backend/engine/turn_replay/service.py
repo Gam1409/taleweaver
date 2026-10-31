@@ -55,6 +55,25 @@ async def record_before(manager: Any, text: str) -> None:
     manager._turn_replay_recorded = True
 
 
+async def record_input(manager: Any, text: str) -> ChatMessage:
+    """Reuse a failed turn's durable input instead of duplicating it on retry."""
+    row = await manager.db.get(TurnReplay, manager.game_id)
+    message = await latest(manager.db, manager.game_id)
+    if (
+        row is not None
+        and row.status == "pending"
+        and row.input_text == text
+        and message is not None
+        and message.role == "user"
+        and message.content == text
+    ):
+        manager._turn_replay_recorded = True
+        return message
+    await record_before(manager, text)
+    saved: ChatMessage = await manager._save_chat_message("user", text)
+    return saved
+
+
 async def finish(manager: Any) -> None:
     if not getattr(manager, "_turn_replay_recorded", False) and not getattr(
         manager, "_replaying", False
@@ -104,14 +123,15 @@ async def begin(manager: Any, message_id: str) -> str:
 
 async def recover(db: AsyncSession, session_id: str) -> bool:
     row = await db.get(TurnReplay, session_id, populate_existing=True)
-    if row is None or row.status != "replaying" or row.backup is None:
+    if row is None or row.status not in {"replaying", "executing"} or row.backup is None:
         return False
+    replaying = row.status == "replaying"
     backup = row.backup
     await restore(db, session_id, backup)
     row = await db.get(TurnReplay, session_id, populate_existing=True)
     if row is None:
         raise RuntimeError("Turn recovery record disappeared")
-    row.status, row.backup = "ready", None
+    row.status, row.backup = ("ready" if replaying else "pending"), None
     await db.commit()
     queue_refresh(session_id, backup["user_id"])
     return True
@@ -119,7 +139,9 @@ async def recover(db: AsyncSession, session_id: str) -> bool:
 
 async def recover_interrupted(db: AsyncSession) -> None:
     ids = list(
-        await db.scalars(select(TurnReplay.session_id).where(TurnReplay.status == "replaying"))
+        await db.scalars(
+            select(TurnReplay.session_id).where(TurnReplay.status.in_(["replaying", "executing"]))
+        )
     )
     for session_id in ids:
         await recover(db, session_id)
@@ -127,7 +149,7 @@ async def recover_interrupted(db: AsyncSession) -> None:
 
 async def recover_owned(manager: Any) -> None:
     row = await manager.db.get(TurnReplay, manager.game_id)
-    if row is None or row.status != "replaying":
+    if row is None or row.status not in {"replaying", "executing"}:
         return
     session = await manager.db.get(GameSession, manager.game_id)
     if session is None or session.user_id != manager.user.id:

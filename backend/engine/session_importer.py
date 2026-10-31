@@ -2,20 +2,22 @@ import io
 import json
 import logging
 import os
+import shutil
 import zipfile
 from typing import Any, Optional
 
 import uuid6
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.archive_safety import MAX_UPLOAD_BYTES, copy_asset, validate_archive
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
 from backend.engine.scene_illustrations.snapshots import remap_illustrations
+from backend.engine.session_archive_access import accessible_template
 from backend.engine.visual_novel.lifecycle import remap_social_state
-from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -67,6 +69,7 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
 
 
 def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
+    validate_archive(zip_file)
     new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
     os.makedirs(new_session_dir, exist_ok=True)
 
@@ -79,8 +82,7 @@ def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
             safe_dest_path = _ensure_within_data_dir(safe_dest_path)
 
             os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
-            with open(safe_dest_path, "wb") as f:
-                f.write(zip_file.read(zip_info.filename))
+            copy_asset(zip_file, zip_info, safe_dest_path)
 
 
 class SessionImporter:
@@ -93,8 +95,12 @@ class SessionImporter:
         Returns:
             The new game session ID if successful, else None.
         """
+        new_session_id = None
         try:
+            if len(content) > MAX_UPLOAD_BYTES:
+                raise ValueError("Session archive exceeds the upload budget.")
             with zipfile.ZipFile(io.BytesIO(content), "r") as zip_file:
+                validate_archive(zip_file)
                 # 1. Read session manifest
                 if "session.json" not in zip_file.namelist():
                     logger.error("session.json missing in .ads archive")
@@ -122,17 +128,9 @@ class SessionImporter:
                     logger.error("Core session components missing in manifest")
                     return None
 
-                # Check if template still exists in the system
-                template_id = game_session_data.get("template_id")
-                template_exists = False
-                if template_id:
-                    template_res = await db.execute(
-                        select(AdventureTemplate.id).where(AdventureTemplate.id == template_id)
-                    )
-                    if template_res.scalar_one_or_none():
-                        template_exists = True
-
-                resolved_template_id = template_id if template_exists else None
+                resolved_template_id = await accessible_template(
+                    db, game_session_data.get("template_id"), owner_id
+                )
 
                 # 3. Create Avatar
                 avatar = Avatar(
@@ -184,6 +182,7 @@ class SessionImporter:
                 # 5. Create SessionState
                 session_state = SessionState(
                     session_id=new_session_id,
+                    living_world=fork_simulation(session_state_data.get("living_world")),
                     user_id=owner_id,
                     template_id=resolved_template_id,
                     avatar_id=new_avatar_id,
@@ -330,4 +329,8 @@ class SessionImporter:
         except Exception:
             logger.exception("Import of ADS session failed")
             await db.rollback()
+            if new_session_id:
+                shutil.rmtree(
+                    _safe_data_path("adventures", "sessions", new_session_id), ignore_errors=True
+                )
             return None

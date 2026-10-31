@@ -74,6 +74,8 @@ The runtime journal is `${DATA_DIR}/inference-reservations.json`, written with f
 flush/fsync and atomic replacement. It contains endpoint hashes, request UUIDs and
 start timestamps only: no URLs, API keys, prompts, responses, NPC memories or private
 thoughts. It is runtime coordination, separate from SQL world state and LanceDB.
+The public `/data` mount denies this JSON file and its temporary replacement files;
+only media extensions are served. Keep the journal in place to preserve recovery fences.
 Keep DATA_DIR on persistent local storage, not an ephemeral remote GPU volume.
 Unfinished records loaded after a restart become uncertain; corrupt or unwritable
 storage fails closed before new remote submission. Do not delete the journal to
@@ -82,9 +84,10 @@ bypass recovery. Backups of world state do not rewind remote inference reservati
 This is **not a distributed inference scheduler**. Use one backend worker and one
 backend process per journal. Other applications sending requests to the same GPU
 are outside this queue. Disabling the flag intentionally restores the old unguarded
-behavior; only do so after stopping unresolved remote work. Existing gameplay SQL
-transaction boundaries are not refactored by this change; the reservation itself
-opens no SQL transaction and performs no world mutation.
+behavior; only do so after stopping unresolved remote work. The reservation itself
+opens no SQL transaction and performs no world mutation. Recoverable gameplay turns
+use separate durable checkpoints to release SQL writers during model waits; see
+[review remediation](engineering/review-remediation-2026-10.md).
 
 ## Verification
 

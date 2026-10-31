@@ -194,16 +194,19 @@ async def add_security_headers(request, call_next):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # CSP keeps 'unsafe-inline' on style-src only (Vue/Vite dev requires it).
     # script-src remains strict ('self'); use nonces for any inline scripts.
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "img-src 'self' data: https:; "
-        "script-src 'self' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-        "connect-src 'self' ws: wss: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "object-src 'none'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'self'"
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        (
+            "default-src 'self'; "
+            "img-src 'self' data: https:; "
+            "script-src 'self' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+            "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+            "connect-src 'self' ws: wss: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'"
+        ),
     )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = (
@@ -242,29 +245,13 @@ os.makedirs("adventures", exist_ok=True)
 
 
 class SafeStaticFiles(StaticFiles):
-    """Custom StaticFiles that blocks access to sensitive files like the database
-    and LLM debug logs.
-
-    Blocked extensions:
-      - Database files (.db, .db-shm, .db-wal)
-      - LLM debug logs (.jsonl, .log)
-      - Agent markdown notes and arbitrary text files (.md, .txt, .env)
-    """
-
-    _BLOCKED_EXTENSIONS = (
-        ".db",
-        ".db-shm",
-        ".db-wal",
-        ".jsonl",
-        ".log",
-        ".md",
-        ".env",
-        ".ini",
-    )
+    """Serve passive media only; runtime state and executable assets remain private."""
 
     async def get_response(self, path: str, scope) -> Response:
+        from backend.engine.archive_safety import MEDIA_EXTENSIONS
+
         lowered = path.lower()
-        if any(lowered.endswith(ext) for ext in self._BLOCKED_EXTENSIONS):
+        if Path(path).suffix.lower() not in MEDIA_EXTENSIONS:
             raise StarletteHTTPException(status_code=403, detail="Access denied")
 
         full_path, stat_result = self.lookup_path(path)
@@ -297,6 +284,10 @@ class SafeStaticFiles(StaticFiles):
                             resp.headers["Content-Type"] = "image/svg+xml"
                 except OSError:
                     pass
+        resp.headers["Content-Security-Policy"] = (
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+        )
+        resp.headers["X-Content-Type-Options"] = "nosniff"
         return resp
 
 

@@ -117,6 +117,7 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
         raise ValueError("Invalid turn snapshot")
     restored_state = decoded(SessionState.__table__, snapshot["state"])
     game = await db.get(GameSession, session_id)
+    (restored_state.get("entity_states") or {}).pop("__portrait_requests__", None)
     restored_state["living_world"] = fork_simulation(
         restored_state.get("living_world"),
         absence_total=offline_total(game.living_world_presence if game else None),

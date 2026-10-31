@@ -110,6 +110,8 @@ def _document(state: Any, user_id: str, **fields: Any) -> MemoryDocument:
 
 
 def _dialogue(state: Any, user_id: str, message: ChatMessage) -> list[MemoryDocument]:
+    if (message.npc_journal or {}).get("status") == "incomplete":
+        return []
     claimed = message.role == "user"
     fingerprint = content_hash(message.content)
     prefix = "Player statement/action (not verified): " if claimed else "Narration: "
@@ -253,7 +255,11 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
         .order_by(ChatMessage.created_at, ChatMessage.id)
         .execution_options(populate_existing=True)
     )
-    messages = {message.id: message for message in rows if message.content}
+    messages = {
+        message.id: message
+        for message in rows
+        if message.content and (message.npc_journal or {}).get("status") != "incomplete"
+    }
     documents = [
         document
         for message in messages.values()

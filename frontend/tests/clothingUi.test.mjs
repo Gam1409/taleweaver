@@ -54,11 +54,11 @@ test('long outfits collapse and garment text is escaped', async () => {
 })
 
 test('adult clothing preference is a separate default-off setting', async () => {
-  const off = await render(setting, { modelValue: false })
-  assert.match(off, /Mature content/)
+  const off = await render(setting, { clothingValue: false, nsfwEnabled: false, nsfwLevel: "soft" })
+  assert.match(off, /Clothing layer tracking/)
   assert.match(off, /Off: general outfits/)
   assert.doesNotMatch(off, /<input[^>]*checked|NPC state|mature_themes/)
-  assert.match(await render(setting, { modelValue: true }), /<input[^>]*checked/)
+  assert.match(await render(setting, { clothingValue: true, nsfwEnabled: false, nsfwLevel: "soft" }), /<input[^>]*checked/)
 })
 
 test('creation sends the independent preference in both modes and clears it outside VN', async () => {

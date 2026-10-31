@@ -22,14 +22,14 @@ const source = ts
 const { default: Settings } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 )
-const render = props => renderToString(createSSRApp({ render: () => h(Settings, props) }))
+const render = props => renderToString(createSSRApp({ render: () => h(Settings, { nsfwEnabled: false, nsfwSavedEnabled: false, nsfwLevel: "soft", nsfwSavedLevel: "soft", ...props }) }))
 
 test('saved existing preference is visible, checked and not redundantly submitted', async () => {
   const html = await render({ modelValue: true, savedValue: true, isSaving: false })
   assert.match(html, /type="checkbox" checked/)
   assert.match(html, /<button[^>]* disabled(?=[ >])/)
-  assert.match(html, />Enabled<\/span>/)
-  assert.match(html, /existing saved sessions keep their settings/)
+  assert.match(html, />Saved<\/span>/)
+  assert.match(html, /Clothing layer tracking/)
 })
 
 test('both enabling and disabling expose an actionable unsaved change', async () => {
@@ -37,7 +37,7 @@ test('both enabling and disabling expose an actionable unsaved change', async ()
     const html = await render({ modelValue: enabled, savedValue: !enabled, isSaving: false })
     assert.match(html, /Unsaved changes/)
     assert.doesNotMatch(html, /<button[^>]* disabled(?=[ >])/)
-    assert.match(html, /Save clothing settings/)
+    assert.match(html, /Save settings/)
   }
 })
 
@@ -45,5 +45,5 @@ test('conversion in progress blocks further toggles and duplicate saves', async 
   const html = await render({ modelValue: true, savedValue: false, isSaving: true })
   assert.match(html, /<input[^>]* disabled(?=[ >])/)
   assert.match(html, /<button[^>]* disabled(?=[ >])/)
-  assert.match(html, /Preparing character details/)
+  assert.match(html, /Saving settings/)
 })

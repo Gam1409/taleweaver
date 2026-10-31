@@ -1310,7 +1310,11 @@ async def import_session_ads(
 ):
     """Import a game session from a portable .ads (ZIP) file."""
     try:
-        content = await file.read()
+        from backend.engine.archive_safety import MAX_UPLOAD_BYTES
+
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "Session archive exceeds the upload budget.")
         new_session_id = await SessionImporter.import_ads(db, content, owner_id=current_user.id)
         if not new_session_id:
             raise HTTPException(

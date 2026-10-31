@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.models.world_entity import WorldEntity
@@ -13,30 +13,44 @@ class ContainerInteractions:
     async def _resolve_container_target(
         self, hint: str
     ) -> tuple[WorldEntity | None, dict[str, Any] | None, int | None]:
-        normalized_hint = (hint or "").strip().lower()
+        normalized_hint = (hint or "").strip().casefold()
         if not normalized_hint:
             return None, None, None
 
         ent_res = await self.db.execute(
             select(WorldEntity).where(
                 WorldEntity.session_id == self.game_id,
-                WorldEntity.current_scene_id == self.state.current_scene_id,
                 WorldEntity.entity_type == "OBJECT",
-                or_(
-                    WorldEntity.id == hint,
-                    WorldEntity.name == hint,
-                ),
             )
         )
-        scene_ent = ent_res.scalars().first()
-        if scene_ent and str(scene_ent.item_type or "").upper() == "CONTAINER":
-            return scene_ent, None, None
+        for scene_ent in ent_res.scalars():
+            override = next(
+                (
+                    value
+                    for key, value in (self.state.entity_states or {}).items()
+                    if key.upper() == scene_ent.id.upper() and isinstance(value, dict)
+                ),
+                {},
+            )
+            names = (scene_ent.id, scene_ent.name, override.get("name"))
+            if normalized_hint not in {str(value or "").strip().casefold() for value in names}:
+                continue
+            location = override.get("current_scene_id", scene_ent.current_scene_id)
+            hidden = override.get("is_hidden", scene_ent.is_hidden)
+            carried = override.get("is_in_inventory", scene_ent.is_in_inventory)
+            if (
+                location == self.state.current_scene_id
+                and not hidden
+                and not carried
+                and str(scene_ent.item_type or "").upper() == "CONTAINER"
+            ):
+                return scene_ent, None, None
 
         for idx, inv_item in enumerate(self.avatar.inventory or []):
             if not self._is_container_item(inv_item):
                 continue
-            item_id = str(inv_item.get("id") or "").strip().lower()
-            item_name = str(inv_item.get("name") or "").strip().lower()
+            item_id = str(inv_item.get("id") or "").strip().casefold()
+            item_name = str(inv_item.get("name") or "").strip().casefold()
             if normalized_hint in {item_id, item_name}:
                 return None, dict(inv_item), idx
 

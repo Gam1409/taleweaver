@@ -226,7 +226,9 @@ class SessionCheckpointService:
         state.time_config = deepcopy(state_snapshot.get("time_config") or {})
         state.inventory = deepcopy(state_snapshot.get("inventory") or [])
         previous_places = deepcopy(registry(state))
-        state.entity_states = deepcopy(state_snapshot.get("entity_states") or {})
+        restored_entities = deepcopy(state_snapshot.get("entity_states") or {})
+        restored_entities.pop("__portrait_requests__", None)
+        state.entity_states = restored_entities
         state.living_world = fork_simulation(
             state_snapshot.get("living_world"),
             absence_total=offline_total(game_session.living_world_presence),

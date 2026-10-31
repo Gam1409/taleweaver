@@ -24,7 +24,13 @@ async def check(db: AsyncSession, session_id: str, user_id: str) -> None:
     if game is None:
         return
     reconcile(simulation, int(state.in_game_time or 0), game.living_world_presence)
-    if simulation.settings.mode == "CATCH_UP" and simulation.target > simulation.cursor:
+    due_events = any(
+        event.status in {"PLANNED", "WAITING_FOR_LLM"} and event.due <= simulation.target
+        for event in simulation.events
+    )
+    if simulation.settings.mode == "CATCH_UP" and (
+        simulation.target > simulation.cursor or due_events
+    ):
         save(state, simulation)
         await db.commit()
         raise SessionBusyError(

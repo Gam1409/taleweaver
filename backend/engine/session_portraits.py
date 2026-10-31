@@ -4,14 +4,15 @@ import asyncio
 import json
 from copy import deepcopy
 from types import SimpleNamespace
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_attribute, set_committed_value
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import database, prompts
 from backend.core.comfyui_config import select_workflow
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
@@ -50,7 +51,7 @@ async def _context(
     state = (await db.execute(query)).scalar_one_or_none()
     if not state:
         raise HTTPException(404, "Session not found.")
-    query = (
+    npc_query = (
         select(WorldEntity)
         .where(
             WorldEntity.session_id == session_id,
@@ -59,7 +60,7 @@ async def _context(
         )
         .execution_options(populate_existing=True)
     )
-    npc = (await db.execute(query)).scalar_one_or_none()
+    npc = (await db.execute(npc_query)).scalar_one_or_none()
     if not npc:
         raise HTTPException(404, "NPC not found in this session.")
     return state, npc
@@ -75,8 +76,9 @@ def _override_key(state: SessionState, target_id: str) -> str:
 async def _settings(
     db: AsyncSession, state: SessionState, user: User, kind: str = "npc"
 ) -> tuple[dict, str, str]:
-    snapshot = AdventureLogic.extract_manifest_snapshot(state)
-    story = SimpleNamespace(original_manifest=snapshot.get("original_manifest") or {})
+    raw = (state.entity_states or {}).get("__manifest_snapshot__")
+    snapshot = raw if isinstance(raw, dict) else {}
+    story: Any = SimpleNamespace(original_manifest=snapshot.get("original_manifest") or {})
     if not snapshot and state.template_id:
         story = await db.get(AdventureTemplate, state.template_id) or story
     t2i = story_t2i(user.t2i_settings, story)
@@ -84,16 +86,16 @@ async def _settings(
         SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), [kind]
     )
     meta = snapshot.get("adventure") or {}
-    styles = state.selected_image_styles
-    tone = state.selected_tone
+    styles = cast(list[Any] | None, state.selected_image_styles)
+    tone = cast(str | dict[str, Any] | None, state.selected_tone)
     return (
         t2i,
         resolve_style_instruction(
             styles if styles is not None else meta.get("selected_image_styles"),
-            user.image_styles_catalog,
+            user.image_styles_catalog or [],
         ),
         resolve_tone_instruction(
-            tone if tone is not None else meta.get("selected_tone"), user.tone_catalog
+            tone if tone is not None else meta.get("selected_tone"), user.tone_catalog or []
         ),
     )
 
@@ -137,37 +139,48 @@ def _image_request(
 
 
 @retry_transaction
-async def _try_save_portrait(session_id: str, target_id: str, user_id: str, image_url: str) -> bool:
+async def _try_save_portrait(
+    session_id: str, target_id: str, user_id: str, image_url: str, token: str
+) -> bool:
     # A fresh transaction checks ownership and merges only the image field.
     async with database.AsyncSessionLocal() as db:
         state, npc = await _context(db, session_id, target_id, user_id)
-        key = _override_key(state, target_id)
-        override = (state.entity_states or {}).get(key)
-        if isinstance(override, dict) and "image_url" in override:
-            before = deepcopy(state.entity_states)
-            overrides = deepcopy(before)
-            overrides[key]["image_url"] = image_url
-            updated = await db.execute(
-                update(SessionState)
-                .where(SessionState.id == state.id, SessionState.entity_states == before)
-                .values(entity_states=overrides)
-                .execution_options(synchronize_session=False)
+        if (state.entity_states or {}).get("__portrait_requests__", {}).get(target_id) != token:
+            raise HTTPException(
+                409, "The portrait request is no longer current. The image was not applied."
             )
-            if updated.rowcount != 1:
-                return False
-        npc.image_url = image_url
+        key = _override_key(state, target_id)
+        before = deepcopy(state.entity_states)
+        overrides = deepcopy(before or {})
+        override = overrides.get(key)
+        if isinstance(override, dict) and "image_url" in override:
+            override["image_url"] = image_url
+        overrides["__portrait_requests__"].pop(target_id, None)
+        updated = await db.execute(
+            update(SessionState)
+            .where(SessionState.id == state.id, SessionState.entity_states == before)
+            .values(entity_states=overrides)
+            .execution_options(synchronize_session=False)
+        )
+        if cast(CursorResult[Any], updated).rowcount != 1:
+            return False
+        set_attribute(npc, "image_url", image_url)
         await db.commit()
         return True
 
 
-async def _save_portrait(session_id: str, target_id: str, user_id: str, image_url: str) -> None:
+async def _save_portrait(
+    session_id: str, target_id: str, user_id: str, image_url: str, token: str
+) -> None:
     for _attempt in range(3):
-        if await _try_save_portrait(session_id, target_id, user_id, image_url):
+        if await _try_save_portrait(session_id, target_id, user_id, image_url, token):
             return
     raise HTTPException(409, "The session changed while saving the portrait. Try again.")
 
 
-async def _portrait_facts(db, state, npc, override: dict) -> tuple[dict, dict | None]:
+async def _portrait_facts(
+    db: AsyncSession, state: SessionState, npc: WorldEntity, override: dict
+) -> tuple[dict, dict | None]:
     visible = await npc_visuals(db, state, npc)
     if visible is not None:
         return {"name": visible["name"], "description": portrait_description(visible)}, visible
@@ -176,11 +189,29 @@ async def _portrait_facts(db, state, npc, override: dict) -> tuple[dict, dict | 
     return facts, None
 
 
-async def _portrait_change(user, change: str, visible: dict | None) -> str:
+async def _portrait_change(user: User, change: str, visible: dict | None) -> str:
     if visible is None:
         return change
     frame = await extract_frame(user, change, [visible])
     return json.dumps(compose_frame(frame, [visible]), ensure_ascii=False)
+
+
+async def _reserve_portrait(db: AsyncSession, state: SessionState, target_id: str) -> str:
+    token = str(uuid4())
+    before = deepcopy(state.entity_states)
+    reserved = deepcopy(before or {})
+    reserved.setdefault("__portrait_requests__", {})[target_id] = token
+    updated = await db.execute(
+        update(SessionState)
+        .where(SessionState.id == state.id, SessionState.entity_states == before)
+        .values(entity_states=reserved)
+        .execution_options(synchronize_session=False)
+    )
+    if cast(CursorResult[Any], updated).rowcount != 1:
+        raise HTTPException(409, "The session changed before portrait generation. Try again.")
+    await db.commit()
+    set_committed_value(state, "entity_states", reserved)
+    return token
 
 
 @traced
@@ -193,6 +224,7 @@ async def regenerate_session_portrait(
     raw_override = (state.entity_states or {}).get(_override_key(state, npc.id))
     override = raw_override if isinstance(raw_override, dict) else {}
     facts, visible = await _portrait_facts(db, state, npc, override)
+    token = await _reserve_portrait(db, state, payload.target_id)
     try:
         t2i, style, tone = await _settings(db, state, user)
         request = _image_request(session_id, facts, t2i, user, style, tone)
@@ -226,7 +258,7 @@ async def regenerate_session_portrait(
         )
         if not image_url:
             raise HTTPException(502, "No portrait was returned. The previous image was kept.")
-        await _save_portrait(session_id, payload.target_id, user_id, image_url)
+        await _save_portrait(session_id, payload.target_id, user_id, image_url, token)
     except TimeoutError as exc:
         raise HTTPException(
             504,

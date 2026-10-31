@@ -10,9 +10,10 @@ from sqlalchemy import select
 
 from backend.core.llm_logger import log_structured_event
 from backend.engine.memory_rag.core import context_fallback, working_memory
-from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
+from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.embeddings import embed_texts
 from backend.engine.memory_rag.ranking import rank_documents
+from backend.engine.memory_rag.recall_sources import collect_documents
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.models.memory_rag import MemoryIndexState
@@ -126,7 +127,14 @@ def _canonical_scores(
 async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRecall:
     candidates, scope = await _semantic_candidates(manager, query)
     # Read source text AFTER network awaits: edits/deletion/rewinds cannot resurrect vector text.
-    documents = await collect_documents(manager.db, manager.state, str(manager.user.id))
+    documents = await collect_documents(
+        manager.db,
+        manager.state,
+        str(manager.user.id),
+        query=query,
+        npc_ids=npc_ids,
+        candidates=candidates,
+    )
     scores = {}
     if candidates and scope:
         current = await _index_state(manager)
