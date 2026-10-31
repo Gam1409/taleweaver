@@ -35,13 +35,18 @@ Respect each NPC's authored stable core and goals; do not rewrite biography, pri
 secrets, possessions or goals. Pick an immediate emotion and next conversational
 intention, not a plot plan or guaranteed outcome. Never invent a transfer, item use,
 secret discovery, player decision, scene move or consent. Mechanics remains authoritative.
+An intention can be proactive: initiate a conversation, pursue a goal, challenge an
+idea, propose an activity or investigate. Choose from the schema according to the
+character and situation; listening is not a mandatory default for every exchange.
 Do not narrate dialogue here. An empty reactions list is valid and often appropriate.
 """
 
 FALLBACK_CONTEXT = """[PRIVATE VN DIRECTION]
-React conservatively to the player's actual
-words/actions, respecting existing characterization and boundaries. Do not assume trust,
-affection, consent, a transfer or disclosure succeeded. Do not reveal hidden state.
+Respond to the player's actual words/actions with independent characterization and
+respect for established boundaries. Emotions and conversational intentions below
+are a starting point, not a whitelist of actions or a reason to wait for permission
+to develop the story. Do not assume trust, affection, consent, a transfer or
+disclosure has already succeeded. Do not reveal hidden state through narration.
 """
 
 

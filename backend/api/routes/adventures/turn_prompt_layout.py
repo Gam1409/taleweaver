@@ -14,9 +14,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.voice_repetition import strip_historical_voice_cues
 from backend.models.chat import ChatMessage
 
 RECENT_NARRATION_MAX_CHARS = 400
+STORY_NARRATION_MAX_CHARS = 8000
 DEFAULT_MAX_MEMORY_TURNS = 10
 
 # Planning/request fields whose information is already contained in the backend results.
@@ -32,12 +34,24 @@ def _is_debug_message(content: str) -> bool:
     return (content or "").lstrip().startswith("[DEBUG")
 
 
-def format_recent_narration(history: list[dict[str, str]]) -> str:
-    """Tail of the last GM reply, so Pass 1 can resolve references like 'open it'."""
+def format_recent_narration(
+    history: list[dict[str, str]], *, for_story_initiative: bool = False
+) -> str:
+    """Give VN planning the recent scene; ordinary mechanics only needs referents."""
     for message in reversed(history or []):
         content = (message.get("content") or "").strip()
         if message.get("role") != "assistant" or not content:
             continue
+        if for_story_initiative:
+            content = strip_historical_voice_cues(content)
+            if len(content) > STORY_NARRATION_MAX_CHARS:
+                head = STORY_NARRATION_MAX_CHARS // 2
+                content = (
+                    content[:head] + "\n[Middle omitted for context budget]\n" + content[-head:]
+                )
+            return (
+                f"PREVIOUS GM NARRATION (completed scene context for story development):\n{content}"
+            )
         if len(content) > RECENT_NARRATION_MAX_CHARS:
             content = "..." + content[-RECENT_NARRATION_MAX_CHARS:]
         return f"PREVIOUS GM NARRATION (only for resolving references):\n{content}"
@@ -49,11 +63,13 @@ def build_pass1_user_prompt(
     user_msg: str,
     history: list[dict[str, str]] | None = None,
     extra_blocks: tuple[str, ...] = (),
+    *,
+    for_story_initiative: bool = False,
 ) -> str:
     """Per-turn user message for Pass 1: live state, extra data, recent context, action."""
     parts = [state_block.strip()]
     parts.extend(block.strip() for block in extra_blocks if block and block.strip())
-    recent = format_recent_narration(history or [])
+    recent = format_recent_narration(history or [], for_story_initiative=for_story_initiative)
     if recent:
         parts.append(recent)
     parts.append(f"PLAYER ACTION:\n{user_msg}")
@@ -122,7 +138,7 @@ def build_narration_turn_block(
     if exits_task:
         lines.append(exits_task)
     if reminders:
-        lines.append("REMINDERS: " + " ".join(reminders))
+        lines.append("REMINDERS:\n" + "\n\n".join(reminders))
     return "\n".join(line for line in lines if line)
 
 

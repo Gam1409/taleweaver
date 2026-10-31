@@ -1,8 +1,11 @@
-"""Bound runaway vocal-tag runs without deleting speech or ordinary delivery cues."""
+"""Limit vocal runs in output and prevent old delivery cues becoming style examples."""
+
+import re
 
 from backend.core.voice_tags import VOCAL_BURST_SET, VOICE_TAG_SET
 
 _BURSTS = VOICE_TAG_SET | VOCAL_BURST_SET
+_HISTORY_CUE = re.compile(r"<([^<>\n]{1,64})>")
 MAX_RUN_TAGS = 8
 MAX_SAME_TAG = 2
 MAX_TAG_CHARS = 64
@@ -66,10 +69,21 @@ def clean_voice_repetition(text: str) -> str:
 
 
 def clean_voice_history(messages: list[dict]) -> list[dict]:
-    """Clean a copy of assistant history only; persisted messages are not rewritten."""
-    return [
-        {**message, "content": clean_voice_repetition(message["content"])}
-        if message.get("role") == "assistant" and isinstance(message.get("content"), str)
-        else message
-        for message in messages
-    ]
+    """Omit old inline delivery cues from model input, preserving prose and tone tags."""
+    cleaned = []
+    for message in messages:
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), str):
+            cleaned.append(message)
+            continue
+        content = strip_historical_voice_cues(message["content"])
+        # Some providers reject empty text messages; preserve structured tool responses.
+        if content.strip() or message.get("tool_calls") or message.get("function_call"):
+            cleaned.append({**message, "content": content})
+    return cleaned
+
+
+def strip_historical_voice_cues(text: str) -> str:
+    """Remove only known angle-bracket cues; keep emotional [tags] and unknown markup."""
+    return _HISTORY_CUE.sub(
+        lambda match: "" if match[1].strip().lower() in _BURSTS else match[0], text
+    )

@@ -12,12 +12,11 @@ from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
+from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
-    SceneRhythm,
     StoryBeat,
     direction_context,
     optional_beat,
-    optional_rhythm,
 )
 from backend.engine.visual_novel.story_prompts import DIRECTOR_INSTRUCTION
 
@@ -78,18 +77,18 @@ VNProgressionIntent = create_model(
     "VNProgressionIntent",
     __config__=ConfigDict(extra="ignore"),
     **_fields(ChatProgressionIntent, _INTENT_FIELDS),
-    scene_rhythm=(
-        Annotated[SceneRhythm | None, BeforeValidator(optional_rhythm)],
+    scene_focus=(
+        Annotated[SceneFocus | None, BeforeValidator(optional_focus)],
         Field(
             default=None,
-            description="Current scene readiness for an autonomous transition, grounded in the latest dialogue.",
+            description="Replaceable scene goal, open question and observed prior development; advisory only, never a memory or required plot path.",
         ),
     ),
     story_beat=(
         Annotated[StoryBeat | None, BeforeValidator(optional_beat)],
         Field(
             default=None,
-            description="Optional immediate autonomous NPC initiative; separate from already resolved actions.",
+            description="Principal autonomous NPC initiative for continuity validation, not a limit on narrative development; separate from completed events.",
         ),
     ),
     new_inventory_items=(list[VNInventoryItem] | None, None),

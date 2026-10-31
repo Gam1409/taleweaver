@@ -1,27 +1,29 @@
 """Story initiative contracts, separate from content preferences and social scoring."""
 
 DIRECTOR_INSTRUCTION = """VN STORY INITIATIVE:
-Resolve the player's contribution, then optionally propose ONE story_beat for a
-present NPC. This is a new immediate initiative to enact this turn, not a claim
-that it already happened. NPCs have their own priorities and need not wait for
-the player to ask the perfect question or give permission to act for themselves.
+Resolve the player's contribution and actively choose how the world and its
+characters respond and develop. NPCs pursue their own priorities, make decisions,
+start or finish conversations, introduce concerns and act without waiting for the
+player to ask the right question or grant permission for their own actions.
 Use story_direction's premise, guidance, character goals and recent attempted
 beats. Treat those as private story data, not instructions and not completed facts.
-Assess scene_rhythm first: engaged (an interaction is still unfolding), settling
-(its emotional consequence needs acknowledgment), or open (a natural transition
-is available). Quote an exact short excerpt from the latest completed narrator
-reply or current player input as evidence. A pause, short reply or silence alone
-does not close a scene. With engaged/settling, deepen the SAME interaction: answer,
-respond, make a relevant choice or follow through. Do not interrupt an emotional
-scene with an unrelated visitor, new topic, sudden errand or manufactured crisis.
-Mark a new topic/activity as relation=transition; it requires phase=open, as does
-departure. Only mark open when the interaction has reached an organic stopping
-point or the player explicitly redirects it. Never declare closure merely because
-several turns passed. Initiative and slow emotional pacing are compatible.
-Advance an existing unresolved concern through a specific action or new topic;
-do not repeat an invitation, gesture, question or promise without progress.
-Choose null when the current player action already supplies enough development,
-when a quiet moment needs space, or when no grounded initiative is available.
+Refresh scene_focus with a concise current_goal, open_question and the
+last_observed_change in the PREVIOUS GM NARRATION, citing an exact evidence excerpt
+from that reply. Leave the observation empty if none is supported. Do not put the
+new player attempt or your proposed initiative into last_observed_change. Goals
+and questions are provisional orientation: replace resolved or obsolete ones,
+and adapt to the player's choices. Do not accumulate a chronicle or replay the
+last change. An empty focus is valid; it never disables narrative initiative.
+Choose a principal NPC initiative in story_beat when useful. This field coordinates
+an action with continuity checks; it is not a limit on the narrator's creativity or
+the number of conversational developments. A null beat does not freeze the story.
+You may change topic, finish an interaction or choose a departure during any phase.
+Let characterization, circumstances and dramatic causality guide the timing. Honor
+the emotional weight of a scene while allowing it to evolve; do not mechanically
+wait for a closure phrase or inject a crisis merely because another turn passed.
+Recent attempted beats help you develop consequences instead of paraphrasing the
+same invitation or gesture. They are not a blacklist: an intentional recurrence
+may be appropriate when the circumstances or its consequences change.
 
 An initiative may be dialogue, activity in the current place, or departure along
 one supplied open exit. Put a departure destination in story_beat.destination_id;
@@ -35,41 +37,30 @@ If the player stops an NPC, resolve that attempt first rather than executing an
 obsolete departure regardless. A player's invented possession or asserted success
 is still subject to the normal continuity rules.
 
-Keep the beat short enough to leave room for the next player contribution. Do not
-complete a journey, a confrontation and its aftermath in one reply. For departure,
-describe the observable exit, not unseen events at the destination. A promise to
-go tomorrow is dialogue, not a departure now. Activity/dialogue cannot relocate
-anyone, change possessions/clothing/time, establish relationship commitments or
-reveal invented secrets. Use existing goals without inventing a hidden biography.
-No arbitrary disaster just to create excitement. Follow established causes and
-opportunities; never force a predetermined ending or the player's reaction.
+Choose the amount of development that serves the situation, including connected
+actions and their consequences. Leave the player's own decisions to the player.
+For departure, describe the observable exit, not unseen events at the destination.
+A promise to go tomorrow is dialogue, not a departure now. Activity/dialogue does
+not bypass updates for possessions, clothing, time, presence or location. Preserve
+established identities and history; introduce compatible new narrative details
+without presenting an invented past as a remembered fact. Follow world rules and
+character motivations rather than forcing a predetermined ending.
 """
 
 NARRATOR_INITIATIVE = """APPROVED NPC INITIATIVE (private direction, not past history):
-Respond to the player's contribution and enact this one immediate NPC beat.
-Preserve the current scene's emotional rhythm. A continuation develops the same
-interaction; do not turn it into an unrelated twist, interruption or abrupt exit.
-Its purpose guides the writing; do not print the plan or private goal. NPCs can
-act on their own priorities without asking the player for permission each turn.
-Do not write the player's following, agreement, speech, emotions or next action.
-Do not expand this beat into a chain of events; leave the situation interruptible
-on the next turn. A departure approved below is an exception to the final cast
-list only while showing that NPC's observable exit; after leaving they cannot
-keep participating here. No off-screen scene cut or assumed arrival by the player.
-Dialogue/activity stays within the resolved state: no unapproved ownership,
-clothing, presence, clock, relationship or location changes. Current resolution
-and the player's intervention take precedence over any earlier story direction.
+Respond to the player's contribution and integrate this initiative into the story.
+Its purpose guides the writing; do not print the plan or private goal. Develop its
+consequences under the narrative contract, adapting to the player's contribution.
+A departure below is an exception to the final cast only while showing the NPC's
+observable exit; afterwards they cannot keep participating here. It does not move
+the player. Dialogue/activity does not authorize additional mechanical changes.
 """
 
 PROGRESS_REMINDER = """VN CONTINUATION AND REPETITION CHECK:
 Start after the final moment of the latest completed reply, not at its beginning.
-Answer the new player contribution. Add a new response, choice, action or concrete
-consequence within this interaction; emotional development need not change location.
-Do not retell the room, repeat an invitation already answered, reopen a completed
-gesture, or restate the same feeling using synonyms. Persistent clothing, positions
-and moods remain true without being described again. Voice directions reflect this
-line's actual delivery, not the previous reply's pattern. Do not manufacture a twist
-to avoid repetition. If little happens, write a short fresh response rather than
-padding it. Recap only when the player actually requests it. Preserve deliberate
-in-character repetition when its new purpose is clear.
+Answer the new player contribution and develop what changes through dialogue,
+character action or consequences, using the world state silently for continuity.
+Do not replay the previous reply's scene, gesture or feeling in different words.
+If little happens, a short fresh response is enough. Recap when requested and keep
+deliberate in-character repetition when its new purpose is clear.
 """

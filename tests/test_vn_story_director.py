@@ -53,7 +53,7 @@ def setup_direction(*, phase="open", kind="departure", evidence=ACTION):
 
 def test_departure_adds_only_npc_movement_and_leaves_player_inventory_and_clock_alone():
     manager, npc, exits, proposal, event = setup_direction()
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
+    stage_direction(manager, proposal, event, [npc], exits)
     assert [(move.entity_id, move.to_scene_id) for move in event.moved_entities] == [
         ("NPC", "ROOM")
     ]
@@ -63,18 +63,19 @@ def test_departure_adds_only_npc_movement_and_leaves_player_inventory_and_clock_
     assert STATE_KEY not in manager.state.entity_states  # No early/independent commit.
 
 
-@pytest.mark.parametrize("phase", ["engaged", "settling"])
+@pytest.mark.parametrize("phase", ["engaged", "settling", "open"])
 @pytest.mark.parametrize("kind", ["departure", "dialogue"])
-def test_emotional_scene_blocks_departure_and_unrelated_new_topic(phase, kind):
+def test_scene_rhythm_does_not_veto_npc_initiative(phase, kind):
     manager, npc, exits, proposal, event = setup_direction(phase=phase, kind=kind)
     proposal.story_beat.relation = "transition"
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
-    assert not event.moved_entities and direction_reminder(manager, event) == ""
+    stage_direction(manager, proposal, event, [npc], exits)
+    assert "APPROVED NPC INITIATIVE" in direction_reminder(manager, event)
+    assert bool(event.moved_entities) == (kind == "departure")
 
 
 def test_engaged_scene_allows_a_new_response_within_same_interaction():
     manager, npc, exits, proposal, event = setup_direction(phase="engaged", kind="dialogue")
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
+    stage_direction(manager, proposal, event, [npc], exits)
     assert "Explain why the letter matters" in direction_reminder(manager, event)
     assert not event.moved_entities
 
@@ -89,7 +90,6 @@ def test_engaged_scene_allows_a_new_response_within_same_interaction():
         "unknown",
         "player_moves",
         "other_origin",
-        "unsupported_closure",
     ],
 )
 def test_invalid_or_displaced_initiative_is_not_narrated(failure):
@@ -108,51 +108,47 @@ def test_invalid_or_displaced_initiative_is_not_narrated(failure):
         event.new_scene_id = "GARDEN"
     if failure == "other_origin":
         exits[0]["from_scene_id"] = "FOREST"
-    if failure == "unsupported_closure":
-        proposal.scene_rhythm.evidence = "An older scene has finished."
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
+    stage_direction(manager, proposal, event, [npc], exits)
     assert not event.moved_entities and direction_reminder(manager, event) == ""
 
 
-def test_only_latest_reply_can_supply_transition_evidence():
-    manager, npc, exits, proposal, event = setup_direction(evidence="Our talk is finished.")
-    history = [
-        {"role": "assistant", "content": "Our talk is finished."},
-        {"role": "assistant", "content": "She begins a difficult confession."},
-    ]
-    stage_direction(manager, proposal, event, [npc], exits, "I listen.", history)
-    assert not event.moved_entities
-    stage_direction(manager, proposal, event, [npc], exits, "I listen.", history[:1])
+@pytest.mark.parametrize(
+    "rhythm", [None, {"phase": "invalid"}, {"phase": "open", "evidence": "Not in history."}]
+)
+def test_missing_or_unmatched_rhythm_does_not_require_player_permission(rhythm):
+    manager, npc, exits, proposal, event = setup_direction()
+    proposal = VNProgressionIntent.model_validate({**proposal.model_dump(), "scene_rhythm": rhythm})
+    stage_direction(manager, proposal, event, [npc], exits)
     assert event.moved_entities
 
 
 def test_guardrail_rejection_cannot_leave_a_phantom_departure_in_narration_or_memory():
     manager, npc, exits, proposal, event = setup_direction()
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
+    stage_direction(manager, proposal, event, [npc], exits)
     event.moved_entities = []
     assert direction_reminder(manager, event) == ""
     record_direction(manager, "reply", completed=True)
     assert STATE_KEY not in manager.state.entity_states
 
 
-def test_attempted_directions_are_bounded_not_facts_and_repetition_is_rejected():
+def test_attempted_directions_are_bounded_guidance_not_an_action_blacklist():
     manager, npc, exits, proposal, event = setup_direction(kind="dialogue")
     for number in range(6):
         proposal.story_beat.action = f"Explain reason {number}"
-        stage_direction(manager, proposal, event, [npc], exits, ACTION)
+        stage_direction(manager, proposal, event, [npc], exits)
         record_direction(manager, str(number), completed=True)
     assert len(recent_directions(manager.state)) == 4
     assert manager.state.entity_states["kept"] == {"value": 1}
     assert direction_context(manager, [npc], exits)["premise"] == "Find the missing letter."
     assert "recent_attempted_beats_not_facts" in direction_context(manager, [npc], exits)
     proposal.story_beat.action = "  EXPLAIN reason 5!"
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
-    assert direction_reminder(manager, event) == ""
+    stage_direction(manager, proposal, event, [npc], exits)
+    assert "EXPLAIN reason 5!" in direction_reminder(manager, event)
 
 
 def test_incomplete_narration_does_not_record_a_direction():
     manager, npc, exits, proposal, event = setup_direction(kind="dialogue")
-    stage_direction(manager, proposal, event, [npc], exits, ACTION)
+    stage_direction(manager, proposal, event, [npc], exits)
     record_direction(manager, "reply", completed=False)
     assert STATE_KEY not in manager.state.entity_states
 
@@ -166,5 +162,6 @@ def test_malformed_optional_planning_does_not_abort_valid_continuity():
             "narrative_description": "The conversation takes two minutes.",
         }
     )
-    assert proposal.story_beat is None and proposal.scene_rhythm is None
+    assert proposal.story_beat is None
+    assert "scene_rhythm" not in proposal.model_dump()
     assert proposal.extra_time_minutes == 2

@@ -185,6 +185,30 @@ def test_recent_narration_is_truncated_to_tail() -> None:
     assert len(block) < 500
 
 
+def test_story_planner_gets_scene_development_before_the_last_400_characters() -> None:
+    text = (
+        'Lina decides to finish the repairs. [angry] "<sigh> Hand me the brush." '
+        + "The room is quiet. " * 80
+    )
+    history = [{"role": "assistant", "content": text}]
+    prompt = build_pass1_user_prompt("STATE", "I wait.", history, for_story_initiative=True)
+    assert "Lina decides to finish the repairs." in prompt
+    assert '[angry] " Hand me the brush."' in prompt
+    assert "<sigh>" not in prompt
+    assert "only for resolving references" not in prompt
+    assert history[0]["content"] == text
+
+
+def test_long_story_context_retains_both_opening_and_final_moment_with_explicit_omission() -> None:
+    text = "OPENING " + "x" * 16000 + " FINAL MOMENT"
+    block = format_recent_narration(
+        [{"role": "assistant", "content": text}], for_story_initiative=True
+    )
+    assert "OPENING" in block and block.endswith("FINAL MOMENT")
+    assert "[Middle omitted for context budget]" in block
+    assert len(block) < 8200
+
+
 def test_outcome_json_drops_planning_fields() -> None:
     # Arrange
     event = GameEvent(

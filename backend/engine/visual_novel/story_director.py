@@ -1,4 +1,4 @@
-"""One bounded NPC initiative inside the existing VN continuity request."""
+"""NPC initiative inside the existing VN continuity request, with world validation."""
 
 import json
 import logging
@@ -9,9 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import EntityMovement
 from backend.engine.visual_novel.config import read_settings
+from backend.engine.visual_novel.scene_focus import (
+    STATE_KEY,
+    focus_context,
+    focus_reminder,
+    record_focus,
+    stage_focus,
+)
 from backend.engine.visual_novel.story_prompts import NARRATOR_INITIATIVE
 
-STATE_KEY = "__vn_story_direction__"
 MAX_RECENT = 4
 logger = logging.getLogger(__name__)
 
@@ -27,13 +33,6 @@ class StoryBeat(BaseModel):
     destination_id: str | None = Field(default=None, max_length=64)
 
 
-class SceneRhythm(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    phase: Literal["engaged", "settling", "open"] = "engaged"
-    evidence: str = Field(min_length=4, max_length=300)
-
-
 def optional_beat(value: Any) -> StoryBeat | None:
     if value is None:
         return None
@@ -42,31 +41,6 @@ def optional_beat(value: Any) -> StoryBeat | None:
     except ValidationError:
         logger.warning("Discarding malformed optional VN story initiative")
         return None
-
-
-def optional_rhythm(value: Any) -> SceneRhythm | None:
-    if value is None:
-        return None
-    try:
-        return SceneRhythm.model_validate(value)
-    except ValidationError:
-        logger.warning("Discarding malformed optional VN scene rhythm; transitions stay blocked")
-        return None
-
-
-def transition_allowed(proposal: Any, user_msg: str, history: list[dict]) -> bool:
-    rhythm = getattr(proposal, "scene_rhythm", None)
-    if rhythm is None or rhythm.phase != "open":
-        return False
-    latest = next(
-        (
-            str(row.get("content", ""))
-            for row in reversed(history)
-            if row.get("role") == "assistant"
-        ),
-        "",
-    )
-    return rhythm.evidence in user_msg or rhythm.evidence in latest
 
 
 def _states(state: Any) -> dict:
@@ -139,7 +113,7 @@ def direction_context(manager: Any, entities: list[Any], exits: list[dict]) -> d
                 destination for destination in destinations if _movable(state, npc, destination)
             ),
         }
-        for npc in present[:3]
+        for npc in present
     ]
     return {
         "premise": str(getattr(state, "plot", None) or getattr(adventure, "plot", "") or "")[:1200],
@@ -148,6 +122,7 @@ def direction_context(manager: Any, entities: list[Any], exits: list[dict]) -> d
         )[:800],
         "pace": read_settings(state).pace,
         "characters": cast,
+        "provisional_scene_orientation_not_facts": focus_context(state),
         "recent_attempted_beats_not_facts": [
             {
                 "npc_id": entry["beat"]["npc_id"],
@@ -166,17 +141,14 @@ def stage_direction(
     event: Any,
     entities: list[Any],
     exits: list[dict],
-    user_msg: str = "",
+    *,
     history: list[dict] | None = None,
 ) -> None:
     """Validate initiative independently; existing turn guardrails still run afterwards."""
     manager._vn_story_beat = None
+    stage_focus(manager, proposal, history or [])
     beat = getattr(proposal, "story_beat", None)
     if beat is None:
-        return
-    if (beat.kind == "departure" or beat.relation == "transition") and not transition_allowed(
-        proposal, user_msg, history or []
-    ):
         return
     npc = _eligible_actor(manager.state, beat, event, entities)
     if npc is None:
@@ -196,8 +168,6 @@ def stage_direction(
 def _eligible_actor(state: Any, beat: StoryBeat, event: Any, entities: list[Any]) -> Any:
     if event.new_scene_id and event.new_scene_id != state.current_scene_id:
         return None
-    if repeated_direction(state, beat):
-        return None
     npc = next((npc for npc in entities if npc.id == beat.npc_id), None)
     if npc is None or not _available(state, npc):
         return None
@@ -210,18 +180,6 @@ def _eligible_actor(state: Any, beat: StoryBeat, event: Any, entities: list[Any]
     ):
         return None
     return npc
-
-
-def repeated_direction(state: Any, beat: StoryBeat) -> bool:
-    """Reject a repeated planner action, not deliberate repetition in player dialogue."""
-    action = " ".join(beat.action.casefold().split()).rstrip(".!?…")
-    return any(
-        entry["beat"]["npc_id"] == beat.npc_id
-        and entry["beat"]["kind"] == beat.kind
-        and entry["beat"].get("destination_id") == beat.destination_id
-        and " ".join(entry["beat"]["action"].casefold().split()).rstrip(".!?…") == action
-        for entry in recent_directions(state)
-    )
 
 
 def _valid_departure(state: Any, npc: Any, destination: str | None, exits: list[dict]) -> bool:
@@ -238,21 +196,32 @@ def _valid_departure(state: Any, npc: Any, destination: str | None, exits: list[
 def direction_reminder(manager: Any, event: Any) -> str:
     """Never narrate a departure rejected by the normal movement guardrails."""
     beat = getattr(manager, "_vn_story_beat", None)
+    orientation = focus_reminder(manager)
     if beat is None:
-        return ""
+        return orientation
     if beat.kind == "departure" and not any(
         move.entity_id == beat.npc_id and move.to_scene_id == beat.destination_id
         for move in getattr(event, "moved_entities", None) or []
     ):
         manager._vn_story_beat = None
-        return ""
-    return NARRATOR_INITIATIVE + json.dumps(beat.model_dump(), ensure_ascii=False)
+        return orientation
+    return "\n\n".join(
+        part
+        for part in (
+            orientation,
+            NARRATOR_INITIATIVE + json.dumps(beat.model_dump(), ensure_ascii=False),
+        )
+        if part
+    )
 
 
 def record_direction(manager: Any, message_id: str, *, completed: bool) -> None:
     """Retain attempted direction, not invented memories; replay snapshots rewind it."""
+    if not completed:
+        return
+    record_focus(manager, message_id)
     beat = getattr(manager, "_vn_story_beat", None)
-    if not completed or beat is None:
+    if beat is None:
         return
     recent = [
         entry for entry in recent_directions(manager.state) if entry["message_id"] != message_id
@@ -260,5 +229,9 @@ def record_direction(manager: Any, message_id: str, *, completed: bool) -> None:
     recent.append({"message_id": message_id, "beat": beat.model_dump()})
     manager.state.entity_states = {
         **_states(manager.state),
-        STATE_KEY: {"version": 1, "recent": recent[-MAX_RECENT:]},
+        STATE_KEY: {
+            **_states(manager.state).get(STATE_KEY, {}),
+            "version": 1,
+            "recent": recent[-MAX_RECENT:],
+        },
     }

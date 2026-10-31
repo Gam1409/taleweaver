@@ -9,6 +9,7 @@ from backend.core.voice_repetition import (
     VoiceRepetitionFilter,
     clean_voice_history,
     clean_voice_repetition,
+    strip_historical_voice_cues,
 )
 
 LOOP = "<giggles><short pause><throat-clearing><breath><long pause><mischievously>"
@@ -54,8 +55,38 @@ def test_history_cleanup_does_not_rewrite_user_input_or_saved_assistant_messages
     ]
     result = clean_voice_history(messages)
     assert result[:2] == messages[:2]
-    assert result[2]["content"] == clean_voice_repetition(original)
+    assert result[2]["content"] == "Thank you."
     assert messages[2]["content"] == original
+
+
+def test_spoken_words_between_cues_do_not_preserve_a_historical_sound_pattern():
+    content = '[angry] "<sigh> Hello. <sigh> Take a seat." [playful] "Tea?" [surprised] "Oh!"'
+    messages = [{"role": "assistant", "content": content} for _ in range(10)]
+    cleaned = clean_voice_history(messages)
+    assert all("<sigh>" not in row["content"] for row in cleaned)
+    assert all(
+        row["content"] == '[angry] " Hello.  Take a seat." [playful] "Tea?" [surprised] "Oh!"'
+        for row in cleaned
+    )
+    assert all(row["content"] == content for row in messages)
+
+
+def test_history_cue_cleanup_preserves_prose_unknown_markup_and_partial_tags():
+    text = "She sighed. <unknown> 2 < 3 and 5 > 4. <breath> Still running. <bre"
+    assert (
+        strip_historical_voice_cues(text)
+        == "She sighed. <unknown> 2 < 3 and 5 > 4.  Still running. <bre"
+    )
+
+
+def test_cue_only_history_does_not_send_empty_assistant_messages_or_drop_tool_calls():
+    history = [
+        {"role": "assistant", "content": "<sigh> <breath>"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "call-1"}]},
+        {"role": "user", "content": "Continue."},
+    ]
+    assert clean_voice_history(history) == history[1:]
+    assert history[0]["content"] == "<sigh> <breath>"
 
 
 @pytest.mark.asyncio

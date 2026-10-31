@@ -39,6 +39,9 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert state.entity_states[SETTINGS_KEY] == {"pace": pace}
     assert read_settings(state).pace == pace
     assert f"PACING: {pace.upper()}." in prompt
+    assert "VISUAL NOVEL PRESENTATION" in prompt
+    assert "not a checklist to describe in each response" in prompt
+    assert "there is no one-beat or one-gesture limit" in prompt
     assert "Stop before the next meaningful player decision" in prompt
     assert 'Character Name: "Dialogue"' in prompt
     assert "session's content language" in prompt

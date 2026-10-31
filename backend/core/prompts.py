@@ -392,13 +392,17 @@ GM_NARRATION_MANDATORY_FORMATTING = (
 
 def get_vocal_direction_prompt(provider: str = "google") -> str:
     return (
-        "VOICE DIRECTION: Actively use tone tags and inline vocalizations to give your narration and dialogue life and atmosphere. "
+        "VOICE DIRECTION: Delivery tags are optional, sparse annotations of this line's actual delivery. "
+        "Ordinary untagged dialogue is the default; do not add a cue merely to decorate a reply. "
         "Tags MUST come from the fixed catalogs below and MUST ALWAYS be in English. "
         + build_voice_tag_catalog_prompt_block(provider)
-        + "1. TONE TAGS: Open a paragraph or dialogue line with one tone tag from the Tone Catalog to set the sustained mood (for example [excited], [whispers], [shouting], [very fast]). "
+        + "1. TONE TAGS: When an emotional or delivery distinction matters, use one Tone Catalog tag at the start of the paragraph or dialogue line. "
         "A tone tag applies to the entire paragraph or dialogue line it opens — start a new paragraph when switching to a different tag. Do not nest tags.\n"
-        "2. INLINE VOCALIZATIONS: Insert momentary human sounds exactly where they happen using angle brackets from the Vocal Bursts Catalog (for example <cough>, <sigh>, <short pause>, <laugh>, <throat-clearing>).\n"
-        "Use both whenever the mood calls for it — combat tension, hushed secrets, desperate warnings."
+        "2. INLINE VOCALIZATIONS: Use a Vocal Bursts Catalog cue only for a meaningful sound occurring now. "
+        "Do not fill pauses with tag chains or repeat a sound out of habit. "
+        "Past delivery is not a permanent character trait; stop carrying a cue forward when its cause ends. "
+        "A continuing physical condition may justify repetition, but earlier tags alone do not. "
+        "Express the scene primarily through words and actions; there is no tag quota."
     )
 
 

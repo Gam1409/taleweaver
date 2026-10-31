@@ -22,7 +22,18 @@ EventKind = Literal[
 ]
 Emotion = Literal["neutral", "curious", "pleased", "concerned", "hurt", "angry", "guarded"]
 Intention = Literal[
-    "listen", "clarify", "reassure", "set_boundary", "reflect", "cooperate", "withdraw"
+    "listen",
+    "clarify",
+    "reassure",
+    "set_boundary",
+    "reflect",
+    "cooperate",
+    "withdraw",
+    "initiate",
+    "pursue_goal",
+    "challenge",
+    "propose_activity",
+    "investigate",
 ]
 
 

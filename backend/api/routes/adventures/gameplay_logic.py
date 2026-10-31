@@ -1196,6 +1196,7 @@ class GameTurnManager:
         """
         _ = auto_visualize
         self._vn_story_beat = None
+        self._vn_scene_focus = None
         cycle_start = time.perf_counter()
         scene_id_before_turn = self.state.current_scene_id
         time_before_turn = self.state.in_game_time
@@ -1677,6 +1678,7 @@ class GameTurnManager:
                     global_unlock_rules_prompt_block,
                     "" if policy.vn else presence_context(all_entities, self.state),
                 ),
+                for_story_initiative=policy.vn,
             )
 
             progression_start = time.perf_counter()
@@ -1763,8 +1765,7 @@ class GameTurnManager:
                     game_event,
                     all_entities,
                     reduced_exits,
-                    user_msg,
-                    history,
+                    history=history,
                 )
 
             try:
@@ -1895,10 +1896,6 @@ class GameTurnManager:
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
         ]
-        if use_vocal_tags:
-            reminders.append(
-                "Use tone tags like [excited] at the start of paragraphs, and inline vocal bursts like <sigh> or <laugh> where appropriate."
-            )
         if language:
             reminders.append(
                 f"Respond in {language.upper()} only (except voice tags like [curious], which MUST always remain in English)."

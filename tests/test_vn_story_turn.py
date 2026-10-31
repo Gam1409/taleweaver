@@ -21,6 +21,7 @@ class StoryRoles(TurnRoles):
         super().__init__()
         self.phase = phase
         self.initiative = initiative
+        self.focus = None
 
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
@@ -31,6 +32,7 @@ class StoryRoles(TurnRoles):
             {
                 "narrative_description": "The player stays to examine the painting.",
                 "scene_rhythm": {"phase": self.phase, "evidence": "Наш разговор окончен."},
+                "scene_focus": self.focus,
                 "story_beat": {
                     "npc_id": "LINA",
                     "kind": "departure",
@@ -138,20 +140,51 @@ async def test_departure_persists_without_player_following_and_replay_rewinds_di
 
 
 @pytest.mark.asyncio
-async def test_unfinished_emotional_scene_keeps_npc_present(monkeypatch):
+async def test_npc_can_choose_departure_without_scene_closure_or_player_permission(monkeypatch):
     roles = StoryRoles(phase="engaged")
     install_roles(monkeypatch, roles)
     async with TestSessionLocal() as db:
         user, _, state, npc = await seed_story(db)
         manager = GameTurnManager(db, "session-1", user)
-        chunks = [chunk async for chunk in manager.process_turn(ACTION)]
+        chunks = [chunk async for chunk in manager.process_turn("Я молча смотрю на картину.")]
         assert final_payload(chunks)["status"] == "success", "".join(chunks)
         await db.refresh(state)
         await db.refresh(npc)
-        assert STATE_KEY not in state.entity_states
+        assert STATE_KEY in state.entity_states
         assert (state.entity_states.get("LINA") or {}).get(
             "current_scene_id", npc.current_scene_id
-        ) == "START"
-        assert "APPROVED NPC INITIATIVE" not in json.dumps(
+        ) == "ROOM"
+        assert state.current_scene_id == "START"
+        assert "APPROVED NPC INITIATIVE" in json.dumps(
             roles.prompts, ensure_ascii=False, default=str
+        )
+
+
+@pytest.mark.asyncio
+async def test_scene_focus_persists_without_initiative_and_full_replay_rewinds_it(monkeypatch):
+    roles = StoryRoles(initiative=False)
+    roles.focus = {"current_goal": "Find the letter", "open_question": "Who last saw it?"}
+    install_roles(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, _, state, _ = await seed_story(db)
+        manager = GameTurnManager(db, "session-1", user)
+        chunks = [chunk async for chunk in manager.process_turn("Я спрашиваю про письмо.")]
+        assert final_payload(chunks)["status"] == "success", "".join(chunks)
+        await db.refresh(state)
+        focus = state.entity_states[STATE_KEY]["focus"]
+        assert focus["orientation"]["current_goal"] == "Find the letter"
+        assert "SCENE ORIENTATION" in json.dumps(roles.prompts, ensure_ascii=False, default=str)
+        assert roles.roles.count("small") == 2  # Continuity and social, no extra model call.
+
+        roles.focus = None
+        retry = GameTurnManager(db, "session-1", user)
+        chunks = [
+            chunk
+            async for chunk in retry.process_turn("ignored", replay_message_id=focus["message_id"])
+        ]
+        assert final_payload(chunks)["status"] == "success", "".join(chunks)
+        await db.refresh(state)
+        assert STATE_KEY not in state.entity_states
+        assert "SCENE ORIENTATION" not in json.dumps(
+            roles.prompts[-1], ensure_ascii=False, default=str
         )
