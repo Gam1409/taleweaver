@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.living_world import presence, runner
+from backend.engine.living_world import concordia_adapter, cycles, deliberation, presence, runner
 from backend.engine.living_world.schema import (
     Command,
     Event,
@@ -67,6 +67,8 @@ async def status(
     if simulation.settings.living_world_enabled:
         reconcile(simulation, int(state.in_game_time or 0), game.living_world_presence)
     result = public_status(simulation)
+    result["concordia_available"] = concordia_adapter.available()
+    result["decision_running"] = game_id in deliberation.pending or game_id in cycles.pending
     if result["status"] == "RUNNING" and game_id not in runner.running:
         result["status"] = "PARTIAL"
     return result
@@ -138,10 +140,15 @@ async def stop(
     game_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> dict:
     await owned(db, game_id, user)
-    request = runner.running.get(game_id)
-    if request is not None:
-        request.set()
-    return {"stop_requested": request is not None}
+    requests = [
+        deliberation.pending.get(game_id),
+        runner.running.get(game_id),
+        cycles.pending.get(game_id),
+    ]
+    for request in requests:
+        if request is not None:
+            request.set()
+    return {"stop_requested": any(request is not None for request in requests)}
 
 
 @router.get("/{game_id}/living-world/events")
@@ -157,6 +164,9 @@ async def events(
     return {
         "timeline": simulation.timeline,
         "events": [event.model_dump() for event in simulation.events],
+        "private_notes": {
+            key: value.model_dump() for key, value in simulation.private_notes.items()
+        },
     }
 
 
@@ -186,6 +196,8 @@ async def schedule(
     if (
         event.status != "PLANNED"
         or event.result
+        or event.speech
+        or event.attempts
         or event.observed_by_player
         or event.committed_at is not None
     ):

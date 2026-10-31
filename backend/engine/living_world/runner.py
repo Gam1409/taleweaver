@@ -2,11 +2,13 @@
 
 import asyncio
 import time
+from dataclasses import dataclass
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world import rules
+from backend.engine.living_world.schedules import compile_slot, slot_limit
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.living_world.state import save
 from backend.models.session_state import SessionState
@@ -39,23 +41,51 @@ def dependencies_ready(simulation: Simulation, event: Event) -> bool:
     return all(known.get(key) == "COMMITTED" for key in event.dependencies)
 
 
-async def run(db: AsyncSession, state: SessionState, simulation: Simulation) -> None:
+@dataclass
+class Budget:
+    game_limit: int
+    events_left: int
+    seconds_left: float
+    processed: int = 0
+
+    @classmethod
+    def for_simulation(cls, simulation: Simulation) -> "Budget":
+        settings = simulation.settings
+        return cls(
+            simulation.cursor + int(settings.max_catchup_game_hours * 60),
+            settings.max_events,
+            settings.max_wall_seconds,
+        )
+
+
+async def run(
+    db: AsyncSession, state: SessionState, simulation: Simulation, *, budget: Budget | None = None
+) -> None:
     if not simulation.settings.living_world_enabled:
         raise HTTPException(409, "Enable Living World first.")
     stop = asyncio.Event()
     running[state.session_id] = stop
     try:
-        await _run(db, state, simulation, stop)
+        await _run(db, state, simulation, stop, budget or Budget.for_simulation(simulation))
     finally:
         running.pop(state.session_id, None)
 
 
 async def _run(
-    db: AsyncSession, state: SessionState, simulation: Simulation, stop: asyncio.Event
+    db: AsyncSession,
+    state: SessionState,
+    simulation: Simulation,
+    stop: asyncio.Event,
+    budget: Budget,
 ) -> None:
     started = time.monotonic()
     settings = simulation.settings
-    limit = min(simulation.target, simulation.cursor + int(settings.max_catchup_game_hours * 60))
+    await compile_slot(db, state, simulation)
+    limit = min(
+        slot_limit(simulation),
+        simulation.cursor + int(settings.max_catchup_game_hours * 60),
+        budget.game_limit,
+    )
     if settings.mode == "PAUSE":
         # Normal play can advance the game clock while connected. Never use UTC
         # or an imported catch-up target to advance a paused world's clock.
@@ -63,8 +93,8 @@ async def _run(
     simulation.last_run_events = 0
     simulation.status = "RUNNING"
     while (
-        simulation.last_run_events < settings.max_events
-        and time.monotonic() - started < settings.max_wall_seconds
+        simulation.last_run_events < min(settings.max_events, budget.events_left)
+        and time.monotonic() - started < min(settings.max_wall_seconds, budget.seconds_left)
         and not stop.is_set()
     ):
         event = next_event(simulation, limit)
@@ -94,6 +124,10 @@ async def _run(
             if simulation.cursor >= simulation.target and next_event(simulation, limit) is None
             else "PARTIAL"
         )
+    budget.events_left -= simulation.last_run_events
+    budget.processed += simulation.last_run_events
+    budget.seconds_left = max(0, budget.seconds_left - (time.monotonic() - started))
+    simulation.last_run_events = budget.processed
     state.in_game_time = max(int(state.in_game_time or 0), simulation.cursor)
     save(state, simulation)
     await db.commit()

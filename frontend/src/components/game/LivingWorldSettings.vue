@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
+import { authState } from '@/store/auth'
+import LivingWorldReasoning from './LivingWorldReasoning.vue'
+import LivingWorldJournal from './LivingWorldJournal.vue'
 import { livingWorldRequest, type LivingWorldPreferences, type LivingWorldStatus } from '@/services/livingWorld'
 
 const props = defineProps<{ sessionId: string }>()
@@ -23,9 +26,11 @@ async function save(): Promise<boolean> {
   if (!dirty.value) return true
   busy.value = true
   try {
+    const available = status.value?.concordia_available
     status.value = await livingWorldRequest<LivingWorldStatus>(props.sessionId, '', 'PATCH', {
       settings: draft.value, expected_revision: status.value.revision,
     })
+    status.value.concordia_available = available
     draft.value = { ...status.value.settings }
     error.value = ''
     window.dispatchEvent(new CustomEvent('living-world-settings-changed'))
@@ -41,8 +46,14 @@ async function resume(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    status.value = await livingWorldRequest<LivingWorldStatus>(props.sessionId, '/resume', 'POST', { expected_revision: status.value.revision })
-  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Could not continue simulation.' }
+    const available = status.value?.concordia_available
+    status.value = await livingWorldRequest<LivingWorldStatus>(props.sessionId, status.value.settings.deliberation_enabled ? '/cycle' : '/resume', 'POST', { expected_revision: status.value.revision })
+    status.value.concordia_available = available
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Could not continue simulation.'
+    await load()
+    error.value = message
+  }
   finally { busy.value = false }
 }
 
@@ -58,7 +69,7 @@ defineExpose({ save })
 <template>
   <section class="space-y-3 rounded-xl border border-teal-500/30 p-4" aria-labelledby="living-world-title">
     <h4 id="living-world-title" class="font-bold text-teal-300">Living World · Experimental</h4>
-    <p class="text-xs text-slate-400">Local persistence and bounded rules simulation. Autonomous LLM decisions and Concordia are not enabled in this preview.</p>
+    <p class="text-xs text-slate-400">A persistent world with bounded NPC routines, private memories and optional Concordia decisions. Disabled until you opt in.</p>
     <template v-if="draft && status">
       <label class="flex items-center gap-2 text-sm"><input v-model="draft.living_world_enabled" type="checkbox" :disabled="busy"> Enable Living World for this session</label>
       <div v-if="draft.living_world_enabled" class="space-y-3 text-sm">
@@ -77,14 +88,16 @@ defineExpose({ save })
         </div>
         <label class="flex items-center gap-2"><input v-model="draft.auto_catchup_on_resume" type="checkbox" :disabled="busy"> Run one bounded batch when returning</label>
         <p role="status">{{ busy ? 'Working…' : status.status }} · Game minute {{ status.cursor }} / {{ status.target }}</p>
-        <p class="text-xs text-slate-400">{{ status.pending_events }} pending events · {{ status.last_run_events }} processed last run · No LLM calls</p>
-        <p v-if="status.status === 'WAITING_FOR_LLM'" class="text-xs text-amber-300">A decision requires an unavailable reasoning adapter. No result was invented and dependent time has not advanced.</p>
+        <p class="text-xs text-slate-400">{{ status.pending_events }} pending events · {{ status.last_run_events }} processed last run · {{ status.llm_calls }} decision attempts</p>
+        <p v-if="status.status === 'WAITING_FOR_LLM'" class="text-xs text-amber-300">A decision is waiting. Continue with private decisions enabled, or disable the experiment to resume normal play. No outcome has been invented.</p>
+        <LivingWorldReasoning v-model="draft" :busy="busy" :concordia-available="status.concordia_available ?? false" />
         <div class="flex flex-wrap gap-2">
           <button type="button" :disabled="busy" class="rounded bg-teal-800 px-3 py-2 disabled:opacity-40" @click="resume">Continue catch-up</button>
           <button type="button" class="rounded border border-white/20 px-3 py-2" @click="stop">Stop after current event</button>
         </div>
         <p v-for="(line, index) in status.recap" :key="index" class="text-sm">{{ line }}</p>
       </div>
+      <LivingWorldJournal v-if="authState.user?.role === 'admin'" :session-id="sessionId" />
       <button type="button" :disabled="busy || !dirty" class="rounded border border-teal-500/50 px-3 py-2 text-sm disabled:opacity-40" @click="save">Save Living World settings</button>
     </template>
     <p v-if="error" role="alert" class="text-sm text-red-300">{{ error }}</p>

@@ -74,6 +74,14 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 * **Appearance & Clothing:** VN tracks individual outfits and changes such as gifts, dressing, and removing items. Visible clothing helps guide both narration and illustrations; more detailed clothing is optional.
 * **Private Knowledge:** A character card shows what your protagonist has learned. It does not reveal an NPC's hidden inventory or private thoughts.
 
+### 🌍 A World Beyond Your Turn
+
+* **Living World · Experimental:** Let NPCs follow small routines, move between connected locations, and speak to one another. Enable it separately for each saved session.
+* **Pause or Catch Up:** Keep the world paused while you are away, or process a limited amount of activity when you return. You control the pace and the number of AI requests.
+* **Private Motivations:** Characters keep their own short goals, beliefs, and observations. Intentions do not become facts until an action succeeds, and private thoughts stay out of player-facing memories.
+* **Choose the Engine:** Use TaleWeaver's built-in decisions or the optional **Concordia** integration. Both use your configured Utility model and the same world rules and request limits.
+* **Inspect & Recover:** Administrators can inspect the private simulation journal. Chronicles restore the world and its character memories together. See the [Living World guide](docs/living-world-usage.md) for setup and experimental limits.
+
 ### 🗺️ Explore, Save & Return
 
 * **Local Discoveries:** Optional dynamic exploration can add nearby places when your character actually arrives, such as a tavern in the current town. Mentioning a distant place alone does not create it.
@@ -251,6 +259,21 @@ poetry run taleweaver
 Open `http://127.0.0.1:8000` in your browser. Complete the initial setup, add your API keys under **Administration**, and jump into an adventure!
 
 ---
+
+### Optional Living World / Concordia setup
+
+Living World is disabled by default. Enable shared inference serialization with
+`INFERENCE_SERIALIZATION_ENABLED=true` in `.env`, restart the backend, then open a
+session's settings and choose **Living World · Experimental**. Use **Allow bounded
+NPC decisions** and **Schedule recurring NPC decisions** to try autonomous routines.
+
+Concordia is optional and requires **Python 3.12 or 3.13**. Install it with
+`poetry install --extras concordia`, or use `./setup.ps1 -Concordia` on Windows /
+`./setup.sh --concordia` on Linux and macOS. Select **Concordia 2.4** in the session's
+decision-engine setting. Keep using the extra when updating dependencies.
+
+The [Living World guide](docs/living-world-usage.md) explains supported actions,
+model settings, budgets, and recovery.
 
 ## 🐳 Running with Docker
 

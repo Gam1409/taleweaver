@@ -25,7 +25,9 @@ export function useLivingWorldPresence(gameId: () => string, ready: () => boolea
         tracked = id
         if (first && !disposed && gameId() === id && ready() && status.settings.auto_catchup_on_resume) {
           const current = await livingWorldRequest<LivingWorldStatus>(id)
-          await livingWorldRequest(id, '/resume', 'POST', { expected_revision: current.revision })
+          // Keep presence heartbeats flowing while the bounded model batch runs.
+          void livingWorldRequest(id, current.settings.deliberation_enabled ? '/cycle' : '/resume', 'POST', { expected_revision: current.revision })
+            .catch(cause => console.warn('Living World batch could not complete:', cause))
         }
       } catch (cause) { console.warn('Living World presence could not be updated:', cause) }
     })

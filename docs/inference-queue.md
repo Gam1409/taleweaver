@@ -1,7 +1,8 @@
 # Experimental shared inference queue
 
 This is the inference prerequisite for Living World deliberation. It does not add
-NPC decisions or enable Concordia. The default is **off** for compatibility.
+NPC decisions or enable Concordia by itself. The opt-in [Living World](living-world-usage.md)
+decision layer uses this queue as a prerequisite. The default is **off** for compatibility.
 
 ## Enable
 

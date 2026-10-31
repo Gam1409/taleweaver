@@ -1,7 +1,8 @@
 # Living World architecture audit
 
-Experimental branch: `experiment/living-world-concordia`, based on `6ad19d20`.
-The feature is opt-in per session. Main and the Mature prompt hooks are unchanged.
+The persistence/rules foundation from `experiment/living-world-concordia` is in main.
+The bounded decisions layer adds optional Concordia without changing existing content
+prompt hooks. Living World remains opt-in per session.
 
 ## Existing integration points
 
@@ -54,15 +55,16 @@ break supported Python versions. Use an optional, version-pinned adapter on Pyth
 3.12/3.13, with no automatic package installation on normal game startup.
 
 Sources: https://pypi.org/pypi/gdm-concordia/json and
-https://github.com/google-deepmind/concordia . Metadata verification is not an
-integration test; no claim of a working Concordia adapter is made at this stage.
+https://github.com/google-deepmind/concordia . The pinned wheel API was inspected, and the implemented adapter is now tested
+against the installed 2.4.0 package with controlled model replies.
 
 The published 2.4.0 wheel was also inspected: the real integration surface is
 `concordia.environment.engines.sequential.Sequential.run_loop(game_masters=...,
 entities=..., max_steps=...)`, with entity `name`, `observe` and `act(ActionSpec)`
 methods. Even this sequential engine prepares observations through Concordia's
-concurrency utilities. A future adapter must bound those calls through TaleWeaver's
-inference reservation, not let independent NPCs issue competing remote requests.
+concurrency utilities. The adapter bounds those calls through TaleWeaver's inference reservation.
+Concordia preparation uses deterministic observations; only the selected actor can
+request one model action. No independent NPC thread owns an HTTP client.
 
 ## Implemented schema and state machine
 
@@ -93,37 +95,63 @@ stateDiagram-v2
     PARTIAL --> PAUSED: disable feature, retain queue
 ```
 
-WAITING_FOR_LLM retries do not contact a provider in this preview. A crash after a
-commit can leave RUNNING persisted; the status endpoint reports PARTIAL if no runner
-exists. FAILED is reserved for a future persisted job-error lifecycle, not emitted
-by the current rules runner.
+Rules-only resume leaves WAITING_FOR_LLM untouched. Opt-in `/deliberate` or `/cycle`
+can resolve it within persisted budgets. A crash after a commit can leave RUNNING
+persisted; status reports PARTIAL when no rules runner exists. Failed inference
+leaves its event waiting, with an attempt consumed and no invented result.
 
-## Stage ledger and next prerequisite
+## Completed implementation stages
 
-- Stage 0: architecture/source inspection complete; no changes to main.
-- Stage 1: SQL migration, PAUSE, presence, ownership/revision controls, settings UI,
-  and snapshot lifecycle implemented and tested.
-- Stage 2: explicit event schedules, bounded rules catch-up, retained backlog,
-  cancellation and crash recovery implemented. Recurring schedule generation remains
-  unimplemented. See usage documentation for the executable mechanical demo.
-- Stages 3–4: not implemented; no pretend deliberation or Concordia wrapper.
-- Stage 5: preview controls, API/lifecycle tests and documentation implemented.
-  Real-browser E2E, private-journal screen and autonomous acceptance demo remain.
+1. SQL persistence, PAUSE, ownership/revision controls, independent presence, and
+   snapshot lifecycle.
+2. Bounded deterministic catch-up, causal dependencies, retained backlog and
+   recurring slots. Slots are compiled lazily with rotating bounded NPC cohorts.
+3. Private NPC goals/beliefs/observations and one typed decision per request.
+   Shared inference admission is required. Invalid output has no world effects.
+4. Optional pinned Concordia extra and real `Sequential` adapter compatibility.
+   The worker thread bridges to the existing async router; it never touches SQL.
+   Only one callback is allowed per step, and cancellation closes the bridge.
+5. Session controls, administrator private journal, API/lifecycle and two-NPC
+   acceptance tests, a Chromium UI smoke test, and installation documentation.
 
-The initial blocker to enabling stage 3 safely was concrete: `memory_rag/scheduling.py` admits
-maintenance on idle state, but cannot guarantee that an already-running remote call
-has stopped when foreground work starts or a local timeout fires. The current session
-write lease serializes one session's mutations, not inference across sessions sharing
-the same Ollama/KoboldCpp endpoint. A new simulation loop would amplify that race.
+Live-model playtesting remains a separate acceptance activity. Controlled replies
+verify mechanics and privacy, not narrative quality or model reasoning accuracy.
 
-The experimental inference prerequisite is now implemented: see
-[inference-queue.md](inference-queue.md). Opt-in endpoint reservations cover text and
-embedding calls, persist indeterminate remote work, and require explicit administrator
-recovery after a timeout. Streaming reservations follow the actual response lifetime.
-This remains single-worker and does not automatically enable NPC reasoning.
+## Decision boundary
 
-Next: bounded deliberation with timeline/revision checks before applying a result,
-private NPC observations/beliefs, and then the optional Python >=3.12 Concordia group.
-The deliberation path must require inference admission to be enabled and must not
-hold a SQLite write transaction while waiting. The runtime inference journal is
-independent of game snapshots because rewind cannot rewind a remote GPU request.
+1. Acquire the existing session lease, authorize ownership and validate revision.
+2. Read the NPC's local evidence and permitted choices. Persist the attempt count,
+   commit and release both SQL transaction and lease before model work.
+3. Wait for the existing idle scheduler and endpoint reservation. Use the Utility
+   role's timeout and configured output cap, without thinking or automatic retries.
+4. Reacquire the lease and reload canonical state. Compare a fingerprint covering
+   all SessionState columns (including timeline/revision), the actor context and
+   current permitted choices. A changed/deleted/rewound world discards the reply.
+5. Validate typed action, adjacency, locks and co-presence. Commit the concrete
+   outcome and private notes in the same transaction. Narration and RAG never
+   receive a proposed action as a committed event.
+
+A frozen prepared snapshot contains only bounded plain data. Existing shared
+inference fencing remains independent of game snapshots, since rewind cannot stop
+remote GPU work. The supported deployment is still a single backend worker.
+
+## Memory and context budgets
+
+No second vector store is introduced. Private state remains inside the existing
+snapshot column. Each NPC replaces its short goal and uncertain belief, with up to
+eight committed observations. A bounded narrator block includes only motivations
+and at most two recent observations for each of up to three present NPCs
+(1,800 JSON characters), never the whole private journal.
+Recurring scheduling, retry counts, timeline request allowances and the event cap
+are explicit and persisted. Reaching a cap reports the limit rather than discarding
+canonical history. See [usage](living-world-usage.md) for exact defaults and controls.
+
+Concordia's design is used as an entity/observation/action/resolution interface,
+not as a second source of world truth. The native and Concordia engines share the
+same schema, provider reservation, validators, snapshots and acceptance scenarios.
+Reference implementations and design sources:
+
+- https://github.com/google-deepmind/concordia
+- https://pypi.org/project/gdm-concordia/2.4.0/
+- https://arxiv.org/abs/2312.03664
+- https://arxiv.org/abs/2507.08892

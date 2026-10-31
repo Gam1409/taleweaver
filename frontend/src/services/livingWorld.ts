@@ -8,6 +8,14 @@ export interface LivingWorldPreferences {
   max_events: number
   max_wall_seconds: number
   auto_catchup_on_resume: boolean
+  deliberation_enabled: boolean
+  decision_engine: 'native' | 'concordia'
+  auto_schedule: boolean
+  schedule_interval_minutes: number
+  max_npcs: number
+  max_decisions_per_run: number
+  max_deliberations: number
+  decision_max_tokens: number
 }
 
 export interface LivingWorldStatus {
@@ -18,6 +26,9 @@ export interface LivingWorldStatus {
   target: number
   pending_events: number
   last_run_events: number
+  llm_calls: number
+  concordia_available?: boolean
+  decision_running?: boolean
   recap: string[]
 }
 
@@ -28,7 +39,7 @@ export function createPresenceId(): string {
 
 export async function livingWorldRequest<T>(id: string, suffix = '', method = 'GET', payload?: unknown): Promise<T> {
   const response = await apiFetch(`/adventures/${encodeURIComponent(id)}/living-world${suffix}`, {
-    method, timeoutMs: 30_000, keepalive: suffix === '/presence',
+    method, timeoutMs: ['/cycle', '/deliberate'].includes(suffix) ? null : 30_000, keepalive: suffix === '/presence',
     ...(payload === undefined ? {} : { includeJson: true, body: JSON.stringify(payload) }),
   })
   const result = await response.json()

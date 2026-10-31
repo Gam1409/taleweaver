@@ -85,3 +85,27 @@ test('enabling the feature through settings starts presence without reloading th
   await settle()
   assert.equal(f.requests.at(-1).payload.active, true)
 })
+
+test('a slow decision batch does not stop independent presence heartbeats', async t => {
+  const f = await fixture(t, true, true)
+  f.data.settings.deliberation_enabled = true
+  const original = globalThis.worldRequest
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  globalThis.worldRequest = async (...args) => {
+    const result = await original(...args)
+    if (args[1] === '/cycle') await gate
+    return result
+  }
+  t.after(() => release())
+  f.ready.value = true
+  await nextTick(); await settle()
+  assert.equal(f.requests.filter(row => row.suffix === '/cycle').length, 1)
+  const before = f.requests.filter(row => row.suffix === '/presence').length
+  t.mock.timers.tick(20_000)
+  await settle()
+  assert.equal(f.requests.filter(row => row.suffix === '/presence').length, before + 1)
+  assert.equal(f.requests.filter(row => row.suffix === '/cycle').length, 1)
+  release()
+  await settle()
+})

@@ -21,6 +21,7 @@ from backend.api.routes.adventures.turn_context_helpers import (
 from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
+from backend.engine.living_world.narration import private_context
 from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
 from backend.engine.memory_rag.recent import recent_dialogue
@@ -327,7 +328,10 @@ class TurnLlmContextBuilder:
         narration_state_block += availability
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
-            narration_state_block + session_memory_block + clothing_block,
+            narration_state_block
+            + session_memory_block
+            + clothing_block
+            + private_context(state, visible),
         )
 
     async def build_context(self, user_msg: str, language: str | None) -> TurnLlmContext:

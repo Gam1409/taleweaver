@@ -28,6 +28,9 @@ dependencies = [
     "faster-whisper (>=1.0.0)",
 ]
 
+[project.optional-dependencies]
+concordia = ["gdm-concordia==2.4.0; python_version >= '3.12'"]
+
 [project.scripts]
 taleweaver = "backend.main:start"
 

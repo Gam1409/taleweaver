@@ -2,7 +2,8 @@
 # This script sets up the Python environment, database, and frontend dependencies.
 
 param (
-    [switch]$SkipStart
+    [switch]$SkipStart,
+    [switch]$Concordia
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,12 +44,18 @@ if (-not $poetryExe) {
     Invoke-TaleWeaverNative -Command $bootstrapPython -Arguments @("-m", "pip", "install", "--upgrade", "pip", "poetry>=2.0.0,<3.0.0")
     $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 }
-Invoke-TaleWeaverNative -Command $poetryExe -Arguments @("install", "--no-interaction")
+$installArgs = @("install", "--no-interaction")
+if ($Concordia) { $installArgs += @("--extras", "concordia") }
+Invoke-TaleWeaverNative -Command $poetryExe -Arguments $installArgs
 $pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
 if (-not (Test-TaleWeaverBackend -Python $pythonExe)) {
     throw "Backend dependencies (including LanceDB) are unavailable after installation. Check the Poetry installation output above."
 }
 Write-Host "[+] Backend Python: $pythonExe" -ForegroundColor Green
+
+if ($Concordia) {
+    Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "import sys; from importlib.metadata import version; assert sys.version_info >= (3, 12), 'Concordia requires Python 3.12 or 3.13'; assert version('gdm-concordia') == '2.4.0'")
+}
 
 # 4. Security Keys
 if (-not (Test-Path "data")) {

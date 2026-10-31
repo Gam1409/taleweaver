@@ -19,7 +19,7 @@ jobs:
       # Type errors must not prevent tests or lint from reporting their own result.
       fail-fast: false
       matrix:
-        check: [lint, types, tests]
+        check: [lint, types, tests, concordia]
     defaults:
       run:
         shell: bash
@@ -42,7 +42,12 @@ jobs:
           pip install "poetry>=2.0.0"
 
       - name: Install dependencies
-        run: poetry install
+        run: |
+          if [ "${{ matrix.check }}" = "concordia" ]; then
+            poetry install --extras concordia
+          else
+            poetry install
+          fi
 
       - name: Code Quality & Security Linting (Ruff)
         if: matrix.check == 'lint'
@@ -57,7 +62,7 @@ jobs:
           poetry run mypy backend --ignore-missing-imports --no-color-output 2>&1 | tee reports/mypy.txt
 
       - name: Create temporary test keys
-        if: matrix.check == 'tests'
+        if: matrix.check == 'tests' || matrix.check == 'concordia'
         run: |
           poetry run python - <<'PY'
           import os
@@ -80,6 +85,13 @@ jobs:
         run: |
           mkdir -p reports
           poetry run pytest tests/ -q --tb=short --junitxml=reports/pytest.xml 2>&1 | tee reports/pytest.txt
+
+      - name: Verify optional Concordia adapter
+        if: matrix.check == 'concordia'
+        run: |
+          poetry run python -c "from importlib.metadata import version; assert version('gdm-concordia') == '2.4.0'"
+          mkdir -p reports
+          poetry run pytest tests/test_living_world_decisions.py tests/test_living_world_acceptance.py -q --tb=short --junitxml=reports/concordia.xml 2>&1 | tee reports/concordia.txt
 
       - name: Upload check reports
         if: always() && matrix.check != 'lint'

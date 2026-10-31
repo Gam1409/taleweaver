@@ -31,6 +31,11 @@ def reconcile(simulation: Simulation, world_time: int, presence: dict | None) ->
         event.status in {"PLANNED", "WAITING_FOR_LLM"} and event.due <= world_time
         for event in simulation.events
     )
+    pending = pending or (
+        simulation.settings.auto_schedule
+        and simulation.settings.deliberation_enabled
+        and simulation.schedule_next_due <= world_time
+    )
     if not pending:
         simulation.cursor = max(simulation.cursor, world_time)
     simulation.target = max(simulation.target, simulation.cursor, world_time)
@@ -69,12 +74,12 @@ def public_status(simulation: Simulation) -> dict:
             event.status in {"PLANNED", "WAITING_FOR_LLM"} for event in simulation.events
         ),
         "last_run_events": simulation.last_run_events,
-        "llm_calls": 0,
-        "tokens": 0,
+        "llm_calls": simulation.deliberation_attempts,
+        "decision_max_tokens": simulation.settings.decision_max_tokens,
         "recap": [
             event.result
             for event in simulation.events
             if event.status == "COMMITTED" and event.observed_by_player
         ][-20:],
-        "capabilities": ["PAUSE", "RULES_CATCH_UP"],
+        "capabilities": ["PAUSE", "RULES_CATCH_UP", "PRIVATE_DECISIONS"],
     }

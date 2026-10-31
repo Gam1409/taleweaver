@@ -6,7 +6,13 @@ set -e
 
 # Parse arguments
 SKIP_START=false
+CONCORDIA=false
+INSTALL_EXTRAS=()
 for arg in "$@"; do
+    if [ "$arg" == "--concordia" ]; then
+        CONCORDIA=true
+        INSTALL_EXTRAS=(--extras concordia)
+    fi
     if [ "$arg" == "--skip-start" ]; then
         SKIP_START=true
     fi
@@ -34,7 +40,7 @@ fi
 echo "[*] Installing Python dependencies, including LanceDB, with Poetry..."
 if command -v poetry &> /dev/null; then
     echo "[+] Using system Poetry..."
-    poetry install
+    poetry install "${INSTALL_EXTRAS[@]}"
     RUN_CMD="poetry run"
     PYTHON_CMD="poetry run python"
 else
@@ -45,12 +51,12 @@ else
     fi
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
         ./venv/Scripts/pip install --upgrade pip "poetry>=2.0.0"
-        ./venv/Scripts/poetry install
+        ./venv/Scripts/poetry install "${INSTALL_EXTRAS[@]}"
         RUN_CMD="./venv/Scripts/poetry run"
         PYTHON_CMD="./venv/Scripts/poetry run python"
     else
         ./venv/bin/pip install --upgrade pip "poetry>=2.0.0"
-        ./venv/bin/poetry install
+        ./venv/bin/poetry install "${INSTALL_EXTRAS[@]}"
         RUN_CMD="./venv/bin/poetry run"
         PYTHON_CMD="./venv/bin/poetry run python"
     fi
@@ -60,6 +66,10 @@ echo "[*] Checking backend dependencies, including LanceDB..."
 if ! $PYTHON_CMD -c "import fastapi, uvicorn, sqlalchemy, alembic, cryptography, pydantic_settings, lancedb"; then
     echo "[!] Backend dependencies are unavailable after installation. Check the Poetry installation output above."
     exit 1
+fi
+
+if [ "$CONCORDIA" = true ]; then
+    $PYTHON_CMD -c "import sys; from importlib.metadata import version; assert sys.version_info >= (3, 12), 'Concordia requires Python 3.12 or 3.13'; assert version('gdm-concordia') == '2.4.0'"
 fi
 
 # 4. Security Keys
