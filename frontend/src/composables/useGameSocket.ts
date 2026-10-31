@@ -10,6 +10,7 @@ import { useSessionContentLanguage } from '@/composables/useSessionContentLangua
 import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
 import { createFailedTurnDrafts, savedActionIndex } from '@/services/failedTurnDrafts'
+import { createSnapshotPoller } from '@/services/snapshotPoller'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -153,7 +154,6 @@ export function useGameSocket(): UseGameSocket {
     promptSuggestions,
   )
   watch([status, language, languageSaving], () => resetSuggestionsRequest(), { flush: 'sync' })
-  let syncTimer: number | null = null
   let activeAgentController: AbortController | null = null
   let activeChatController: AbortController | null = null
   const agentPaused = ref(false)
@@ -257,7 +257,7 @@ export function useGameSocket(): UseGameSocket {
       if (!res.ok) return null
       return await res.json()
     } catch (err) {
-      console.error('[Session] Snapshot load error:', err)
+      if (!(err instanceof Error && err.name === 'AbortError')) console.error('[Session] Snapshot load error:', err)
       return null
     }
   }
@@ -343,31 +343,18 @@ export function useGameSocket(): UseGameSocket {
     }
   }
 
-  function startSyncTimer(): void {
-    if (syncTimer !== null) {
-      clearInterval(syncTimer)
+  const snapshotPoller = createSnapshotPoller(async signal => {
+    if (!currentGameId || status.value === 'disconnected' || status.value === 'connecting' || status.value === 'loading') return
+    const gameId = currentGameId
+    const revision = snapshotRevision
+    const snapshot = await fetchSessionSnapshot(gameId, signal)
+    if (!signal.aborted && currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
+      applySessionSnapshot(snapshot, false)
     }
+  })
 
-    syncTimer = window.setInterval(async () => {
-      if (!currentGameId || status.value === 'disconnected' || status.value === 'connecting' || status.value === 'loading') {
-        return
-      }
-
-      const gameId = currentGameId
-      const revision = snapshotRevision
-      const snapshot = await fetchSessionSnapshot(gameId)
-      if (currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
-        applySessionSnapshot(snapshot, false)
-      }
-    }, 5000)
-  }
-
-  function stopSyncTimer(): void {
-    if (syncTimer !== null) {
-      clearInterval(syncTimer)
-      syncTimer = null
-    }
-  }
+  function startSyncTimer(): void { snapshotPoller.start() }
+  function stopSyncTimer(): void { snapshotPoller.stop() }
 
   /**
    * Loads the current session state and history.
@@ -534,6 +521,7 @@ export function useGameSocket(): UseGameSocket {
     messages.value = draft.messages
     const beforeAttempt = new Set(messages.value)
     snapshotRevision += 1
+    snapshotPoller.interrupt()
     const knownMessageIds = new Set(messages.value.map(message => message.id).filter((id): id is string => !!id))
     const lastSavedMessage = [...messages.value].reverse().find(message => message.id)
     const reusableInputId = lastSavedMessage?.role === 'user' && lastSavedMessage.content.trim() === normalizedContent

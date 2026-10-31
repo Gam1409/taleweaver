@@ -11,11 +11,15 @@ const draftModule = ts.transpileModule(draftSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText
 const draftModuleUrl = `data:text/javascript;base64,${Buffer.from(draftModule).toString('base64')}`
+const pollerSource = readFileSync(new URL('../src/services/snapshotPoller.ts', import.meta.url), 'utf8')
+const pollerCompiled = ts.transpileModule(pollerSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const pollerUrl = `data:text/javascript;base64,${Buffer.from(pollerCompiled).toString('base64')}`
 const source = readFileSync(new URL('../src/composables/useGameSocket.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
+  .replace("from '@/services/snapshotPoller'", `from '${pollerUrl}'`)
   .replace("from '@/services/failedTurnDrafts'", `from '${draftModuleUrl}'`)
   .replace(/import .* from '@\/composables\/usePromptSuggestions';/, `const usePromptSuggestions = () => ({ suggestionsLoading: ref(false), suggestionsError: ref(''), suggestionsNotice: ref(''), refreshSuggestions: async () => {}, resetSuggestionsRequest: () => {} });`)
   .replace(/import .* from '@\/composables\/useSessionContentLanguage';/, `const useSessionContentLanguage = () => ({ language: ref('English'), languageSaving: ref(false), setLanguage: async () => true });`)
