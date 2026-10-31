@@ -255,6 +255,7 @@ function handleBlur(): void {
 }
 
 let sizeObserver: ResizeObserver | undefined
+let resizeFrame: number | undefined
 
 onMounted(() => {
   if (textAreaRef.value) {
@@ -263,7 +264,11 @@ onMounted(() => {
       const width = entry?.contentRect.width ?? 0
       if (width === previousWidth) return
       previousWidth = width
-      resizeToContent()
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = undefined
+        resizeToContent()
+      })
     })
     sizeObserver.observe(textAreaRef.value)
   }
@@ -274,6 +279,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   sizeObserver?.disconnect()
+  if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
   if (blurTimer !== null) {
     clearTimeout(blurTimer)
     blurTimer = null
