@@ -119,8 +119,11 @@ export function parseComicDialogue(
     .join('|')
   const unknownPattern = String.raw`(?:\p{Lu}[\p{L}]{0,2}\.\s+)*[\p{L}\p{N}_][\p{L}\p{M}\p{N}_ \t'’\-()]{0,59}?`
   const namePattern = knownPattern ? `(?:${knownPattern}|${unknownPattern})` : unknownPattern
+  // Close the same quote style that opened the speech. Inner guillemets in
+  // straight/curly quoted dialogue are content, not a return to narration.
+  const quotedSpeech = String.raw`(?:"[^"\n]*"|“[^”\n]*”|„[^“”\n]*[“”]|«(?:[^«»\n]|«[^«»\n]*»)*»|»[^«\n]*«)`
   const inlineSpeechSplitter = new RegExp(
-    String.raw`(?:^|\n|(?<=[.!?»”"“]\s+)|(?<=\]\s*))(?:\[[^\]\n]+\]\s*)?(?:\*\*([^*\n:]{1,60}?):\*\*|\*\*([^*\n:]{1,60}?)\*\*:|(${namePattern}):)\s*(?:(?:\[[^\]\n]+\]|"\[[^"\n]+\]")\s*)?(["“„«»][\s\S]*?["”«»])`,
+    String.raw`(?:^|\n|(?<=[.!?»”"“]\s+)|(?<=\]\s*))(?:\[[^\]\n]+\]\s*)?(?:\*\*([^*\n:]{1,60}?):\*\*|\*\*([^*\n:]{1,60}?)\*\*:|(${namePattern}):)\s*(?:(?:\[[^\]\n]+\]|"\[[^"\n]+\]")\s*)?(${quotedSpeech})`,
     'giu'
   )
   cleanContent = cleanContent.replace(inlineSpeechSplitter, (match, bold, boldAfter, plain) => {
@@ -163,7 +166,8 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
     speechText = tagInSpeech[2].trim()
   }
   const hasQuotes = /^["“„«»]/.test(speechText) || /["”«»]$/.test(speechText)
-  speechText = speechText.replace(/^["“„«»\s]+|["”«»\s]+$/g, '').trim()
+  // Remove only the outer delimiters; preserve quotes within the spoken text.
+  speechText = speechText.replace(/^["“„«»]/, '').replace(/["”«»]$/, '').trim()
   let targetName: string | undefined
   const toMatch = speakerName.match(/^(.+?)\s+(?:to|\(to)\s+(.+?)\)?$/i)
   if (toMatch) {

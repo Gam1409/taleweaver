@@ -123,3 +123,18 @@ test('a unique learned alias resolves to the same NPC and ambiguous labels do no
   const other = { id: 'other-id', name: 'Анна', entity_type: 'NPC', metadata_json: { npc_journal: { aliases: ['Девушка'] } } }
   assert.equal(resolveSpeakerAlias('Девушка', [mira, other]), null)
 })
+
+for (const [opening, closing] of [['"', '"'], ['“', '”'], ['«', '»']]) {
+  test(`inner quotations keep speech together inside ${opening}${closing}`, () => {
+    const speech = 'Как на ключ к ответу на вопрос «почему это произошло» и «что делать дальше». Другие — объект исследования.'
+    const result = parse(`Лина: [calm] ${opening}${speech}${closing} Она сделала паузу.`)
+    assert.deepEqual(result.dialogues.map(d => [d.speaker, d.text]), [
+      ['Лина', speech], ['Game Master', 'Она сделала паузу.']
+    ])
+    assert.equal(result.dialogues[0].voiceTag, 'calm')
+  })
+}
+
+test('an inner quotation at the end retains its closing delimiter', () => {
+  assert.equal(parse('Лина: "Он сказал «пора»"').dialogues[0].text, 'Он сказал «пора»')
+})
