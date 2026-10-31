@@ -816,6 +816,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
+                    auto-grow
                     :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
@@ -841,6 +842,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
+                    auto-grow
                     :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
@@ -869,6 +871,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
+                    auto-grow
                     :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
@@ -894,6 +897,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
+                    auto-grow
                     :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"

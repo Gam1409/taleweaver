@@ -9,6 +9,7 @@ interface ReferenceOption {
 
 const props = defineProps<{
   modelValue: string
+  autoGrow?: boolean
   rows?: number
   maxlength?: number
   placeholder?: string
@@ -98,9 +99,27 @@ function updatePopupPosition() {
   }
 }
 
+function resizeToContent() {
+  const area = textAreaRef.value
+  if (!props.autoGrow || !area || !area.clientWidth) return
+  area.style.height = 'auto'
+  const style = getComputedStyle(area)
+  const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+  const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  const height = Math.max(area.scrollHeight + border, area.offsetHeight)
+  area.style.height = `${style.boxSizing === 'border-box' ? height : height - border - padding}px`
+  repositionPopup()
+}
+
+watch(() => [props.modelValue, props.rows, props.autoGrow], () => {
+  if (props.autoGrow) resizeToContent()
+  else textAreaRef.value?.style.removeProperty('height')
+}, { flush: 'post' })
+
 function handleInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
   const nextValue = target.value
+  resizeToContent()
   emit('update:modelValue', nextValue)
   dismissUntilInputChange.value = false
   updateSuggestState(nextValue, target.selectionStart || 0)
@@ -235,12 +254,26 @@ function handleBlur(): void {
   }, 120)
 }
 
+let sizeObserver: ResizeObserver | undefined
+
 onMounted(() => {
+  if (textAreaRef.value) {
+    let previousWidth = -1
+    sizeObserver = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? 0
+      if (width === previousWidth) return
+      previousWidth = width
+      resizeToContent()
+    })
+    sizeObserver.observe(textAreaRef.value)
+  }
+  resizeToContent()
   window.addEventListener('resize', repositionPopup)
   window.addEventListener('scroll', repositionPopup, true)
 })
 
 onBeforeUnmount(() => {
+  sizeObserver?.disconnect()
   if (blurTimer !== null) {
     clearTimeout(blurTimer)
     blurTimer = null
@@ -256,6 +289,7 @@ onBeforeUnmount(() => {
       ref="textAreaRef"
       :value="modelValue"
       :rows="rows || 3"
+      :style="autoGrow ? { overflowY: 'hidden', resize: 'none', transitionProperty: 'color, background-color, border-color, box-shadow' } : undefined"
       :maxlength="maxlength"
       :placeholder="placeholder"
       :class="className || 'w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner'"
