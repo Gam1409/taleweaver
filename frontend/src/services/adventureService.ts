@@ -1,7 +1,9 @@
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import { API_BASE, authHeaders } from '@/services/http'
 import { isNpcEntity, isObjectEntity, mergeUniqueById } from '@/utils/editor_utils'
 
 export interface Adventure {
+  living_world_settings?: LivingWorldPreferences | null
   id: string
   title: string
   teaser?: string
@@ -61,6 +63,7 @@ export interface Adventure {
 }
 
 export interface AdventureFormData {
+  living_world_settings?: LivingWorldPreferences | null
   title: string
   teaser: string
   version: string

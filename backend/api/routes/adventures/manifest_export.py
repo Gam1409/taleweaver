@@ -21,7 +21,13 @@ _LEGACY_EQUIPMENT_SLOTS = (
 
 
 def backfill_manifest_metadata(manifest: dict[str, Any], adventure: AdventureTemplate) -> None:
-    """Fill top-level metadata that older manifests may lack (existing keys win)."""
+    """Refresh simulation defaults and fill missing legacy metadata."""
+    manifest["living_world_settings"] = adventure.living_world_settings
+    if isinstance(manifest.get("adventure"), dict):
+        manifest["adventure"] = {
+            **manifest["adventure"],
+            "living_world_settings": adventure.living_world_settings,
+        }
     defaults = {
         "version": adventure.version or "1.0",
         "id": adventure.id,

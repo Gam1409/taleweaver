@@ -372,6 +372,7 @@ class AdventureExporter:
             "version": CURRENT_VERSION,
             "adventure": {
                 "title": adv.title,
+                "living_world_settings": adv.living_world_settings,
                 "teaser": adv.teaser,
                 "version": adv.version,
                 "creator": adv.creator,

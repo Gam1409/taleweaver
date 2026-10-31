@@ -41,6 +41,7 @@ General configuration, narrative constraints, and gameplay settings.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
+| `living_world_settings` | `object` or `null` | Optional validated Living World defaults, inherited by new VN sessions. Contains settings only, never session events or private NPC memories. |
 | `title` | `string` | The title of the adventure. |
 | `teaser` | `string` | A short, atmospheric hook/summary (max 300 chars). |
 | `context` | `string` | Foundational world-building lore and background for the AI Game Master. |

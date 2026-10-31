@@ -660,8 +660,11 @@ async def start_session_for_template(
         adventure, template_entities, avatar, first_scene_id, initial_entity_states
     )
 
+    from backend.engine.living_world.template_settings import initial_state
+
     new_state = SessionState(
         session_id=new_session.id,
+        living_world=initial_state(adventure),
         user_id=current_user.id,
         template_id=template_id,
         avatar_id=avatar.id,

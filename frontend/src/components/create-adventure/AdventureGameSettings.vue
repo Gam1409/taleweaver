@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { watch } from 'vue'
+import LivingWorldAdventureButton from '@/components/living-world/LivingWorldAdventureButton.vue'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import AdventureRuleModeSelector from './AdventureRuleModeSelector.vue'
 import AdventureTimeSettings, { type TimeConfigData } from './AdventureTimeSettings.vue'
 import AdventureCombatSettings from './AdventureCombatSettings.vue'
@@ -9,6 +11,7 @@ import type { RuleMode } from '@/types'
 const props = defineProps<{
   modelValue: {
     rule_enforcement_mode: RuleMode
+    living_world_settings?: LivingWorldPreferences | null
     clock_enabled: boolean
     pacing_minutes: number
     min_scenes: number | null
@@ -73,6 +76,12 @@ watch(
     <AdventureRuleModeSelector
       :model-value="modelValue.rule_enforcement_mode"
       @update:model-value="update('rule_enforcement_mode', $event)"
+    />
+
+    <LivingWorldAdventureButton
+      v-if="modelValue.rule_enforcement_mode === 'vn'"
+      :model-value="modelValue.living_world_settings"
+      @update:model-value="update('living_world_settings', $event)"
     />
 
     <!-- 2. Time & Pacing System (with Auto Mode switch) -->

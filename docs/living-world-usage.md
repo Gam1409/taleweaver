@@ -8,8 +8,8 @@ sequential engine. Neither runs a perpetual agent swarm or a second RAG database
 ## Setup
 
 1. Update dependencies with `poetry install` and `npm ci` in `frontend`. Apply the
-   existing migration with `poetry run alembic upgrade head` (normal startup also
-   applies it). No additional database migration is needed for the decision layer.
+   migrations with `poetry run alembic upgrade head` (normal startup also applies
+   them), including the adventure defaults column.
 2. For model decisions, set `INFERENCE_SERIALIZATION_ENABLED=true` in `.env` and
    restart the backend. Configure the **Utility** model with **Ollama** or
    **OpenAI-Compatible API**. These are the transports covered by the shared
@@ -22,6 +22,24 @@ sequential engine. Neither runs a perpetual agent swarm or a second RAG database
 5. Choose budgets, save, and press **Continue catch-up**. The optional return setting
    runs one bounded batch on reconnect, not an endless background loop. Presence
    heartbeats continue while inference waits.
+
+### Adventure defaults for VN
+
+When creating or editing an adventure, select **VN** and open **Living World**.
+The **Enable Concordia** checkbox reveals time controls, recurring NPC routines,
+and request and processing budgets. Every control has a small **?** button with
+help on hover, keyboard focus, or tap. Apply the settings when creating an
+adventure; the editor's **Save settings** also saves the adventure changes.
+
+These defaults are copied into **new sessions only**. Existing sessions retain
+their own settings and memories; change those through the session settings.
+Turning Concordia off retains the chosen budgets but disables Living World and
+NPC deliberation for new sessions. Copies and adventure exports preserve defaults,
+without copying a session's private simulation journal.
+
+The window reports missing Concordia or shared inference serialization. Defaults
+can be saved before server setup, but model decisions require the setup below.
+The Utility model supplies the provider, credentials, and global LLM timeout.
 
 ### Optional Concordia
 

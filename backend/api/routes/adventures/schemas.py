@@ -4,12 +4,15 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
+from backend.engine.living_world.schema import Settings as LivingWorldSettings
 from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
 
 
 class CreateAdventureTemplatePayload(BaseModel):
     """Payload for creating a new adventure. Backwards-compatible with previous tests (avatar_name optional)."""
+
+    living_world_settings: Optional[LivingWorldSettings] = None
 
     id: Optional[str] = None  # Client-side UUID optional; server will generate if missing
     title: str
@@ -299,6 +302,8 @@ class CreateAdventureTemplatePayload(BaseModel):
 
 class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
+
+    living_world_settings: Optional[LivingWorldSettings] = None
 
     id: str
     title: str
@@ -640,6 +645,8 @@ class StoryIdeaSuggestionResponse(BaseModel):
 
 class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
+
+    living_world_settings: Optional[LivingWorldSettings] = None
 
     detailed_clothing: Optional[bool] = None
     nsfw_enabled: Optional[bool] = None

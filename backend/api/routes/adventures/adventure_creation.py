@@ -28,6 +28,10 @@ from backend.engine.generation_control import (
     register_generation,
     unregister_generation,
 )
+from backend.engine.living_world.template_settings import (
+    initial_state,
+    stored_defaults,
+)
 from backend.engine.npc_cards.settings import creation_manifest
 from backend.engine.nsfw.settings import with_nsfw_settings
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
@@ -135,6 +139,7 @@ def build_template(
         id=template_id,
         owner_id=owner_id,
         title=payload.title,
+        living_world_settings=stored_defaults(payload.living_world_settings),
         original_prompt=payload.original_prompt,
         strict_rules=policy.mechanics,
         rule_enforcement_mode=payload.rule_enforcement_mode or "rpg",
@@ -219,6 +224,7 @@ def _build_session_state(
 ) -> SessionState:
     return SessionState(
         session_id=session.id,
+        living_world=initial_state(adv),
         user_id=user_id,
         template_id=adv.id,
         avatar_id=avatar.id,

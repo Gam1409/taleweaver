@@ -155,6 +155,7 @@ def _create_cloned_template_entity(
         id=new_id,
         owner_id=user_id,
         title=new_title,
+        living_world_settings=deepcopy(original.living_world_settings),
         teaser=original.teaser,
         version=original.version or "1.0.0",
         language=original.language,

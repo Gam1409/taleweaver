@@ -76,7 +76,7 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 
 ### 🌍 A World Beyond Your Turn
 
-* **Living World · Experimental:** Let NPCs follow small routines, move between connected locations, and speak to one another. Enable it separately for each saved session.
+* **Living World · Experimental:** Let NPCs follow small routines, move between connected locations, and speak to one another. Choose **VN → Living World** when creating or editing an adventure to configure Concordia defaults, or adjust each saved session separately.
 * **Pause or Catch Up:** Keep the world paused while you are away, or process a limited amount of activity when you return. You control the pace and the number of AI requests.
 * **Private Motivations:** Characters keep their own short goals, beliefs, and observations. Intentions do not become facts until an action succeeds, and private thoughts stay out of player-facing memories.
 * **Choose the Engine:** Use TaleWeaver's built-in decisions or the optional **Concordia** integration. Both use your configured Utility model and the same world rules and request limits.

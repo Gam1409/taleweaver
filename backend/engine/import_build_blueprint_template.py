@@ -1,5 +1,6 @@
 """Map blueprint metadata to template fields without applying session-bundle defaults."""
 
+from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 from backend.utils.text_utils import generate_adventure_id
 
@@ -10,6 +11,9 @@ def build_blueprint_template(
     from backend.engine.adventure_importer import _resolve_license_url
 
     return AdventureTemplate(
+        living_world_settings=stored_defaults(
+            adv_meta.get("living_world_settings", manifest.get("living_world_settings"))
+        ),
         id=generate_adventure_id(
             adv_meta.get("title") or manifest.get("title") or "Imported Blueprint"
         ),

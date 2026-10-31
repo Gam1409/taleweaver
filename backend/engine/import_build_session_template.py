@@ -1,5 +1,6 @@
 """Restore template metadata from the adventure section of a session bundle."""
 
+from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 from backend.utils.text_utils import generate_adventure_id
 
@@ -9,6 +10,7 @@ def build_session_template(data, user, origin_id):
 
     old_adv = data["adventure"]
     return AdventureTemplate(
+        living_world_settings=stored_defaults(old_adv.get("living_world_settings")),
         id=generate_adventure_id(old_adv["title"]),
         owner_id=user.id,
         title=old_adv["title"],

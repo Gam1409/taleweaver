@@ -16,6 +16,9 @@ from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.living_world import router as living_world_router
+from backend.api.routes.adventures.living_world_capabilities import (
+    router as living_world_capabilities_router,
+)
 from backend.api.routes.adventures.living_world_decisions import (
     router as living_world_decisions_router,
 )
@@ -39,6 +42,7 @@ router = APIRouter(prefix="/adventures")
 
 # Include sub-routers in order of specificity.
 # 1. Imports (static paths like /import, /check-defaults)
+router.include_router(living_world_capabilities_router)
 router.include_router(imports_router)
 
 # 2. Assets (specific paths like /{template_id}/visuals/...)

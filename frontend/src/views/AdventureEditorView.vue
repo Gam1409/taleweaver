@@ -2,6 +2,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adventureService } from '@/services/adventureService'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import { visualService } from '@/services/visualService'
 import type { VisualKind } from '@/services/visualService'
 import { entityService } from '@/services/entityService'
@@ -631,6 +632,7 @@ const form = ref({
   license_url: '',
   original_prompt: '',
   rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
+  living_world_settings: null as LivingWorldPreferences | null,
   detailed_clothing: false,
   nsfw_enabled: false,
   nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
@@ -834,6 +836,7 @@ async function fetchAdventure() {
     form.value.license = data.license || ''
     form.value.license_url = data.license_url || ''
     form.value.original_prompt = data.original_prompt || ''
+    form.value.living_world_settings = data.living_world_settings ? { ...data.living_world_settings } : null
     form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
     form.value.detailed_clothing = data.detailed_clothing === true
     form.value.nsfw_enabled = data.nsfw_enabled === true
@@ -1410,6 +1413,7 @@ async function saveChanges() {
   isSaving.value = true
   errorMsg.value = ''
   try {
+    const livingWorldChanged = JSON.stringify(form.value.living_world_settings) !== JSON.stringify(adventure.value?.living_world_settings ?? null)
     const teaserOrPlotChanged = (form.value.teaser || '') !== (adventure.value?.teaser || '')
       || (form.value.plot || '') !== (adventure.value?.plot || '')
 
@@ -1435,7 +1439,7 @@ async function saveChanges() {
       await fetchDebugInfo()
     }
     addNotification('Adventure configuration updated.', 'success')
-    if (clothingChanged || nsfwChanged) {
+    if (clothingChanged || nsfwChanged || livingWorldChanged) {
       addNotification('Settings apply to this adventure and new games only. Existing saved sessions keep their previous settings.', 'info')
     }
 
@@ -2623,6 +2627,7 @@ watch(
               @update:calendar-pacing-unit="form.time_config = { ...(form.time_config || {}), calendar_pacing_unit: $event }"
               @update:calendar-max-value="form.time_config = { ...(form.time_config || {}), calendar_max_value: $event }"
               @update:calendar-max-unit="form.time_config = { ...(form.time_config || {}), calendar_max_unit: $event }"
+              @update:living-world="form.living_world_settings = $event"
               @update:mode="form.rule_enforcement_mode = $event as any"
               @update:detailed-clothing="form.detailed_clothing = $event"
               @update:nsfw-enabled="form.nsfw_enabled = $event"

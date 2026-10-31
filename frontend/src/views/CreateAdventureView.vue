@@ -12,6 +12,7 @@ import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpText
 import AdventureStatusAlerts from '@/components/create-adventure/AdventureStatusAlerts.vue'
 import AdventureBasicInfo from '@/components/create-adventure/AdventureBasicInfo.vue'
 import AdventureGameSettings from '@/components/create-adventure/AdventureGameSettings.vue'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import AutoValidateFixToggle from '@/components/create-adventure/AutoValidateFixToggle.vue'
 import AdventureAssetSettings from '@/components/create-adventure/AdventureAssetSettings.vue'
 import AdventureCatalogSelector from '@/components/create-adventure/AdventureCatalogSelector.vue'
@@ -37,6 +38,7 @@ const form = ref({
   clock_enabled: true,
   pacing_minutes: 5,
   rule_enforcement_mode: 'story' as RuleMode,
+  living_world_settings: null as LivingWorldPreferences | null,
   show_npc_state: false,
   detailed_clothing: false,
   nsfw_enabled: false,
@@ -306,6 +308,7 @@ async function handleCreate() {
 
   const payload: any = {
     ...form.value,
+    living_world_settings: form.value.rule_enforcement_mode === 'vn' ? form.value.living_world_settings : undefined,
     show_npc_state: form.value.rule_enforcement_mode === 'vn' && form.value.show_npc_state,
     detailed_clothing: form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing,
     nsfw_enabled: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled,

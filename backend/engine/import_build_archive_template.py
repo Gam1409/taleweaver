@@ -1,5 +1,6 @@
 """Map ADZ metadata to template fields while preserving archive-specific defaults."""
 
+from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 
 
@@ -15,6 +16,9 @@ def build_archive_template(
     resolved_license_url,
 ):
     return AdventureTemplate(
+        living_world_settings=stored_defaults(
+            adv_data.get("living_world_settings", manifest_data.get("living_world_settings"))
+        ),
         id=new_template_id,
         owner_id=owner_id,
         title=adv_data["title"],
