@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
+import { entityFormErrors } from '@/components/editor/entityFormValidation'
 import NpcCombatSettings from '@/components/editor/NpcCombatSettings.vue'
 import { Plus, Trash2, Key, FileText, Lock, Code2, Sparkles, ToggleLeft, ChevronDown, ChevronRight, Edit3 } from 'lucide-vue-next'
 
@@ -339,38 +340,14 @@ const entityIdError = computed(() => {
   return ''
 })
 
-const isFormInvalid = computed(() => {
-  const nameInvalid = !(localForm.value.name || '').trim() ||
-         (localForm.value.name || '').length > 50
-  const descInvalid = !(localForm.value.description || '').trim() ||
-         (localForm.value.description || '').length > 1000
-  const personaInvalid = (localForm.value.goal || '').length > 200 ||
-         (localForm.value.character || '').length > 200
-  const teaserInvalid = (localForm.value.teaser || '').length > 300
-  const hasEditableId = props.isCreateEntityMode || (props.context && ['npc', 'object', 'scene'].includes(props.context.type))
-  const maxIdLen = props.context?.type === 'scene' ? 50 : 30
-  const idInvalid = hasEditableId
-    ? (!(localForm.value.entity_id || '').trim() || (localForm.value.entity_id || '').length > maxIdLen || !!entityIdError.value)
-    : false
-  // Combinable items now only require at least one ingredient to be useful.
-  // Saving zero is allowed (acts as a placeholder combinable the GM can fill in later).
-  const ingredientsCount = Array.isArray(localForm.value.combination_ingredients_input)
-    ? localForm.value.combination_ingredients_input.filter((s: string) => Boolean(s)).length
-    : 0
-  const combinationInvalid =
-    (currentItemType.value === 'COMBINABLE' && ingredientsCount !== 0 && ingredientsCount < 1) ||
-    (currentItemType.value === 'CONSTRUCTABLE' && ingredientsCount < 2)
-  const uniqueStates = new Set(switchStates.value.map(s => s.trim().toUpperCase()))
-  const switchInvalid = currentItemType.value === 'SWITCH' && (
-    switchStates.value.length < 2 ||
-    uniqueStates.size !== switchStates.value.length ||
-    switchStates.value.some(s => !s.trim()) ||
-    !(localForm.value.switch_initial_state || '').trim() ||
-    !uniqueStates.has(String(localForm.value.switch_initial_state).trim().toUpperCase()) ||
-    switchTransitions.value.some(t => !t.to || !uniqueStates.has(t.to) || (t.from && !uniqueStates.has(t.from)))
-  )
-  return nameInvalid || descInvalid || personaInvalid || teaserInvalid || idInvalid || combinationInvalid || switchInvalid
-})
+const validationErrors = computed(() => entityFormErrors(localForm.value, {
+  hasEditableId: Boolean(props.isCreateEntityMode || (props.context && ['npc', 'object', 'scene'].includes(props.context.type))),
+  maxIdLength: props.context?.type === 'scene' ? 50 : 30,
+  entityIdError: entityIdError.value,
+  switchStates: switchStates.value,
+  switchTransitions: switchTransitions.value,
+}))
+const isFormInvalid = computed(() => validationErrors.value.length > 0)
 
 watch(() => props.initialForm, (newVal) => {
   localForm.value = {
@@ -495,7 +472,7 @@ watch(() => localForm.value.item_type, (newType) => {
 })
 
 function handleSave() {
-  if (!(localForm.value.name || '').trim() || !(localForm.value.description || '').trim()) {
+  if (props.isSaving || isFormInvalid.value) {
     return
   }
 
@@ -2378,12 +2355,20 @@ const textLogPreviewClass = computed(() => {
 
             </div>
           </div>
-          <div class="px-8 py-5 border-t border-white/5 flex justify-end gap-4 bg-slate-900/55 rounded-b-[2.5rem]">
+          <div class="px-8 py-5 border-t border-white/5 bg-slate-900/55 rounded-b-[2.5rem]">
+            <div v-if="validationErrors.length" id="entity-validation-errors" role="status" class="mb-4 text-sm text-amber-200">
+              <p class="font-bold">Cannot save yet. Check these fields in General / Advanced:</p>
+              <ul class="mt-1 max-h-28 overflow-y-auto list-disc pl-5">
+                <li v-for="error in validationErrors" :key="error">{{ error }}</li>
+              </ul>
+            </div>
+            <div class="flex justify-end gap-4">
             <button @click="emit('close')" class="px-6 py-2.5 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">Discard</button>
-            <button @click="handleSave" :disabled="isSaving || isFormInvalid" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
+            <button @click="handleSave" :disabled="isSaving || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
               <i v-if="isSaving" class="ra ra-cycle animate-spin"></i>
               <span>{{ isSaving ? 'Saving...' : (isCreateEntityMode ? ('Create ' + (context.type === 'npc' ? 'NPC' : context.type.toUpperCase())) : 'Apply Changes') }}</span>
             </button>
+            </div>
           </div>
         </div>
       </div>
