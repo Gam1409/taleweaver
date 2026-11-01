@@ -15,6 +15,8 @@ from backend.engine.scene_illustrations.snapshots import (
     content_hash,
     registry_of,
 )
+from backend.engine.scene_staging import props
+from backend.engine.scene_staging.provenance import retract
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState, MemorySummary
@@ -28,8 +30,17 @@ def refresh_visual_snapshot(state: SessionState, message: ChatMessage) -> None:
     snapshot = registry["snapshots"].get(message.id)
     if not snapshot:
         return  # Never fabricate historical appearance from the current scene.
+    facts = snapshot.get("visible_facts") or {}
+    if "staging_status" in facts:
+        facts["staging_status"] = "unconfirmed"
+    for person in facts.get("characters", []):
+        person.pop("posture", None)
+        person.pop("placement", None)
+    facts.pop("props", None)
+    snapshot.pop("staging_sources", None)
     snapshot.update(
         nonce=uuid4().hex,
+        source_revision_id=message.revision_id,
         content_hash=content_hash(message),
         narration=message.content[:MAX_NARRATION],
     )
@@ -55,6 +66,12 @@ async def refresh_evidence(db: AsyncSession, session: GameSession, message: Chat
         .execution_options(populate_existing=True)
     )
     if state is not None:
+        retract(state, message.id)
+        props.retract(state, message.id)
+        direction = (state.entity_states or {}).get("__vn_story_direction__") or {}
+        if (direction.get("focus") or {}).get("message_id") == message.id:
+            direction = {key: value for key, value in direction.items() if key != "focus"}
+            state.entity_states = {**state.entity_states, "__vn_story_direction__": direction}
         refresh_visual_snapshot(state, message)
         await retract_chronicle(db, state, message)
     summaries = await db.scalars(

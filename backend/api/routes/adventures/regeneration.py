@@ -21,6 +21,7 @@ from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.dirty_queue import queue_refresh
 from backend.engine.memory_rag.scheduling import scheduler
+from backend.engine.message_versions import archive
 from backend.engine.narration_correction import NarrationCorrection, append_correction
 from backend.engine.npc_journal.worker import schedule
 from backend.models.chat import ChatMessage
@@ -116,6 +117,7 @@ async def regenerate_latest_message(
         raise HTTPException(409, "The latest response changed. Refresh the chat and try again.")
     guidance = await narration_guidance(db, session, current_user)
     original = history[0].content
+    original_revision = history[0].revision_id
     message_id = history[0].id
     # Release the read transaction before waiting for a potentially slow model.
     await db.commit()
@@ -143,7 +145,10 @@ async def regenerate_latest_message(
     changed = await db.execute(
         update(ChatMessage)
         .where(
-            ChatMessage.id == message_id, ChatMessage.id == latest, ChatMessage.content == original
+            ChatMessage.id == message_id,
+            ChatMessage.id == latest,
+            ChatMessage.content == original,
+            ChatMessage.revision_id == original_revision,
         )
         .values(content=narration)
         .returning(ChatMessage.id)
@@ -156,6 +161,7 @@ async def regenerate_latest_message(
     if message is None:
         raise HTTPException(409, "The response no longer exists.")
     if narration != original:
+        archive(message, original)
         await refresh_evidence(db, session, message)
     await db.commit()
     if message.npc_journal is not None:
@@ -165,3 +171,76 @@ async def regenerate_latest_message(
         **message.to_client_dict(),
         "narration_correction_applied": bool(payload.narration_correction),
     }
+
+
+class RestoreRevisionRequest(BaseModel):
+    version_id: str
+    expected_revision_id: str | None = None
+
+
+async def _owned_message(
+    db: AsyncSession, game_id: str, message_id: str, user: User
+) -> tuple[GameSession, ChatMessage]:
+    session = await db.get(GameSession, game_id)
+    message = await db.get(ChatMessage, message_id)
+    if (
+        session is None
+        or session.user_id != user.id
+        or message is None
+        or message.session_id != game_id
+        or message.role != "assistant"
+    ):
+        raise HTTPException(404, "Narration not found.")
+    return session, message
+
+
+@router.get("/{game_id}/chat/{message_id}/versions")
+async def read_versions(
+    game_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from backend.engine.message_versions import history
+
+    _, message = await _owned_message(db, game_id, message_id, current_user)
+    return {"current_revision_id": message.revision_id, "versions": history(message)}
+
+
+@router.post("/{game_id}/chat/{message_id}/versions/restore")
+async def restore_version(
+    game_id: str,
+    message_id: str,
+    payload: RestoreRevisionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from backend.engine.message_versions import history
+
+    session, message = await _owned_message(db, game_id, message_id, current_user)
+    latest = await db.scalar(
+        select(ChatMessage.id)
+        .where(ChatMessage.session_id == game_id, ChatMessage.role.in_(["user", "assistant"]))
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(1)
+    )
+    if (
+        session.status not in {"active", "completed"}
+        or latest != message.id
+        or message.revision_id != payload.expected_revision_id
+    ):
+        raise HTTPException(
+            409, "The latest narration changed. Reload its versions before restoring."
+        )
+    selected = next((row for row in history(message) if row.get("id") == payload.version_id), None)
+    if not selected:
+        raise HTTPException(404, "Narration revision not found.")
+    original = message.content
+    message.content = selected["content"]
+    archive(message, original, origin="restore", restored_from=payload.version_id)
+    await refresh_evidence(db, session, message)
+    await db.commit()
+    if message.npc_journal is not None:
+        schedule(game_id, current_user.id)
+    queue_refresh(game_id, current_user.id)
+    return message.to_client_dict()

@@ -24,7 +24,8 @@ def next_event(simulation: Simulation, limit: int) -> Event | None:
                 (
                     event
                     for event in simulation.events
-                    if event.status in {"PLANNED", "WAITING_FOR_LLM"} and event.due <= limit
+                    if event.status in {"PLANNED", "WAITING_FOR_LLM", "DEFERRED"}
+                    and event.due <= limit
                 ),
                 key=lambda event: event.due,
             )
@@ -101,6 +102,9 @@ async def _run(
         if event is None:
             simulation.cursor = limit
             break
+        if event.status == "DEFERRED" and event.retry_after > time.time():
+            simulation.status = "PARTIAL"
+            break
         if not dependencies_ready(simulation, event):
             if event.status != "CANCELLED":
                 simulation.status = "PARTIAL"
@@ -111,7 +115,14 @@ async def _run(
             break
         else:
             await rules.apply(db, state, event)
-            event.status = "CANCELLED" if event.status == "CANCELLED" else "COMMITTED"
+            event.status = (
+                event.status if event.status in {"CANCELLED", "DEFERRED"} else "COMMITTED"
+            )
+            if event.status == "DEFERRED":
+                save(state, simulation)
+                await db.commit()
+                simulation.status = "PARTIAL"
+                break
         simulation.cursor = max(simulation.cursor, event.due)
         event.committed_at = simulation.cursor
         simulation.last_run_events += 1

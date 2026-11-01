@@ -1,5 +1,6 @@
 """VN moment images freeze visible facts and never mutate portraits or current scenes."""
 
+import asyncio
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,8 +125,8 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
             provider="stable_diffusion", positive_prompt="A quiet cafe", negative_prompt="blur"
         )
         target = Path(kwargs["target_dir"], kwargs["filename"])
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"fake image")
+        await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(target.write_bytes, b"fake image")
         return local_path_to_data_url(str(target))
 
     async def adapt(description, rules, user, **kwargs):
@@ -243,7 +244,7 @@ async def test_late_result_is_discarded_after_story_change(
     result = await finish(auth_client)
     assert result["state"] == "failed"
     request = illustration_world[0]
-    assert not Path(request["target_dir"], request["filename"]).exists()
+    assert not await asyncio.to_thread(Path(request["target_dir"], request["filename"]).exists)
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
         assert registry_of(state.entity_states)["images"] == {}
@@ -322,7 +323,7 @@ async def test_comfy_story_preset_is_used(
     async def adapt(description, rules, user, **kwargs):
         adaptations.append(rules)
         assert "Soft watercolor with ink outlines" in description
-        return "2 adults, standing apart, woman beside window, man seated"
+        return "1 people, Лина, red coat, standing beside window"
 
     monkeypatch.setattr(render, "adapt_body", adapt)
     result = await finish(auth_client)
@@ -346,8 +347,7 @@ async def test_comfy_story_preset_is_used(
     monkeypatch.setattr(image_prompt_adapter, "adapt_body", unexpected_adaptation)
     prepared = await image_prompt_adapter.prepare_prompt(illustration_world[0]["prompt"], options)
     assert prepared["positive"] == (
-        "model-quality-token, 2 adults, standing apart, woman beside window, man seated, "
-        "model-style-token"
+        "model-quality-token, 1 people, Лина, red coat, standing beside window, model-style-token"
     )
 
 
@@ -376,14 +376,14 @@ async def test_utility_distills_prompt_before_non_comfy_provider(
 
     async def adapt(description, rules, user):
         calls.append((description, rules))
-        return "A woman in a red coat offers a cup at a cafe."
+        return "1 people. Лина in a red coat offers a cup at a cafe."
 
     monkeypatch.setattr(render, "adapt_body", adapt)
     assert (await finish(auth_client))["state"] == "succeeded"
     assert len(calls) == 1
     assert calls[0][1].language == "English"
     assert "Лина" in calls[0][0]
-    assert illustration_world[0]["prompt"] == "A woman in a red coat offers a cup at a cafe."
+    assert illustration_world[0]["prompt"] == "1 people. Лина in a red coat offers a cup at a cafe."
 
 
 async def test_utility_failure_does_not_submit_an_image(

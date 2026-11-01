@@ -10,6 +10,7 @@ class SessionCheckpointResponse(BaseModel):
     session_id: str
     message_index: int
     trigger_reason: CheckpointTriggerReason
+    pinned: bool = False
     title: str
     created_at: datetime
 

@@ -18,6 +18,7 @@ from fastapi.encoders import jsonable_encoder
 
 from backend.api.routes.adventures.combat.context import system_event
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.engine.hook_ledger import run
 
 if TYPE_CHECKING:
     from backend.api.routes.adventures.gameplay_logic import GameTurnManager
@@ -53,8 +54,10 @@ class PostTurnHooks:
 
     async def _collect_messages(self) -> list[str]:
         combat = self.manager.combat
-        messages = await combat.check_special_unlocks()
-        attack_msg = await combat.check_npc_attack_triggers()
+        messages = await run(self.manager, "special_unlocks", combat.check_special_unlocks)
+        attack_msg = await run(
+            self.manager, "npc_attack_triggers", combat.check_npc_attack_triggers
+        )
         if attack_msg:
             messages.append(attack_msg)
         return messages

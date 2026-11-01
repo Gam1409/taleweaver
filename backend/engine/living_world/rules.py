@@ -3,6 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.living_world.interaction import defer_move
 from backend.engine.living_world.schema import Event
 from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
@@ -65,6 +66,8 @@ async def move(db: AsyncSession, state: SessionState, event: Event, actor: World
         or lock_state.get("is_locked", edge.is_locked)
     ):
         cancel(event, "Movement is not permitted by the current world state.")
+        return
+    if await defer_move(db, state, event, origin):
         return
     # State overrides are the same authority read by normal gameplay and visual snapshots.
     state.entity_states = {

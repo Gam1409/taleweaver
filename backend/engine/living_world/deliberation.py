@@ -183,6 +183,18 @@ async def apply(
     await rules.apply(db, state, proposal)
     if proposal.status == "CANCELLED":
         raise HTTPException(409, "The proposed action is no longer permitted.")
+    if proposal.status == "DEFERRED":
+        event.kind = proposal.kind
+        event.destination = proposal.destination
+        event.status = proposal.status
+        event.deferrals = proposal.deferrals
+        event.retry_after = proposal.retry_after
+        event.result = proposal.result
+        event.observed_by_player = proposal.observed_by_player
+        simulation.status = "PARTIAL"
+        save(state, simulation)
+        await db.commit()
+        return
     check_stop(state.session_id)
     simulation.private_notes[event.actor] = PrivateNotes(
         goal=decision.goal,

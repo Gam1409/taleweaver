@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core.llm_logger import log_structured_event
+from backend.core.reliability_metrics import record_recall
 from backend.engine.memory_rag.core import context_fallback, working_memory
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.embeddings import embed_texts
@@ -30,11 +31,16 @@ class TurnRecall:
     elapsed_ms: float = 0
     usage: dict[str, dict] = field(default_factory=dict)
     core_documents: list[MemoryDocument] = field(default_factory=list)
+    candidates: int = 0
+    ranked: int = 0
+    projection_metrics: dict = field(default_factory=dict)
 
     def record_usage(
         self, manager: Any, audience: str, block: str, selected: list[MemoryDocument]
     ) -> None:
+        metrics = {"candidates": self.candidates, "ranked": self.ranked, **self.projection_metrics}
         audit = {
+            "selection_metrics": metrics,
             "retrieval_method": self.method,
             "duration_ms": self.elapsed_ms,
             "source_ids": [doc.source_id for doc in selected],
@@ -47,6 +53,7 @@ class TurnRecall:
         if self.usage.get(audience) == audit:
             return
         self.usage[audience] = audit
+        record_recall(metrics, self.method)
         log_structured_event(
             "gm.turn.memory_recall",
             game_id=manager.state.session_id,
@@ -145,11 +152,14 @@ async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRe
         ):
             scores = _canonical_scores(documents, candidates, scope)
     ranked = rank_documents(documents, query, npc_ids, manager.state.current_scene_id, scores)
+    ranked_count = len(ranked)
     core = working_memory(documents, npc_ids)
     if not ranked:
         ranked = context_fallback(documents)
     return TurnRecall(
         enabled=True,
+        candidates=len(documents),
+        ranked=ranked_count,
         documents=ranked,
         core_documents=core,
         method="hybrid" if scores else "sql_lexical",

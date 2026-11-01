@@ -19,7 +19,7 @@ class Figure(BaseModel):
     character_id: str = Field(min_length=1, max_length=128)
     presence: Literal["visible", "off_screen", "uncertain"] = "visible"
     posture: Literal[
-        "unspecified", "standing", "seated", "lying", "walking", "leaning", "kneeling"
+        "unspecified", "standing", "seated", "lying", "walking", "leaning", "kneeling", "crouching"
     ] = "unspecified"
     action: Literal[
         "unspecified",
@@ -49,7 +49,14 @@ class Separation(BaseModel):
     subject_id: str = Field(min_length=1, max_length=128)
     target_id: str = Field(min_length=1, max_length=128)
     relation: Literal[
-        "beside", "across from", "apart from", "facing", "behind", "holding hands with"
+        "beside",
+        "across from",
+        "apart from",
+        "facing",
+        "behind",
+        "holding hands with",
+        "in_front_of",
+        "near",
     ]
 
 

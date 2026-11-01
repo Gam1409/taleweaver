@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import NarrationVersions from './NarrationVersions.vue'
 import { RotateCcw } from 'lucide-vue-next'
 import { useGameSocket } from '@/composables/useGameSocket'
 import { useNarrationRegeneration } from '@/composables/useNarrationRegeneration'
@@ -27,4 +28,5 @@ const unavailable = computed(() => props.disabled || !canRegenerate.value)
     <RotateCcw :size="compact ? 15 : 18" :class="{ 'animate-spin': busy }" />
     <span v-if="showLabel" class="text-xs" :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Rewrite' : 'Rewrite response' }}</span>
   </button>
+  <NarrationVersions :game-id="gameId" :disabled="disabled || busy" />
 </template>

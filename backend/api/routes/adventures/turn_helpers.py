@@ -337,10 +337,19 @@ class TurnSessionStateHelper:
                 continue
             existing.append(normalized)
 
-        if len(existing) > self.gm_notes_max_items:
-            existing = existing[-self.gm_notes_max_items :]
-
         exit_states = dict(self.manager.state.exit_states or {})
+        archive_key = f"{self.gm_notes_state_key}_archive"
+        archived = list(exit_states.get(archive_key) or [])
+        if clear_notes:
+            archived = []
+        archived = [note for note in archived if note.strip().lower() not in forget_set]
+        if len(existing) > self.gm_notes_max_items:
+            archived.extend(existing[: -self.gm_notes_max_items])
+            existing = existing[-self.gm_notes_max_items :]
+        active = {note.casefold() for note in existing}
+        exit_states[archive_key] = list(
+            dict.fromkeys(note for note in archived if note.casefold() not in active)
+        )
         if existing:
             exit_states[self.gm_notes_state_key] = existing
         else:

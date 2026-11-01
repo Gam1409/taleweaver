@@ -28,6 +28,10 @@ def test_upgrade_from_either_parent(tmp_path, monkeypatch, parent):
         assert "source_keys" in {
             column["name"] for column in schema.get_columns("memory_summaries")
         }
+        assert {"revision_id", "versions"} <= {
+            column["name"] for column in schema.get_columns("chat_messages")
+        }
+        assert "hook_runs" in schema.get_table_names()
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
     finally:

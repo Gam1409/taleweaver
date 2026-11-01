@@ -31,6 +31,7 @@ def write_settings(state: Any, settings: VnSettings) -> None:
     if read_settings(state).scene_staging != validated.scene_staging:
         states = dict(states or {})
         states.pop("__scene_staging__", None)
+        states.pop("__scene_props__", None)
     state.entity_states = {
         **(states if isinstance(states, dict) else {}),
         SETTINGS_KEY: validated.model_dump(),

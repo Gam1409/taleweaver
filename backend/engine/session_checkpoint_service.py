@@ -44,6 +44,17 @@ def _reason_title(reason: str, snapshot: dict[str, Any]) -> str:
     return f"Checkpoint: {reason.replace('_', ' ').title()}" if reason else "Checkpoint"
 
 
+def _restore_session_context(
+    game_session: GameSession, state: SessionState, snapshot: dict[str, Any]
+) -> None:
+    state_snapshot = snapshot.get("session_state") or {}
+    if "active_sequence_id" in state_snapshot:
+        state.active_sequence_id = state_snapshot["active_sequence_id"]
+    game_session.status = snapshot.get("session_status") or (
+        "completed" if state.is_completed else "active"
+    )
+
+
 class SessionCheckpointService:
     @staticmethod
     async def _load_context(
@@ -105,6 +116,7 @@ class SessionCheckpointService:
             "session_state": {
                 **memory_snapshot(state),
                 "current_scene_id": state.current_scene_id,
+                "active_sequence_id": state.active_sequence_id,
                 "in_game_time": state.in_game_time,
                 "time_system": state.time_system,
                 "time_config": deepcopy(state.time_config or {}),
@@ -125,11 +137,16 @@ class SessionCheckpointService:
         db: AsyncSession, session_id: str, keep: int = MAX_CHECKPOINTS_PER_SESSION
     ) -> None:
         cp_res = await db.execute(
-            select(SessionCheckpoint.id)
+            select(SessionCheckpoint)
             .where(SessionCheckpoint.session_id == session_id)
             .order_by(SessionCheckpoint.created_at.desc(), SessionCheckpoint.id.desc())
         )
-        checkpoint_ids = list(cp_res.scalars().all())
+        checkpoint_ids = [
+            cp.id
+            for cp in cp_res.scalars().all()
+            if cp.trigger_reason.upper() != "MANUAL"
+            and not (cp.state_snapshot or {}).get("pinned", False)
+        ]
         stale_ids = checkpoint_ids[keep:]
         if stale_ids:
             await db.execute(delete(SessionCheckpoint).where(SessionCheckpoint.id.in_(stale_ids)))
@@ -141,10 +158,11 @@ class SessionCheckpointService:
         trigger_reason: str,
         scene_label: str | None = None,
     ) -> SessionCheckpoint:
-        _, state, avatar = await SessionCheckpointService._load_context(db, session_id)
+        game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         message_ids = await SessionCheckpointService._message_ids(db, session_id)
 
         snapshot = SessionCheckpointService._build_snapshot(state, avatar, scene_label=scene_label)
+        snapshot["session_status"] = game_session.status
         snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
 
@@ -175,6 +193,7 @@ class SessionCheckpointService:
                 id=cp.id,
                 session_id=cp.session_id,
                 message_index=cp.message_index,
+                pinned=bool((cp.state_snapshot or {}).get("pinned")),
                 trigger_reason=cp.trigger_reason,
                 title=_reason_title(cp.trigger_reason, cp.state_snapshot or {}),
                 created_at=cp.created_at,
@@ -238,6 +257,7 @@ class SessionCheckpointService:
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])
         state.quests = deepcopy(state_snapshot.get("quests") or [])
         state.is_completed = bool(state_snapshot.get("is_completed", state.is_completed))
+        _restore_session_context(game_session, state, snapshot)
         restore_memory(state, state_snapshot)
         await invalidate_memory(db, session_id)
 

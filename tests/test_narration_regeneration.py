@@ -367,3 +367,73 @@ def test_legacy_appearance_retraction_preserves_manual_description(description, 
     retract_reply(npc, "old")
     assert npc.description == expected
     assert npc.metadata_json["npc_journal"]["entries"] == []
+
+
+async def test_versions_restore_is_append_only_and_rejects_stale_revision(auth_client, narration):
+    message_id, llm = narration
+    response = await auth_client.post(PATH, json={"message_id": message_id})
+    assert response.status_code == 200
+    revision = response.json()["revision_id"]
+    path = f"/api/adventures/portrait-session/chat/{message_id}/versions"
+    versions = (await auth_client.get(path)).json()["versions"]
+    assert [v["content"] for v in versions] == [
+        "The gate remains locked.",
+        "The locked gate refuses to budge.",
+    ]
+    payload = {"version_id": versions[0]["id"], "expected_revision_id": revision}
+    restored = await auth_client.post(path + "/restore", json=payload)
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["content"] == versions[0]["content"]
+    assert restored.json()["revision_id"] != revision
+    assert (await auth_client.post(path + "/restore", json=payload)).status_code == 409
+    assert len((await auth_client.get(path)).json()["versions"]) == 3
+    llm.aexecute_simple_task.assert_awaited_once()
+
+
+async def test_rewrite_retracts_pose_and_copy_keeps_versions(auth_client, narration):
+    from backend.engine.npc_journal.messages import copy_messages
+    from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY
+    from backend.engine.scene_staging.state import KEY
+
+    message_id, _ = narration
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        state.entity_states = {
+            **state.entity_states,
+            KEY: {
+                "status": "ready",
+                "source_message_id": message_id,
+                "actors": {
+                    "NPC_NEW": {"posture": {"value": "sitting", "source_message_id": message_id}}
+                },
+            },
+            REGISTRY_KEY: {
+                "snapshots": {
+                    message_id: {
+                        "visible_facts": {
+                            "staging_status": "ready",
+                            "characters": [{"id": "NPC_NEW", "posture": "sitting"}],
+                        }
+                    }
+                },
+                "images": {},
+            },
+        }
+        await db.commit()
+    assert (await auth_client.post(PATH, json={"message_id": message_id})).status_code == 200
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        assert state.entity_states[KEY]["actors"] == {}
+        facts = state.entity_states[REGISTRY_KEY]["snapshots"][message_id]["visible_facts"]
+        assert facts["staging_status"] == "unconfirmed"
+        assert "posture" not in facts["characters"][0]
+        source = await db.get(ChatMessage, message_id)
+        ids = await copy_messages(db, "portrait-session", "portrait-session")
+        await db.flush()
+        copied = await db.get(ChatMessage, ids[message_id])
+        assert copied.versions == source.versions
+        assert copied.revision_id == source.revision_id

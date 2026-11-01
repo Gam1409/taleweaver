@@ -7,6 +7,7 @@ from .base import Base
 from .character import Character
 from .chat import ChatMessage
 from .game_session import GameSession
+from .hook_run import HookRun
 from .memory_rag import MemoryIndexState as MemoryIndexState
 from .memory_rag import MemorySummary as MemorySummary
 from .session_checkpoint import SessionCheckpoint
@@ -30,6 +31,7 @@ __all__ = [
     "SessionCheckpoint",
     "SessionState",
     "User",
+    "HookRun",
     "TurnReplay",
     "ValidationRun",
     "WorldEntity",

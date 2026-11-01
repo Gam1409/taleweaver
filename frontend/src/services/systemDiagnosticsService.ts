@@ -1,6 +1,7 @@
 import { apiFetch } from '@/services/http'
 
 export interface SystemDiagnosticsSettings {
+  reliability?: { scope: string, recall: Record<string, number>, hooks?: { name: string, status: string, attempts: number, error_type: string | null, updated_at: string }[] }
   enabled: boolean
   log_directory: string
   retention_files: number

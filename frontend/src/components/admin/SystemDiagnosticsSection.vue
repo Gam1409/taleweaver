@@ -60,7 +60,23 @@ onMounted(load)
     </div>
     <div class="space-y-6 rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
       <p v-if="loading" role="status" class="text-sm text-slate-300">Loading diagnostics settings…</p>
-      <form v-else-if="settings" class="space-y-6" @submit.prevent="save">
+      <div v-if="settings?.reliability" class="rounded-xl border border-slate-700 p-4 text-sm text-slate-300">
+        <h2 class="font-bold text-white">Memory recall</h2>
+        <p>{{ settings.reliability.scope }}. Counts are per audience projection, not unique turns.</p>
+        <dl class="mt-3 grid grid-cols-2 gap-2">
+          <template v-for="(value, key) in settings.reliability.recall" :key="key">
+            <dt>{{ String(key).replace(/_/g, ' ') }}</dt><dd>{{ value }}</dd>
+          </template>
+        </dl>
+        <h2 class="mt-4 font-bold text-white">Recent post-turn hooks</h2>
+        <ul class="mt-2 space-y-1">
+          <li v-for="(hook, index) in settings.reliability.hooks ?? []" :key="index">
+            {{ hook.name }}: {{ hook.status }} ({{ hook.attempts }} attempts) {{ hook.error_type ?? '' }}
+          </li>
+        </ul>
+        <button type="button" class="mt-3 rounded border border-slate-600 px-3 py-2" @click="load">Refresh metrics</button>
+      </div>
+      <form v-if="!loading && settings" class="space-y-6" @submit.prevent="save">
         <fieldset :disabled="saving" class="space-y-5 disabled:opacity-70">
           <label class="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-white/5 bg-slate-950/40 p-5">
             <span>

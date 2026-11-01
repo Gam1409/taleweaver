@@ -59,7 +59,10 @@ def project(
     *,
     npc_ids: set[str] | None = None,
     core_documents: list[MemoryDocument] | None = None,
+    metrics: dict | None = None,
 ) -> tuple[str, list[MemoryDocument]]:
+    metrics = metrics if metrics is not None else {}
+    metrics.update(duplicates=0, budget_skips=0, selected=0)
     used: dict[str, int] = {}
     seen: set[str] = set()
     selected = []
@@ -77,16 +80,22 @@ def project(
         is_core = document.id in core_ids
         if is_core:
             available = min(available, 1250 - core_used, 1250 // max(1, cast_size))
-        if fingerprint in seen or available < 220:
+        if fingerprint in seen:
+            metrics["duplicates"] += 1
+            continue
+        if available < 220:
+            metrics["budget_skips"] += 1
             continue
         record = _record(document, available, core=is_core)
         if not record:
+            metrics["budget_skips"] += 1
             continue
         output += record
         used[group] = used.get(group, 0) + len(record)
         core_used += len(record) if is_core else 0
         seen.add(fingerprint)
         selected.append(document)
+    metrics["selected"] = len(selected)
     return (output if selected else ""), selected
 
 
@@ -94,9 +103,14 @@ def recall_block(manager: Any, audience: str, npc_ids: set[str] | None = None) -
     recall = getattr(manager, "_memory_recall", None)
     if recall is None or not recall.enabled:
         return ""
+    metrics = {}
     block, selected = project(
-        recall.documents, npc_ids=npc_ids, core_documents=getattr(recall, "core_documents", [])
+        recall.documents,
+        npc_ids=npc_ids,
+        core_documents=getattr(recall, "core_documents", []),
+        metrics=metrics,
     )
+    recall.projection_metrics = metrics
     recall.record_usage(manager, audience, block, selected)
     return block
 

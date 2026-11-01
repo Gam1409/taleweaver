@@ -336,6 +336,7 @@ export interface WorldMemory {
 }
 
 export interface SessionCheckpoint {
+  pinned?: boolean
   id: string
   session_id: string
   message_index: number

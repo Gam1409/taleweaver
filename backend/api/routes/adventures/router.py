@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
+from backend.api.routes.adventures.checkpoint_policy import router as checkpoint_policy_router
 from backend.api.routes.adventures.cloning import router as cloning_router
 from backend.api.routes.adventures.dynamic_locations import router as dynamic_locations_router
 from backend.api.routes.adventures.editor import router as editor_router
@@ -51,6 +52,7 @@ router.include_router(visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
 router.include_router(sessions_router, dependencies=[Depends(session_mutation_lease)])
+router.include_router(checkpoint_policy_router)
 router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
 

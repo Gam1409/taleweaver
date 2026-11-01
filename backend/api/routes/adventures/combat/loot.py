@@ -155,7 +155,8 @@ class CombatLootMixin:
         flag_modified(self.state, "entity_states")
         last_msg = await self._load_last_assistant_message()
         await self._generate_prompt_suggestions(last_msg)
-        await self.db.commit()
+        if not getattr(self.manager, "_atomic_post_turn_hook", False):
+            await self.db.commit()
 
     async def _loot_done(self, combat: dict[str, Any]) -> str:
         dropped_items = list(combat.get("loot_items") or [])

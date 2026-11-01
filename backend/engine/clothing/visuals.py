@@ -60,6 +60,7 @@ def character_visuals(
         "appearance": appearance_text,
         "clothing": clothing,
         "managed_clothing": True,
+        "clothing_tokens": [item["name"] for item in projected["clothing"] if item.get("name")],
         "clothing_detail_limited": limited,
     }
 

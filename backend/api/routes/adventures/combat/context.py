@@ -164,7 +164,8 @@ class CombatContextMixin:
     # --- Stream helpers -----------------------------------------------------------
 
     async def _emit_combat_final(self, status_note: str | None = None) -> AsyncGenerator[str, None]:
-        await self.db.commit()
+        if not getattr(self.manager, "_atomic_post_turn_hook", False):
+            await self.db.commit()
         combat_snap = AdventureLogic.get_combat_snapshot(self.state)
         # Never send a zombie combat object that has no active phase.
         if combat_snap and not any(

@@ -28,7 +28,7 @@ def reconcile(simulation: Simulation, world_time: int, presence: dict | None) ->
     elapsed = max(0, total - simulation.offline_total_seen)
     simulation.offline_total_seen = max(total, simulation.offline_total_seen)
     pending = any(
-        event.status in {"PLANNED", "WAITING_FOR_LLM"} and event.due <= world_time
+        event.status in {"PLANNED", "WAITING_FOR_LLM", "DEFERRED"} and event.due <= world_time
         for event in simulation.events
     )
     pending = pending or (
@@ -71,7 +71,8 @@ def public_status(simulation: Simulation) -> dict:
         "cursor": simulation.cursor,
         "target": simulation.target,
         "pending_events": sum(
-            event.status in {"PLANNED", "WAITING_FOR_LLM"} for event in simulation.events
+            event.status in {"PLANNED", "WAITING_FOR_LLM", "DEFERRED"}
+            for event in simulation.events
         ),
         "last_run_events": simulation.last_run_events,
         "llm_calls": simulation.deliberation_attempts,
@@ -79,7 +80,7 @@ def public_status(simulation: Simulation) -> dict:
         "recap": [
             event.result
             for event in simulation.events
-            if event.status == "COMMITTED" and event.observed_by_player
+            if event.status in {"COMMITTED", "DEFERRED", "CANCELLED"} and event.observed_by_player
         ][-20:],
         "capabilities": ["PAUSE", "RULES_CATCH_UP", "PRIVATE_DECISIONS"],
     }

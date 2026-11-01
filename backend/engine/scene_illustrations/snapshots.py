@@ -42,6 +42,15 @@ def _visible_facts(value: dict | None) -> dict:
         for key in ("setting", "lighting", "visible_action", "staging_status")
         if facts.get(key)
     }
+    result["props"] = [
+        {
+            key: str(item[key])[:200]
+            for key in ("item_id", "owner_id", "name", "spatial_position")
+            if key in item
+        }
+        for item in (facts.get("props") or [])[:24]
+        if isinstance(item, dict)
+    ]
     people = facts.get("characters") or []
     result["characters"] = [
         {
@@ -54,6 +63,11 @@ def _visible_facts(value: dict | None) -> dict:
                     }
                 }
                 if isinstance(person.get("placement"), dict)
+                else {}
+            ),
+            **(
+                {"clothing_tokens": [str(token)[:200] for token in person["clothing_tokens"][:32]]}
+                if isinstance(person.get("clothing_tokens"), list)
                 else {}
             ),
             **({"managed_clothing": True} if person.get("managed_clothing") is True else {}),
@@ -100,6 +114,8 @@ async def capture_scene_snapshot(
     registry["images"] = {**registry["images"], **saved_images}
     registry["snapshots"][message.id] = {
         "nonce": uuid4().hex,
+        "source_message_id": message.id,
+        "source_revision_id": message.revision_id,
         "content_hash": content_hash(message),
         "scene_id": message.scene_id,
         "sequence_id": message.sequence_id,
@@ -123,7 +139,9 @@ def remap_illustrations(entity_states: dict | None, message_id_map: dict[str, st
             for key, value in registry[kind].items()
             if key in message_id_map and isinstance(value, dict)
         }
-    for snapshot in registry["snapshots"].values():
+    for message_id, snapshot in registry["snapshots"].items():
         snapshot["nonce"] = uuid4().hex
+        if "source_message_id" in snapshot:
+            snapshot["source_message_id"] = message_id
     states[REGISTRY_KEY] = registry
     return states

@@ -7,6 +7,8 @@ from typing import Any
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.clothing.visuals import session_objects
+from backend.engine.scene_staging import props
 from backend.engine.scene_staging.schema import INSTRUCTIONS, SceneExtraction
 from backend.engine.scene_staging.state import KEY, MAX_CAST, digest, project, reconcile
 from backend.engine.turn_replay.transactions import release_for_model
@@ -28,6 +30,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
     }
     if not completed or not narration.strip() or len(narration) > MAX_NARRATION:
         state.entity_states = {**(state.entity_states or {}), KEY: result}
+        props.invalidate(state)
         return
     from backend.api.routes.adventures.logic import AdventureLogic
 
@@ -44,11 +47,23 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
     )
     if len(cast) > MAX_CAST:
         state.entity_states = {**(state.entity_states or {}), KEY: result}
+        props.invalidate(state)
         return  # Never silently drop a character or truncate the completed narrative.
+    rows = await session_objects(manager.db, state.session_id)
+    valid_items = props.candidates(
+        manager.avatar, rows, state, {row.id for row in rows if row.entity_type == "NPC"}
+    )
+    present = {person["id"] for person in cast}
+    items = [item for item in valid_items if item["owner_id"] in present]
+    if len(items) > 100:
+        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        props.invalidate(state)
+        return
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
             "present_cast": cast,
+            "owned_items": items,
             "previous_staging": project(state, cast),
             "current_narration": narration,
         },
@@ -70,10 +85,14 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             ),
             timeout=role_timeout(manager.user, "small"),
         )
-        result = reconcile(state, cast, narration, SceneExtraction.model_validate(response))
+        extraction = SceneExtraction.model_validate(response)
+        result = reconcile(state, cast, narration, extraction)
+        props.reconcile(state, narration, extraction.props, items, valid_items=valid_items)
     except asyncio.CancelledError:
         raise
     except Exception:
         logger.exception("Scene staging reconciliation failed for session %s", manager.game_id)
     finally:
+        if result.get("status") != "ready":
+            props.invalidate(state)
         state.entity_states = {**(state.entity_states or {}), KEY: result}

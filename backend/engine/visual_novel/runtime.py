@@ -11,6 +11,8 @@ from backend.engine.clothing.visuals import (
     session_objects,
 )
 from backend.engine.scene_illustrations import capture_scene_snapshot
+from backend.engine.scene_staging import props
+from backend.engine.scene_staging.provenance import stamp
 from backend.engine.scene_staging.state import digest, project, registry
 from backend.engine.visual_novel.config import read_settings
 from backend.models.world_entity import WorldScene
@@ -67,6 +69,8 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
 
     # ChatMessage's insert hook stamps scene_id from the session on flush.
     await manager.db.flush([message])
+    stamp(manager.state, message)
+    props.stamp(manager.state, message)
     with manager.db.no_autoflush:
         entities = await AdventureLogic.build_session_entities(manager.db, manager.state)
         scene = await manager.db.scalar(
@@ -117,4 +121,13 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
         facts["staging_status"] = saved.get("status", "unconfirmed") if matches else "unconfirmed"
         for person in facts["characters"]:
             person.update(staging.get(person["id"], {}))
+    facts["props"] = props.project(
+        manager.state,
+        props.candidates(
+            manager.avatar,
+            list(rows.values()),
+            manager.state,
+            {row.id for row in rows.values() if row.entity_type == "NPC"},
+        ),
+    )
     await capture_scene_snapshot(manager.db, manager.state, message, facts)

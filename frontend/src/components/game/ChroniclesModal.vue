@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Clock3, History, Sparkles, X } from 'lucide-vue-next'
+import CheckpointPinButton from './CheckpointPinButton.vue'
 import type { SessionCheckpoint } from '@/types'
 
 defineProps<{
@@ -38,7 +39,7 @@ function reasonBadge(reason: SessionCheckpoint['trigger_reason']): string {
           </div>
           <div>
             <h3 class="text-lg font-black text-white">Chronicles Timeline</h3>
-            <p class="text-xs text-slate-400">Select a checkpoint to weave time backward.</p>
+            <p class="text-xs text-slate-400">The newest five automatic checkpoints are kept. Pin a checkpoint to retain it.</p>
           </div>
         </div>
         <button class="text-slate-400 hover:text-white transition-colors" @click="emit('close')">
@@ -75,7 +76,8 @@ function reasonBadge(reason: SessionCheckpoint['trigger_reason']): string {
             </span>
           </div>
 
-          <div class="flex justify-end">
+          <div class="flex flex-wrap justify-end gap-y-2">
+            <CheckpointPinButton :checkpoint="checkpoint" />
             <button
               class="px-4 py-2 rounded-lg bg-sky-500 text-slate-950 text-xs font-black uppercase tracking-wider hover:bg-sky-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="restoringId === checkpoint.id"

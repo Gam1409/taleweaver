@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.engine.scene_staging.props import PropDelta
+
 Posture = Literal["standing", "sitting", "lying", "kneeling", "crouching", "unknown"]
 Relation = Literal["in_front_of", "behind", "beside", "near", "on", "under", "unknown"]
 
@@ -27,6 +29,7 @@ class SceneDelta(BaseModel):
 class SceneExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     changes: list[SceneDelta] = Field(default_factory=list, max_length=13)
+    props: list[PropDelta] = Field(default_factory=list, max_length=24)
 
 
 INSTRUCTIONS = """Extract only final, explicitly completed visual changes from current_narration.
@@ -48,5 +51,10 @@ part positions. A person standing in front of a seated person is not standing on
 bench. Use null for unchanged fields; clear=true if an explicit movement invalidates
 prior staging but does not establish a new pose/placement. Do not guess a replacement.
 On posture changes, previous placement is cleared unless explicitly supplied again.
-Return an empty changes list when no supported visual change occurred.
+For props, use only supplied un-worn owned_items. Report an item placement only
+with an exact quote of a completed action. spatial_position must be a literal
+phrase in that quote. Taking off an item never implies placing it on the floor.
+Use provisional for an explicitly observed but unlocated item, confirmed only for
+explicit placement, and clear for a picked-up item. Never change ownership.
+Return empty changes and props lists when no supported visual change occurred.
 """

@@ -42,10 +42,12 @@ class Event(BaseModel):
     participant: str = Field(default="", max_length=100)
     destination: str = Field(default="", max_length=100)
     dependencies: list[str] = Field(default_factory=list, max_length=16)
-    status: Literal["PLANNED", "WAITING_FOR_LLM", "COMMITTED", "CANCELLED"] = "PLANNED"
+    status: Literal["PLANNED", "WAITING_FOR_LLM", "DEFERRED", "COMMITTED", "CANCELLED"] = "PLANNED"
     result: str = Field(default="", max_length=300)
     observed_by_player: bool = False
     attempts: int = Field(default=0, ge=0, le=2)
+    deferrals: int = Field(default=0, ge=0, le=3)
+    retry_after: float = Field(default=0, ge=0)
     speech: str = Field(default="", max_length=180)
     committed_at: int | None = Field(default=None, ge=0)
 

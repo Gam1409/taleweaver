@@ -430,6 +430,8 @@ class GameTurnManager:
         if changed:
             self.state.entity_states = states
             flag_modified(self.state, "entity_states")
+            if getattr(self, "_atomic_post_turn_hook", False):
+                return
             try:
                 await self.db.commit()
             except Exception:
