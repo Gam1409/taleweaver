@@ -10,6 +10,7 @@ SETTINGS_KEY = "__vn_settings__"
 class VnSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    scene_staging: bool = False
     pace: Literal["leisurely", "balanced", "brisk"] = "balanced"
 
 
@@ -27,6 +28,9 @@ def write_settings(state: Any, settings: VnSettings) -> None:
     """Replace the JSON value so SQLAlchemy detects the change without touching NPCs."""
     validated = VnSettings.model_validate(settings)
     states = getattr(state, "entity_states", None)
+    if read_settings(state).scene_staging != validated.scene_staging:
+        states = dict(states or {})
+        states.pop("__scene_staging__", None)
     state.entity_states = {
         **(states if isinstance(states, dict) else {}),
         SETTINGS_KEY: validated.model_dump(),

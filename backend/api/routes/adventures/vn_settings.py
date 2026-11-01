@@ -59,6 +59,7 @@ async def update(
     try:
         with session_write_lease(game_id):
             state = await owned_vn_state(db, game_id, user)
+            payload = read_settings(state).model_copy(update=payload.model_dump(exclude_unset=True))
             write_settings(state, payload)
             await db.commit()
     except SessionBusyError:

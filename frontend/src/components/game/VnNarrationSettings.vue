@@ -6,6 +6,8 @@ type NarrationPace = 'leisurely' | 'balanced' | 'brisk'
 const props = defineProps<{ sessionId: string }>()
 const pace = ref<NarrationPace>('balanced')
 const savedPace = ref<NarrationPace>('balanced')
+const sceneStaging = ref(false)
+const savedSceneStaging = ref(false)
 const loaded = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -42,12 +44,14 @@ async function load(): Promise<void> {
       { signal: request.signal }
     )
     if (!response.ok) throw new Error('Could not load narration settings.')
-    const data = (await response.json()) as { settings: { pace: NarrationPace } }
+    const data = (await response.json()) as { settings: { pace: NarrationPace; scene_staging?: boolean } }
     if (controller !== request) return
     pace.value = options.some(option => option.value === data.settings.pace)
       ? data.settings.pace
       : 'balanced'
     savedPace.value = pace.value
+    sceneStaging.value = data.settings.scene_staging ?? false
+    savedSceneStaging.value = sceneStaging.value
     loaded.value = true
   } catch (cause) {
     if (controller === request)
@@ -63,7 +67,7 @@ async function load(): Promise<void> {
 
 async function save(): Promise<boolean> {
   // An unopened or failed settings request must not overwrite the server default.
-  if (!loaded.value || pace.value === savedPace.value) return true
+  if (!loaded.value || (pace.value === savedPace.value && sceneStaging.value === savedSceneStaging.value)) return true
   if (busy.value) return false
   controller?.abort()
   const request = new AbortController()
@@ -78,7 +82,7 @@ async function save(): Promise<boolean> {
         method: 'PATCH',
         includeJson: true,
         signal: request.signal,
-        body: JSON.stringify({ pace: pace.value })
+        body: JSON.stringify({ pace: pace.value, scene_staging: sceneStaging.value })
       }
     )
     if (response.status === 409) {
@@ -92,6 +96,7 @@ async function save(): Promise<boolean> {
     if (!response.ok) throw new Error('Could not save narration settings. Please retry.')
     if (controller !== request) return false
     savedPace.value = pace.value
+    savedSceneStaging.value = sceneStaging.value
     return true
   } catch (cause) {
     if (controller === request)
@@ -152,6 +157,13 @@ defineExpose({ save })
           ><span class="block text-sm font-semibold">{{ option.label }}</span
           ><span class="text-xs text-slate-400">{{ option.description }}</span></span
         >
+      </label>
+      <label class="flex items-start gap-3 rounded-xl border border-white/10 p-3">
+        <input v-model="sceneStaging" type="checkbox" class="mt-1 accent-rose-400" />
+        <span>
+          <span class="block text-sm font-semibold">Track scene poses and placement (experimental)</span>
+          <span class="text-xs text-slate-400">After each reply, check explicit pose and placement changes for continuity and illustrations. Adds one Small / Utility request before the turn finishes. Clothing and inventory remain controlled by the game rules.</span>
+        </span>
       </label>
     </fieldset>
   </details>

@@ -36,7 +36,7 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert old_reference == original
     assert state.entity_states["npc_7"] == original["npc_7"]
     assert state.entity_states["__vn_state__"] == original["__vn_state__"]
-    assert state.entity_states[SETTINGS_KEY] == {"pace": pace}
+    assert state.entity_states[SETTINGS_KEY] == {"pace": pace, "scene_staging": False}
     assert read_settings(state).pace == pace
     assert f"PACING: {pace.upper()}." in prompt
     assert "VISUAL NOVEL PRESENTATION" in prompt

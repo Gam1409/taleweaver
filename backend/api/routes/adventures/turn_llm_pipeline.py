@@ -28,6 +28,7 @@ from backend.engine.memory_rag.prompts import recall_block, recall_enabled, with
 from backend.engine.memory_rag.recent import recent_dialogue
 from backend.engine.memory_rag.retrieval import prepare_recall
 from backend.engine.npc_presence import physically_present, presence_context
+from backend.engine.scene_staging.state import narration_block
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -327,6 +328,8 @@ class TurnLlmContextBuilder:
         availability = presence_context(world.all_entities, state)
         mechanics_state_block += availability
         narration_state_block += availability
+        if is_vn(adventure):
+            narration_state_block += narration_block(state, world.all_entities, self.manager.avatar)
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
             narration_state_block

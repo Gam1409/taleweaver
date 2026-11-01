@@ -11,6 +11,8 @@ from backend.engine.clothing.visuals import (
     session_objects,
 )
 from backend.engine.scene_illustrations import capture_scene_snapshot
+from backend.engine.scene_staging.state import digest, project, registry
+from backend.engine.visual_novel.config import read_settings
 from backend.models.world_entity import WorldScene
 
 
@@ -91,7 +93,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
         "appearance": manager.avatar.description,
         "clothing": equipped_appearance(manager.avatar),
     }
-    facts = {
+    facts: dict[str, Any] = {
         "setting": scene.description if scene is not None else "",
         "characters": [
             player,
@@ -105,4 +107,14 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     if any(person.get("managed_clothing") for person in facts["characters"]):
         # A scene label is enough to ground composition; its prose may describe hidden outfits.
         facts["setting"] = scene.label if scene is not None else ""
+    if read_settings(manager.state).scene_staging:
+        saved = registry(manager.state)
+        matches = (
+            saved.get("source_hash") == digest(message.content)
+            and saved.get("scene_id") == manager.state.current_scene_id
+        )
+        staging = project(manager.state, facts["characters"]) if matches else {}
+        facts["staging_status"] = saved.get("status", "unconfirmed") if matches else "unconfirmed"
+        for person in facts["characters"]:
+            person.update(staging.get(person["id"], {}))
     await capture_scene_snapshot(manager.db, manager.state, message, facts)

@@ -86,16 +86,19 @@ async def test_public_chat_cards_and_settings_do_not_expose_private_social_state
 
 async def test_pace_changes_persist_without_modifying_private_simulation(auth_client, vn_world):
     response = await auth_client.get(f"/api/adventures/{SESSION}/vn-settings")
-    assert response.json() == {"mode": "vn", "settings": {"pace": "leisurely"}}
+    assert response.json() == {
+        "mode": "vn",
+        "settings": {"pace": "leisurely", "scene_staging": False},
+    }
     response = await auth_client.patch(
         f"/api/adventures/{SESSION}/vn-settings", json={"pace": "brisk"}
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"mode": "vn", "settings": {"pace": "brisk"}}
+    assert response.json() == {"mode": "vn", "settings": {"pace": "brisk", "scene_staging": False}}
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
         assert state.entity_states[STATE_KEY] == social_fixture().model_dump()
-        assert state.entity_states[SETTINGS_KEY] == {"pace": "brisk"}
+        assert state.entity_states[SETTINGS_KEY] == {"pace": "brisk", "scene_staging": False}
 
 
 @pytest.mark.parametrize("session_id", ["other-session", "missing-session"])

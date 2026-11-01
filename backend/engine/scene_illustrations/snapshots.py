@@ -39,12 +39,23 @@ def _visible_facts(value: dict | None) -> dict:
     facts = value or {}
     result = {
         key: str(facts[key])[:2000]
-        for key in ("setting", "lighting", "visible_action")
+        for key in ("setting", "lighting", "visible_action", "staging_status")
         if facts.get(key)
     }
     people = facts.get("characters") or []
     result["characters"] = [
         {
+            **(
+                {
+                    "placement": {
+                        key: str(person["placement"][key])[:120]
+                        for key in ("relation", "target_kind", "target")
+                        if key in person["placement"]
+                    }
+                }
+                if isinstance(person.get("placement"), dict)
+                else {}
+            ),
             **({"managed_clothing": True} if person.get("managed_clothing") is True else {}),
             **(
                 {"clothing_detail_limited": True}
@@ -53,7 +64,7 @@ def _visible_facts(value: dict | None) -> dict:
             ),
             **{
                 key: str(person[key])[:1000]
-                for key in ("id", "name", "appearance", "clothing", "position")
+                for key in ("id", "name", "appearance", "clothing", "position", "posture")
                 if person.get(key)
             },
         }

@@ -1,5 +1,6 @@
 """Private VN state and its provenance survive saves and rewind with their story."""
 
+import asyncio
 import io
 import json
 import zipfile
@@ -183,7 +184,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
         manifest = json.loads(archive.read("session.json"))
     exported_states = manifest["session_state"]["entity_states"]
     assert exported_states[STATE_KEY] == social_fixture().model_dump()
-    assert exported_states[SETTINGS_KEY] == {"pace": "leisurely"}
+    assert exported_states[SETTINGS_KEY] == {"pace": "leisurely", "scene_staging": False}
     imported = await auth_client.post(
         "/api/adventures/sessions/import",
         files={"file": ("novel.ads", exported.content, "application/zip")},
@@ -192,7 +193,10 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
     for sid in (copied.json()["game_id"], imported.json()["game_id"]):
         settings_response = await auth_client.get(f"/api/adventures/{sid}/vn-settings")
         assert settings_response.status_code == 200, settings_response.text
-        assert settings_response.json() == {"mode": "vn", "settings": {"pace": "leisurely"}}
+        assert settings_response.json() == {
+            "mode": "vn",
+            "settings": {"pace": "leisurely", "scene_staging": False},
+        }
     async with TestSessionLocal() as db:
         original = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
         for sid in (copied.json()["game_id"], imported.json()["game_id"]):
@@ -201,7 +205,10 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
             assert message.id != FIRST_MESSAGE
             expected = remap_social_state(original.entity_states, {FIRST_MESSAGE: message.id})
             assert state.entity_states[STATE_KEY] == expected[STATE_KEY]
-            assert state.entity_states[SETTINGS_KEY] == {"pace": "leisurely"}
+            assert state.entity_states[SETTINGS_KEY] == {
+                "pace": "leisurely",
+                "scene_staging": False,
+            }
             registry = state.entity_states[REGISTRY_KEY]
             assert set(registry["images"]) == {message.id}
             assert set(registry["snapshots"]) == {message.id}
@@ -209,14 +216,14 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
             image_url = registry["images"][message.id]["image_url"]
             assert image_url.startswith(f"/data/adventures/sessions/{sid}/")
             image_path = Path(data_url_to_local_path(image_url))
-            assert image_path.is_file()
-            assert (
-                image_path.read_bytes()
-                == Path(
-                    data_url_to_local_path(
-                        original.entity_states[REGISTRY_KEY]["images"][FIRST_MESSAGE]["image_url"]
-                    )
-                ).read_bytes()
+            assert await asyncio.to_thread(image_path.is_file)
+            original_image = Path(
+                data_url_to_local_path(
+                    original.entity_states[REGISTRY_KEY]["images"][FIRST_MESSAGE]["image_url"]
+                )
+            )
+            assert await asyncio.to_thread(image_path.read_bytes) == await asyncio.to_thread(
+                original_image.read_bytes
             )
             state.entity_states = {**state.entity_states, STATE_KEY: SocialState().model_dump()}
         await db.commit()
@@ -240,7 +247,10 @@ async def test_vn_export_remains_playable_when_original_template_is_unavailable(
     sid = imported.json()["game_id"]
     response = await auth_client.get(f"/api/adventures/{sid}/vn-settings")
     assert response.status_code == 200, response.text
-    assert response.json() == {"mode": "vn", "settings": {"pace": "leisurely"}}
+    assert response.json() == {
+        "mode": "vn",
+        "settings": {"pace": "leisurely", "scene_staging": False},
+    }
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == sid))
         assert state.template_id is None
@@ -250,6 +260,24 @@ async def test_vn_export_remains_playable_when_original_template_is_unavailable(
 async def test_checkpoint_rewinds_feelings_goals_promotion_settings_and_future_provenance(vn_world):
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
+        write_settings(state, VnSettings(pace="leisurely", scene_staging=True))
+        state.entity_states = {
+            **state.entity_states,
+            "__scene_staging__": {
+                "scene_id": state.current_scene_id,
+                "status": "ready",
+                "actors": {
+                    "NPC_NEW": {
+                        "origin": "",
+                        "posture": {
+                            "value": "sitting",
+                            "evidence": "The character sits down.",
+                            "source_hash": "saved",
+                        },
+                    }
+                },
+            },
+        }
         before = deepcopy(state.entity_states)
         checkpoint = await SessionCheckpointService.create_checkpoint(db, SESSION, "manual")
         await db.commit()
@@ -316,3 +344,15 @@ async def test_session_start_skips_stale_rpg_init_scripts_only_in_vn(
             select(SessionState).where(SessionState.session_id == response.json()["game_id"])
         )
         assert ("__script_vars__" in state.entity_states) is should_run
+
+
+async def test_pace_only_patch_preserves_scene_tracking(auth_client, vn_world):
+    response = await auth_client.patch(
+        f"/api/adventures/{SESSION}/vn-settings", json={"scene_staging": True}
+    )
+    assert response.status_code == 200
+    response = await auth_client.patch(
+        f"/api/adventures/{SESSION}/vn-settings", json={"pace": "brisk"}
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"] == {"pace": "brisk", "scene_staging": True}

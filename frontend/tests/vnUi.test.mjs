@@ -46,7 +46,7 @@ test('VN pace loads persisted choice and generic Save sends only edited pace', a
   f.pace.value = 'brisk'
   assert.equal(await f.save(), true)
   assert.equal(calls[1].options.method, 'PATCH')
-  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk' })
+  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk', scene_staging: false })
 })
 
 test('a failed pace load does not overwrite settings or block unrelated Save', async t => {
@@ -135,4 +135,18 @@ test('generic settings Save stops before other writes when VN pace is busy', asy
   f.exploration.value = { save: async () => { calls.push('exploration'); return true } }
   await f.saveAll()
   assert.deepEqual(calls, ['pace'])
+})
+
+test('scene staging toggle saves independently of narration pace', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'sceneStaging, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'balanced', scene_staging: false } })
+  })
+  await tick()
+  f.sceneStaging.value = true
+  assert.equal(await f.save(), true)
+  assert.deepEqual(JSON.parse(calls[1].body), { pace: 'balanced', scene_staging: true })
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 2)
 })

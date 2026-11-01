@@ -48,6 +48,7 @@ def illustration_status(state: SessionState, message: ChatMessage) -> dict:
     available = snapshot.get("content_hash") == digest
     return {
         "message_id": message.id,
+        "staging_status": (snapshot.get("visible_facts") or {}).get("staging_status"),
         "available": available,
         "reason": None
         if available

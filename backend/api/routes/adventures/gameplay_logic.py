@@ -30,6 +30,8 @@ from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
+from backend.engine.scene_staging.runtime import reconcile_narration
+from backend.engine.visual_novel.config import read_settings as read_vn_settings
 from backend.engine.visual_novel.story_director import (
     direction_reminder,
     record_direction,
@@ -2072,6 +2074,10 @@ class GameTurnManager:
 
             response_text = fallback
             yield f"event: chunk\ndata: {json.dumps({'content': fallback})}\n\n"
+
+        if policy.vn and read_vn_settings(self.state).scene_staging:
+            yield f"event: status\ndata: {json.dumps({'content': 'Checking scene continuity...'})}\n\n"
+            await reconcile_narration(self, response_text, completed=narration_completed)
 
         id_to_name: dict[str, str] = {}
         for entity in all_entities:

@@ -8,6 +8,7 @@ import { getOriginalImageUrl } from '@/utils/game_icons'
 
 const props = defineProps<{ sessionId: string; messageId: string; messageContent?: string; canGenerate: boolean }>()
 interface MomentState {
+  staging_status?: string
   available: boolean
   reason: string | null
   image_url: string | null
@@ -119,6 +120,7 @@ onBeforeUnmount(() => {
       <p class="text-xs text-slate-400">Saved with this reply. Later changes to the scene do not update this image.</p>
       <ImageGenerationDetails :key="imageUrl" :details="state?.generation_details" />
     </div>
+    <p v-if="state?.staging_status === 'unconfirmed'" role="status" class="text-xs text-amber-300">Pose and placement could not be confirmed for this reply. The illustration will rely on explicit details in the passage.</p>
     <p v-if="loading" role="status" class="text-xs text-slate-400">Loading illustration…</p>
     <button
       v-if="canGenerate && state?.available"
