@@ -72,7 +72,7 @@ def test_multilingual_units_and_formats(format):
     body, limits = assemble(atoms, proposal, format)
     assert "Эмираль" not in body
     assert "English realization" in body
-    assert bool(limits) == (format == "tags")
+    assert bool(limits) == (format in {"tags", "hybrid"})
     assert scene()["characters"][0]["name"] == "Эмираль"
 
 
@@ -129,7 +129,9 @@ def test_missing_clothing_is_unknown_and_invalid_source_is_rejected():
 
 @pytest.mark.asyncio
 async def test_structural_retry_is_bounded(monkeypatch):
-    call = AsyncMock(return_value=Proposal(units=[]))
+    from backend.engine.scene_illustrations.prompt_compiler import EnglishPlan
+
+    call = AsyncMock(return_value=EnglishPlan(facts=[]))
     monkeypatch.setattr(preparation, "_call", call)
     with pytest.raises(ValueError, match="after a retry"):
         await preparation.normalize(None, inventory(scene()), ImagePromptRules())
@@ -212,7 +214,7 @@ def test_lifecycle_discards_derived_data_and_changes_epoch():
 
 
 def test_nsfw_routes_to_legacy_without_changing_its_prompts():
-    with pytest.raises(ValueError, match="Current preparation"):
+    with pytest.raises(ValueError, match="existing preparation"):
         preparation.policy_for(
             {"provider": "stable_diffusion", "provider_options": {"_nsfw_enabled": True}}
         )
@@ -310,8 +312,8 @@ def test_preference_aba_has_a_fresh_epoch():
     from backend.engine.visual_novel.config import VnSettings, write_settings
 
     state = SimpleNamespace(entity_states={})
-    write_settings(state, VnSettings(visual_preparation="plan"))
+    write_settings(state, VnSettings(visual_audit=False))
     first = state.entity_states[KEY]["epoch"]
     write_settings(state, VnSettings())
-    write_settings(state, VnSettings(visual_preparation="plan"))
+    write_settings(state, VnSettings(visual_audit=False))
     assert state.entity_states[KEY]["epoch"] != first

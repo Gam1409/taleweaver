@@ -121,10 +121,12 @@ async def generate_scene_illustration(
         # The provider queue must not hold a database transaction open.
         await db.commit()
         details: dict = {"trace_id": current_id()} if current_id() else {}
-        details["context_mode"] = "neutral_source"
+        details["context_mode"] = (
+            "neutral_source" if t2i.get("_nsfw_enabled") else "saved_visual_plan"
+        )
         request["provider_options"]["_generation_details"] = details
         with collect_queries() as queries:
-            if preferences.visual_preparation == "plan":
+            if not t2i.get("_nsfw_enabled"):
                 snapshot["plan_identity"] = await plan_preparation.prepare(
                     request,
                     snapshot,

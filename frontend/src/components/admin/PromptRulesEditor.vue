@@ -30,7 +30,7 @@ function update<K extends keyof ImagePromptRules>(key: K, value: ImagePromptRule
         <input type="checkbox" :checked="modelValue.adapt_with_llm" @change="update('adapt_with_llm', ($event.target as HTMLInputElement).checked)" />
         <span>Adapt descriptions with the Small / Utility LLM</span>
       </label>
-      <p class="text-xs text-slate-400">Used for world generation and suggested prompts. Manually entered prompts keep your wording; required prefix and suffix are still added.</p>
+      <p class="text-xs text-slate-400">Used for world generation and suggested prompts. Neutral story-moment illustrations always prepare saved facts in English using the selected output format. Manually entered prompts keep your wording; required prefix and suffix are still added.</p>
       <details class="rounded-xl border border-slate-700 p-4">
         <summary class="cursor-pointer text-sm">Additional prompt rules</summary>
         <div class="mt-4 space-y-4">

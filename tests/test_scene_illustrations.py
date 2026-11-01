@@ -32,6 +32,7 @@ __all__ = ["workflow"]
 
 @pytest_asyncio.fixture
 async def illustration_world(auth_client, monkeypatch, tmp_path):
+    """Keep the pre-plan contract covered on the unchanged NSFW compatibility route."""
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
     visual_jobs._jobs.clear()
     async with TestSessionLocal() as db:
@@ -72,7 +73,7 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
                 entity_states={
                     AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY: {
                         "adventure": {"rule_enforcement_mode": mode},
-                        "original_manifest": {},
+                        "original_manifest": {"nsfw_settings": {"enabled": True}},
                     },
                     "NPC": {"description": "Future blue coat", "secret": "hidden map"},
                 },
@@ -313,7 +314,8 @@ async def test_comfy_story_preset_is_used(
         state.selected_image_styles = [{"instruction": "Soft watercolor with ink outlines"}]
         data = deepcopy(state.entity_states)
         data[AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY]["original_manifest"] = {
-            "visual_presets": {"advanced": "story-art"}
+            "visual_presets": {"advanced": "story-art"},
+            "nsfw_settings": {"enabled": True},
         }
         state.entity_states = data
         await db.commit()

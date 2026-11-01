@@ -1,5 +1,8 @@
 # Saved visual plans: Stage 1 implementation
 
+Historical stage-1 notes. Current defaults and shared compiler behavior are
+documented in [Stage 2](visual-plan-stage2-implementation.md).
+
 The first stage is opt-in for Visual Novel moment illustrations. Existing sessions
 keep **Current preparation**. Enable **Saved visual plan** in adventure narration
 settings. The image workflow still chooses description, tags or hybrid format.

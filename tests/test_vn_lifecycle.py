@@ -187,7 +187,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
     assert exported_states[SETTINGS_KEY] == {
         "pace": "leisurely",
         "scene_staging": False,
-        "visual_preparation": "legacy",
+        "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
     }
@@ -204,7 +204,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
             "settings": {
                 "pace": "leisurely",
                 "scene_staging": False,
-                "visual_preparation": "legacy",
+                "visual_preparation": "plan",
                 "visual_audit": True,
                 "visual_audit_failure": "block",
             },
@@ -220,7 +220,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
             assert state.entity_states[SETTINGS_KEY] == {
                 "pace": "leisurely",
                 "scene_staging": False,
-                "visual_preparation": "legacy",
+                "visual_preparation": "plan",
                 "visual_audit": True,
                 "visual_audit_failure": "block",
             }
@@ -267,7 +267,7 @@ async def test_vn_export_remains_playable_when_original_template_is_unavailable(
         "settings": {
             "pace": "leisurely",
             "scene_staging": False,
-            "visual_preparation": "legacy",
+            "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
         },
@@ -387,7 +387,7 @@ async def test_pace_only_patch_preserves_scene_tracking(auth_client, vn_world):
     assert response.json()["settings"] == {
         "pace": "brisk",
         "scene_staging": True,
-        "visual_preparation": "legacy",
+        "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
     }

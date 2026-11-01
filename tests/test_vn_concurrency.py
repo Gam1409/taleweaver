@@ -83,7 +83,7 @@ async def test_real_manager_lease_prevents_lost_pace_and_social_writes(
         assert saved.entity_states[SETTINGS_KEY] == {
             "pace": "brisk",
             "scene_staging": False,
-            "visual_preparation": "legacy",
+            "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
         }

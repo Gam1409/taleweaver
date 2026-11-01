@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Info, X } from 'lucide-vue-next'
+import VisualPlanDetails from './VisualPlanDetails.vue'
 
 const props = defineProps<{ details?: Record<string, unknown> | null }>()
 const activeTab = ref<'image' | 'query'>('image')
@@ -54,6 +55,7 @@ const fields = computed(() => [
             <dt class="text-slate-400">{{ label }}</dt><dd class="break-words">{{ details[key] }}</dd>
           </template>
         </dl>
+        <VisualPlanDetails :plan="details.visual_plan as Record<string, unknown> | undefined" :positive="details.positive_prompt" />
         <h3 class="mb-2 text-sm font-semibold">Positive prompt</h3>
         <pre class="mb-4 select-text whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-sans text-sm">{{ details.positive_prompt ?? 'Not recorded.' }}</pre>
         <h3 class="mb-2 text-sm font-semibold">Negative prompt</h3>

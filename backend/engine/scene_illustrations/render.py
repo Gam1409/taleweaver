@@ -11,7 +11,6 @@ from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
-from backend.engine.visual_novel.config import read_settings
 from backend.utils.path_security import safe_data_path
 
 from . import fidelity, source_quality
@@ -43,11 +42,7 @@ async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
         "narration": snapshot.get("full_narration", snapshot["narration"]),
     }
     context = VisualContext.from_snapshot(selected_snapshot, tone)
-    prompt = (
-        ""
-        if read_settings(state).visual_preparation == "plan"
-        else source_quality.build_prompt(context, style)
-    )
+    prompt = "" if not t2i.get("_nsfw_enabled") else source_quality.build_prompt(context, style)
     ext = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
     return {
         "prompt": prompt,

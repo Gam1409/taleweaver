@@ -16,8 +16,8 @@ from backend.engine.visual_plan_lifecycle import KEY, reset
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from tests.conftest import TestSessionLocal
+from tests.test_prompt_compiler import english_plan_for
 from tests.test_scene_illustrations import finish, illustration_world
-from tests.test_visual_plan import proposal_for
 
 __all__ = ["illustration_world"]
 
@@ -25,7 +25,10 @@ __all__ = ["illustration_world"]
 async def enable(**kwargs):
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
-        write_settings(state, VnSettings(visual_preparation="plan", **kwargs))
+        states = deepcopy(state.entity_states)
+        states["__manifest_snapshot__"]["original_manifest"]["nsfw_settings"] = {"enabled": False}
+        state.entity_states = states
+        write_settings(state, VnSettings(**kwargs))
         await db.commit()
 
 
@@ -36,7 +39,7 @@ def plan_calls(monkeypatch):
             return Audit(status="passed")
         from backend.engine.scene_illustrations.visual_plan import Atom
 
-        return proposal_for(
+        return english_plan_for(
             [
                 Atom.model_validate({k: v for k, v in a.items() if k != "value_hash"})
                 for a in data["atoms"]

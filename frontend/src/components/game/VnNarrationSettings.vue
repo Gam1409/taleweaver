@@ -3,12 +3,10 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 
 type NarrationPace = 'leisurely' | 'balanced' | 'brisk'
-type VisualPreparation = 'legacy' | 'plan'
 type AuditFailure = 'block' | 'warn'
 type NarrationSettings = {
   pace: NarrationPace
   scene_staging?: boolean
-  visual_preparation?: VisualPreparation
   visual_audit?: boolean
   visual_audit_failure?: AuditFailure
 }
@@ -17,8 +15,6 @@ const pace = ref<NarrationPace>('balanced')
 const savedPace = ref<NarrationPace>('balanced')
 const sceneStaging = ref(false)
 const savedSceneStaging = ref(false)
-const visualPreparation = ref<VisualPreparation>('legacy')
-const savedVisualPreparation = ref<VisualPreparation>('legacy')
 const visualAudit = ref(true)
 const savedVisualAudit = ref(true)
 const auditFailure = ref<AuditFailure>('block')
@@ -67,8 +63,6 @@ async function load(): Promise<void> {
     savedPace.value = pace.value
     sceneStaging.value = data.settings.scene_staging ?? false
     savedSceneStaging.value = sceneStaging.value
-    visualPreparation.value = data.settings.visual_preparation === 'plan' ? 'plan' : 'legacy'
-    savedVisualPreparation.value = visualPreparation.value
     visualAudit.value = data.settings.visual_audit ?? true
     savedVisualAudit.value = visualAudit.value
     auditFailure.value = data.settings.visual_audit_failure === 'warn' ? 'warn' : 'block'
@@ -90,7 +84,6 @@ async function save(): Promise<boolean> {
   // An unopened or failed settings request must not overwrite the server default.
   if (!loaded.value || (
     pace.value === savedPace.value && sceneStaging.value === savedSceneStaging.value &&
-    visualPreparation.value === savedVisualPreparation.value &&
     visualAudit.value === savedVisualAudit.value && auditFailure.value === savedAuditFailure.value
   )) return true
   if (busy.value) return false
@@ -110,7 +103,6 @@ async function save(): Promise<boolean> {
         body: JSON.stringify({
           pace: pace.value,
           scene_staging: sceneStaging.value,
-          visual_preparation: visualPreparation.value,
           visual_audit: visualAudit.value,
           visual_audit_failure: auditFailure.value,
         })
@@ -128,7 +120,6 @@ async function save(): Promise<boolean> {
     if (controller !== request) return false
     savedPace.value = pace.value
     savedSceneStaging.value = sceneStaging.value
-    savedVisualPreparation.value = visualPreparation.value
     savedVisualAudit.value = visualAudit.value
     savedAuditFailure.value = auditFailure.value
     return true
@@ -200,21 +191,15 @@ defineExpose({ save })
         </span>
       </label>
       <div class="space-y-3 rounded-xl border border-white/10 p-3">
-        <label class="block text-sm font-semibold">
-          Illustration preparation
-          <select v-model="visualPreparation" class="mt-2 w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-sm">
-            <option value="legacy">Current preparation</option>
-            <option value="plan">Saved visual plan (experimental)</option>
-          </select>
-        </label>
-        <p class="text-xs text-slate-400">The experimental path translates saved scene facts once and reuses them for later illustrations with the same settings. Your selected image prompt format is preserved.</p>
-        <p class="text-xs text-slate-400">Saved visual plans currently support neutral scene continuity only. Sessions with NSFW enabled must use Current preparation (legacy).</p>
-        <div v-if="visualPreparation === 'plan'" class="space-y-3">
+        <h3 class="text-sm font-semibold">Saved visual plans</h3>
+        <p class="text-xs text-slate-400">Scene facts are translated once and reused across compatible description, tag and hybrid formats. Each new final prompt can receive its own continuity check.</p>
+        <p class="text-xs text-slate-400">NSFW-enabled sessions keep their existing preparation and prompts. These controls apply to neutral scene illustrations.</p>
+        <div class="space-y-3">
           <label class="flex items-start gap-3 text-sm">
             <input v-model="visualAudit" type="checkbox" class="mt-1 accent-rose-400" />
-            <span>Check visual continuity before the first image from each saved plan</span>
+            <span>Check visual continuity for each new prompt</span>
           </label>
-          <p class="text-xs text-slate-400">The check adds one Small / Utility request for a new plan. It can miss mistakes and does not guarantee the generated image matches the scene. Some sessions always require this check.</p>
+          <p class="text-xs text-slate-400">The check adds one Small / Utility request for each new final prompt. Repeating the same prompt reuses its result. The check can miss mistakes and does not guarantee that the image matches the scene.</p>
           <label class="block text-sm font-semibold">
             If the check fails or cannot finish
             <select v-model="auditFailure" class="mt-2 w-full rounded-lg border border-slate-600 bg-slate-900 p-2 text-sm">

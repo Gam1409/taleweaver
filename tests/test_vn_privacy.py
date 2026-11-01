@@ -91,7 +91,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
         "settings": {
             "pace": "leisurely",
             "scene_staging": False,
-            "visual_preparation": "legacy",
+            "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
         },
@@ -105,7 +105,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
         "settings": {
             "pace": "brisk",
             "scene_staging": False,
-            "visual_preparation": "legacy",
+            "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
         },
@@ -116,7 +116,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
         assert state.entity_states[SETTINGS_KEY] == {
             "pace": "brisk",
             "scene_staging": False,
-            "visual_preparation": "legacy",
+            "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
         }

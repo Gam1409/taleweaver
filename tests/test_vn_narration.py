@@ -39,7 +39,7 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert state.entity_states[SETTINGS_KEY] == {
         "pace": pace,
         "scene_staging": False,
-        "visual_preparation": "legacy",
+        "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
     }
@@ -134,8 +134,8 @@ def test_generator_retains_its_tool_contract_even_with_vn_mode():
     assert "Text Adventure RPG" in prompt
 
 
-def test_visual_preparation_defaults_keep_legacy_path_and_enable_strict_audit():
+def test_visual_preparation_defaults_enable_plans_and_strict_audit():
     settings = read_settings(SimpleNamespace(entity_states={SETTINGS_KEY: {"pace": "leisurely"}}))
-    assert settings.visual_preparation == "legacy"
+    assert settings.visual_preparation == "plan"
     assert settings.visual_audit is True
     assert settings.visual_audit_failure == "block"

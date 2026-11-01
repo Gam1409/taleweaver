@@ -6,7 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-VERSION = 1
+VERSION = 2
+INVENTORY_VERSION = 1
 MAX_ATOMS = 160
 
 
@@ -129,7 +130,7 @@ def inventory(facts: dict) -> list[Atom]:
             atoms.append(_atom("/" + key, "scene", key, facts[key], required=False))
     if not atoms or len(atoms) > MAX_ATOMS:
         raise ValueError(
-            "The saved visual facts exceed plan limits or are unavailable. Use Legacy preparation."
+            "The saved visual facts exceed plan limits or are unavailable. Choose another completed moment to illustrate."
         )
     return atoms
 
@@ -177,7 +178,8 @@ def assemble(atoms: list[Atom], proposal: Proposal, output_format: str) -> tuple
         if (
             unit.section == "tags"
             and cast_size != 1
-            and atom.predicate in {"worn", "posture", "placement"}
+            and atom.predicate
+            in {"present", "worn", "posture", "placement", "position", "prop", "prop_position"}
         ):
             limitations.append({"atom_id": atom.id, "reason": "global_tag_binding"})
     body = " ".join(sections["description"])

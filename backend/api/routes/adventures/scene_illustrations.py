@@ -12,6 +12,7 @@ from backend.engine.scene_illustrations import SceneIllustrationRequest
 from backend.engine.scene_illustrations.context import (
     illustration_status,
     owned_context,
+    plan_enabled,
     require_snapshot,
 )
 from backend.models.user import User
@@ -31,7 +32,9 @@ async def read_illustration(
     current_user: User = Depends(get_current_user),
 ):
     state, message = await owned_context(db, game_id, message_id, current_user.id)
-    return illustration_status(state, message)
+    status = illustration_status(state, message)
+    status["plan_enabled"] = await plan_enabled(db, state)
+    return status
 
 
 @router.post("/{game_id}/illustrations")

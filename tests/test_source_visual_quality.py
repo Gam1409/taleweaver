@@ -1,4 +1,4 @@
-"""Neutral source-rich mode preserves inputs without changing established routing."""
+"""The retained compatibility route preserves source inputs and addendum gates."""
 
 from copy import deepcopy
 from types import SimpleNamespace
@@ -37,11 +37,17 @@ def test_oversize_source_fails_explicitly_without_cutting():
 
 
 @pytest.mark.asyncio
-async def test_source_mode_uses_one_adaptation_and_no_enum_extraction(monkeypatch):
+async def test_compatibility_mode_uses_one_adaptation_and_no_enum_extraction(monkeypatch):
     monkeypatch.setattr(
         render,
         "_settings",
-        AsyncMock(return_value=({"provider": "stable_diffusion"}, "watercolor", "quiet")),
+        AsyncMock(
+            return_value=(
+                {"provider": "stable_diffusion", "_nsfw_enabled": True},
+                "watercolor",
+                "quiet",
+            )
+        ),
     )
     extract = AsyncMock(side_effect=AssertionError("Source mode must not discard the passage"))
     adapt = AsyncMock(return_value="Two adults standing apart beside a table with a red notebook.")
