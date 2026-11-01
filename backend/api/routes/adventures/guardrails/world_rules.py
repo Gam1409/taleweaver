@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import select
 
 from backend.api.routes.adventures.guardrails.base import inventory_ids_upper
+from backend.api.routes.adventures.guardrails.movement_messages import movement_message
 from backend.engine.rule_engine import GameEvent
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity
+
+logger = logging.getLogger(__name__)
 
 
 def _switch_flag_keys(metadata: dict[str, Any]) -> set[str]:
@@ -151,7 +155,12 @@ class WorldRulesMixin:
         if move.to_scene_id == current_scene:
             return None  # Changing only the spatial position is always fine.
         if not self._npc_is_moveable(ent, override):
-            return f"Rule Violation: NPC '{ent.name}' ({ent.id}) is not moveable and cannot change scenes to '{move.to_scene_id}'."
+            logger.info(
+                "NPC movement blocked: npc=%s destination=%s reason=stationary",
+                ent.id,
+                move.to_scene_id,
+            )
+            return movement_message(ent.name, False, self.turn_language)
         allowed = override.get("allowed_scenes")
         if allowed is None:
             allowed = getattr(ent, "allowed_scenes", None) or []
@@ -160,10 +169,13 @@ class WorldRulesMixin:
             and allowed
             and move.to_scene_id.upper() not in {str(s).upper() for s in allowed if s}
         ):
-            return (
-                f"Rule Violation: NPC '{ent.name}' ({ent.id}) is not permitted to move to scene "
-                f"'{move.to_scene_id}'. Allowed scenes: {', '.join(allowed)}."
+            logger.info(
+                "NPC movement blocked: npc=%s destination=%s reason=restricted allowed=%s",
+                ent.id,
+                move.to_scene_id,
+                allowed,
             )
+            return movement_message(ent.name, True, self.turn_language)
         return None
 
     async def _enforce_npc_movement_guardrails(self, event: GameEvent) -> list[str]:
