@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import ComfySettingsEditor from './ComfySettingsEditor.vue'
 import ComfyPresetSelector from './ComfyPresetSelector.vue'
 import type { ComfyOptions } from '@/types/comfyui'
 
@@ -201,10 +200,10 @@ const handleSave = () => {
   emit('save', localForm.value)
 }
 
-const testSimple = () => {
+const testSimple = (options: ComfyOptions = comfyOptions.value) => {
   emit('test', { 
     key: 'simple_v',
-    ...comfyOptions.value,
+    ...options,
     comfyui_profile: 'simple',
     model: localForm.value.simple_model, 
     provider: localForm.value.simple_model_provider,
@@ -218,10 +217,10 @@ const testSimple = () => {
   })
 }
 
-const testAdvanced = () => {
+const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
   emit('test', { 
     key: 'advanced_v',
-    ...comfyOptions.value,
+    ...options,
     comfyui_profile: 'advanced',
     model: localForm.value.advanced_model, 
     provider: localForm.value.advanced_model_provider,
@@ -425,7 +424,7 @@ const testAdvanced = () => {
 
         <button 
           type="button"
-          @click="testSimple"
+          @click="testSimple()"
           :disabled="testResults.simple_v?.status === 'loading' || (localForm.simple_model_provider !== 'comfyui' && !localForm.simple_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
@@ -449,7 +448,7 @@ const testAdvanced = () => {
           </select>
         </div>
 
-        <ComfyPresetSelector v-if="localForm.simple_model_provider === 'comfyui'" v-model="comfyOptions" profile="simple" />
+        <ComfyPresetSelector v-if="localForm.simple_model_provider === 'comfyui'" v-model="comfyOptions" profile="simple" :test-result="testResults.simple_v" @test="testSimple($event)" />
         <div v-if="localForm.simple_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -594,7 +593,7 @@ const testAdvanced = () => {
 
         <button 
           type="button"
-          @click="testAdvanced"
+          @click="testAdvanced()"
           :disabled="testResults.advanced_v?.status === 'loading' || (localForm.advanced_model_provider !== 'comfyui' && !localForm.advanced_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
@@ -618,7 +617,7 @@ const testAdvanced = () => {
           </select>
         </div>
 
-        <ComfyPresetSelector v-if="localForm.advanced_model_provider === 'comfyui'" v-model="comfyOptions" profile="advanced" />
+        <ComfyPresetSelector v-if="localForm.advanced_model_provider === 'comfyui'" v-model="comfyOptions" profile="advanced" :test-result="testResults.advanced_v" @test="testAdvanced($event)" />
         <div v-if="localForm.advanced_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -795,11 +794,6 @@ const testAdvanced = () => {
           </div>
         </div>
       </div>
-
-      <ComfySettingsEditor
-        v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui'"
-        v-model="comfyOptions"
-      />
 
       <!-- Stable Diffusion Endpoint -->
       <div 
