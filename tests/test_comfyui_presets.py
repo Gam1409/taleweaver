@@ -60,7 +60,7 @@ def preset_options(comfy_options, workflow, **kwargs):
     ("name", "expected"),
     [
         ("models/animagine-xl-4.0-opt.safetensors", "animagine4"),
-        ("models/novaAnimeAM_v6029B.safetensors", "anima"),
+        ("models/novaAnimeAM_v6029B.safetensors", "nova_anime_am"),
         ("models/novaAnimeXL_ilV190.safetensors", None),
         ("ponyDiffusionV6XL_v6StartWithThisOne.safetensors", "pony6"),
         ("illustriousXL_v01.safetensors", "illustrious"),
@@ -357,3 +357,12 @@ async def test_prompt_tools_are_admin_only(auth_client):
     assert (
         await auth_client.post("/api/settings/comfyui/detect-template", json={"graph": {}})
     ).status_code == 403
+
+
+def test_nova_automatic_template_uses_tags_without_changing_generic_anima(workflow):
+    workflow["graph"]["model"]["inputs"]["ckpt_name"] = "novaAnimeAM_v6029B.safetensors"
+    preset = ComfyPreset.model_validate(named_preset(workflow, automatic=True))
+    assert preset.prompt_rules.template_id == "nova_anime_am"
+    assert preset.prompt_rules.format == "tags"
+    assert preset.prompt_rules.adapt_with_llm is True
+    assert template_rules("anima").format == "hybrid"

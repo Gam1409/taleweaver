@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { comfyRequest } from '@/services/comfyPresetService'
 import ComfyModelField from './ComfyModelField.vue'
 import type { ComfyWorkflow } from '@/types/comfyui'
@@ -11,7 +11,6 @@ const options = ref<ModelOption[]>([])
 const loading = ref(false)
 watch(loading, value => emit('busy', value))
 const message = ref('')
-const inputPrefix = `workflow-${getCurrentInstance()!.uid}`
 const enumLabels: Record<string, string> = { sampler_name: 'Sampler', scheduler: 'Scheduler' }
 const loaders = computed(() => JSON.stringify(Object.entries(props.modelValue.graph).map(([id, node]) => [id, node.class_type, Object.keys(node.inputs)])))
 watch([() => props.url, loaders], () => { options.value = []; message.value = '' })
@@ -69,7 +68,7 @@ async function refresh(): Promise<void> {
       }
     }
     emit('update:modelValue', { ...props.modelValue, graph })
-    message.value = resolved ? `Model lists refreshed. Resolved ${resolved} matching filename(s) to their server folders.` : 'Model lists refreshed.'
+    message.value = resolved ? `Model lists refreshed. Resolved ${resolved} matching filename(s) to their server folders.` : 'Model and generation parameter lists refreshed.'
   } catch (err) { if (url === props.url && snapshot === JSON.stringify(props.modelValue.graph)) message.value = String(err) }
   finally { loading.value = false }
 }
@@ -81,7 +80,7 @@ async function refresh(): Promise<void> {
       VAE from checkpoint: {{ checkpointVaeSources.join(', ') }}. These workflow connections use the checkpoint's VAE output; no separate VAE file is needed for them. Run a test image to confirm the checkpoint contains a working VAE.
     </p>
     <ComfyModelField v-for="item in models" :key="`${item.id}-${item.field}`" :label="labels[item.field]! + (models.filter(model => model.field === item.field).length > 1 ? ` · ${item.id}` : '')" :model-value="String(item.value)" :files="modelFiles(item.id, item.field)" :folder="folders[item.field]" @update:model-value="update(item.id, item.field, $event)" />
-    <button v-if="models.length" type="button" :disabled="loading" class="text-xs text-cyan-300 underline disabled:opacity-40" @click="refresh">{{ loading ? 'Loading models…' : 'Refresh model list from server' }}</button>
+    <button v-if="models.length || enums.length" type="button" :disabled="loading" class="text-xs text-cyan-300 underline disabled:opacity-40" @click="refresh">{{ loading ? 'Loading server options…' : 'Refresh model and parameter lists from server' }}</button>
     <p v-if="message" role="status" class="text-xs text-slate-400">{{ message }}</p>
     <p v-if="checkedModels.length" role="status" :class="['text-xs', missingModels.length ? 'text-amber-300' : 'text-slate-400']">
       {{ checkedModels.length - missingModels.length }} of {{ checkedModels.length }} selected model files are available.
@@ -94,9 +93,14 @@ async function refresh(): Promise<void> {
         <label v-for="item in parameters" :key="`${item.id}-${item.field}`" class="text-xs text-slate-300">{{ controls[item.field]!.label }}<span v-if="parameters.filter(parameter => parameter.field === item.field).length > 1"> · {{ item.id }}</span>
           <input :value="item.value" type="number" :min="controls[item.field]!.min" :max="controls[item.field]!.max" :step="controls[item.field]!.step" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2" @change="numberChanged(item.id, item.field, $event)" />
         </label>
-        <label v-for="item in enums" :key="`${item.id}-${item.field}`" class="text-xs text-slate-300">{{ enumLabels[item.field] }}
-          <input :value="item.value" :list="`${inputPrefix}-${item.id}-${item.field}`" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2" @change="update(item.id, item.field, ($event.target as HTMLInputElement).value)" />
-          <datalist :id="`${inputPrefix}-${item.id}-${item.field}`"><option v-for="name in choices(item.id, item.field)" :key="name" :value="name" /></datalist>
+        <label v-for="item in enums" :key="`${item.id}-${item.field}`" class="min-w-0 text-xs text-slate-300">{{ enumLabels[item.field] }}<span v-if="enums.filter(parameter => parameter.field === item.field).length > 1"> · {{ item.id }}</span>
+          <select v-if="choices(item.id, item.field).length" :aria-label="`${enumLabels[item.field]} · ${item.id}`" :value="item.value" class="mt-1 w-full min-w-0 rounded border border-slate-700 bg-slate-900 p-2" @change="update(item.id, item.field, ($event.target as HTMLSelectElement).value)">
+            <option v-if="!choices(item.id, item.field).includes(String(item.value))" :value="item.value" disabled>Unavailable: {{ item.value }}</option>
+            <option v-for="name in choices(item.id, item.field)" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <input v-else :value="item.value" class="mt-1 w-full min-w-0 rounded border border-slate-700 bg-slate-900 p-2" @change="update(item.id, item.field, ($event.target as HTMLInputElement).value)" />
+          <span v-if="!choices(item.id, item.field).length" class="mt-1 block text-slate-400">Refresh server lists to choose supported values, or enter a value manually.</span>
+          <span v-else-if="!choices(item.id, item.field).includes(String(item.value))" class="mt-1 block text-amber-300">The current value is unavailable on this server. Choose a supported value.</span>
         </label>
       </div>
     </details>
