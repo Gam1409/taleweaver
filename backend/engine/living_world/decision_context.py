@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world import rules
 from backend.engine.living_world.schema import Event, Simulation
+from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
 from backend.models.session_state import SessionState
@@ -79,7 +80,7 @@ async def destinations(db: AsyncSession, state: SessionState, actor: Any, scene:
     )
     if not movable or scene is None or scene.on_leave_scene_script:
         return []
-    allowed = override.get("allowed_scenes", actor.allowed_scenes) or []
+    allowed = allowed_scenes(actor, state.entity_states or {})
     rows = await db.execute(
         select(WorldExit, WorldScene)
         .join(

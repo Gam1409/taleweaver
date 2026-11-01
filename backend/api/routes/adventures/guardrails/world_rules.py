@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from backend.api.routes.adventures.guardrails.base import inventory_ids_upper
 from backend.api.routes.adventures.guardrails.movement_messages import movement_message
+from backend.engine.npc_movement import allowed_scenes
 from backend.engine.rule_engine import GameEvent
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity
@@ -161,9 +162,7 @@ class WorldRulesMixin:
                 move.to_scene_id,
             )
             return movement_message(ent.name, False, self.turn_language)
-        allowed = override.get("allowed_scenes")
-        if allowed is None:
-            allowed = getattr(ent, "allowed_scenes", None) or []
+        allowed = allowed_scenes(ent, self.state.entity_states or {})
         if (
             isinstance(allowed, list)
             and allowed

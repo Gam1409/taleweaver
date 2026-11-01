@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.engine import debug_inspection, debug_mutations, debug_progression
+from backend.engine import debug_inspection, debug_movement, debug_mutations, debug_progression
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -29,7 +29,7 @@ _HANDLERS = {
     "unhide": debug_mutations.debug_unhide,
     "npc_note": debug_mutations.debug_npc_note,
     "note": debug_mutations.debug_npc_note,
-    "moveable": debug_mutations.debug_moveable,
+    "moveable": debug_movement.debug_moveable,
     "open_exit": debug_mutations.debug_open_exit,
     "walkthrough": debug_mutations.debug_walkthrough,
     "game_over": debug_mutations.debug_game_over,

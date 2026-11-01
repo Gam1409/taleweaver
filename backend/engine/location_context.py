@@ -36,7 +36,9 @@ def _movement_label(entity: Any, separator: str) -> str:
         getattr(entity, "moveable", False)
         or str(getattr(entity, "movement_type", "") or "").upper() == "MOVABLE"
     )
-    allowed = getattr(entity, "allowed_scenes", None) or []
+    allowed = (
+        getattr(entity, "session_allowed_scenes", getattr(entity, "allowed_scenes", None)) or []
+    )
     if is_moveable and allowed:
         return f"{separator}Movable: Allowed in {', '.join(allowed)}"
     if is_moveable:

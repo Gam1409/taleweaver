@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world.schema import Event
+from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -39,7 +40,7 @@ async def move(db: AsyncSession, state: SessionState, event: Event, actor: World
     movable = override.get(
         "moveable", bool(actor.moveable) or str(actor.movement_type).upper() == "MOVABLE"
     )
-    allowed = override.get("allowed_scenes", actor.allowed_scenes) or []
+    allowed = allowed_scenes(actor, state.entity_states or {})
     edge = await db.scalar(
         select(WorldExit).where(
             WorldExit.session_id == state.session_id,

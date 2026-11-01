@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.core.llm_roles import resolve_llm_role
+from backend.engine.npc_movement import allowed_scenes
 from backend.models.world_entity import WorldEntity, WorldExit
 
 # Session override key -> WorldEntity attribute it replaces for this turn.
@@ -49,6 +50,7 @@ TECHNICAL_TURN_INSTRUCTION = (
 def apply_entity_overrides(entities: list[WorldEntity], overrides: dict[str, Any]) -> None:
     """Applies session-state overrides onto the (session-scoped) entities for this turn."""
     for ent in entities:
+        ent.session_allowed_scenes = allowed_scenes(ent, overrides)
         override = overrides.get(ent.id)
         if override is None:
             continue

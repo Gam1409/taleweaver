@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
 from backend.engine.rule_engine import EntityMovement
@@ -72,7 +73,7 @@ def _movable(state: Any, npc: Any, destination: str) -> bool:
         movable = bool(getattr(npc, "moveable", False)) or (
             str(getattr(npc, "movement_type", "")).upper() == "MOVABLE"
         )
-    allowed = override.get("allowed_scenes", getattr(npc, "allowed_scenes", None)) or []
+    allowed = allowed_scenes(npc, state.entity_states or {})
     return bool(movable) and (
         not allowed or destination.upper() in {str(item).upper() for item in allowed}
     )

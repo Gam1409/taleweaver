@@ -54,3 +54,17 @@ existing-exit access checks, bounds and evidence-substring checks; it cannot pro
 that a free-form description is spatially truthful. This is not arbitrary continent
 expansion, autonomous world simulation, or a guarantee of Qwen 14B accuracy. Tests
 mock model responses; actual model behavior requires live gameplay evaluation.
+
+## NPC movement in existing sessions
+
+`/debug moveable all true` enables movement for every NPC currently in the session
+and refreshes their allowed scene lists from matching NPCs in the adventure template.
+Session-only NPCs retain their existing scene restrictions. This is an explicit,
+one-time synchronization; later template edits require running the command again.
+`/debug moveable all false` disables movement without changing those lists.
+The existing `/debug moveable NPC_ID true` command only toggles one NPC's movement.
+
+Generated exploration locations are accessible to movable NPCs by default, including
+locations already generated in a saved session. Authored scene restrictions still
+apply to authored locations. Empty allowed scene lists mean unrestricted movement.
+Stationary NPCs remain stationary, and locked exits and other world rules still apply.

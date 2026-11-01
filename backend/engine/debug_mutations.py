@@ -178,40 +178,6 @@ async def debug_npc_note(db, state, args, user=None, adventure=None, avatar=None
     return f"DEBUG: NPC '{found.name}' notes set to: \"{note_val}\""
 
 
-async def debug_moveable(db, state, args, user=None, adventure=None, avatar=None):
-    parts = args.split(" ")
-    if len(parts) < 3:
-        return "DEBUG ERROR: Usage: /debug moveable [NPC_ID|NAME] [true|false]"
-    target = parts[1].strip()
-    val = parts[2].strip().lower() in ("true", "1", "yes")
-
-    res = await db.execute(
-        select(WorldEntity).where(
-            WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"
-        )
-    )
-    ents = res.scalars().all()
-    found = next(
-        (
-            e
-            for e in ents
-            if e.id.upper() == target.upper() or (e.name and e.name.lower() == target.lower())
-        ),
-        None,
-    )
-    if not found:
-        return f"DEBUG ERROR: NPC '{target}' not found in session."
-
-    states = dict(state.entity_states or {})
-    if found.id not in states:
-        states[found.id] = {}
-    states[found.id]["moveable"] = val
-    state.entity_states = states
-    flag_modified(state, "entity_states")
-    await db.commit()
-    return f"DEBUG: NPC '{found.name}' moveable set to {val}."
-
-
 async def debug_open_exit(db, state, args, user=None, adventure=None, avatar=None):
     parts = args.split(" ")
     if len(parts) < 2:
