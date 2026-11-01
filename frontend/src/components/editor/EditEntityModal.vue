@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import ItemDraftGenerator from '@/components/editor/ItemDraftGenerator.vue'
+import { generateItemDescription, type ItemDraft } from '@/services/itemGeneration'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
@@ -79,6 +81,17 @@ const emit = defineEmits<{
   (e: 'save', data: any): void
   (e: 'combat-saved'): void
 }>()
+
+const itemDraftBusy = ref(false)
+const itemDescriptionError = ref('')
+function applyItemDraft(draft: ItemDraft) {
+  Object.assign(localForm.value, {
+    name: draft.name, description: draft.description,
+    is_portable: draft.is_portable,
+    wearable_slots_input: draft.wearable_slots,
+    text_log_content: draft.text_log_content,
+  })
+}
 
 const activeTab = ref<'simple' | 'advanced'>('simple')
 const editingTransitionIndex = ref<number | null>(null)
@@ -350,6 +363,8 @@ const validationErrors = computed(() => entityFormErrors(localForm.value, {
 const isFormInvalid = computed(() => validationErrors.value.length > 0)
 
 watch(() => props.initialForm, (newVal) => {
+  itemDraftBusy.value = false
+  itemDescriptionError.value = ''
   localForm.value = {
     is_hidden: false,
     reveal_rule: '',
@@ -472,7 +487,7 @@ watch(() => localForm.value.item_type, (newType) => {
 })
 
 function handleSave() {
-  if (props.isSaving || isFormInvalid.value) {
+  if (props.isSaving || itemDraftBusy.value || isFormInvalid.value) {
     return
   }
 
@@ -655,15 +670,21 @@ async function handleGenerateBiography() {
 
 async function handleGenerateDescription() {
   if (!props.adventureId || !localForm.value.name) return
+  const sourceForm = localForm.value
   isGenerating.value['description'] = true
+  itemDescriptionError.value = ''
   try {
-    const result = await entityService.generateSceneDescription(
+    const result = await generateItemDescription(
       props.adventureId,
-      localForm.value.name
+      localForm.value.name,
+      localForm.value.description,
+      localForm.value.item_type
     )
-    localForm.value.description = result.description
+    if (localForm.value === sourceForm && props.show) sourceForm.description = result.description
   } catch (error) {
-    console.error('Failed to generate description:', error)
+    if (localForm.value === sourceForm && props.show) {
+      itemDescriptionError.value = error instanceof Error ? error.message : 'Item description generation failed.'
+    }
   } finally {
     isGenerating.value['description'] = false
   }
@@ -737,6 +758,10 @@ const textLogPreviewClass = computed(() => {
           <!-- Scrollable Content -->
           <div class="px-8 py-6 space-y-6 overflow-y-auto flex-1">
             <div v-show="activeTab === 'simple'" class="space-y-6">
+              <ItemDraftGenerator v-if="isCreateEntityMode && context.type === 'object' && adventureId"
+                :key="context.id" :adventure-id="adventureId" :item-type="localForm.item_type"
+                :fixed-slots="localForm.is_wearable_slots_fixed ? localForm.wearable_slots_input : []"
+                :disabled="isSaving" @draft="applyItemDraft" @busy="itemDraftBusy = $event" />
               <!-- Editable ID (create mode or scene/npc/object edit mode) -->
               <div v-if="isCreateEntityMode || ['npc', 'object', 'scene'].includes(context.type)" class="space-y-3">
                 <div class="flex justify-between items-center">
@@ -2073,6 +2098,7 @@ const textLogPreviewClass = computed(() => {
                   <i class="ra ra-crystals" :class="{ 'animate-spin': isGenerating['description'] }"></i>
                   <span>Quick-Gen Description</span>
                 </button>
+                <p v-if="itemDescriptionError" role="alert" class="text-sm text-red-300">{{ itemDescriptionError }}</p>
               </div>
             </div> <!-- End simple tab -->
 
@@ -2368,7 +2394,7 @@ const textLogPreviewClass = computed(() => {
             </div>
             <div class="flex justify-end gap-4">
             <button @click="emit('close')" class="px-6 py-2.5 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">Discard</button>
-            <button @click="handleSave" :disabled="isSaving || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
+            <button @click="handleSave" :disabled="isSaving || itemDraftBusy || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
               <i v-if="isSaving" class="ra ra-cycle animate-spin"></i>
               <span>{{ isSaving ? 'Saving...' : (isCreateEntityMode ? ('Create ' + (context.type === 'npc' ? 'NPC' : context.type.toUpperCase())) : 'Apply Changes') }}</span>
             </button>

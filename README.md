@@ -123,6 +123,7 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 * **World Validation:** Check connections and story consistency, review generation reports, and apply suggested improvements.
 * **Event Scripting:** Add custom events and outcomes through the editor's scripting tools.
 * **Reusable Characters & Items:** Export and import protagonists, NPCs, and items with their portraits to reuse them in other adventures.
+* **Items from Descriptions:** In the Adventure Workbench, choose a scene → items → **+ Create**, select an item type, and describe what to create. **Generate item draft** fills an editable card; review it and click **Create Object** to save. Wearable drafts suggest equipment slots, and readable drafts include their text. Images and advanced rules are configured separately.
 * **Community Adventures:** Browse and install shared adventures, then make your own variations.
 
 ---

@@ -11,6 +11,7 @@ from backend.api.routes.adventures.editing import (
     ai_fix_apply,
     ai_fix_suggest,
     generation,
+    item_generation,
     payload,
     story_crud,
     validation,
@@ -42,6 +43,7 @@ for _module in (
     story_crud,
     entity_update,
     generation,
+    item_generation,
 ):
     router.include_router(_module.router)
 
