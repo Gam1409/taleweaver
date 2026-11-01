@@ -18,6 +18,7 @@ from backend.engine.import_archive_world import build_archive_world
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 from backend.utils.text_utils import generate_adventure_id
 
 logger = logging.getLogger(__name__)
@@ -178,11 +179,11 @@ async def import_adz(
         zip_buffer = io.BytesIO(adz_data)
 
         with zipfile.ZipFile(zip_buffer, "r") as zip_file:
-            validate_archive(zip_file)
+            await run_file_operation(validate_archive, zip_file)
             if not _archive_sizes_allowed(zip_file):
                 return False
 
-            manifest_data = _read_archive_manifest(zip_file)
+            manifest_data = await run_file_operation(_read_archive_manifest, zip_file)
             if manifest_data is None:
                 return False
             adv_data = manifest_data["adventure"]
@@ -221,7 +222,9 @@ async def import_adz(
             normalize_vn_template(new_template)
             db.add(new_template)
 
-            existing_images_mapping = _extract_archive_assets(zip_file, new_template_id)
+            existing_images_mapping = await run_file_operation(
+                _extract_archive_assets, zip_file, new_template_id
+            )
 
             world_manifest = build_archive_world(manifest_data, adv_data, resolved_license_url)
             prot = manifest_data.get("protagonist")

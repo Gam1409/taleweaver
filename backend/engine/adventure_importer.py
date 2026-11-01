@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import uuid
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from backend.core.auth import get_password_hash
 from backend.core.config import settings
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,11 @@ def _build_local_default_user() -> User:
     )
 
 
+def _read_json_file(file_path):
+    with open(file_path, encoding="utf-8") as source:
+        return json.load(source)
+
+
 class AdventureTemplateImporter:
     @staticmethod
     async def import_from_directory(
@@ -108,11 +115,15 @@ class AdventureTemplateImporter:
         overwrite: bool = False,
     ):
         """Scans a directory for .adv or .adz files and imports them."""
-        if not os.path.exists(directory):
+        if not await run_file_operation(os.path.exists, directory):
             logger.warning(f"Import directory {directory} does not exist.")
             return
 
-        files = [f for f in os.listdir(directory) if f.endswith(".adv") or f.endswith(".adz")]
+        files = [
+            f
+            for f in await run_file_operation(os.listdir, directory)
+            if f.endswith(".adv") or f.endswith(".adz")
+        ]
         if not files:
             return
 
@@ -129,7 +140,7 @@ class AdventureTemplateImporter:
                     overwrite=overwrite,
                 )
                 if success and delete_after:
-                    os.remove(file_path)
+                    await run_file_operation(os.remove, file_path)
                     logger.info(f"Successfully imported and deleted {filename}")
                 elif success:
                     logger.info(f"Successfully imported {filename}")
@@ -155,16 +166,15 @@ class AdventureTemplateImporter:
     ) -> bool:
         """Imports a single file (.adv or .adz)."""
         if file_path.endswith(".adz"):
-            with open(file_path, "rb") as f:
-                return await AdventureTemplateImporter.import_adz(
-                    db, f.read(), owner_id=owner_id, overwrite=overwrite
-                )
-        elif file_path.endswith(".adv"):
-            with open(file_path, encoding="utf-8") as f:
-                payload = json.load(f)
-                return await AdventureTemplateImporter.import_adv_manifest(
-                    db, payload, owner_id=owner_id, allow_session=allow_session, overwrite=overwrite
-                )
+            content = await run_file_operation(Path(file_path).read_bytes)
+            return await AdventureTemplateImporter.import_adz(
+                db, content, owner_id=owner_id, overwrite=overwrite
+            )
+        if file_path.endswith(".adv"):
+            payload = await run_file_operation(_read_json_file, file_path)
+            return await AdventureTemplateImporter.import_adv_manifest(
+                db, payload, owner_id=owner_id, allow_session=allow_session, overwrite=overwrite
+            )
         return False
 
     @staticmethod

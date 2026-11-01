@@ -23,6 +23,7 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,10 @@ def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
             copy_asset(zip_file, zip_info, safe_dest_path)
 
 
+def _read_session_manifest(zip_file):
+    return json.loads(zip_file.read("session.json").decode("utf-8"))
+
+
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
@@ -100,13 +105,13 @@ class SessionImporter:
             if len(content) > MAX_UPLOAD_BYTES:
                 raise ValueError("Session archive exceeds the upload budget.")
             with zipfile.ZipFile(io.BytesIO(content), "r") as zip_file:
-                validate_archive(zip_file)
+                await run_file_operation(validate_archive, zip_file)
                 # 1. Read session manifest
                 if "session.json" not in zip_file.namelist():
                     logger.error("session.json missing in .ads archive")
                     return None
 
-                manifest = json.loads(zip_file.read("session.json").decode("utf-8"))
+                manifest = await run_file_operation(_read_session_manifest, zip_file)
 
                 # 2. Setup new IDs
                 new_session_id = str(uuid6.uuid7())
@@ -318,7 +323,7 @@ class SessionImporter:
                     )
                     db.add(world_map)
 
-                _extract_assets(zip_file, new_session_id)
+                await run_file_operation(_extract_assets, zip_file, new_session_id)
 
             await import_summaries(
                 db, session_state, owner_id, manifest.get("memory_summaries") or [], message_ids
@@ -330,7 +335,9 @@ class SessionImporter:
             logger.exception("Import of ADS session failed")
             await db.rollback()
             if new_session_id:
-                shutil.rmtree(
-                    _safe_data_path("adventures", "sessions", new_session_id), ignore_errors=True
+                await run_file_operation(
+                    shutil.rmtree,
+                    _safe_data_path("adventures", "sessions", new_session_id),
+                    ignore_errors=True,
                 )
             return None

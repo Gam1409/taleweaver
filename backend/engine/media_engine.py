@@ -4,19 +4,15 @@ Integrated with LiteLLM to support OpenAI (DALL-E), OpenRouter, and Google (Imag
 """
 
 import asyncio
-import base64
-import io
 import logging
 import os
 import re
-import shutil
 import uuid
 from typing import Any, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import litellm
 import requests
-from PIL import Image
 
 from backend.core import prompts
 from backend.core.config import settings
@@ -24,6 +20,12 @@ from backend.core.llm_diagnostics import async_operation
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import resolve_bfl_model_alias
 from backend.engine.image_prompt_adapter import cover_source
+from backend.engine.media_file_operations import (
+    decode_image_payload,
+    list_thumbnail_sources,
+    persist_image_bytes,
+)
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     ensure_within_base_dir,
     local_path_to_data_url,
@@ -35,7 +37,6 @@ from backend.utils.path_security import (
 from backend.utils.path_security import (
     sanitize_path_component as sanitize_path_component_shared,
 )
-from backend.utils.svg_generator import SVGPlaceholderGenerator
 from backend.utils.text_utils import slugify
 
 logger = logging.getLogger(__name__)
@@ -265,96 +266,30 @@ class MediaEngine:
         category: str,
         filename: Optional[str] = None,
     ) -> Optional[str]:
-        """Copy a curated static SVG placeholder into DATA_DIR and return its /data URL."""
-        source_asset = _select_static_placeholder_asset(category)
-        if not source_asset:
-            return None
-        if not os.path.exists(source_asset):
-            logger.warning("Static SVG placeholder asset not found: %s", source_asset)
-            return None
+        from backend.engine.media_file_operations import _copy_static_svg_placeholder
 
-        safe_target_dir = _resolve_output_dir(target_dir)
-        os.makedirs(safe_target_dir, exist_ok=True)
-
-        default_stem = f"placeholder_{entity_id}_{uuid.uuid4().hex[:6]}"
-        safe_filename = _normalize_svg_filename(filename, default_stem)
-        filepath = _ensure_within_data_dir(os.path.join(safe_target_dir, safe_filename))
-        await asyncio.to_thread(shutil.copyfile, source_asset, filepath)
-
-        rel_path = os.path.relpath(filepath, settings.DATA_DIR).replace("\\", "/")
-        return f"/data/{rel_path}"
+        return await run_file_operation(
+            _copy_static_svg_placeholder, target_dir, entity_id, category, filename
+        )
 
     @staticmethod
     async def cleanup_adventure_assets(adventure_id: str):
-        """Removes all generated assets for an adventure from disk."""
-        target_dir = _safe_data_path("adventures", "library", adventure_id)
-        if os.path.exists(target_dir):
-            try:
-                # Use a thread pool executor for blocking I/O if needed,
-                # but for simplicity we'll just use shutil in this async context.
-                shutil.rmtree(target_dir)
-                logger.info("Cleaned up assets for adventure %s", adventure_id)
-            except OSError as e:
-                logger.error("Failed to cleanup assets for adventure %s: %s", adventure_id, e)
+        from backend.engine.media_file_operations import cleanup_adventure_assets
+
+        return await run_file_operation(cleanup_adventure_assets, adventure_id)
 
     @staticmethod
     async def _generate_thumbnail(filepath: str, max_size: int = 480):
-        """Creates a thumbnail for the given image file if it doesn't exist."""
-        try:
-            if ".." in filepath:
-                raise ValueError("Path traversal detected")
-            safe_filepath = _ensure_within_data_dir(filepath)
-            source_stem, ext = os.path.splitext(os.path.basename(safe_filepath))
-            safe_thumb_name = sanitize_relative_segment(f"{source_stem}_thumb{ext}")
-            if not safe_thumb_name:
-                raise ValueError("Invalid thumbnail filename.")
-            thumb_path = _ensure_within_data_dir(
-                os.path.join(os.path.dirname(safe_filepath), safe_thumb_name)
-            )
-            # Re-verify containment at the sink so the taint analysis trusts the path.
-            data_root = os.path.realpath(settings.DATA_DIR)
-            if os.path.commonpath([os.path.realpath(thumb_path), data_root]) != data_root:
-                raise ValueError("Invalid thumbnail path: escapes DATA_DIR.")
-            # Avoid re-generating if it already exists
-            if os.path.exists(thumb_path):
-                return thumb_path
+        from backend.engine.media_file_operations import _generate_thumbnail
 
-            if _is_svg_image_file(safe_filepath, ext):
-                shutil.copy2(safe_filepath, thumb_path)
-                return thumb_path
-
-            # Use to_thread for blocking PIL operations
-            def _resize():
-                with Image.open(safe_filepath) as img:
-                    img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                    img_to_save = (
-                        img.convert("RGB")
-                        if img.mode in ("RGBA", "P") and ext.lower() in (".jpg", ".jpeg")
-                        else img
-                    )
-                    img_to_save.save(thumb_path, optimize=True, quality=80)
-                return thumb_path
-
-            return await asyncio.to_thread(_resize)
-        except Exception as e:
-            logger.error("Failed to generate thumbnail for %s: %s", filepath, e)
-            return None
+        return await run_file_operation(_generate_thumbnail, filepath, max_size)
 
     @staticmethod
     async def ensure_thumbnails(adventure_id: str):
         """Scans the library for an adventure and ensures all images have thumbnails."""
         target_dir = _safe_data_path("adventures", "library", adventure_id)
-        if not os.path.exists(target_dir):
-            return
-
-        image_extensions = {".jpg", ".jpeg", ".png"}
-        tasks = []
-        for root, _, files in os.walk(target_dir):
-            for file in files:
-                base, ext = os.path.splitext(file)
-                if ext.lower() in image_extensions and not base.endswith("_thumb"):
-                    filepath = os.path.join(root, file)
-                    tasks.append(MediaEngine._generate_thumbnail(filepath))
+        paths = await run_file_operation(list_thumbnail_sources, target_dir)
+        tasks = [MediaEngine._generate_thumbnail(path) for path in paths]
 
         if tasks:
             logger.info(
@@ -628,31 +563,14 @@ class MediaEngine:
         try:
             safe_target_dir = _resolve_output_dir(target_dir)
             ext = "jpg" if image_format.lower() == "jpeg" else "png"
-            filepath = _build_output_filepath(safe_target_dir, filename, ext)
+            filepath = await run_file_operation(
+                _build_output_filepath, safe_target_dir, filename, ext
+            )
 
-            if b64_data.startswith("data:image/"):
-                if ";base64," in b64_data:
-                    b64_data = b64_data.split(";base64,", 1)[1]
-                elif "," in b64_data:
-                    b64_data = b64_data.split(",", 1)[1]
-
-            b64_data = re.sub(r"[^A-Za-z0-9+/=]", "", b64_data)
-
-            padding_needed = len(b64_data) % 4
-            if padding_needed:
-                b64_data += "=" * (4 - padding_needed)
-
-            logger.info("Decoding base64 image payload (length=%d)", len(b64_data))
-            image_bytes = base64.b64decode(b64_data)
-
-            if image_format.lower() == "jpeg":
-                img = Image.open(io.BytesIO(image_bytes))
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                # Image.save is CPU bound, wrap in to_thread
-                await asyncio.to_thread(img.save, filepath, "JPEG", quality=quality, optimize=True)
-            else:
-                _write_binary_file(filepath, image_bytes)
+            image_bytes = await run_file_operation(decode_image_payload, b64_data)
+            await run_file_operation(
+                persist_image_bytes, filepath, image_bytes, image_format, quality
+            )
 
             # Generate thumbnail
             await MediaEngine._generate_thumbnail(filepath)
@@ -676,18 +594,13 @@ class MediaEngine:
             if response.status_code == 200:
                 safe_target_dir = _resolve_output_dir(target_dir)
                 ext = "jpg" if image_format.lower() == "jpeg" else "png"
-                filepath = _build_output_filepath(safe_target_dir, filename, ext)
+                filepath = await run_file_operation(
+                    _build_output_filepath, safe_target_dir, filename, ext
+                )
 
-                if image_format.lower() == "jpeg":
-                    img = Image.open(io.BytesIO(response.content))
-                    if img.mode in ("RGBA", "P"):
-                        img = img.convert("RGB")
-                    # Image.save is CPU bound, wrap in to_thread
-                    await asyncio.to_thread(
-                        img.save, filepath, "JPEG", quality=quality, optimize=True
-                    )
-                else:
-                    _write_binary_file(filepath, response.content)
+                await run_file_operation(
+                    persist_image_bytes, filepath, response.content, image_format, quality
+                )
 
                 # Generate thumbnail
                 await MediaEngine._generate_thumbnail(filepath)
@@ -973,26 +886,11 @@ class MediaEngine:
         filename: Optional[str] = "placeholder.svg",
         category: str = "",
     ) -> str:
-        """
-        Generates a procedural SVG placeholder as a fallback.
-        Ensures consistent visual style for 'unmanifested' content.
-        """
-        _ = adventure_id
-        try:
-            safe_target_dir = _resolve_output_dir(target_dir)
-            os.makedirs(safe_target_dir, exist_ok=True)
-            default_stem = f"placeholder_{entity_id}_{uuid.uuid4().hex[:6]}"
-            safe_filename = _normalize_svg_filename(filename, default_stem)
+        from backend.engine.media_file_operations import generate_svg_placeholder
 
-            filepath = _ensure_within_data_dir(os.path.join(safe_target_dir, safe_filename))
-            generator = SVGPlaceholderGenerator(width=1200, height=800, num_shapes=15)
-            generator.save(filepath, title=entity_id, category=category)
-
-            rel_path = os.path.relpath(filepath, settings.DATA_DIR).replace("\\", "/")
-            return f"/data/{rel_path}"
-        except (OSError, ValueError, TypeError) as e:
-            logger.error("Failed to generate SVG placeholder: %s", e)
-            return ""
+        return await run_file_operation(
+            generate_svg_placeholder, adventure_id, entity_id, target_dir, filename, category
+        )
 
 
 def _extract_mapping_image_payload(response):

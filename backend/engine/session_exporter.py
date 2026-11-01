@@ -1,14 +1,10 @@
-import io
-import json
 import logging
-import os
-import zipfile
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.export_archives import pack_export_ads
 from backend.engine.memory_rag.lifecycle import export_summaries
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -16,6 +12,7 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
 
 logger = logging.getLogger(__name__)
@@ -131,23 +128,4 @@ class SessionExporter:
         """
         manifest = await SessionExporter.build_session_manifest(db, session_id)
 
-        # Create the ZIP
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # 1. Add Manifest
-            encoded_manifest = jsonable_encoder(manifest)
-            zip_file.writestr("session.json", json.dumps(encoded_manifest, indent=2))
-
-            # 2. Add local assets directory
-            session_dir = _safe_data_path("adventures", "sessions", session_id)
-            if os.path.exists(session_dir):
-                for root, _, files in os.walk(session_dir):
-                    for file in files:
-                        local_full = os.path.join(root, file)
-                        safe_local_full = _ensure_within_data_dir(local_full)
-                        # Compute relative path within zip
-                        rel_path = os.path.relpath(safe_local_full, session_dir)
-                        zip_rel = f"assets/{rel_path.replace(os.sep, '/')}"
-                        zip_file.write(safe_local_full, zip_rel)
-
-        return zip_buffer.getvalue()
+        return await run_file_operation(pack_export_ads, manifest, session_id)

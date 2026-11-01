@@ -1,26 +1,23 @@
-import io
-import json
 import logging
 import os
-import zipfile
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
 from backend.engine.adventure_export_assets import (
-    localize_archive_asset,
     normalize_exported_equipment,
     serialize_world_location,
 )
 from backend.engine.clothing.settings import clothing_settings
+from backend.engine.export_archives import pack_export_adz
 from backend.engine.npc_cards.settings import manifest_card_settings
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from backend.utils.async_files import run_file_operation
 
 logger = logging.getLogger(__name__)
 
@@ -482,41 +479,4 @@ class AdventureExporter:
         """
         manifest = await AdventureExporter.build_full_manifest(db, template_id)
 
-        # Gather local assets
-        adventure_dir = _safe_data_path("adventures", "library", template_id)
-        if not os.path.exists(adventure_dir):
-            # Legacy fallback for pre-migration adventures.
-            adventure_dir = _safe_data_path("adventures", template_id)
-        asset_mapping = {}  # local_path -> zip_path
-
-        def localize_path(path):
-            return localize_archive_asset(path, adventure_dir, asset_mapping)
-
-        # Localize all image fields
-        manifest["adventure"]["image_url"] = localize_path(manifest["adventure"].get("image_url"))
-        if manifest["protagonist"]:
-            manifest["protagonist"]["profile_image"] = localize_path(
-                manifest["protagonist"].get("profile_image")
-            )
-        for s in manifest["scenes"]:
-            s["image_url"] = localize_path(s.get("image_url"))
-        for n in manifest["npcs"]:
-            n["image_url"] = localize_path(n.get("image_url"))
-        for o in manifest["objects"]:
-            o["image_url"] = localize_path(o.get("image_url"))
-
-        # Create the ZIP
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # 1. Add Manifest
-            # Use jsonable_encoder to handle datetime and other non-serializable objects
-            encoded_manifest = jsonable_encoder(manifest)
-            zip_file.writestr("adventure.adv", json.dumps(encoded_manifest, indent=2))
-
-            # 2. Add Assets
-            for local_full, zip_rel in asset_mapping.items():
-                if os.path.exists(local_full):
-                    safe_local_full = _ensure_within_data_dir(local_full)
-                    zip_file.write(safe_local_full, zip_rel)
-
-        return zip_buffer.getvalue()
+        return await run_file_operation(pack_export_adz, manifest, template_id)
