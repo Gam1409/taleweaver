@@ -13,6 +13,7 @@ from backend.api.routes.adventures.editing import (
     generation,
     item_generation,
     payload,
+    personality,
     story_crud,
     validation,
     world_crud,
@@ -44,6 +45,7 @@ for _module in (
     entity_update,
     generation,
     item_generation,
+    personality,
 ):
     router.include_router(_module.router)
 

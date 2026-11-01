@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import NpcPersonalityDetails from '@/components/editor/NpcPersonalityDetails.vue'
 import ItemDraftGenerator from '@/components/editor/ItemDraftGenerator.vue'
 import { generateItemDescription, type ItemDraft } from '@/services/itemGeneration'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
@@ -21,6 +22,7 @@ const props = defineProps<{
     mana: number
     goal: string
     character: string
+    personality_profile?: Record<string, string>
     is_killable: boolean
     item_type: string
     is_portable: boolean
@@ -123,6 +125,7 @@ function hasActiveScripts(t: any): boolean {
 const localForm = ref({
   is_hidden: false,
   reveal_rule: '',
+  personality_profile: {} as Record<string, string>,
   moveable: false,
   allowed_scenes_input: [] as string[],
   notes: '',
@@ -368,6 +371,7 @@ watch(() => props.initialForm, (newVal) => {
   localForm.value = {
     is_hidden: false,
     reveal_rule: '',
+    personality_profile: {},
     moveable: false,
     allowed_scenes_input: [],
     notes: '',
@@ -401,6 +405,7 @@ watch(() => props.show, (newVal) => {
     localForm.value = {
       is_hidden: false,
       reveal_rule: '',
+      personality_profile: {},
       moveable: false,
       allowed_scenes_input: [],
       notes: '',
@@ -2067,6 +2072,9 @@ const textLogPreviewClass = computed(() => {
               <div class="space-y-3">
                 <div class="flex justify-between items-center">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Description / Biography <span class="text-red-400">*</span></label>
+                  <NpcPersonalityDetails v-if="context.type === 'npc'" v-model="localForm.personality_profile"
+                    :adventure-id="adventureId" :name="localForm.name" :description="localForm.description"
+                    :goal="localForm.goal" :character="localForm.character" />
                   <span :class="['text-xs font-bold tracking-widest', (localForm.description || '').length > 1000 ? 'text-red-500' : 'text-emerald-500/50']">
                     {{ (localForm.description || '').length }} / 1000
                   </span>

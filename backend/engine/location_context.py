@@ -11,6 +11,7 @@ Two detail levels exist:
 from typing import Any, Optional
 
 from backend.engine.npc_journal.records import memory_context
+from backend.engine.personality.profile import personality_context
 
 
 def _format_item_refs(items: Optional[list]) -> list[str]:
@@ -56,6 +57,8 @@ def _describe_npc(e: Any, detail: str) -> str:
     pos_str = f" (Position: {e.spatial_position})" if e.spatial_position else ""
     goal_str = f" [Goal: {e.goal}]" if e.goal else ""
     char_str = f" [Character: {e.character}]" if e.character else ""
+    traits = personality_context(e)
+    char_str += f" [Private personality: {traits}]" if traits else ""
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     inv_refs = _format_item_refs(e.inventory)
     inv_str = (
@@ -290,6 +293,8 @@ def build_world_npcs_context(
             desc = desc[:-1]
         goal_str = f", Goal: {npc.goal}" if npc.goal else ""
         char_str = f", Character: {npc.character}" if npc.character else ""
+        traits = personality_context(npc)
+        char_str += f", Private personality: {traits}" if traits else ""
         inv_refs = _format_item_refs(npc.inventory)
         inv_str = f", PRIVATE GM Inventory: {', '.join(inv_refs)}" if inv_refs else ""
         notes_str = f', Status: "{npc.notes}"' if getattr(npc, "notes", None) else ""

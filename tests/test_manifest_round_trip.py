@@ -40,6 +40,7 @@ INSULT = {
     "effects": [{"target": "target", "stat": "charisma", "amount": "-2"}],
 }
 NPC_META = {
+    "personality_profile": {"trust": "cautious", "value": "knowledge"},
     "special_actions": [INSULT],
     "attack_mode": "ATTACK_ON_SIGHT",
     "attack_trigger": {"required_item_id": "IDOL", "guard_expression": "tw.player.hp > 0"},
@@ -135,6 +136,7 @@ async def test_combat_data_survives_export_and_import(auth_client, setup_test_db
         assert avatar.stats["unlocked_actions"] == []  # locked specials stay locked
 
         meta = troll.metadata_json
+        assert meta["personality_profile"] == NPC_META["personality_profile"]
         assert meta["special_actions"][0]["id"] == "INSULT"
         assert meta["attack_mode"] == "ATTACK_ON_SIGHT"
         assert meta["attack_trigger"] == NPC_META["attack_trigger"]

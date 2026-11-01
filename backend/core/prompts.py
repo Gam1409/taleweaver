@@ -86,6 +86,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "For every locked container, place at least one discoverable hint or puzzle clue in the world that explains how to unlock it (code clue, key location clue, or explicit riddle).\n"
     "For NPCs, assign an 'npc_type': HUMANOID, ANIMAL, MONSTER, BEING.\n"
     "Every NPC MUST also have a 'goal' and a 'character' description (both strings).\n\n"
+    "For every NPC, fill all seven personality_profile choices from the schema enums, consistent with their biography, character and goal. These are flexible tendencies, never compulsory actions.\n"
     "PROTAGONIST:\n"
     "The protagonist must also have a 'goal' (primary motivation, max 300 chars) and 'character' (personality traits, max 300 chars).\n"
     "These help the GM understand how the player character thinks and acts.\n\n"

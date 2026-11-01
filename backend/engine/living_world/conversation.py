@@ -14,6 +14,7 @@ from backend.engine.living_world import concordia_adapter
 from backend.engine.living_world.deliberation import require_enabled
 from backend.engine.living_world.state import load, save
 from backend.engine.npc_presence import physically_present
+from backend.engine.personality.profile import personality_context
 from backend.engine.turn_replay.transactions import release_for_model
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ def context(state: Any, simulation: Any, actor: Any, message: str) -> dict:
             "id": actor.id,
             "name": str(actor.name)[:100],
             "character": str(actor.description or "")[:1000],
+            "authored_character": str(getattr(actor, "character", "") or "")[:300],
+            "authored_goal": str(getattr(actor, "goal", "") or "")[:300],
+            "personality_tendencies": personality_context(actor),
         },
         "scene_id": state.current_scene_id,
         "player_request_unverified": message[:2000],

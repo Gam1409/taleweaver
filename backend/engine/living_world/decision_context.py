@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.living_world import rules
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.npc_presence import physically_present
+from backend.engine.personality.profile import personality_context
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -54,6 +55,9 @@ async def context_for(
             "id": actor.id,
             "name": str(actor.name)[:100],
             "description": str(actor.description or "")[:1000],
+            "authored_character": str(getattr(actor, "character", "") or "")[:300],
+            "authored_goal": str(getattr(actor, "goal", "") or "")[:300],
+            "personality_tendencies": personality_context(actor),
         },
         "scene": {
             "id": location,

@@ -57,6 +57,10 @@ async def update_npc(
     _update_movement(npc, payload)
 
     metadata_json = dict(npc.metadata_json or {})
+    if given(payload, "personality_profile"):
+        metadata_json["personality_profile"] = (
+            payload.personality_profile.model_dump() if payload.personality_profile else {}
+        )
     put_metadata(metadata_json, payload, _NPC_SCRIPT_FIELDS, empty_as_none=False)
     npc.metadata_json = metadata_json
     flag_modified(npc, "metadata_json")

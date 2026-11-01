@@ -5,6 +5,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
+from backend.engine.personality.profile import PersonalityProfile
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,7 @@ class EntityUpdateRequest(BaseModel):
     stamina: Optional[int] = None
     goal: Optional[str] = None
     character: Optional[str] = None
+    personality_profile: Optional[PersonalityProfile] = None
     is_killable: Optional[bool] = None
     item_type: Optional[str] = None
     is_portable: Optional[bool] = None
@@ -135,6 +138,7 @@ class EntityCreateRequest(BaseModel):
     is_portable: Optional[bool] = None
     goal: Optional[str] = None
     character: Optional[str] = None
+    personality_profile: Optional[PersonalityProfile] = None
     hp: Optional[int] = None
     stamina: Optional[int] = None
     mana: Optional[int] = None

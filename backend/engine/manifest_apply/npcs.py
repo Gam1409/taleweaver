@@ -21,6 +21,7 @@ from backend.models.world_entity import WorldEntity
 # NPC settings that may appear at the top level (generated manifests) or inside
 # `metadata_json` (exported manifests). The top-level value wins.
 _METADATA_FIELDS = (
+    "personality_profile",
     "equipped_weapon_id",
     "equipped_armor_id",
     "special_actions",

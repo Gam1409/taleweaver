@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from backend.engine.npc_presence import physically_present
+from backend.engine.personality.profile import personality_context
 from backend.engine.rule_engine import EntityMovement
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.scene_focus import (
@@ -109,6 +110,7 @@ def direction_context(manager: Any, entities: list[Any], exits: list[dict]) -> d
             "id": npc.id,
             "character": str(getattr(npc, "character", "") or "")[:300],
             "goal": str(getattr(npc, "goal", "") or "")[:300],
+            "personality_tendencies": personality_context(npc),
             "departure_destinations": sorted(
                 destination for destination in destinations if _movable(state, npc, destination)
             ),

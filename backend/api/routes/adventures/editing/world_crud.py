@@ -304,6 +304,8 @@ async def create_editor_entity(
         str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
     )
     metadata_json = dict(payload.metadata_json or {})
+    if payload.entity_type == "NPC" and payload.personality_profile is not None:
+        metadata_json["personality_profile"] = payload.personality_profile.model_dump()
     if item_type == "SWITCH":
         switch_config = metadata_json.get("switch") or {}
         states = switch_config.get("states") or []

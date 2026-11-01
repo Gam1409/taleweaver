@@ -11,6 +11,7 @@ from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.prompts import recall_block
 from backend.engine.npc_presence import physically_present
+from backend.engine.personality.profile import personality_context
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
@@ -113,6 +114,7 @@ def _payload(
             "name": npc.name,
             "authored_description": str(getattr(npc, "description", "") or "")[:700],
             "character": _character_context(social.characters[npc.id]),
+            "personality_tendencies": personality_context(npc),
         }
         for npc in npcs
         if npc.id in social.characters

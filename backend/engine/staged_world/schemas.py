@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from backend.engine.personality.generation import GeneratedNPCSchema
 from backend.engine.world_schemas import (
     AwardTemplateSchema,
     ProtagonistSchema,
@@ -12,7 +13,6 @@ from backend.engine.world_schemas import (
     SequenceSchema,
     WorldExitSchema,
     WorldManifesto,
-    WorldNPCSchema,
     WorldObjectSchema,
     WorldSceneSchema,
     WorldScriptSchema,
@@ -20,7 +20,7 @@ from backend.engine.world_schemas import (
 
 DETAIL_SCHEMAS = {
     "scenes": WorldSceneSchema,
-    "npcs": WorldNPCSchema,
+    "npcs": GeneratedNPCSchema,
     "objects": WorldObjectSchema,
     "sequences": SequenceSchema,
     "quests": QuestSchema,

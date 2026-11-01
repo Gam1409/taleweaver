@@ -71,6 +71,15 @@ def details(kind, rows):
             entry.update(
                 goal="Talk",
                 character="Reserved",
+                personality_profile={
+                    "temperament": "calm",
+                    "sociability": "reserved",
+                    "speech": "direct",
+                    "trust": "cautious",
+                    "value": "knowledge",
+                    "conflict": "negotiate",
+                    "risk": "calculated",
+                },
                 npc_type="HUMANOID",
                 hp=100,
                 mana=0,

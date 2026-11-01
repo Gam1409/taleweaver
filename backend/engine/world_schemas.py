@@ -11,6 +11,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from backend.engine.clothing.schema import Garment, VisualProfile
+from backend.engine.personality.profile import PersonalityProfile
 
 
 class WorldBaseSchema(BaseModel):
@@ -269,6 +270,10 @@ class SpecialActionSchema(WorldBaseSchema):
 
 
 class WorldNPCSchema(WorldBaseSchema):
+    personality_profile: PersonalityProfile = Field(
+        default_factory=PersonalityProfile,
+        description="Choose all seven personality tendencies consistent with this NPC's biography, goal and character. Use schema enum values. These are tendencies, not absolute rules.",
+    )
     visual_profile: Optional[VisualProfile] = Field(
         default=None,
         description="Optional stable appearance and canonical owned worn-item references.",
