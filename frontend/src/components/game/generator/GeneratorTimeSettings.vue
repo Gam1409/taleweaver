@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Clock, Sun, Hourglass, Calendar, Timer } from 'lucide-vue-next'
+import { Clock, Sun, Hourglass, Timer } from 'lucide-vue-next'
 
 const props = withDefaults(
   defineProps<{

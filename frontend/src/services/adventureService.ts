@@ -10,6 +10,7 @@ export interface Adventure {
   version?: string
   creator?: string
   copyright?: string
+  license_url?: string | null
   license?: string
   original_prompt?: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'

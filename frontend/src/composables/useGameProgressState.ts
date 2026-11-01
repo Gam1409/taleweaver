@@ -19,7 +19,6 @@ export function useGameProgressState(options: UseGameProgressStateOptions) {
     status,
     isCompleted,
     pendingTerminalEpilogue,
-    gameSettings,
     createTerminalEpilogue,
     refreshUser,
   } = options

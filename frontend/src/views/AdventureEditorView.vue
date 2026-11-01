@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ClothingDraft } from '@/services/clothingAuthoring'
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adventureService } from '@/services/adventureService'
 import type { LivingWorldPreferences } from '@/services/livingWorld'
@@ -14,7 +14,7 @@ import { useEntityTransfer } from '@/composables/useEntityTransfer'
 
 // Components
 import EditorHeader from '@/components/editor/EditorHeader.vue'
-import { Save, X, Trash2, ArrowLeft } from 'lucide-vue-next'
+
 import WorldTab from '@/components/editor/WorldTab.vue'
 import SequencesSection from '@/components/editor/SequencesSection.vue'
 import ProtagonistTab from '@/components/editor/ProtagonistTab.vue'
@@ -44,18 +44,7 @@ import EditExitModal from '@/components/editor/EditExitModal.vue'
 import NpcCombatModal from '@/components/editor/NpcCombatModal.vue'
 
 // Utilities
-import { 
-  fixNewlines, 
-  isNpcEntity, 
-  isObjectEntity, 
-  mergeUniqueById, 
-  formatBytes,
-  makeSafeFilename,
-  getImageExtension,
-  itemTypePrefix,
-  buildPrefixedEditorId,
-  sanitizeEditorIdToken,
-} from '@/utils/editor_utils'
+import { fixNewlines, isNpcEntity, isObjectEntity, mergeUniqueById, formatBytes, makeSafeFilename, getImageExtension, itemTypePrefix, sanitizeEditorIdToken } from '@/utils/editor_utils'
 
 const props = defineProps<{
   adventureId: string
@@ -84,13 +73,13 @@ const createEntitySceneId = ref<string | null>(null)
 const createEntityType = ref<'npc' | 'object' | null>(null)
 const pendingProtagonistAssignment = ref<{ type: 'equipment' | 'inventory'; key?: string; index?: number } | null>(null)
 const showItemTypeSelector = ref(false)
-const itemTypeSelectorSceneLabel = ref('')
+
 const showAddExistingItemModal = ref(false)
 const addExistingItemKind = ref<'items' | 'switch' | 'container' | 'text-log' | 'npc'>('items')
 const showExitModal = ref(false)
 const isCreateExitMode = ref(false)
 const activeEditExitId = ref<string | null>(null)
-const exitModalForm = ref({
+const emptyExitForm = () => ({
   from_scene_id: '',
   to_scene_id: '',
   label: '',
@@ -109,8 +98,20 @@ const exitModalForm = ref({
   on_unlock_failure_script: '',
   on_unlock_failure_text: '',
 })
+const exitModalForm = ref(emptyExitForm())
 
-const editForm = ref({
+type EntityEditorForm = InstanceType<typeof EditEntityModal>['$props']['initialForm'] & {
+  on_pickup_script?: string; on_pickup_text?: string
+  on_drop_script?: string; on_drop_text?: string
+  on_equip_script?: string; on_equip_text?: string
+  on_unequip_script?: string; on_unequip_text?: string
+  on_enter_scene_script?: string; on_enter_scene_text?: string
+  on_open_exit_script?: string; on_open_exit_text?: string
+  on_exit_used_script?: string; on_exit_used_text?: string
+  on_defeat_script?: string; on_defeat_text?: string
+  on_protagonist_enters_scene_script?: string; on_protagonist_enters_scene_text?: string
+}
+const editForm = ref<EntityEditorForm>({
   name: '',
   teaser: '',
   description: '',
@@ -399,13 +400,7 @@ function closeExitEditModal() {
   showExitModal.value = false
   isCreateExitMode.value = false
   activeEditExitId.value = null
-  exitModalForm.value = {
-    from_scene_id: '',
-    to_scene_id: '',
-    label: '',
-    exit_type: 'one_way',
-    lock_description: '',
-  }
+  exitModalForm.value = emptyExitForm()
 }
 
 const adventure = ref<any>(null)
@@ -1532,15 +1527,6 @@ function buildVisualImageUrl(imagePath?: string | null) {
   return visualService.buildImageUrl(imagePath, visualsCacheVersion.value)
 }
 
-function hasMissingImage(entity: any): boolean {
-  const raw = String(entity?.image_url || '').trim()
-  if (!raw) return true
-  const lowered = raw.toLowerCase()
-  if (lowered.startsWith('assets/') || lowered.startsWith('/assets/')) return true
-  if (lowered.includes('placeholder_') || lowered.includes('/placeholder-')) return true
-  return false
-}
-
 function downloadVisualAsset(imagePath: string | null | undefined, filenameLabel: string) {
   if (!imagePath) {
     addNotification('No image available for download.', 'error')
@@ -1788,7 +1774,7 @@ function cancelRegeneration() {
 function stopAllGenerations() {
   if (activeAbortControllers.value.size === 0) return
   
-  for (const [key, controller] of activeAbortControllers.value.entries()) {
+  for (const controller of activeAbortControllers.value.values()) {
     try {
       controller.abort()
     } catch (e) {
@@ -1908,53 +1894,6 @@ const routeSceneDetails = computed<any | null>(() => {
   return editorScenes.value.find((scene: any) => String(scene.id) === sceneId) || null
 })
 
-const routeSceneNpcs = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  if (!sceneId) return []
-  return editorNpcs.value.filter((npc: any) => String(npc.current_scene_id || '') === sceneId)
-})
-
-const routeSceneObjects = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  if (!sceneId) return []
-  return editorAllObjects.value.filter((obj: any) => String(obj.current_scene_id || '') === sceneId)
-})
-
-const routeSceneSwitches = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'SWITCH')
-})
-
-const routeSceneContainers = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'CONTAINER')
-})
-
-const routeSceneTextLogs = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'READABLE')
-})
-
-const routeSceneItems = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => {
-    const itemType = String(obj.item_type || '').toUpperCase()
-    return itemType !== 'SWITCH' && itemType !== 'CONTAINER' && itemType !== 'READABLE'
-  })
-})
-
-const routeSceneExits = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  const exits = Array.isArray(debugData.value?.exits) ? debugData.value.exits : []
-  if (!sceneId) return []
-  return exits.filter((worldExit: any) => {
-    return String(worldExit.from_scene_id || '') === sceneId || String(worldExit.to_scene_id || '') === sceneId
-  })
-})
-
-const routeExitDetails = computed<any | null>(() => {
-  const exitId = String(activeMapExitId.value || '').trim()
-  const exits = Array.isArray(debugData.value?.exits) ? debugData.value.exits : []
-  if (!exitId) return null
-  return exits.find((worldExit: any) => String(worldExit.id) === exitId) || null
-})
-
 const referenceOptions = computed<Array<{ id: string; name: string; imageUrl?: string | null; type: string; itemType?: string }>>(() => {
   const entries: Array<{ id: string; name: string; imageUrl?: string | null; type: string; itemType?: string }> = []
   
@@ -2002,12 +1941,10 @@ const sceneReferenceOptions = computed(() => {
 const canShowSceneRoutePanel = computed(() => route.name === 'adventure-editor-scene')
 const canShowExitRoutePanel = computed(() => route.name === 'adventure-editor-exit')
 
-const isCreatingRouteAsset = ref(false)
+
 const isDeletingRouteAsset = ref(false)
 
 const isCreatingScene = ref(false)
-const createSceneForm = ref({ sceneId: '', name: '', description: '' })
-const createSceneFormError = ref('')
 
 function openCreateSceneForm() {
   isCreatingScene.value = true
@@ -2016,58 +1953,6 @@ function openCreateSceneForm() {
 
 function cancelCreateScene() {
   isCreatingScene.value = false
-}
-
-async function saveCreateScene() {
-  const sceneId = createSceneForm.value.sceneId.trim()
-  const name = createSceneForm.value.name.trim()
-  const description = createSceneForm.value.description.trim()
-
-  if (!sceneId) {
-    createSceneFormError.value = 'Scene ID is required.'
-    return
-  }
-  if (!name) {
-    createSceneFormError.value = 'Scene name is required.'
-    return
-  }
-  if (name.length > 100) {
-    createSceneFormError.value = 'Scene name must be 100 characters or less.'
-    return
-  }
-  if (!description) {
-    createSceneFormError.value = 'Scene description is required.'
-    return
-  }
-  if (description.length > 1000) {
-    createSceneFormError.value = 'Scene description must be 1000 characters or less.'
-    return
-  }
-
-  const existingIds = new Set(editorScenes.value.map((s: any) => String(s.id || '').toUpperCase()))
-  if (existingIds.has(sceneId.toUpperCase())) {
-    createSceneFormError.value = `A scene with ID "${sceneId}" already exists.`
-    return
-  }
-
-  isSavingText.value = true
-  createSceneFormError.value = ''
-  try {
-    await entityService.createScene(props.adventureId, {
-      scene_id: sceneId,
-      label: name,
-      description,
-    })
-    await fetchDebugInfo()
-    addNotification(`Scene "${name}" created.`, 'success')
-    isCreatingScene.value = false
-    createSceneForm.value = { sceneId: '', name: '', description: '' }
-  } catch (error: any) {
-    createSceneFormError.value = error?.message || 'Failed to create scene.'
-    addNotification(createSceneFormError.value, 'error')
-  } finally {
-    isSavingText.value = false
-  }
 }
 
 function openSceneEditorRoute(sceneId: string) {

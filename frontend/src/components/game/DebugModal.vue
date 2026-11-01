@@ -10,38 +10,8 @@
  */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import dagre from 'dagre'
-import { getImageUrl, getItemIcon, getTypeColor } from '@/utils/game_icons'
-import {
-  Users,
-  Map as MapIcon,
-  Package,
-  Terminal,
-  X,
-  Search,
-  Heart,
-  Zap,
-  Flame,
-  Shield,
-  Eye,
-  EyeOff,
-  Crosshair,
-  RotateCcw,
-  Sparkles,
-  Lock,
-  Unlock,
-  Maximize2,
-  ZoomIn,
-  ZoomOut,
-  Compass,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  Trophy,
-  Swords,
-  Layers,
-} from 'lucide-vue-next'
+import { getImageUrl, getItemIcon } from '@/utils/game_icons'
+import { Users, Map as MapIcon, Package, Terminal, X, Search, Heart, Zap, Flame, Eye, Sparkles, Lock, Unlock, Maximize2, ZoomIn, ZoomOut, Compass, Copy, Check, Trophy, Swords, Layers } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
@@ -172,7 +142,7 @@ const zoom = ref(1)
 const offset = ref({ x: 0, y: 0 })
 const isPanning = ref(false)
 const lastMousePos = ref({ x: 0, y: 0 })
-const hoveredNode = ref<any | null>(null)
+
 const selectedNode = ref<any | null>(null)
 const margin = 80
 
@@ -441,7 +411,7 @@ const filteredItems = computed(() => {
 // -------------------------------------------------------------
 // TAB 4: DIAGNOSTICS & RAW
 // -------------------------------------------------------------
-const rawSearch = ref('')
+
 const copySuccess = ref(false)
 
 const rawJsonString = computed(() => {
@@ -1165,7 +1135,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0 overflow-hidden text-cyan-400">
                             <img v-if="item.image_url" :src="getImageUrl(item.image_url)" class="w-full h-full object-cover" />
-                            <i v-else :class="[getItemIcon(item.name, item.item_type), 'text-sm']"></i>
+                            <i v-else :class="[getItemIcon(item.item_type), 'text-sm']"></i>
                           </div>
                           <div>
                             <div class="font-bold text-white group-hover:text-cyan-300 transition-colors">{{ item.name }}</div>

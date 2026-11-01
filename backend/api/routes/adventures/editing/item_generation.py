@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.editing.common import _get_owned_adventure_or_404
+from backend.api.routes.adventures.editing.generation_errors import generation_error
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.core.llm_router import GameMasterLLM
@@ -103,7 +104,13 @@ This is an unsaved draft: never claim to have placed the item, given it to anyon
 
 
 async def _generate(user: User, context: dict, response_model: type[BaseModel]):
-    gm = GameMasterLLM.for_role(user, "small")
+    try:
+        gm = GameMasterLLM.for_role(user, "small")
+    except ValueError as exc:
+        raise HTTPException(
+            503,
+            "Item generation is not configured. Check the small model, provider and API key in Settings.",
+        ) from exc
     try:
         result = await gm.aexecute_complex_task(
             system_prompt=_ITEM_PROMPT + GARMENT_INSTRUCTION,
@@ -113,9 +120,7 @@ async def _generate(user: User, context: dict, response_model: type[BaseModel]):
         )
         return response_model.model_validate(result)
     except Exception as exc:
-        raise HTTPException(
-            502, "Could not generate a valid item draft. Please try again."
-        ) from exc
+        raise generation_error(exc) from exc
 
 
 @router.post("/{template_id}/editor/generate-item-draft", response_model=ItemDraft)

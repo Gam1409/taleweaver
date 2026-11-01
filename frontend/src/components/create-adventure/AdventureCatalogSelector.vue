@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { CatalogTile } from '@/types'
 import InfoPopoverButton from '@/components/create-adventure/InfoPopoverButton.vue'
-import { Search, X, Check, ChevronRight, Sparkles } from 'lucide-vue-next'
+import { Search, X, Check, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps<{
   title: string

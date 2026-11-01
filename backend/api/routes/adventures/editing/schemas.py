@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
+from backend.api.routes.adventures.editing.exit_fields import ExitBehaviorFields
 from backend.engine.clothing.schema import Garment
 from backend.engine.personality.profile import PersonalityProfile
 
@@ -98,8 +99,6 @@ class EntityUpdateRequest(BaseModel):
     on_hp_change_text: Optional[str] = None
     on_status_change_script: Optional[str] = None
     on_status_change_text: Optional[str] = None
-    is_hidden: Optional[bool] = None
-    reveal_rule: Optional[str] = None
     moveable: Optional[bool] = None
     allowed_scenes: Optional[list[str]] = None
     notes: Optional[str] = None
@@ -117,7 +116,7 @@ class SceneCreateRequest(BaseModel):
     decorative_objects: Optional[list[str]] = None
 
 
-class ExitCreateRequest(BaseModel):
+class ExitCreateRequest(ExitBehaviorFields):
     from_scene_id: str
     to_scene_id: str
     label: str

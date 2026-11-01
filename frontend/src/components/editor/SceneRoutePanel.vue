@@ -454,15 +454,6 @@ function buildVisualImageUrl(imagePath?: string | null) {
   return visualService.buildImageUrl(imagePath, props.visualsCacheVersion)
 }
 
-function hasMissingImage(entity: any): boolean {
-  const raw = String(entity?.image_url || '').trim()
-  if (!raw) return true
-  const lowered = raw.toLowerCase()
-  if (lowered.startsWith('assets/') || lowered.startsWith('/assets/')) return true
-  if (lowered.includes('placeholder_') || lowered.includes('/placeholder-')) return true
-  return false
-}
-
 function editRouteEntity(type: 'npc' | 'object', entity: any) {
   if (!entity) return
   emit(

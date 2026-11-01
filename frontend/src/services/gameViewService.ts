@@ -39,7 +39,12 @@ export const gameViewService = {
       }
 
       if (settings?.game_settings) {
-        return settings.game_settings as GameSettings
+        const raw = settings.game_settings
+        const dateFormat = raw.date_format
+        return {
+          clock_24h: typeof raw.clock_24h === 'boolean' ? raw.clock_24h : false,
+          date_format: dateFormat === 'DD.MM.YY' || dateFormat === 'MM/DD/YY' || dateFormat === 'YY-MM-DD' ? dateFormat : undefined,
+        }
       }
       return null
     } catch (error) {

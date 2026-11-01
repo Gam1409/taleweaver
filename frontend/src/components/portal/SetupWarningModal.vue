@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X, AlertTriangle, ShieldAlert, Zap } from 'lucide-vue-next'
+import { X, AlertTriangle, Zap } from 'lucide-vue-next'
 import { configState } from '@/store/config'
 
 defineProps<{

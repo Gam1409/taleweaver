@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Save, X } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   form: any
   adventure: any
   debugData: any
@@ -9,7 +9,7 @@ const props = defineProps<{
   isSaving: boolean
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'update:tone', val: string): void
   (e: 'save-changes'): void
 }>()

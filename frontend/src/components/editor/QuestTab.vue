@@ -19,7 +19,7 @@ const emit = defineEmits<{
   (e: 'notify', message: string, type?: 'error' | 'success' | 'info'): void
 }>()
 
-const availableItems = computed(() => {
+const availableItems = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorObjects && props.editorObjects.length > 0
       ? props.editorObjects
@@ -32,7 +32,7 @@ const availableItems = computed(() => {
     .filter((i: any) => Boolean(i.id))
 })
 
-const availableScenes = computed(() => {
+const availableScenes = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorScenes && props.editorScenes.length > 0
       ? props.editorScenes
@@ -45,7 +45,7 @@ const availableScenes = computed(() => {
     .filter((s: any) => Boolean(s.id))
 })
 
-const availableNpcs = computed(() => {
+const availableNpcs = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorNpcs && props.editorNpcs.length > 0
       ? props.editorNpcs

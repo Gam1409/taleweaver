@@ -61,6 +61,8 @@ const {
   templates,
   sessions,
   isLoading,
+  errorMsg,
+  isImporting,
   showDeleteConfirm,
   templateToDelete,
   showDeleteSessionConfirm,
@@ -180,6 +182,7 @@ function openCreateModal() {
 }
 
 async function createEmptyAdventure() {
+  errorMsg.value = ''
   setLoadingState(true)
   try {
     const payload = {
@@ -202,7 +205,7 @@ async function createEmptyAdventure() {
 }
 
 async function onDeleteAllAdventures() {
-  if (templates.length === 0 || isDeleting.value) return
+  if (templates.value.length === 0 || isDeleting.value) return
   showDeleteAllAdventuresConfirm.value = true
 }
 
@@ -216,7 +219,7 @@ async function confirmDeleteAllAdventures() {
 }
 
 async function onDeleteAllSessions() {
-  if (sessions.length === 0 || isDeletingSession.value) return
+  if (sessions.value.length === 0 || isDeletingSession.value) return
   showDeleteAllSessionsConfirm.value = true
 }
 
@@ -335,6 +338,11 @@ onUnmounted(() => {
       <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10" :class="activeSection === 'profile' ? 'lg:p-10' : ''">
         
         <SetupWarningBanner :active-section="activeSection" />
+
+        <div v-if="errorMsg" role="alert" class="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-950/40 p-4 text-sm text-red-200">
+          <p>{{ errorMsg }}</p>
+          <button type="button" @click="errorMsg = ''" aria-label="Dismiss error" class="shrink-0 rounded-lg px-2 py-1 font-bold hover:bg-red-500/20">Dismiss</button>
+        </div>
 
         <PortalLibraryToolbar
           v-if="activeSection !== 'profile'"

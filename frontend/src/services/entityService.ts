@@ -1,7 +1,29 @@
 import type { ClothingDraft } from '@/services/clothingAuthoring'
 import { API_BASE, authHeaders } from '@/services/http'
 
-export interface EntityEditData {
+export interface ExitBehaviorData {
+  unlock_expression?: string | null
+  on_open_exit_script?: string | null
+  on_open_exit_text?: string | null
+  on_exit_used_script?: string | null
+  on_exit_used_text?: string | null
+  on_unlock_success_script?: string | null
+  on_unlock_success_text?: string | null
+  on_unlock_failure_script?: string | null
+  on_unlock_failure_text?: string | null
+}
+
+export interface EntityEditData extends ExitBehaviorData {
+  craft_guard_expression?: string | null
+  on_craft_success_script?: string | null
+  on_craft_success_text?: string | null
+  on_craft_failure_script?: string | null
+  on_craft_failure_text?: string | null
+  on_read_script?: string | null
+  on_read_text?: string | null
+
+  on_leave_scene_script?: string | null
+  on_leave_scene_text?: string | null
   target_type: string
   target_id: string
   new_id?: string
@@ -63,10 +85,6 @@ export interface EntityEditData {
   on_unequip_text?: string | null
   on_enter_scene_script?: string | null
   on_enter_scene_text?: string | null
-  on_open_exit_script?: string | null
-  on_open_exit_text?: string | null
-  on_exit_used_script?: string | null
-  on_exit_used_text?: string | null
   on_defeat_script?: string | null
   on_defeat_text?: string | null
   on_protagonist_enters_scene_script?: string | null
@@ -81,7 +99,7 @@ export interface SceneCreateData {
   decorative_objects?: string[]
 }
 
-export interface ExitCreateData {
+export interface ExitCreateData extends ExitBehaviorData {
   from_scene_id: string
   to_scene_id: string
   label: string
@@ -94,6 +112,9 @@ export interface ExitCreateData {
 }
 
 export interface EntityCreateData {
+  is_hidden?: boolean
+  reveal_rule?: string | null
+  spatial_position?: string | null
   entity_id: string
   entity_type: 'NPC' | 'OBJECT'
   scene_id: string

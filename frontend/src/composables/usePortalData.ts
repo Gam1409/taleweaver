@@ -3,7 +3,7 @@ import { api } from '@/composables/useApi'
 import { notificationService } from '@/services/notificationService'
 import { usePortalModals, type PortalImportWarningType } from '@/composables/usePortalModals'
 import { usePortalPendingState } from '@/composables/usePortalPendingState'
-import type { AdventureTemplateSummary, GameSession } from '@/types'
+import type { AdventureTemplateSummary, GameSession, CatalogTile } from '@/types'
 
 type ImportKind = 'adv' | 'adz'
 type PendingCard = { adventureId: string; title: string; status: string; hasError: boolean; kind: 'creation' | 'import' }

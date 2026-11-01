@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { authState, clearAuth } from '@/store/auth'
 import { configState } from '@/store/config'
 import ChangeCredentialsModal from '@/components/portal/ChangeCredentialsModal.vue'
-import { isMobileSidebarOpen, openMobileSidebar } from '@/store/layout'
+import { openMobileSidebar } from '@/store/layout'
 
 const router = useRouter()
 const route = useRoute()

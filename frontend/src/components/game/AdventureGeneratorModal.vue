@@ -632,7 +632,7 @@ async function cancelActiveGeneration() {
 async function handlePlayNow() {
   if (!createdAdventureId.value) return
   try {
-    const res = await api.startSession(createdAdventureId.value)
+    const res = await api.startSessionForTemplate(createdAdventureId.value)
     if (res?.game_id) {
       emit('close')
       router.push({ name: 'game', params: { id: res.game_id } })

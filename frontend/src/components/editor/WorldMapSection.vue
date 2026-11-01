@@ -164,19 +164,19 @@ function updateLayout() {
 
   const nodes = g.nodes().map(id => {
     const node = g.node(id)
-    const originalScene = scenes.value.find(s => safeId(s.id) === id) || {}
+    const originalScene = scenes.value.find(s => safeId(s.id) === id)
     const isCurrent = currentId === id
 
     return {
       id,
-      label: originalScene.label || id,
+      label: originalScene?.label || id,
       x: node.x,
       y: node.y,
       width: node.width,
       height: node.height,
       isCurrent,
-      imageUrl: originalScene.image_url || null,
-      description: originalScene.description || ''
+      imageUrl: originalScene?.image_url || null,
+      description: originalScene?.description || ''
     }
   })
 
@@ -185,14 +185,14 @@ function updateLayout() {
     const rawExit = exits.value.find((re: any) => 
       (safeId(re.from) === e.v && safeId(re.to) === e.w) ||
       (safeId(re.from) === e.w && safeId(re.to) === e.v)
-    ) || {}
-    const exitType = edge.exitType || rawExit.exit_type || 'one_way'
+    )
+    const exitType = edge.exitType || rawExit?.exit_type || 'one_way'
     return {
       from: e.v,
       to: e.w,
       points: edge.points || [],
-      label: edge.label || rawExit.label || '',
-      isLocked: edge.isLocked || !!rawExit.is_locked,
+      label: edge.label || rawExit?.label || '',
+      isLocked: edge.isLocked || !!rawExit?.is_locked,
       exitType,
       isBidirectional: exitType === 'bidirectional'
     }

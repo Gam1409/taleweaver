@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { getImageUrl, getItemIcon, getTypeColor, hasRenderableImagePath } from '@/utils/game_icons'
 
 type LootItem = {
+  image_url?: string | null
   id?: string
   name?: string
   description?: string

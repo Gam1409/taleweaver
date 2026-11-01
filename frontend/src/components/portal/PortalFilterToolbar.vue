@@ -1,18 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import {
-  Search,
-  X,
-  LayoutGrid,
-  Table as TableIcon,
-  Palette,
-  Sparkles,
-  SlidersHorizontal,
-  RotateCcw,
-  BookOpen,
-  Sword,
-  MessageSquare
-} from 'lucide-vue-next'
+
+import { Search, X, LayoutGrid, Table as TableIcon, RotateCcw } from 'lucide-vue-next'
 import type { RuleTypeFilter, ViewMode } from '@/composables/usePortalFilters'
 
 const props = defineProps<{
@@ -29,7 +17,7 @@ const props = defineProps<{
   isFiltered: boolean
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'update:search-query', val: string): void
   (e: 'update:selected-type', val: RuleTypeFilter): void
   (e: 'update:selected-tone', val: string): void
@@ -38,15 +26,6 @@ const emit = defineEmits<{
   (e: 'reset-filters'): void
 }>()
 
-const isExpandedMobile = ref(false)
-
-const typeOptions: Array<{ id: RuleTypeFilter; label: string; icon: any }> = [
-  { id: 'all', label: 'All Modes', icon: null },
-  { id: 'rpg', label: 'RPG', icon: Sword },
-  { id: 'story', label: 'Story', icon: BookOpen },
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'vn', label: 'Visual novel', icon: BookOpen }
-]
 </script>
 
 <template>

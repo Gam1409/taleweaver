@@ -36,7 +36,7 @@ const key = (gameId: string) => `taleweaver:narration-correction:${gameId}`
 /** Per-session, per-tab feedback survives a reload but never enters story storage. */
 export function getCorrection(gameId?: string): PendingCorrection | null {
   if (!gameId) return null
-  if (Object.hasOwn(pending, gameId)) return pending[gameId] ?? null
+  if (Object.prototype.hasOwnProperty.call(pending, gameId)) return pending[gameId] ?? null
   try {
     const saved = JSON.parse(sessionStorage.getItem(key(gameId)) || 'null')
     pending[gameId] = saved && typeof saved.id === 'string' && typeof saved.label === 'string' &&

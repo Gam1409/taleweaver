@@ -115,7 +115,7 @@ jobs:
           - check: build
             command: npm run build
           - check: types
-            command: npx --no-install vue-tsc --noEmit
+            command: npm run typecheck
     defaults:
       run:
         working-directory: frontend

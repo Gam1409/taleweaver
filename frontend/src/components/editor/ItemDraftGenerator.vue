@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { generateItemDraft, type ItemDraft } from '@/services/itemGeneration'
 
 const props = defineProps<{
@@ -7,6 +7,7 @@ const props = defineProps<{
   itemType: string
   fixedSlots: string[]
   disabled?: boolean
+  contextVersion?: number
 }>()
 const emit = defineEmits<{
   (e: 'draft', value: ItemDraft): void
@@ -16,24 +17,33 @@ const brief = ref('')
 const busy = ref(false)
 const error = ref('')
 const generated = ref(false)
-let disposed = false
-onBeforeUnmount(() => { disposed = true })
+let revision = 0
+function invalidate() {
+  revision++
+  busy.value = false
+  error.value = ''
+  generated.value = false
+  emit('busy', false)
+}
+watch(() => JSON.stringify([props.adventureId, props.itemType, props.fixedSlots, props.contextVersion]), invalidate, { flush: 'sync' })
+onBeforeUnmount(invalidate)
 
 async function generate() {
   if (busy.value || props.disabled || !brief.value.trim()) return
+  const requestRevision = ++revision
   busy.value = true
   error.value = ''
   generated.value = false
   emit('busy', true)
   try {
     const draft = await generateItemDraft(props.adventureId, brief.value.trim(), props.itemType, props.fixedSlots)
-    if (disposed) return
+    if (requestRevision !== revision) return
     emit('draft', draft)
     generated.value = true
   } catch (cause) {
-    if (!disposed) error.value = cause instanceof Error ? cause.message : 'Item generation failed.'
+    if (requestRevision === revision) error.value = cause instanceof Error ? cause.message : 'Item generation failed.'
   } finally {
-    if (!disposed) {
+    if (requestRevision === revision) {
       busy.value = false
       emit('busy', false)
     }

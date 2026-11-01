@@ -78,6 +78,7 @@ export interface CharacterSheet {
   time_config?: Record<string, any> | null
   time_per_turn?: number
   max_time_per_turn?: number | null
+  current_scene_id?: string | null
   current_scene?: string | null
   scene_id?: string | null
   rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn'
@@ -292,8 +293,9 @@ export interface WorldMapData {
 /** Summary of a game session returned by GET /api/adventures. */
 export interface GameSession {
   game_id: string
-  template_id?: string
-  adventure_id: string
+  template_id?: string | null
+  adventure_id: string | null
+  creator?: string | null
   avatar_id: string
   profile_image?: string | null
   adventure_title: string
@@ -466,6 +468,7 @@ export interface GeneratorSurprisePresetPayload {
 }
 
 export interface GeneratorSurprisePresetResponse {
+  generation_strictness?: 'strict' | 'creative'
   title: string
   story_idea: string
   selected_tone?: string | null

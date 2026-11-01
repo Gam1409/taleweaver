@@ -208,14 +208,6 @@ const hasOllamaProviderSelected = computed(() => (
   || localForm.value.compression_model_provider === 'ollama'
 ))
 
-const hasMinimaxProviderSelected = computed(() => (
-  localForm.value.small_model_provider === 'minimax'
-  || localForm.value.complex_model_provider === 'minimax'
-  || localForm.value.generator_model_provider === 'minimax'
-  || localForm.value.play_agent_model_provider === 'minimax'
-  || localForm.value.compression_model_provider === 'minimax'
-))
-
 const ollamaModelCount = computed(() => {
   const models = props.availableConstants?.predefined_llm_models?.ollama
   return Array.isArray(models) ? models.length : 0
@@ -259,10 +251,6 @@ const refreshLlmProviderModels = (provider: string) => {
     emit('refreshLlmModels', provider, provider === 'custom_openai' ? localForm.value.custom_openai_url : undefined)
   }
 }
-
-const isCompressionModelMissingWarning = computed(() => {
-  return !!localForm.value.enable_history_compression && !localForm.value.compression_model?.trim()
-})
 
 const handleTurnsInput = (e: Event) => {
   const val = Number((e.target as HTMLInputElement).value)

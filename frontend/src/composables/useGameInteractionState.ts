@@ -77,10 +77,6 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
     return style
   })
 
-  const showsMechanics = computed(() => {
-    const mode = ruleMode.value
-    return mode === 'full_visible' || mode === 'narrative_with_rolls'
-  })
 
   const isConsumableHover = computed(() => isConsumableEntity(hoveredEntity.value))
 

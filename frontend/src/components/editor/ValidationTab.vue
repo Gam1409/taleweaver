@@ -366,14 +366,6 @@ function reactivateFinding(finding: AnnotatedValidationFinding) {
   dismissedKeys.value = next
 }
 
-function toggleDismissedFor(finding: AnnotatedValidationFinding) {
-  if (isDismissed(finding)) {
-    reactivateFinding(finding)
-  } else {
-    dismissFinding(finding)
-  }
-}
-
 function _makeRef(finding: AnnotatedValidationFinding): DeleteValidationFindingRef {
   return {
     source: finding.source,

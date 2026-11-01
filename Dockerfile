@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 
 # Copy package files and install dependencies
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy frontend source and build
 COPY frontend/ ./
@@ -18,7 +18,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    && rm -rf /var/lib/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Install poetry
 ENV POETRY_VIRTUALENVS_CREATE=false \

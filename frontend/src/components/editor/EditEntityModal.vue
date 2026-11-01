@@ -88,6 +88,7 @@ const emit = defineEmits<{
 }>()
 
 const itemDraftBusy = ref(false)
+const itemDraftContextVersion = ref(0)
 const clothingBusy = ref(false)
 const itemDescriptionError = ref('')
 function applyItemDraft(draft: ItemDraft) {
@@ -127,50 +128,51 @@ function hasActiveScripts(t: any): boolean {
   )
 }
 
-const localForm = ref({
-  is_hidden: false,
-  reveal_rule: '',
-  personality_profile: {} as Record<string, string>,
-  moveable: false,
-  allowed_scenes_input: [] as string[],
-  notes: '',
-  pickup_trigger_mode: 'silent',
-  pickup_trigger_cue: '',
-  attack_mode: 'PASSIVE',
-  unlock_expression: '',
-  on_unlock_success_script: '',
-  on_unlock_success_text: '',
-  on_unlock_failure_script: '',
-  on_unlock_failure_text: '',
-  craft_guard_expression: '',
-  on_craft_success_script: '',
-  on_craft_success_text: '',
-  on_craft_failure_script: '',
-  on_craft_failure_text: '',
-  on_read_script: '',
-  on_read_text: '',
-  on_leave_scene_script: '',
-  on_leave_scene_text: '',
-  on_pickup_script: '',
-  on_pickup_text: '',
-  on_drop_script: '',
-  on_drop_text: '',
-  on_equip_script: '',
-  on_equip_text: '',
-  on_unequip_script: '',
-  on_unequip_text: '',
-  on_enter_scene_script: '',
-  on_enter_scene_text: '',
-  on_open_exit_script: '',
-  on_open_exit_text: '',
-  on_defeat_script: '',
-  on_defeat_text: '',
-  on_protagonist_enters_scene_script: '',
-  on_protagonist_enters_scene_text: '',
-  on_success_script: '',
-  on_failure_script: '',
-  ...props.initialForm
-})
+function makeLocalForm(form: typeof props.initialForm) {
+  return {
+    personality_profile: {} as Record<string, string>,
+    moveable: false,
+    allowed_scenes_input: [] as string[],
+    notes: '',
+    pickup_trigger_mode: 'silent',
+    pickup_trigger_cue: '',
+    attack_mode: 'PASSIVE',
+    unlock_expression: '',
+    on_unlock_success_script: '',
+    on_unlock_success_text: '',
+    on_unlock_failure_script: '',
+    on_unlock_failure_text: '',
+    craft_guard_expression: '',
+    on_craft_success_script: '',
+    on_craft_success_text: '',
+    on_craft_failure_script: '',
+    on_craft_failure_text: '',
+    on_read_script: '',
+    on_read_text: '',
+    on_leave_scene_script: '',
+    on_leave_scene_text: '',
+    on_pickup_script: '',
+    on_pickup_text: '',
+    on_drop_script: '',
+    on_drop_text: '',
+    on_equip_script: '',
+    on_equip_text: '',
+    on_unequip_script: '',
+    on_unequip_text: '',
+    on_enter_scene_script: '',
+    on_enter_scene_text: '',
+    on_open_exit_script: '',
+    on_open_exit_text: '',
+    on_defeat_script: '',
+    on_defeat_text: '',
+    on_protagonist_enters_scene_script: '',
+    on_protagonist_enters_scene_text: '',
+    on_success_script: '',
+    on_failure_script: '',
+    ...form
+  }
+}
+const localForm = ref(makeLocalForm(props.initialForm))
 const switchStates = ref<string[]>([])
 const switchTransitions = ref<any[]>([])
 
@@ -371,70 +373,19 @@ const validationErrors = computed(() => entityFormErrors(localForm.value, {
 const isFormInvalid = computed(() => validationErrors.value.length > 0)
 
 watch(() => props.initialForm, (newVal) => {
+  itemDraftContextVersion.value++
   itemDraftBusy.value = false
   itemDescriptionError.value = ''
-  localForm.value = {
-    is_hidden: false,
-    reveal_rule: '',
-    personality_profile: {},
-    moveable: false,
-    allowed_scenes_input: [],
-    notes: '',
-    pickup_trigger_mode: 'silent',
-    pickup_trigger_cue: '',
-    attack_mode: 'PASSIVE',
-    on_pickup_script: '',
-    on_pickup_text: '',
-    on_drop_script: '',
-    on_drop_text: '',
-    on_equip_script: '',
-    on_equip_text: '',
-    on_unequip_script: '',
-    on_unequip_text: '',
-    on_enter_scene_script: '',
-    on_enter_scene_text: '',
-    on_open_exit_script: '',
-    on_open_exit_text: '',
-    on_defeat_script: '',
-    on_defeat_text: '',
-    on_protagonist_enters_scene_script: '',
-    on_protagonist_enters_scene_text: '',
-    ...newVal
-  }
+  localForm.value = makeLocalForm(newVal)
   syncFromForm()
 }, { deep: true })
 
 watch(() => props.show, (newVal) => {
+  itemDraftContextVersion.value++
+  itemDraftBusy.value = false
   if (newVal) {
     activeTab.value = 'simple'
-    localForm.value = {
-      is_hidden: false,
-      reveal_rule: '',
-      personality_profile: {},
-      moveable: false,
-      allowed_scenes_input: [],
-      notes: '',
-      pickup_trigger_mode: 'silent',
-      pickup_trigger_cue: '',
-      attack_mode: 'PASSIVE',
-      on_pickup_script: '',
-      on_pickup_text: '',
-      on_drop_script: '',
-      on_drop_text: '',
-      on_equip_script: '',
-      on_equip_text: '',
-      on_unequip_script: '',
-      on_unequip_text: '',
-      on_enter_scene_script: '',
-      on_enter_scene_text: '',
-      on_open_exit_script: '',
-      on_open_exit_text: '',
-      on_defeat_script: '',
-      on_defeat_text: '',
-      on_protagonist_enters_scene_script: '',
-      on_protagonist_enters_scene_text: '',
-      ...props.initialForm
-    }
+    localForm.value = makeLocalForm(props.initialForm)
     syncFromForm()
   }
 })
@@ -769,7 +720,7 @@ const textLogPreviewClass = computed(() => {
           <div class="px-8 py-6 space-y-6 overflow-y-auto flex-1">
             <div v-show="activeTab === 'simple'" class="space-y-6">
               <ItemDraftGenerator v-if="isCreateEntityMode && context.type === 'object' && adventureId"
-                :key="context.id" :adventure-id="adventureId" :item-type="localForm.item_type"
+                :context-version="itemDraftContextVersion" :adventure-id="adventureId" :item-type="localForm.item_type"
                 :fixed-slots="localForm.is_wearable_slots_fixed ? localForm.wearable_slots_input : []"
                 :disabled="isSaving || clothingBusy" @draft="applyItemDraft" @busy="itemDraftBusy = $event" />
               <!-- Editable ID (create mode or scene/npc/object edit mode) -->
@@ -1050,7 +1001,7 @@ const textLogPreviewClass = computed(() => {
                 </p>
                 <div class="space-y-2">
                   <div
-                    v-for="(item, idx) in localForm.inventory_input"
+                    v-for="(_item, idx) in localForm.inventory_input"
                     :key="idx"
                     class="flex items-center gap-2"
                   >
@@ -1176,9 +1127,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                 </div>
 
-
-
-                <!-- Hidden state & Reveal rule for Objects -->
+<!-- Hidden state & Reveal rule for Objects -->
                 <div v-if="currentItemType !== 'CONSTRUCTABLE'" class="space-y-4 border-t border-white/5 pt-4">
                   <div class="flex items-center justify-between">
                     <div class="space-y-1 pr-4">
@@ -1327,7 +1276,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <div class="space-y-2">
                     <div
-                      v-for="(ing, idx) in localForm.combination_ingredients_input"
+                      v-for="(_ing, idx) in localForm.combination_ingredients_input"
                       :key="idx"
                       class="flex items-center gap-2"
                     >
@@ -1550,7 +1499,7 @@ const textLogPreviewClass = computed(() => {
                     
                     <div class="space-y-2">
                       <div
-                        v-for="(state, idx) in switchStates"
+                        v-for="(_state, idx) in switchStates"
                         :key="idx"
                         class="flex items-center gap-2"
                       >
@@ -1920,7 +1869,7 @@ const textLogPreviewClass = computed(() => {
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Contained Items</label>
                   <div class="space-y-2">
                     <div
-                      v-for="(item, idx) in localForm.inventory_input"
+                      v-for="(_item, idx) in localForm.inventory_input"
                       :key="idx"
                       class="flex items-center gap-2"
                     >

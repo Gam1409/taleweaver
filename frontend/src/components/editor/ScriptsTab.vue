@@ -13,7 +13,7 @@ import {
   ChevronUp,
   X,
 } from 'lucide-vue-next'
-import { adventureService } from '@/services/adventureService'
+
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
 
 const props = defineProps<{
@@ -112,7 +112,7 @@ const showModal = ref(false)
 const isNewScript = ref(false)
 const showDeleteConfirmModal = ref(false)
 const pendingDeleteScriptId = ref<string | null>(null)
-const isCheckingSyntax = ref(false)
+
 const syntaxValidationResult = ref<{
   checked: boolean
   valid: boolean
@@ -209,43 +209,6 @@ function confirmDeleteScript() {
 // Syntax Validation
 // ---------------------------------------------------------------------------
 
-async function checkSyntax() {
-  if (!props.adventure?.id) return
-  isCheckingSyntax.value = true
-  syntaxValidationResult.value = null
-
-  try {
-    const res = await adventureService.validateScript(props.adventure.id, {
-      code: modalScript.value.code,
-      trigger: modalScript.value.trigger,
-      target: modalScript.value.target || undefined,
-    })
-
-    syntaxValidationResult.value = {
-      checked: true,
-      valid: res.valid,
-      errors: res.errors || [],
-      warnings: res.warnings || [],
-    }
-
-    if (res.valid) {
-      emit('notify', 'Syntax and sandbox verification passed!', 'success')
-    } else {
-      emit('notify', `Found ${res.errors.length} syntax/safety issue(s).`, 'error')
-    }
-  } catch (err: any) {
-    syntaxValidationResult.value = {
-      checked: true,
-      valid: false,
-      errors: [err.message || 'Validation request failed.'],
-      warnings: [],
-    }
-    emit('notify', err.message || 'Validation failed.', 'error')
-  } finally {
-    isCheckingSyntax.value = false
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Save Script
 // ---------------------------------------------------------------------------
@@ -294,76 +257,6 @@ async function saveScript() {
 // ---------------------------------------------------------------------------
 // Snippet Templates
 // ---------------------------------------------------------------------------
-
-const SNIPPET_TEMPLATES = [
-  {
-    label: 'Story Message',
-    code: 'tw.story.show_message("A mysterious chill fills the air as ancient runes glow faintly.")\n',
-  },
-  {
-    label: 'Move NPC',
-    code: '# Move an NPC to a specific scene\ntw.npcs.move("NPC_NAME", "SCENE_ID")\n',
-  },
-  {
-    label: 'Lock / Unlock Exit',
-    code: '# Lock an exit with reason, or unlock it\ntw.exits.lock("EXIT_ID", "A sturdy iron grate blocks the passage.")\n# tw.exits.unlock("EXIT_ID")\n',
-  },
-  {
-    label: 'Modify Player HP',
-    code: '# Damage or heal protagonist avatar\ntw.player.damage(15)\n# tw.player.heal(20)\n',
-  },
-  {
-    label: 'Custom Variable (State)',
-    code: '# Check and toggle custom quest/puzzle flags\nif not tw.vars.get("chamber_cleared", False):\n    tw.vars.set("chamber_cleared", True)\n    tw.story.show_message("You hear the sound of stone shifting in the distance.")\n',
-  },
-  {
-    label: 'Add Memory',
-    code: '# Inject custom narrative memory into avatar context\ntw.memories.add("Discovered an inscription detailing the moon crest ritual.")\n',
-  },
-  {
-    label: 'Victory / Game Over',
-    code: '# Trigger victory or defeat\ntw.game.set_victory("You have retrieved the lost relic and saved the realm!")\n# tw.game.set_game_over("The ancient darkness completely consumed your spirit.")\n',
-  },
-  {
-    label: 'Complete Quest',
-    code: '# Mark quest completed\ntw.quests.complete("MAIN_QUEST_ID")\n',
-  },
-  {
-    label: 'Dice Roll Check',
-    code: '# Roll a safe die (1 to 20)\nroll = tw.dice.d20()\nif roll >= 12:\n    tw.story.show_message("You skillfully dodge the falling rocks! (Roll: " + str(roll) + ")")\nelse:\n    tw.player.damage(10)\n    tw.story.show_message("A falling boulder grazes your shoulder! (Roll: " + str(roll) + ")")\n',
-  },
-  {
-    label: 'Switch Mechanism State',
-    code: '# Inspect or toggle switch mechanism\ncurrent = tw.switches.get_state("LEVER_01")\nif current == "OFF":\n    tw.switches.set_state("LEVER_01", "ON")\n    tw.story.show_message("You pull the lever. Heavy gears churn inside the wall!")\n',
-  },
-  {
-    label: 'Console Log',
-    code: '# Output diagnostic messages to server terminal console\ntw.log("Inspecting player state: HP=" + str(tw.player.hp))\n# print("Or use standard print for quick inspection")\n',
-  },
-  {
-    label: 'In-Game Debug Message',
-    code: '# Emits an in-game notification (only visible when Debug Mode is ON)\ntw.debug("Door trap triggered for scene: " + str(tw.scene.id))\n',
-  },
-]
-
-function insertSnippet(code: string) {
-  modalScript.value.code = (modalScript.value.code || '').trimEnd() + '\n\n' + code
-  syntaxValidationResult.value = null
-}
-
-function handleTabKey(e: KeyboardEvent) {
-  if (e.key === 'Tab') {
-    e.preventDefault()
-    const target = e.target as HTMLTextAreaElement
-    const start = target.selectionStart
-    const end = target.selectionEnd
-    modalScript.value.code =
-      modalScript.value.code.substring(0, start) + '    ' + modalScript.value.code.substring(end)
-    setTimeout(() => {
-      target.selectionStart = target.selectionEnd = start + 4
-    }, 0)
-  }
-}
 
 </script>
 

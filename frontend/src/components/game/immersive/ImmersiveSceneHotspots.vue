@@ -7,7 +7,7 @@
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getItemIcon, getTypeColor, getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
-import { Compass, DoorOpen, Lock, Hand, Sparkles, Eye, X, ArrowRight, Terminal } from 'lucide-vue-next'
+import { Compass, DoorOpen, Lock, Hand, Sparkles, X, ArrowRight, Terminal } from 'lucide-vue-next'
 
 const props = defineProps<{
   sceneExits: any[]
@@ -55,7 +55,7 @@ function handleImageError(path?: string | null) {
   brokenImages.value[path] = true
 }
 
-function onImageLoadError(e: Event, path?: string | null) {
+function onImageLoadError(_e: Event, path?: string | null) {
   if (!path) return
   if (!thumbFailed.value[path]) {
     thumbFailed.value[path] = true

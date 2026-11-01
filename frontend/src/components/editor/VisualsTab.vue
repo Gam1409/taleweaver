@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import StoryVisualPresets from './StoryVisualPresets.vue'
-const props = defineProps<{
+defineProps<{
   form: any
   adventure: any
   imageStylesCatalog: any[]
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'update:style', val: string): void
   (e: 'save-changes'): void
 }>()

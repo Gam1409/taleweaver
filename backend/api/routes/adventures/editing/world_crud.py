@@ -14,6 +14,7 @@ from backend.api.routes.adventures.editing.common import (
     _normalize_lock_fields,
     _sanitize_object_id,
 )
+from backend.api.routes.adventures.editing.exit_fields import exit_behavior_values
 from backend.api.routes.adventures.editing.image_clone import _clone_entity_image
 from backend.api.routes.adventures.editing.payload import _serialize_model
 from backend.api.routes.adventures.editing.schemas import (
@@ -200,8 +201,10 @@ async def create_editor_exit(
         code_to_unlock=code or None,
         item_to_unlock=item or None,
         rule_to_unlock=rule or None,
+        **exit_behavior_values(payload),
     )
     db.add(world_exit)
+    await db.flush()
     if isinstance(adv.original_manifest, dict) and isinstance(
         adv.original_manifest.get("exits"), list
     ):
@@ -219,6 +222,7 @@ async def create_editor_exit(
                 "code_to_unlock": world_exit.code_to_unlock,
                 "item_to_unlock": world_exit.item_to_unlock,
                 "rule_to_unlock": world_exit.rule_to_unlock,
+                **exit_behavior_values(world_exit),
             }
         )
         adv.original_manifest = manifest

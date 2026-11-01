@@ -136,3 +136,51 @@ async def test_readable_description_limit(auth_client, setup_test_db, monkeypatc
         },
     )
     assert response.status_code == 502
+
+
+async def test_missing_model_configuration_is_actionable(auth_client, setup_test_db, monkeypatch):
+    template_id = await seed()
+
+    def unconfigured(*_):
+        raise ValueError("No API key configured: secret-value")
+
+    monkeypatch.setattr(module.GameMasterLLM, "for_role", unconfigured)
+    response = await auth_client.post(
+        f"/api/adventures/{template_id}/editor/generate-item-draft",
+        json={"brief": "A key", "item_type": "DEFAULT"},
+    )
+    assert response.status_code == 503
+    assert "Settings" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+async def test_rejected_provider_credentials_are_not_invalid_draft(
+    auth_client, setup_test_db, monkeypatch
+):
+    from litellm.exceptions import AuthenticationError
+
+    template_id = await seed()
+    call = fake_model(monkeypatch, {})
+    call.side_effect = AuthenticationError("secret-value", "custom_openai", "test")
+    response = await auth_client.post(
+        f"/api/adventures/{template_id}/editor/generate-item-draft",
+        json={"brief": "A key", "item_type": "DEFAULT"},
+    )
+    assert response.status_code == 503
+    assert "API key" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+async def test_uncertain_inference_requires_recovery(auth_client, setup_test_db, monkeypatch):
+    from backend.core.inference.registry import InferenceUncertainError
+
+    template_id = await seed()
+    call = fake_model(monkeypatch, {})
+    call.side_effect = InferenceUncertainError("private endpoint")
+    response = await auth_client.post(
+        f"/api/adventures/{template_id}/editor/generate-item-draft",
+        json={"brief": "A key", "item_type": "DEFAULT"},
+    )
+    assert response.status_code == 503
+    assert "administrator" in response.json()["detail"]
+    assert "private endpoint" not in response.text

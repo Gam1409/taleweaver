@@ -162,7 +162,6 @@ function updateLayout() {
   g.setDefaultEdgeLabel(() => ({}))
 
   const visitedIdsList = Object.keys(props.mapData.nodes).sort()
-  const firstId = visitedIdsList[0]
   const visitedIds = new Set(visitedIdsList)
   const currentId = props.mapData.current_scene_id
   if (currentId) visitedIds.add(currentId)
@@ -217,14 +216,14 @@ function updateLayout() {
     const rawEdge = props.mapData!.edges.find(re => 
       (safeId(re.from) === e.v && safeId(re.to) === e.w) ||
       (safeId(re.from) === e.w && safeId(re.to) === e.v)
-    ) || {}
-    const exitType = edge.exitType || rawEdge.exit_type || 'one_way'
+    )
+    const exitType = edge.exitType || rawEdge?.exit_type || 'one_way'
     return {
       from: e.v,
       to: e.w,
       points: edge.points || [],
-      label: edge.label || rawEdge.label || '',
-      isLocked: edge.isLocked || rawEdge.is_locked || false,
+      label: edge.label || rawEdge?.label || '',
+      isLocked: edge.isLocked || rawEdge?.is_locked || false,
       exitType,
       isBidirectional: exitType === 'bidirectional'
     }

@@ -51,7 +51,7 @@ import { useGameSessionLifecycle } from '@/composables/useGameSessionLifecycle'
 import { useGameCommandFlow } from '@/composables/useGameCommandFlow'
 import { useGameProgressState } from '@/composables/useGameProgressState'
 import { refreshUser } from '@/store/auth'
-import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+
 import { audioService } from '@/services/audioService'
 import { type GameSettings } from '@/services/gameViewService'
 import { gameCommandService } from '@/services/gameCommandService'
@@ -208,7 +208,6 @@ const {
   suggestionsNotice,
   refreshSuggestions,
   worldMemories,
-  worldRumors,
   statusText,
   debugLogs,
   systemDebugEnabled,
@@ -550,18 +549,6 @@ const isContainerLocked = (container: any): boolean => {
   }
 
   return container?.locked === true || metadata?.locked === true
-}
-
-const getContainerCodeRequirement = (container: any): string => {
-  let metadata = container?.metadata_json || {}
-  if (typeof metadata === 'string') {
-    try {
-      metadata = JSON.parse(metadata)
-    } catch {
-      metadata = {}
-    }
-  }
-  return String(container?.code_to_unlock || metadata?.code_to_unlock || '').trim()
 }
 
 const markContainerUnlockedLocally = (containerId: string) => {
@@ -1266,36 +1253,6 @@ const exitDisplayName = (exit: any): string => {
   return raw
 }
 
-interface ExitLockBadge {
-  label: string
-  icon: string
-  detail: string
-}
-
-const exitLockBadge = (exit: any): ExitLockBadge | null => {
-  if (!exit || !isExitLocked(exit)) return null
-  const code = String(exit.code_to_unlock || '').trim()
-  const item = String(exit.item_to_unlock || '').trim()
-  const expr = String(exit.unlock_expression || '').trim()
-  const rule = String(exit.rule_to_unlock || '').trim()
-  const description = String(exit.lock_description || '').trim()
-
-  if (code) {
-    return { label: 'Locked by Code', icon: 'ra ra-key', detail: description || 'Requires a passcode' }
-  }
-  if (item) {
-    return { label: `Requires ${item}`, icon: 'ra ra-key', detail: description || `Requires the ${item}` }
-  }
-  if (expr) {
-    return { label: 'Guarded Exit', icon: 'ra ra-lock', detail: description || 'Protected by scripted condition' }
-  }
-  if (rule) {
-    return { label: `Rule: ${rule}`, icon: 'ra ra-scroll-unfurled', detail: description || `Requires: ${rule}` }
-  }
-  return { label: 'Locked', icon: 'ra ra-lock', detail: description || 'The way is barred' }
-}
-
-
 // Recover from stale snapshots where edges lack the WorldExit UUID by refreshing once.
 watch(sceneExits, (exits) => {
   if (!exits || exits.length === 0) return
@@ -1418,7 +1375,7 @@ const {
   emitSystemMessage,
 })
 
-const { speakLatestAssistantMessage } = useGameAutoSpeak({
+useGameAutoSpeak({
   messages,
   status,
   inputLocked,
@@ -1434,17 +1391,6 @@ const { speakLatestAssistantMessage } = useGameAutoSpeak({
 const handleTrackQuest = (questId: string | null) => {
   setTrackedQuest(questId)
   showQuests.value = false
-}
-
-const brokenImages = ref<Record<string, boolean>>({})
-
-const handleImageError = (path?: string | null) => {
-  if (!path) return
-  brokenImages.value[path] = true
-}
-
-const showImage = (path?: string | null) => {
-  return !!path && !brokenImages.value[path]
 }
 
 useGameSessionLifecycle({
@@ -1465,7 +1411,6 @@ useGameSessionLifecycle({
 
 const {
   hoveredEntity,
-  mousePos,
   tooltipImageFailed,
   contextMenu,
   tooltipStyle,
@@ -1512,8 +1457,6 @@ const {
     return openContainerByHint(hint)
   },
 })
-
-
 
 const handleEquipFromSheet = async (name: string) => {
   sheetDirty.value = true
@@ -1774,7 +1717,7 @@ usePlayAgentAutoLoop()
       :tracker-hidden="isQuestTrackerHidden"
       @close="showQuests = false" 
       @track-quest="handleTrackQuest"
-      @toggle-tracker="(val) => isQuestTrackerHidden = val"
+      @toggle-tracker="(val: boolean) => isQuestTrackerHidden = val"
     />
     <WalkthroughModal
       :open="showWalkthrough"
@@ -1970,7 +1913,7 @@ usePlayAgentAutoLoop()
       :open="showGeneratorModal"
       :proposal="generatorProposal"
       @close="closeGeneratorModal"
-      @completed="(advId, title) => {
+      @completed="(_advId, title) => {
         emitSystemMessage(`SYSTEM: Adventure '${title}' successfully created and added to your archives.`)
         addNotification(`Adventure '${title}' created successfully!`, 'success')
       }"

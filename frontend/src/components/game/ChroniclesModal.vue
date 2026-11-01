@@ -2,7 +2,7 @@
 import { Clock3, History, Sparkles, X } from 'lucide-vue-next'
 import type { SessionCheckpoint } from '@/types'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   checkpoints: SessionCheckpoint[]
   loading?: boolean

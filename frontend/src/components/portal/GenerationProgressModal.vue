@@ -86,7 +86,7 @@ async function resumeGeneration() {
   }
 }
 
-const backendStats = ref<any>(null)
+const backendStats = ref<Record<string, { generated: number; reused: number }> | null>(null)
 async function checkStatus() {
   try {
     const statusData = await api.getAdventureStatus(props.adventureId)

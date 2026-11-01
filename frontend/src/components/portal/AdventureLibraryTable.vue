@@ -1,25 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import type { AdventureTemplateSummary } from '@/types'
 import type { LibrarySessions } from '@/composables/librarySessions'
-import {
-  Edit3,
-  MoreVertical,
-  Download,
-  Trash2,
-  Image,
-  RefreshCw,
-  Sword,
-  BookOpen,
-  MessageSquare,
-  Sparkles,
-  AlertCircle,
-  Plus,
-  Compass,
-  ArrowDownToLine,
-  Loader2,
-  Copy
-} from 'lucide-vue-next'
+import { Edit3, MoreVertical, Download, Trash2, Image, RefreshCw, Sword, BookOpen, MessageSquare, Sparkles, Plus, Compass, Loader2, Copy } from 'lucide-vue-next'
 import { formatCatalogLabel } from '@/composables/usePortalFilters'
 import PendingAdventureCard from './PendingAdventureCard.vue'
 import AdventurePlayActions from './AdventurePlayActions.vue'
@@ -71,7 +54,7 @@ function toggleMenu(id: string, ev: MouseEvent) {
   activeMenuId.value = activeMenuId.value === id ? null : id
 }
 
-function handleGlobalClick(ev: MouseEvent) {
+function handleGlobalClick(_ev: MouseEvent) {
   activeMenuId.value = null
 }
 

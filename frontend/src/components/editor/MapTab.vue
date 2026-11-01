@@ -3,7 +3,7 @@
  * MapTab — Renders the adventure template scenes as an interactive world map.
  * Reuses Dagre for graph layouts and SVG/HTML rendering for visual excellence.
  */
-import { watch, ref, nextTick, onMounted, computed } from 'vue'
+import { watch, ref, onMounted, computed } from 'vue'
 import dagre from 'dagre'
 import mapSvg from '@/assets/svg/fantasy-rpg-map.svg'
 import { visualService } from '@/services/visualService'

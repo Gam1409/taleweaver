@@ -72,13 +72,6 @@ const isProviderConfigured = (providerId: string) => {
   return Boolean(props.configuredKeys?.[providerId])
 }
 
-const isModelCustom = (model: string, provider: string) => {
-  if (!model) return false
-  const predefined = props.availableConstants?.predefined_image_models?.[provider]
-  if (!predefined) return true
-  return !predefined.includes(model)
-}
-
 const isCustomSimple = ref(false)
 const isCustomAdvanced = ref(false)
 

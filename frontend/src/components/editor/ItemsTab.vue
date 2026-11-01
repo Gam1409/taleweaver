@@ -51,15 +51,6 @@ const isContainerLocked = (obj: any): boolean => {
   return Boolean(metadata.code_to_unlock || metadata.item_to_unlock)
 }
 
-const hasMissingImage = (obj: any): boolean => {
-  const raw = String(obj?.image_url || '').trim()
-  if (!raw) return true
-  const lowered = raw.toLowerCase()
-  if (lowered.startsWith('assets/') || lowered.startsWith('/assets/')) return true
-  if (lowered.includes('placeholder_') || lowered.includes('/placeholder-')) return true
-  return false
-}
-
 function buildVisualImageUrl(imagePath?: string | null) {
   if (!imagePath) return ''
   return `${imagePath}?v=${props.visualsCacheVersion}`

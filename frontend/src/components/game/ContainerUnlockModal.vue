@@ -100,13 +100,7 @@ const effectiveDescription = computed(() => {
 const entityNoun = computed(() => (effectiveKind.value === 'exit' ? 'exit' : 'container'))
 
 // Helper to format ID to readable name (e.g. BRONZE_KEY -> Bronze Key)
-const formatIdToName = (id: string): string => {
-  if (!id) return ''
-  return id
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
-}
+
 
 // Find matching key item in inventory
 const matchingInventoryKey = computed(() => {
@@ -119,13 +113,6 @@ const matchingInventoryKey = computed(() => {
 })
 
 const hasRequiredKey = computed(() => !!matchingInventoryKey.value)
-
-const keyNameDisplay = computed(() => {
-  if (matchingInventoryKey.value) {
-    return matchingInventoryKey.value.name || matchingInventoryKey.value.id
-  }
-  return formatIdToName(requiredItemId.value)
-})
 
 const handleCodeSubmit = () => {
   if (!codeInput.value.trim() || props.busy) return

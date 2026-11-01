@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import StatBar from '@/components/game/StatBar.vue'
 import { getImageUrl, getItemIcon, hasRenderableImagePath } from '@/utils/game_icons'
-import { fixNewlines, hasNonZero } from '@/services/hoverEntityService'
+import { hasNonZero } from '@/services/hoverEntityService'
 import { formatObjectIds } from '@/utils/editor_utils'
 import { DoorClosed, DoorClosedLocked } from 'lucide-vue-next'
 
