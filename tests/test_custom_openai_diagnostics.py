@@ -128,3 +128,46 @@ async def test_api_reports_json_failure_after_generation(auth_client, monkeypatc
     assert response.json()["status"] == "error"
     assert "server responded" in response.json()["message"]
     assert SECRET not in response.text
+
+
+@pytest.mark.parametrize("stage", ["configuration", "request_or_response"])
+def test_uncertain_queue_identifies_local_block_and_recovery(stage):
+    from backend.core.inference.registry import InferenceUncertainError
+
+    message = connection_test_diagnostic(
+        InferenceUncertainError(SECRET), stage=stage, model="local-model"
+    )
+    assert "No generation request was sent" in message
+    assert "Model discovery can still work" in message
+    assert "Inference queue" in message
+    assert "Clear stopped request" in message
+    assert SECRET not in message
+
+
+@pytest.mark.asyncio
+async def test_api_reports_uncertain_queue_without_misdiagnosing_endpoint(auth_client, monkeypatch):
+    from backend.core.inference.registry import InferenceUncertainError
+
+    router = SimpleNamespace(
+        aexecute_complex_task=AsyncMock(side_effect=InferenceUncertainError(SECRET))
+    )
+    monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(lambda *args, **kwargs: router))
+    response = await auth_client.post(
+        "/api/settings/test-llm", json={"provider": "custom_openai", "model": "local-model"}
+    )
+    assert response.json()["status"] == "error"
+    assert "No generation request was sent" in response.json()["message"]
+    assert "Clear stopped request" in response.json()["message"]
+    assert SECRET not in response.text
+
+
+@pytest.mark.parametrize("provider", ["custom_openai", "ollama"])
+def test_queue_wait_is_distinct_from_uncertain_recovery(provider):
+    from backend.core.error_diagnostics import diagnose_provider_error
+    from backend.core.inference.registry import InferenceQueueError
+
+    message = diagnose_provider_error(InferenceQueueError(SECRET), provider=provider)
+    assert "No generation request was sent" in message
+    assert "Wait for active requests" in message
+    assert "Clear stopped request" not in message
+    assert SECRET not in message

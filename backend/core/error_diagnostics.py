@@ -7,6 +7,8 @@ into actionable, human-friendly error messages for the UI.
 
 import logging
 
+from backend.core.inference.diagnostics import admission_diagnostic
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,6 +19,9 @@ def diagnose_provider_error(
     context: str = "llm",
 ) -> str:
     """Analyze an exception from an AI provider and return a clear, user-friendly diagnostic message."""
+    queue_message = admission_diagnostic(exc)
+    if queue_message:
+        return queue_message
     lower_text = str(exc or "").lower()
     prov_display = provider.capitalize() if provider else "Provider"
 
@@ -81,13 +86,10 @@ def diagnose_provider_error(
         )
 
     request_error = _diagnose_request_limits(lower_text, prov_display)
-    if request_error:
-        return request_error
-
     # Fallback: Never return raw exception text (str(exc) or exc.message) to the client
     # to prevent information exposure through an exception (CodeQL py/stack-trace-exposure).
     # All technical details must be inspected via server logs.
-    return (
+    return request_error or (
         f"Connection test failed for {prov_display}. "
         "Please check your provider configuration, credentials, and server logs for details."
     )

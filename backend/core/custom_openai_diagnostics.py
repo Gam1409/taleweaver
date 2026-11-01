@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 
 from backend.core.error_diagnostics import diagnose_provider_error
+from backend.core.inference.diagnostics import admission_diagnostic
 
 _URL_ERRORS = {
     "URL must be a non-empty string.": (
@@ -37,6 +38,9 @@ _URL_ERRORS = {
 
 def connection_test_diagnostic(exc: Exception, *, stage: str, model: str) -> str:
     """Use fixed messages only: exceptions can include credentials and model output."""
+    queue_message = admission_diagnostic(exc)
+    if queue_message:
+        return queue_message
     if isinstance(exc, HTTPException) and exc.status_code == 400:
         detail = exc.detail if isinstance(exc.detail, str) else ""
         if detail in _URL_ERRORS:
@@ -47,6 +51,10 @@ def connection_test_diagnostic(exc: Exception, *, stage: str, model: str) -> str
             "Check the saved Base URL (ending in /v1), optional API key and backend log. "
             "Test Model uses saved endpoint settings."
         )
+    return _response_diagnostic(exc, model=model)
+
+
+def _response_diagnostic(exc: Exception, *, model: str) -> str:
     text = str(exc)
     if isinstance(exc, ValueError) and text.startswith(
         (
