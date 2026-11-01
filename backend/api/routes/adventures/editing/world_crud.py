@@ -24,6 +24,7 @@ from backend.api.routes.adventures.editing.schemas import (
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.clothing.authoring import store_editor_clothing
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -304,6 +305,7 @@ async def create_editor_entity(
         str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
     )
     metadata_json = dict(payload.metadata_json or {})
+    store_editor_clothing(metadata_json, payload)
     if payload.entity_type == "NPC" and payload.personality_profile is not None:
         metadata_json["personality_profile"] = payload.personality_profile.model_dump()
     if item_type == "SWITCH":

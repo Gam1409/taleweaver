@@ -5,6 +5,7 @@ interface EntityForm {
   character?: string
   teaser?: string
   entity_id?: string
+  clothing?: { layer?: number; coverage?: string[]; category?: string; opaque?: boolean } | null
   item_type?: string
   combination_ingredients_input?: string[]
   switch_initial_state?: string
@@ -39,6 +40,14 @@ export function entityFormErrors(form: EntityForm, options: ValidationOptions): 
     if ((form.entity_id || '').length > options.maxIdLength) errors.push(`ID must be at most ${options.maxIdLength} characters.`)
   }
   const itemType = String(form.item_type || '').toUpperCase()
+  if (itemType === 'WEARABLE') {
+    const clothing = form.clothing
+    if (!clothing || !Number.isInteger(clothing.layer) || clothing.layer! < 0 || clothing.layer! > 4) errors.push('Clothing: select a layer or prepare missing clothing data.')
+    const regions = ['head', 'torso', 'arms', 'pelvis', 'legs', 'feet', 'hands']
+    const coverage = Array.isArray(clothing?.coverage) ? clothing.coverage : []
+    if (!coverage.length || coverage.some(region => !regions.includes(region)) || new Set(coverage).size !== coverage.length) errors.push('Clothing: select valid, unique covered or placement regions.')
+    if (clothing?.category && !['clothing', 'armor', 'accessory'].includes(clothing.category)) errors.push('Clothing: select a valid category.')
+  }
   const ingredients = (form.combination_ingredients_input || []).filter(Boolean)
   if (itemType === 'CONSTRUCTABLE' && ingredients.length < 2) {
     errors.push('Constructable items require at least two ingredients.')

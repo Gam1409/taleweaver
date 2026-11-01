@@ -31,3 +31,11 @@ test('constructable and switch constraints remain enforced', () => {
     ...options, switchStates: ['OFF', 'ON'], switchTransitions: [{ from: 'OFF', to: 'ON' }],
   }), [])
 })
+
+test('wearable editing requires wardrobe data rather than equipment slots alone', () => {
+  const wearable = { ...npc, item_type: 'WEARABLE', wearable_slots_input: ['Chest'] }
+  assert.ok(entityFormErrors(wearable, options).some(error => error.startsWith('Clothing:')))
+  assert.deepEqual(entityFormErrors({ ...wearable, clothing: { layer: 3, coverage: ['torso', 'arms'] } }, options), [])
+  assert.ok(entityFormErrors({ ...wearable, clothing: { layer: 5, coverage: ['torso'] } }, options).length)
+  assert.ok(entityFormErrors({ ...wearable, clothing: { layer: 3, coverage: ['torso', 'torso'] } }, options).length)
+})

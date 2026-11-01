@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import ClothingItemFields from '@/components/editor/ClothingItemFields.vue'
+import type { ClothingDraft } from '@/services/clothingAuthoring'
 import NpcPersonalityDetails from '@/components/editor/NpcPersonalityDetails.vue'
 import ItemDraftGenerator from '@/components/editor/ItemDraftGenerator.vue'
 import { generateItemDescription, type ItemDraft } from '@/services/itemGeneration'
@@ -34,6 +36,7 @@ const props = defineProps<{
     text_log_format: string
     entity_id: string
     wearable_slots_input: string[]
+    clothing?: ClothingDraft | null
     combination_ingredients_input: string[]
     reveal_rule: string
     is_hidden: boolean
@@ -85,6 +88,7 @@ const emit = defineEmits<{
 }>()
 
 const itemDraftBusy = ref(false)
+const clothingBusy = ref(false)
 const itemDescriptionError = ref('')
 function applyItemDraft(draft: ItemDraft) {
   Object.assign(localForm.value, {
@@ -92,6 +96,7 @@ function applyItemDraft(draft: ItemDraft) {
     is_portable: draft.is_portable,
     wearable_slots_input: draft.wearable_slots,
     text_log_content: draft.text_log_content,
+    clothing: draft.clothing,
   })
 }
 
@@ -492,7 +497,7 @@ watch(() => localForm.value.item_type, (newType) => {
 })
 
 function handleSave() {
-  if (props.isSaving || itemDraftBusy.value || isFormInvalid.value) {
+  if (props.isSaving || itemDraftBusy.value || clothingBusy.value || isFormInvalid.value) {
     return
   }
 
@@ -766,7 +771,7 @@ const textLogPreviewClass = computed(() => {
               <ItemDraftGenerator v-if="isCreateEntityMode && context.type === 'object' && adventureId"
                 :key="context.id" :adventure-id="adventureId" :item-type="localForm.item_type"
                 :fixed-slots="localForm.is_wearable_slots_fixed ? localForm.wearable_slots_input : []"
-                :disabled="isSaving" @draft="applyItemDraft" @busy="itemDraftBusy = $event" />
+                :disabled="isSaving || clothingBusy" @draft="applyItemDraft" @busy="itemDraftBusy = $event" />
               <!-- Editable ID (create mode or scene/npc/object edit mode) -->
               <div v-if="isCreateEntityMode || ['npc', 'object', 'scene'].includes(context.type)" class="space-y-3">
                 <div class="flex justify-between items-center">
@@ -1267,6 +1272,11 @@ const textLogPreviewClass = computed(() => {
                     </label>
                   </div>
                 </div>
+
+                <ClothingItemFields v-if="currentItemType === 'WEARABLE'" :key="context.id"
+                  v-model="localForm.clothing" :adventure-id="adventureId" :name="localForm.name"
+                  :description="localForm.description" :slots="localForm.wearable_slots_input"
+                  :disabled="isSaving || itemDraftBusy" @busy="clothingBusy = $event" />
 
                 <!-- CONSUMABLE: Effects -->
                 <div v-if="currentItemType === 'CONSUMABLE'" class="space-y-4">
@@ -2402,7 +2412,7 @@ const textLogPreviewClass = computed(() => {
             </div>
             <div class="flex justify-end gap-4">
             <button @click="emit('close')" class="px-6 py-2.5 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">Discard</button>
-            <button @click="handleSave" :disabled="isSaving || itemDraftBusy || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
+            <button @click="handleSave" :disabled="isSaving || itemDraftBusy || clothingBusy || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
               <i v-if="isSaving" class="ra ra-cycle animate-spin"></i>
               <span>{{ isSaving ? 'Saving...' : (isCreateEntityMode ? ('Create ' + (context.type === 'npc' ? 'NPC' : context.type.toUpperCase())) : 'Apply Changes') }}</span>
             </button>

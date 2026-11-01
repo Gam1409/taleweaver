@@ -1,3 +1,4 @@
+import type { ClothingDraft } from '@/services/clothingAuthoring'
 import { API_BASE, authHeaders } from '@/services/http'
 
 export interface EntityEditData {
@@ -29,6 +30,7 @@ export interface EntityEditData {
   text_log_content?: string
   text_log_format?: string
   wearable_slots?: string[]
+  clothing?: ClothingDraft | null
   combination_ingredients?: string[]
   reveal_rule?: string | null
   is_hidden?: boolean | null
@@ -112,6 +114,7 @@ export interface EntityCreateData {
   notes?: string
   metadata_json?: Record<string, any>
   wearable_slots?: string[]
+  clothing?: ClothingDraft | null
   combination_ingredients?: string[]
   stat_modifier_strength?: number
   inventory?: any[]

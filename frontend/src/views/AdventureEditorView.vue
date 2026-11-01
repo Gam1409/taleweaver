@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ClothingDraft } from '@/services/clothingAuthoring'
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adventureService } from '@/services/adventureService'
@@ -130,6 +131,7 @@ const editForm = ref({
   text_log_format: 'DOCUMENT',
   entity_id: '',
   wearable_slots_input: [] as string[],
+  clothing: null as ClothingDraft | null,
   combination_ingredients_input: [] as string[],
   reveal_rule: '',
   is_hidden: false,
@@ -299,6 +301,7 @@ function openCreateNpc(targetSceneId?: string) {
     text_log_format: 'DOCUMENT',
     entity_id: candidateId,
     wearable_slots_input: [],
+    clothing: null,
     combination_ingredients_input: [],
     reveal_rule: '',
     is_hidden: false,
@@ -373,6 +376,7 @@ function handleItemTypeSelected(itemType: string, isFixed = false, preselectedSl
     text_log_format: 'DOCUMENT',
     entity_id: defaultId,
     wearable_slots_input: preselectedSlots,
+    clothing: null,
     combination_ingredients_input: [],
     reveal_rule: '',
     is_hidden: false,
@@ -1056,6 +1060,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     text_log_format: String(metadata?.text_log_format || selectedObject?.text_log_format || 'DOCUMENT').trim().toUpperCase(),
     entity_id: String(selectedObject?.id || selectedNpc?.id || selectedScene?.id || id || ''),
     wearable_slots_input: selectedObject?.wearable_slots || [],
+    clothing: selectedObject?.metadata_json?.clothing ? JSON.parse(JSON.stringify(selectedObject.metadata_json.clothing)) : null,
     combination_ingredients_input: Array.isArray(selectedObject?.combination_ingredients)
       ? [...selectedObject.combination_ingredients]
       : (metadata?.combination_ingredients ? [...metadata.combination_ingredients] : []),
@@ -1204,6 +1209,7 @@ async function saveEntityText(data: any) {
           is_portable: itemType !== 'SWITCH',
           inventory: data.inventory || [],
           wearable_slots: data.wearable_slots || undefined,
+          clothing: itemType === 'WEARABLE' ? data.clothing : undefined,
           combination_ingredients: data.combination_ingredients || undefined,
           stat_modifier_strength: data.stat_modifier_strength || undefined,
           is_hidden: data.is_hidden,
@@ -1350,6 +1356,7 @@ async function saveEntityText(data: any) {
         ? data.text_log_format
         : undefined,
       wearable_slots: editEntityContext.value.type === 'object' ? data.wearable_slots : undefined,
+      clothing: editEntityContext.value.type === 'object' && data.item_type === 'WEARABLE' ? data.clothing : undefined,
       combination_ingredients: editEntityContext.value.type === 'object' ? data.combination_ingredients : undefined,
       spatial_position: ['npc', 'object'].includes(editEntityContext.value.type) ? data.spatial_position : undefined,
       reveals_item_id: editEntityContext.value.type === 'object' ? data.reveals_item_id : undefined,

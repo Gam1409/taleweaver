@@ -21,6 +21,10 @@ class Appearance(_VisualModel):
 
 
 class Garment(_VisualModel):
+    category: Literal["clothing", "armor", "accessory"] = Field(
+        default="clothing",
+        description="Accessories (e.g. necklaces, rings) never hide lower clothing across a whole body region. Armor is a visual category, not a grant of combat stats.",
+    )
     layer: Annotated[StrictInt, Field(ge=0, le=4)]
     coverage: list[Region] = Field(min_length=1, max_length=7)
     opaque: StrictBool = True

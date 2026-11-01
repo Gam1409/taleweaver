@@ -58,7 +58,9 @@ def visible_character(
             *[
                 _covered(garments[other.item_id], other)
                 for other in worn
-                if garments[other.item_id].opaque and garments[other.item_id].layer > garment.layer
+                if garments[other.item_id].opaque
+                and garments[other.item_id].category != "accessory"
+                and garments[other.item_id].layer > garment.layer
             ]
         )
         visible = covered - blocked

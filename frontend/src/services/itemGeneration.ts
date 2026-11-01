@@ -1,3 +1,4 @@
+import type { ClothingData } from '@/services/clothingAuthoring'
 import { API_BASE, authHeaders } from '@/services/http'
 
 export interface ItemDraft {
@@ -7,6 +8,7 @@ export interface ItemDraft {
   is_portable: boolean
   wearable_slots: string[]
   text_log_content: string
+  clothing: ClothingData | null
 }
 
 async function generate<T>(adventureId: string, endpoint: string, input: object): Promise<T> {

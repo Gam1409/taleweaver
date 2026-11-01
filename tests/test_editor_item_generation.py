@@ -49,6 +49,7 @@ async def test_draft_does_not_create_item_and_preserves_slot(
             "item_type": "WEARABLE",
             "is_portable": True,
             "wearable_slots": ["Finger"],
+            "clothing": {"category": "accessory", "layer": 4, "coverage": ["torso"]},
         },
     )
     response = await auth_client.post(

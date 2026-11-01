@@ -97,7 +97,10 @@ def test_initial_profiles_reference_canonical_owned_objects_without_duplicates()
         "DRESS"
     ]
     assert len(manifest["objects"]) == 2
-    assert manifest["objects"][0]["metadata_json"]["clothing"] == garment()
+    assert manifest["objects"][0]["metadata_json"]["clothing"] == {
+        **garment(),
+        "category": "clothing",
+    }
     assert manifest["protagonist"]["starting_inventory"] == ["COAT"]
 
 

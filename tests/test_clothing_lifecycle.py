@@ -30,7 +30,7 @@ async def clothing_world(auth_client, monkeypatch, tmp_path):
 
     async def avatar_portrait(ctx, avatar, prot):
         assert avatar.visual_profile["worn"][0]["item_id"] == "COAT"
-        assert ctx.manifest["objects"][0]["clothing"] == garment()
+        assert ctx.manifest["objects"][0]["clothing"] == {**garment(), "category": "clothing"}
         seen.append("avatar")
 
     async def npc_portrait(ctx, npc, *args):
@@ -143,9 +143,12 @@ async def test_initial_profiles_and_canonical_items_exist_before_portraits(
         assert avatar.inventory == ["COAT"]
         assert avatar.visual_profile["worn"][0]["item_id"] == "COAT"
         assert npc.inventory[0]["id"] == "DRESS"
-        assert npc.inventory[0]["clothing"] == garment()
+        assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
         assert npc.visual_profile["appearance"]["age_years"] == 31
-        assert all(obj.metadata_json["clothing"] == garment() for obj in objects)
+        assert all(
+            obj.metadata_json["clothing"] == {**garment(), "category": "clothing"}
+            for obj in objects
+        )
 
 
 async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, clothing_world):
@@ -156,8 +159,11 @@ async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, 
             deepcopy(avatar.visual_profile),
             deepcopy(npc.visual_profile),
         )
-        assert avatar.inventory[0]["metadata_json"]["clothing"] == garment()
-        assert npc.inventory[0]["clothing"] == garment()
+        assert avatar.inventory[0]["metadata_json"]["clothing"] == {
+            **garment(),
+            "category": "clothing",
+        }
+        assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
         assert state.entity_states["__manifest_snapshot__"]["original_manifest"][
             "clothing_settings"
         ] == {"detailed": True}
@@ -190,8 +196,11 @@ async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, 
             avatar, npc, state = await actors(db, restored_id)
             assert avatar.visual_profile == expected_avatar
             assert npc.visual_profile == expected_npc
-            assert avatar.inventory[0]["metadata_json"]["clothing"] == garment()
-            assert npc.inventory[0]["clothing"] == garment()
+            assert avatar.inventory[0]["metadata_json"]["clothing"] == {
+                **garment(),
+                "category": "clothing",
+            }
+            assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
 
 
 async def test_adv_export_import_and_template_copy_preserve_profiles(auth_client, clothing_world):
@@ -200,7 +209,10 @@ async def test_adv_export_import_and_template_copy_preserve_profiles(auth_client
         assert manifest["clothing_settings"] == {"detailed": True}
         assert manifest["protagonist"]["visual_profile"]["worn"][0]["item_id"] == "COAT"
         assert manifest["npcs"][0]["visual_profile"]["worn"][0]["item_id"] == "DRESS"
-        assert manifest["objects"][0]["metadata_json"]["clothing"] == garment()
+        assert manifest["objects"][0]["metadata_json"]["clothing"] == {
+            **garment(),
+            "category": "clothing",
+        }
         owner = (await db.get(AdventureTemplate, "clothing-world")).owner_id
         manifest["adventure"]["title"] = "Imported clothing"
         assert await AdventureTemplateImporter.import_adv_manifest(db, manifest, owner_id=owner)

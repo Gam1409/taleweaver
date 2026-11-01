@@ -11,6 +11,8 @@ from backend.api.routes.adventures.editing.common import _get_owned_adventure_or
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.clothing.authoring import GARMENT_INSTRUCTION
+from backend.engine.clothing.schema import Garment
 from backend.models.user import User
 
 router = APIRouter(tags=["Editor"])
@@ -56,6 +58,7 @@ class ItemDraft(BaseModel):
     is_portable: bool
     wearable_slots: list[Slot] = Field(default_factory=list, max_length=12)
     text_log_content: str = Field(default="", max_length=1000)
+    clothing: Garment | None = None
 
     @model_validator(mode="after")
     def normalize_type_fields(self):
@@ -65,8 +68,11 @@ class ItemDraft(BaseModel):
             raise ValueError("READABLE items require readable text")
         if self.item_type != "READABLE":
             self.text_log_content = ""
+        if self.item_type == "WEARABLE" and self.clothing is None:
+            raise ValueError("Wearable drafts require clothing metadata")
         if self.item_type != "WEARABLE":
             self.wearable_slots = []
+            self.clothing = None
         if self.item_type == "SWITCH":
             self.is_portable = False
         return self
@@ -100,7 +106,7 @@ async def _generate(user: User, context: dict, response_model: type[BaseModel]):
     gm = GameMasterLLM.for_role(user, "small")
     try:
         result = await gm.aexecute_complex_task(
-            system_prompt=_ITEM_PROMPT,
+            system_prompt=_ITEM_PROMPT + GARMENT_INSTRUCTION,
             user_prompt=json.dumps(context, ensure_ascii=False),
             response_model=response_model,
             model=gm.model,

@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
+from backend.engine.clothing.schema import Garment
 from backend.engine.personality.profile import PersonalityProfile
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class EntityUpdateRequest(BaseModel):
     text_log_format: Optional[str] = None
     exit_type: Optional[str] = None
     wearable_slots: Optional[list[str]] = None
+    clothing: Optional[Garment] = None
     combination_ingredients: Optional[list[str]] = None
     reveal_rule: Optional[str] = None
     is_hidden: Optional[bool] = None
@@ -145,6 +147,7 @@ class EntityCreateRequest(BaseModel):
     is_killable: Optional[bool] = None
     metadata_json: Optional[dict[str, Any]] = None
     wearable_slots: Optional[list[str]] = None
+    clothing: Optional[Garment] = None
     combination_ingredients: Optional[list[str]] = None
     stat_modifier_strength: Optional[int] = None
     inventory: Optional[list] = None

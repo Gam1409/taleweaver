@@ -7,7 +7,7 @@ This audit did not call a live LLM or inspect a particular player's saved sessio
 
 ## Findings
 
-### Wearable editor items can lack wardrobe metadata
+### Wearable editor items can lack wardrobe metadata — editor workflow corrected
 
 `ItemDraft` in `backend/api/routes/adventures/editing/item_generation.py` produces a type,
 portability and equipment slots, but no `clothing` metadata. The ordinary editor also allows
@@ -20,8 +20,12 @@ and submit a wear action. The object is a valid inventory/equipment item, but ca
 through the structured wardrobe subsystem without garment metadata. This affects the new
 item draft feature as well as manually authored legacy items.
 
-Recommended correction: expose and validate garment metadata in the item editing workflow,
-including generated drafts, with a review step. Do not equate ownership with wearing.
+Implemented correction: wearable drafts now require validated garment metadata, and the item
+editor exposes category, layer, regions and lower-layer occlusion. **Prepare missing clothing
+data** proposes missing properties without overwriting existing ones or saving automatically.
+The saved metadata feeds wardrobe actions and visible appearance. Accessories never occlude
+whole body regions, but can themselves be hidden under a higher opaque garment. Existing
+unprepared items still need review and saving; ownership does not imply wearing.
 
 ### Empty converted profiles can suppress previously described outfits
 
@@ -61,4 +65,4 @@ The existing clothing, movement and presentation regression selection passed 145
 Separate deterministic reproductions confirmed both findings above. Passing tests establish
 that covered pipeline paths work, not that a particular model obeys the prompts or that all
 editor-to-game clothing workflows are complete. No clothing prompts or behavior were changed
-as part of this audit.
+as part of the initial audit; the editor correction above was implemented subsequently.
