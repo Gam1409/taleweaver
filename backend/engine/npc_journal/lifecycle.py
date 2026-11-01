@@ -66,4 +66,4 @@ async def _rewind_npc(db: AsyncSession, npc: WorldEntity, removed: set[str]) -> 
             if e.get("category") == "appearance" and e.get("source") == "observed"
         ]
         npc.description = appearances[0][:1000] if appearances else ""
-    npc.metadata_json = {**npc.metadata_json, JOURNAL_KEY: journal}
+    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}

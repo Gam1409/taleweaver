@@ -7,11 +7,11 @@ import logging
 import random
 import re
 import time
-from types import SimpleNamespace
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
 from backend.core.inference.player_errors import retryable
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import inspect, select
@@ -309,12 +309,12 @@ class GameTurnManager:
         state: SessionState | None = None,
         adventure: AdventureTemplate | None = None,
         avatar: Avatar | None = None,
-    ):
+    ) -> None:
         self.db = db
         self.game_id = game_id
         self.user = user
         self.state: SessionState | None = state
-        self.adventure: AdventureTemplate | None = adventure
+        self.adventure: AdventureTemplate | AdventureSnapshot | None = adventure
         self.avatar: Avatar | None = avatar
         self.stop_requested = False
         self.turn_language: str | None = None
@@ -336,6 +336,7 @@ class GameTurnManager:
         self._llm_context_builder = TurnLlmContextBuilder(self)
         self.combat = TurnCombatManager(self)
         self.pending_npc_attacks: list[str] = []
+        self._dynamic_scene_images: list[str] = []
         self.guardrails = TurnGuardrailsManager(self)
         self.interactions = TurnInteractionsManager(self)
         self.state_applier = TurnStateApplier(self)
@@ -437,6 +438,8 @@ class GameTurnManager:
         """Persist a ChatMessage and run post-save processing (unhide referenced entities).
         Returns the created ChatMessage instance.
         """
+        if self.state is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         cm = ChatMessage(session_id=self.state.session_id, role=role, content=content)
         self.db.add(cm)
         await self.db.flush()
@@ -510,6 +513,8 @@ class GameTurnManager:
         return pattern.sub(_replace, text)
 
     async def _build_scene_exits_context_json(self) -> str:
+        if self.state is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         exits_res = await self.db.execute(
             select(WorldExit).where(
                 WorldExit.from_scene_id == self.state.current_scene_id,
@@ -564,7 +569,7 @@ class GameTurnManager:
 
     @staticmethod
     def _build_chat_progression_npcs(entities: list[WorldEntity]) -> list[dict]:
-        reduced_npcs = []
+        reduced_npcs: list[dict[str, Any]] = []
         for entity in entities:
             if (entity.entity_type or "").upper() != "NPC":
                 continue
@@ -729,16 +734,14 @@ class GameTurnManager:
 
         if not self.adventure:
             snapshot = AdventureLogic.extract_manifest_snapshot(self.state)
-            snapshot_adventure = (
-                snapshot.get("adventure") if isinstance(snapshot.get("adventure"), dict) else {}
-            )
-            snapshot_manifest = (
-                snapshot.get("original_manifest")
-                if isinstance(snapshot.get("original_manifest"), dict)
-                else {}
-            )
+            snapshot_adventure = snapshot.get("adventure")
+            if not isinstance(snapshot_adventure, dict):
+                snapshot_adventure = {}
+            snapshot_manifest = snapshot.get("original_manifest")
+            if not isinstance(snapshot_manifest, dict):
+                snapshot_manifest = {}
             if snapshot_adventure or snapshot_manifest:
-                self.adventure = SimpleNamespace(
+                self.adventure = AdventureSnapshot(
                     id=snapshot_adventure.get("id") or self.state.template_id or "deleted-template",
                     title=snapshot_adventure.get("title")
                     or (self.state.session.adventure_title if self.state.session else None)
@@ -844,7 +847,12 @@ class GameTurnManager:
     async def _process_turn_inner(
         self, message: str, auto_visualize: bool = False, language: str | None = None
     ) -> AsyncGenerator[str, None]:
-        if not await self.initialize():
+        if (
+            not await self.initialize()
+            or self.state is None
+            or self.avatar is None
+            or self.adventure is None
+        ):
             yield f"event: error\ndata: {json.dumps({'detail': 'Game session not found.'})}\n\n"
             return
 
@@ -1149,7 +1157,7 @@ class GameTurnManager:
             await self.db.flush()
 
         # 3. LLM Processing (Pass 1 & Pass 2)
-        async def _run_llm_cycle_with_lang(msg, av):
+        async def _run_llm_cycle_with_lang(msg: str, av: bool) -> AsyncGenerator[str, None]:
             async for c in self._run_llm_cycle(msg, av, language=language):
                 yield c
 
@@ -1159,11 +1167,11 @@ class GameTurnManager:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            user_safe_error = _friendly_llm_error_message(exc)
-            if not user_safe_error:
+            pipeline_error = _friendly_llm_error_message(exc)
+            if not pipeline_error:
                 logger.exception("[Turn %s] Turn pipeline aborted unexpectedly", self.game_id)
-                user_safe_error = _friendly_llm_unexpected_error_message()
-            yield f"event: error\ndata: {json.dumps({'detail': user_safe_error, 'retryable': retryable(exc)})}\n\n"
+                pipeline_error = _friendly_llm_unexpected_error_message()
+            yield f"event: error\ndata: {json.dumps({'detail': pipeline_error, 'retryable': retryable(exc)})}\n\n"
             return
 
         turn_end = time.perf_counter()
@@ -1201,6 +1209,8 @@ class GameTurnManager:
 
         `narration_only` skips Pass 1 for pure reaction narrations that must not change state.
         """
+        if self.state is None or self.avatar is None or self.adventure is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         _ = auto_visualize
         self._vn_story_beat = None
         self._vn_scene_focus = None
@@ -1555,11 +1565,11 @@ class GameTurnManager:
 
             # Provide compact prior chat context so tool parameters can be derived from discussed details.
             history_lines = []
-            for msg in history[-12:]:
-                role = msg.get("role")
+            for history_message in history[-12:]:
+                role = history_message.get("role")
                 if role not in ("user", "assistant"):
                     continue
-                content = (msg.get("content") or "").strip()
+                content = (history_message.get("content") or "").strip()
                 if not content:
                     continue
                 history_lines.append(f"{role.upper()}: {content[:400]}")
@@ -2379,7 +2389,7 @@ class GameTurnManager:
         into self.state.compressed_history using the configured compression model.
         Emits a system message into the chat and stream when compression occurs.
         """
-        if not bool(getattr(self.state, "enable_history_compression", True)):
+        if self.state is None or not bool(getattr(self.state, "enable_history_compression", True)):
             return
 
         max_turns = getattr(self.state, "max_memory_turns", None)
@@ -2513,8 +2523,10 @@ class GameTurnManager:
             if isawaitable(result):
                 await result
 
-    async def _finalize_session(self, status: str, note: str | None = None):
+    async def _finalize_session(self, status: str, note: str | None = None) -> None:
         """Updates the session status and records the outcome in the user's game log."""
+        if self.state is None or self.adventure is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         previous_status = self.state.session.status if self.state and self.state.session else None
         if self.state.session:
             self.state.session.status = status
@@ -2565,128 +2577,156 @@ class GameTurnManager:
     def _parse_json_string_array(raw: str) -> list[str]:
         return TurnSuggestionsManager.parse_json_string_array(raw)
 
-    def _build_prompt_suggestions_payload(self, *args, **kwargs) -> dict[str, Any]:
-        return self.suggestions.build_prompt_suggestions_payload(*args, **kwargs)
+    def _build_prompt_suggestions_payload(self) -> dict[str, Any]:
+        return self.suggestions.build_prompt_suggestions_payload()
 
-    def _set_prompt_suggestions_state(self, *args, **kwargs) -> None:
-        self.suggestions.set_prompt_suggestions_state(*args, **kwargs)
+    def _set_prompt_suggestions_state(self, suggestions: list[str]) -> None:
+        self.suggestions.set_prompt_suggestions_state(suggestions)
 
-    def _fallback_prompt_suggestions(self, *args, **kwargs) -> list[str]:
-        return self.suggestions.fallback_prompt_suggestions(*args, **kwargs)
+    def _fallback_prompt_suggestions(
+        self,
+        *,
+        scene_label: str,
+        visible_objects: list[str],
+        visible_npcs: list[str],
+        inventory_items: list[str],
+    ) -> list[str]:
+        return self.suggestions.fallback_prompt_suggestions(
+            scene_label=scene_label,
+            visible_objects=visible_objects,
+            visible_npcs=visible_npcs,
+            inventory_items=inventory_items,
+        )
 
-    async def _build_player_only_suggestion_context(self, *args, **kwargs) -> dict[str, Any]:
-        return await self.suggestions.build_player_only_suggestion_context(*args, **kwargs)
+    async def _build_player_only_suggestion_context(self) -> dict[str, Any]:
+        return await self.suggestions.build_player_only_suggestion_context()
 
-    async def _load_last_assistant_message(self, *args, **kwargs) -> str:
-        return await self.suggestions.load_last_assistant_message(*args, **kwargs)
+    async def _load_last_assistant_message(self) -> str:
+        return await self.suggestions.load_last_assistant_message()
 
-    async def _generate_prompt_suggestions(self, *args, **kwargs) -> list[str]:
-        return await self.suggestions.generate_prompt_suggestions(*args, **kwargs)
+    async def _generate_prompt_suggestions(
+        self, last_response: str, *, refresh: bool = False
+    ) -> list[str]:
+        return await self.suggestions.generate_prompt_suggestions(last_response, refresh=refresh)
 
     # --- Adventure Generation & Terminal Epilogue ---
-    def _get_pending_ag_image_confirmation(self, *args, **kwargs) -> dict[str, Any] | None:
-        return self.adventure_gen.get_pending_ag_image_confirmation(*args, **kwargs)
+    def _get_pending_ag_image_confirmation(self) -> dict[str, Any] | None:
+        return self.adventure_gen.get_pending_ag_image_confirmation()
 
-    def _set_pending_ag_image_confirmation(self, *args, **kwargs) -> None:
-        self.adventure_gen.set_pending_ag_image_confirmation(*args, **kwargs)
+    def _set_pending_ag_image_confirmation(self, request: AdventureGenerationRequest) -> None:
+        self.adventure_gen.set_pending_ag_image_confirmation(request)
 
-    def _clear_pending_ag_image_confirmation(self, *args, **kwargs) -> None:
-        self.adventure_gen.clear_pending_ag_image_confirmation(*args, **kwargs)
+    def _clear_pending_ag_image_confirmation(self) -> None:
+        self.adventure_gen.clear_pending_ag_image_confirmation()
 
-    async def _classify_short_intent(self, *args, **kwargs) -> dict[str, Any] | None:
-        return await self.adventure_gen.classify_short_intent(*args, **kwargs)
+    async def _classify_short_intent(
+        self, user_msg: str, system_prompt: str, phase: str
+    ) -> dict[str, Any] | None:
+        return await self.adventure_gen.classify_short_intent(user_msg, system_prompt, phase)
 
-    async def _parse_ag_image_confirmation_decision(self, *args, **kwargs) -> str:
-        return await self.adventure_gen.parse_ag_image_confirmation_decision(*args, **kwargs)
+    async def _parse_ag_image_confirmation_decision(self, user_msg: str) -> str:
+        return await self.adventure_gen.parse_ag_image_confirmation_decision(user_msg)
 
-    async def _is_generation_retry_request(self, *args, **kwargs) -> bool:
-        return await self.adventure_gen.is_generation_retry_request(*args, **kwargs)
+    async def _is_generation_retry_request(self, user_msg: str) -> bool:
+        return await self.adventure_gen.is_generation_retry_request(user_msg)
 
-    def _set_last_ag_generation_request(self, *args, **kwargs) -> None:
-        self.adventure_gen.set_last_ag_generation_request(*args, **kwargs)
+    def _set_last_ag_generation_request(self, request: AdventureGenerationRequest) -> None:
+        self.adventure_gen.set_last_ag_generation_request(request)
 
-    def _get_last_ag_generation_request(self, *args, **kwargs) -> Any:
-        return self.adventure_gen.get_last_ag_generation_request(*args, **kwargs)
+    def _get_last_ag_generation_request(self) -> AdventureGenerationRequest | None:
+        return self.adventure_gen.get_last_ag_generation_request()
 
-    def _set_last_ag_generation_error(self, *args, **kwargs) -> None:
-        self.adventure_gen.set_last_ag_generation_error(*args, **kwargs)
+    def _set_last_ag_generation_error(self, error_type: str | None) -> None:
+        self.adventure_gen.set_last_ag_generation_error(error_type)
 
-    def _get_last_ag_generation_error(self, *args, **kwargs) -> str | None:
-        return self.adventure_gen.get_last_ag_generation_error(*args, **kwargs)
+    def _get_last_ag_generation_error(self) -> str | None:
+        return self.adventure_gen.get_last_ag_generation_error()
 
-    async def _stream_adventure_generator_tools(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.adventure_gen.stream_adventure_generator_tools(*args, **kwargs):
+    async def _stream_adventure_generator_tools(self, event: Any) -> AsyncGenerator[str, None]:
+        async for item in self.adventure_gen.stream_adventure_generator_tools(event):
             yield item
 
-    async def _apply_adventure_generator_tools(self, *args, **kwargs) -> None:
-        return await self.adventure_gen.apply_adventure_generator_tools(*args, **kwargs)
+    async def _apply_adventure_generator_tools(
+        self, event: Any, stream_callback: Callable[[str], Awaitable[None] | None] | None = None
+    ) -> None:
+        return await self.adventure_gen.apply_adventure_generator_tools(event, stream_callback)
 
-    async def _generate_terminal_epilogue_text(self, *args, **kwargs) -> str:
-        return await self.adventure_gen.generate_terminal_epilogue_text(*args, **kwargs)
+    async def _generate_terminal_epilogue_text(self, language: str | None = None) -> str:
+        return await self.adventure_gen.generate_terminal_epilogue_text(language)
 
-    async def create_terminal_epilogue(self, *args, **kwargs) -> dict[str, Any]:
-        return await self.adventure_gen.create_terminal_epilogue(*args, **kwargs)
+    async def create_terminal_epilogue(self, language: str | None = None) -> dict[str, Any]:
+        return await self.adventure_gen.create_terminal_epilogue(language)
 
     # --- Combat ---
-    def _read_combat_state(self, *args, **kwargs) -> dict[str, Any]:
-        return self.combat._read_combat_state(*args, **kwargs)
+    def _read_combat_state(self) -> dict[str, Any]:
+        return self.combat._read_combat_state()
 
-    def _is_combat_active(self, *args, **kwargs) -> bool:
-        return self.combat._is_combat_active(*args, **kwargs)
+    def _is_combat_active(self) -> bool:
+        return self.combat._is_combat_active()
 
-    def _has_combat_phase(self, *args, **kwargs) -> bool:
-        return self.combat._has_combat_phase(*args, **kwargs)
+    def _has_combat_phase(self) -> bool:
+        return self.combat._has_combat_phase()
 
-    def _set_combat_state(self, *args, **kwargs) -> None:
-        self.combat._set_combat_state(*args, **kwargs)
+    def _set_combat_state(self, combat: dict[str, Any]) -> None:
+        self.combat._set_combat_state(combat)
 
-    async def _find_fight_target(self, *args, **kwargs) -> WorldEntity | None:
-        return await self.combat._find_fight_target(*args, **kwargs)
+    async def _find_fight_target(self, target_hint: str) -> WorldEntity | None:
+        return await self.combat._find_fight_target(target_hint)
 
-    async def _find_scene_npc_by_hint(self, *args, **kwargs) -> WorldEntity | None:
-        return await self.combat._find_scene_npc_by_hint(*args, **kwargs)
+    async def _find_scene_npc_by_hint(self, target_hint: str) -> WorldEntity | None:
+        return await self.combat._find_scene_npc_by_hint(target_hint)
 
-    def _is_npc_defeated(self, *args, **kwargs) -> bool:
-        return self.combat._is_npc_defeated(*args, **kwargs)
+    def _is_npc_defeated(self, npc: WorldEntity) -> bool:
+        return self.combat._is_npc_defeated(npc)
 
-    def _entity_stat(self, *args, **kwargs) -> int:
-        return self.combat._entity_stat(*args, **kwargs)
+    def _entity_stat(self, ent: WorldEntity, stat_key: str, fallback: int = 0) -> int:
+        return self.combat._entity_stat(ent, stat_key, fallback)
 
-    def _is_npc_killable(self, *args, **kwargs) -> bool:
-        return self.combat._is_npc_killable(*args, **kwargs)
+    def _is_npc_killable(self, npc: WorldEntity) -> bool:
+        return self.combat._is_npc_killable(npc)
 
-    def _player_damage_dice(self, *args, **kwargs) -> str:
-        return self.combat._player_damage_dice(*args, **kwargs)
+    def _player_damage_dice(self) -> str:
+        return self.combat._player_damage_dice()
 
-    def _enemy_damage_dice(self, *args, **kwargs) -> str:
-        return self.combat._enemy_damage_dice(*args, **kwargs)
+    def _enemy_damage_dice(self, enemy: WorldEntity) -> str:
+        return self.combat._enemy_damage_dice(enemy)
 
-    def _append_combat_log(self, *args, **kwargs) -> None:
-        self.combat._append_combat_log(*args, **kwargs)
+    def _append_combat_log(
+        self,
+        combat: dict[str, Any],
+        text: str,
+        entry_type: str = "log",
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        self.combat._append_combat_log(combat, text, entry_type, data)
 
     async def _emit_combat_final(self, status_note: str | None = None) -> AsyncGenerator[str, None]:
         async for item in self.combat._emit_combat_final(status_note):
             yield item
 
-    async def _emit_combat_aftermath_narration(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.combat._emit_combat_aftermath_narration(*args, **kwargs):
+    async def _emit_combat_aftermath_narration(
+        self, combat: dict[str, Any]
+    ) -> AsyncGenerator[str, None]:
+        async for item in self.combat._emit_combat_aftermath_narration(combat):
             yield item
 
     async def _calculate_npc_total_stats(self, npc: WorldEntity) -> dict[str, Any]:
         return await self.combat._calculate_npc_total_stats(npc)
 
-    async def _handle_fight_start(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.combat._handle_fight_start(*args, **kwargs):
+    async def _handle_fight_start(
+        self, user_msg: str, initiated_by_enemy: bool = False
+    ) -> AsyncGenerator[str, None]:
+        async for item in self.combat._handle_fight_start(user_msg, initiated_by_enemy):
             yield item
 
     async def _auto_trigger_combat_from_gm(self, game_event: GameEvent) -> bool:
         return await self.combat._auto_trigger_combat_from_gm(game_event)
 
-    def _find_consumable(self, *args, **kwargs) -> dict[str, Any] | None:
-        return self.combat._find_consumable(*args, **kwargs)
+    def _find_consumable(self, item_name: str) -> dict[str, Any] | None:
+        return self.combat._find_consumable(item_name)
 
-    def _sync_combat_player_snapshot(self, *args, **kwargs) -> None:
-        self.combat._sync_combat_player_snapshot(*args, **kwargs)
+    def _sync_combat_player_snapshot(self, combat: dict[str, Any]) -> None:
+        self.combat._sync_combat_player_snapshot(combat)
 
     def _description_delta(self, description: str, resource: str) -> int:
         return self.combat._description_delta(description, resource)
@@ -2698,8 +2738,10 @@ class GameTurnManager:
     def _parse_json_object(text: str) -> dict[str, Any] | None:
         return TurnGuardrailsManager._parse_json_object(text)
 
-    async def _request_llm_combat_special_event(self, *args, **kwargs) -> dict[str, Any] | None:
-        return await self.combat._request_llm_combat_special_event(*args, **kwargs)
+    async def _request_llm_combat_special_event(
+        self, combat: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        return await self.combat._request_llm_combat_special_event(combat)
 
     def _consume_item_now(self, item_name: str) -> str:
         return self.combat._consume_item_now(item_name)
@@ -2716,11 +2758,11 @@ class GameTurnManager:
     async def _spawn_scene_item(self, item: dict[str, Any]) -> None:
         return await self.combat._spawn_scene_item(item)
 
-    async def _session_entity_id_exists(self, *args, **kwargs) -> bool:
-        return await self.combat._session_entity_id_exists(*args, **kwargs)
+    async def _session_entity_id_exists(self, entity_id: str) -> bool:
+        return await self.combat._session_entity_id_exists(entity_id)
 
-    async def _collect_existing_item_ids(self, *args, **kwargs) -> set[str]:
-        return await self.combat._collect_existing_item_ids(*args, **kwargs)
+    async def _collect_existing_item_ids(self) -> set[str]:
+        return await self.combat._collect_existing_item_ids()
 
     async def _normalize_loot_items(self, items: list[Any]) -> list[dict[str, Any]]:
         return await self.combat._normalize_loot_items(items)
@@ -2728,11 +2770,11 @@ class GameTurnManager:
     async def _resolve_loot_command(self, user_msg: str, combat: dict[str, Any]) -> str | None:
         return await self.combat._resolve_loot_command(user_msg, combat)
 
-    def _award_combat_victory_xp(self, *args, **kwargs) -> int:
-        return self.combat._award_combat_victory_xp(*args, **kwargs)
+    def _award_combat_victory_xp(self, enemy_ent: WorldEntity) -> int:
+        return self.combat._award_combat_victory_xp(enemy_ent)
 
-    async def _handle_combat_turn(self, *args, **kwargs) -> AsyncGenerator[str, None]:
-        async for item in self.combat._handle_combat_turn(*args, **kwargs):
+    async def _handle_combat_turn(self, user_msg: str) -> AsyncGenerator[str, None]:
+        async for item in self.combat._handle_combat_turn(user_msg):
             yield item
 
     # --- Guardrails ---
@@ -2744,40 +2786,46 @@ class GameTurnManager:
     def _sanitize_inspect_or_search_target(raw_target: str) -> str | None:
         return TurnGuardrailsManager._sanitize_inspect_or_search_target(raw_target)
 
-    async def _extract_inspect_or_search_target(self, *args, **kwargs) -> str | None:
-        return await self.guardrails._extract_inspect_or_search_target(*args, **kwargs)
+    async def _extract_inspect_or_search_target(self, user_msg: str) -> str | None:
+        return await self.guardrails._extract_inspect_or_search_target(user_msg)
 
     async def _collect_inspect_search_visibility_tokens(self) -> tuple[set[str], set[str]]:
         return await self.guardrails._collect_inspect_search_visibility_tokens()
 
-    async def _is_inspect_or_search_target_visible(self, *args, **kwargs) -> bool:
-        return await self.guardrails._is_inspect_or_search_target_visible(*args, **kwargs)
+    async def _is_inspect_or_search_target_visible(self, target_hint: str) -> bool:
+        return await self.guardrails._is_inspect_or_search_target_visible(target_hint)
 
-    async def _guard_non_visible_inspect_or_search(self, *args, **kwargs) -> str | None:
-        return await self.guardrails._guard_non_visible_inspect_or_search(*args, **kwargs)
+    async def _guard_non_visible_inspect_or_search(self, user_msg: str) -> str | None:
+        return await self.guardrails._guard_non_visible_inspect_or_search(user_msg)
 
-    def _is_container_item(self, *args, **kwargs) -> bool:
-        return self.guardrails._is_container_item(*args, **kwargs)
+    def _is_container_item(self, item: Any) -> bool:
+        return self.guardrails._is_container_item(item)
 
-    def _is_container_locked(self, *args, **kwargs) -> bool:
-        return self.guardrails._is_container_locked(*args, **kwargs)
+    def _is_container_locked(
+        self, scene_container: WorldEntity | None, inventory_container: dict[str, Any] | None
+    ) -> bool:
+        return self.guardrails._is_container_locked(scene_container, inventory_container)
 
-    def _extract_access_code(self, *args, **kwargs) -> str | None:
-        return self.guardrails._extract_access_code(*args, **kwargs)
+    def _extract_access_code(self, text: str) -> str | None:
+        return self.guardrails._extract_access_code(text)
 
     async def _resolve_container_from_free_text(
         self, text: str
     ) -> tuple[str, str, str, str, str, bool] | None:
         return await self.guardrails._resolve_container_from_free_text(text)
 
-    async def _enforce_no_dynamic_item_generation(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_no_dynamic_item_generation(*args, **kwargs)
+    async def _enforce_no_dynamic_item_generation(self, event: GameEvent) -> list[str]:
+        return await self.guardrails._enforce_no_dynamic_item_generation(event)
 
-    async def _enforce_constructable_combination(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_constructable_combination(*args, **kwargs)
+    async def _enforce_constructable_combination(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
+        return await self.guardrails._enforce_constructable_combination(event, user_msg)
 
-    async def _enforce_hidden_entity_reveal(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_hidden_entity_reveal(*args, **kwargs)
+    async def _enforce_hidden_entity_reveal(
+        self, event: GameEvent, user_msg: str, draft_narration: str = ""
+    ) -> list[str]:
+        return await self.guardrails._enforce_hidden_entity_reveal(event, user_msg, draft_narration)
 
     async def _is_key_item_referenced(
         self, item_id: str, lowered_msg: str, target_name: str | None = None
@@ -2787,23 +2835,29 @@ class GameTurnManager:
     async def _get_switch_story_flags(self) -> set[str]:
         return await self.guardrails._get_switch_story_flags()
 
-    async def _enforce_container_unlock_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_container_unlock_guardrails(*args, **kwargs)
+    async def _enforce_container_unlock_guardrails(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
+        return await self.guardrails._enforce_container_unlock_guardrails(event, user_msg)
 
-    async def _enforce_exit_unlock_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_exit_unlock_guardrails(*args, **kwargs)
+    async def _enforce_exit_unlock_guardrails(self, event: GameEvent, user_msg: str) -> list[str]:
+        return await self.guardrails._enforce_exit_unlock_guardrails(event, user_msg)
 
-    async def _enforce_switch_transition_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_switch_transition_guardrails(*args, **kwargs)
+    async def _enforce_switch_transition_guardrails(
+        self, event: GameEvent, user_msg: str
+    ) -> list[str]:
+        return await self.guardrails._enforce_switch_transition_guardrails(event, user_msg)
 
-    async def _enforce_npc_movement_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_npc_movement_guardrails(*args, **kwargs)
+    async def _enforce_npc_movement_guardrails(self, event: GameEvent) -> list[str]:
+        return await self.guardrails._enforce_npc_movement_guardrails(event)
 
     async def _enforce_quest_and_award_guardrails(self, event: GameEvent) -> None:
         return await self.guardrails._enforce_quest_and_award_guardrails(event)
 
-    async def _enforce_win_and_loss_guardrails(self, *args, **kwargs) -> list[str]:
-        return await self.guardrails._enforce_win_and_loss_guardrails(*args, **kwargs)
+    async def _enforce_win_and_loss_guardrails(
+        self, event: GameEvent, script_context: Any | None = None
+    ) -> list[str]:
+        return await self.guardrails._enforce_win_and_loss_guardrails(event, script_context)
 
     async def _handle_read_action_unlock(self, read_target: str) -> None:
         return await self.guardrails._handle_read_action_unlock(read_target)
@@ -2895,23 +2949,23 @@ class GameTurnManager:
         )
 
     # --- State Applier ---
-    def _upsert_entity_update(self, *args, **kwargs) -> None:
+    def _upsert_entity_update(self, event: GameEvent, entity_id: str, **fields: object) -> None:
         applier = getattr(self, "state_applier", None)
         if applier is None or not hasattr(applier, "_upsert_entity_update"):
             applier = TurnStateApplier(self)
-        applier._upsert_entity_update(*args, **kwargs)
+        applier._upsert_entity_update(event, entity_id, **fields)
 
-    def _upsert_entity_movement(self, *args, **kwargs) -> None:
+    def _upsert_entity_movement(self, event: GameEvent, entity_id: str, to_scene_id: str) -> None:
         applier = getattr(self, "state_applier", None)
         if applier is None or not hasattr(applier, "_upsert_entity_movement"):
             applier = TurnStateApplier(self)
-        applier._upsert_entity_movement(*args, **kwargs)
+        applier._upsert_entity_movement(event, entity_id, to_scene_id)
 
-    async def _build_map_payload(self, *args, **kwargs) -> dict[str, Any]:
+    async def _build_map_payload(self) -> dict[str, Any]:
         applier = getattr(self, "state_applier", None)
         if applier is None or not hasattr(applier, "_build_map_payload"):
             applier = TurnStateApplier(self)
-        return await applier._build_map_payload(*args, **kwargs)
+        return await applier._build_map_payload()
 
     async def _build_awards_payload(self, adventure: AdventureTemplate | None) -> list[dict]:
         applier = getattr(self, "state_applier", None)
@@ -2919,14 +2973,16 @@ class GameTurnManager:
             applier = TurnStateApplier(self)
         return await applier._build_awards_payload(adventure)
 
-    async def _apply_game_event(self, *args, **kwargs) -> list[str]:
+    async def _apply_game_event(self, event: GameEvent) -> list[str]:
         applier = getattr(self, "state_applier", None)
         if applier is None or not hasattr(applier, "_apply_game_event"):
             applier = TurnStateApplier(self)
-        return await applier._apply_game_event(*args, **kwargs)
+        return await applier._apply_game_event(event)
 
     async def _build_script_context(self) -> GameContext:
         """Builds an isolated GameContext for the scripting sandbox, covering all entities in the session."""
+        if self.state is None or self.avatar is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         ent_res = await self.db.execute(
             select(WorldEntity).where(WorldEntity.session_id == self.state.session_id)
         )
@@ -2957,7 +3013,7 @@ class GameTurnManager:
         )
         for tent in template_entities:
             if isinstance(tent, dict) and tent.get("id") and tent.get("id") not in entities_map:
-                eid = tent.get("id")
+                eid = str(tent["id"])
                 ent_copy = dict(tent)
                 eid_upper = str(eid).strip().upper()
                 if eid in session_overrides:
@@ -3030,6 +3086,8 @@ class GameTurnManager:
         self, changeset: ScriptChangeset, game_event: Any = None
     ) -> list[str]:
         """Applies mutations from ScriptChangeset to models and returns narrative messages."""
+        if self.state is None or self.avatar is None or self.adventure is None:
+            raise RuntimeError("Game turn context has not been initialized.")
         system_messages: list[str] = []
 
         if changeset.player_hp_change:

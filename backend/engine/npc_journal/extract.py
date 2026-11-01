@@ -1,6 +1,7 @@
 """Prepare a small, spoiler-aware extraction request after narration is complete."""
 
 import json
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +50,7 @@ def _bounded_known(npcs: list[WorldEntity], message: ChatMessage) -> list[dict]:
     known = []
     remaining = MAX_KNOWN_CHARACTERS_CHARS - 2
     for npc in sorted(npcs, key=lambda npc: (not relevant(npc), str(npc.id))):
-        row = {"npc_id": npc.id, "name": npc.name, "scene_id": npc.current_scene_id}
+        row: dict[str, Any] = {"npc_id": npc.id, "name": npc.name, "scene_id": npc.current_scene_id}
         if relevant(npc):
             row.update(
                 aliases=journal_of(npc).get("aliases", [])[:5],

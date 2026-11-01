@@ -1,3 +1,5 @@
+from typing import Any
+
 import uuid6
 from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, synonym
@@ -23,9 +25,11 @@ class WorldScene(Base, TimestampMixin):
         String(36), ForeignKey("game_sessions.id", ondelete="CASCADE"), nullable=True
     )
 
-    label = Column(String(100), nullable=False)  # Human readable name
-    description = Column(String(2000), nullable=False)  # Atmospheric description
-    image_url = Column(String(255), nullable=True)  # Scene visual link
+    label: Mapped[str] = mapped_column(String(100), nullable=False)  # Human readable name
+    description: Mapped[str] = mapped_column(
+        String(2000), nullable=False
+    )  # Atmospheric description
+    image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Scene visual link
     decorative_objects = Column(JSON, nullable=True)  # Static, non-interactable background details
     on_enter_scene_script: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     on_enter_scene_text: Mapped[str | None] = mapped_column(String(5000), nullable=True)
@@ -51,8 +55,8 @@ class WorldExit(Base, TimestampMixin):
         String(36), ForeignKey("game_sessions.id", ondelete="CASCADE"), nullable=True
     )
 
-    from_scene_id = Column(String(50), nullable=False)
-    to_scene_id = Column(String(50), nullable=False)
+    from_scene_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    to_scene_id: Mapped[str] = mapped_column(String(50), nullable=False)
 
     label = Column(String(100), nullable=False)  # e.g. "a heavy oak door"
     exit_type = Column(String(20), default="one_way", nullable=False)
@@ -92,12 +96,12 @@ class WorldEntity(Base, TimestampMixin):
     )
 
     entity_type = Column(String(20), nullable=False)  # "NPC" or "OBJECT"
-    name = Column(String(100), nullable=False)
-    description = Column(String(1000), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
 
-    current_scene_id = Column(String(50), nullable=False)
+    current_scene_id: Mapped[str] = mapped_column(String(50), nullable=False)
     spatial_position = Column(String(255), nullable=True)  # e.g. "inside the desk"
-    image_url = Column(String(255), nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Advanced Item Management
     item_type = Column(String(50), nullable=True)  # e.g. "CONSUMABLE", "WEAPON", "KEY", "STATIC"
@@ -129,11 +133,11 @@ class WorldEntity(Base, TimestampMixin):
     )  # Dynamic status/condition notes for GM and narration
     goal = Column(String(1000), nullable=True)
     character = Column(String(1000), nullable=True)
-    hp = Column(Integer, nullable=True)
+    hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_hp = Column(Integer, nullable=True)
-    mana = Column(Integer, nullable=True)
+    mana: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_mana = Column(Integer, nullable=True)
-    stamina = Column(Integer, nullable=True)
+    stamina: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_stamina = Column(Integer, nullable=True)
     voice = Column(String(50), nullable=True)  # Optional Google TTS voice for this NPC
 
@@ -143,12 +147,14 @@ class WorldEntity(Base, TimestampMixin):
     stat_modifier_intelligence = Column(Integer, nullable=True)
     stat_modifier_wisdom = Column(Integer, nullable=True)
     stat_modifier_charisma = Column(Integer, nullable=True)
-    stat_modifier_armor_class = Column(Integer, nullable=True)
+    stat_modifier_armor_class: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_attackable = Column(Boolean, default=True, nullable=False)
     is_killable = Column(Boolean, default=True, nullable=False)
 
     # Optional state, e.g. NPC inventory: [{"name": "Key", "id": "BRONZE_KEY"}]
     inventory = Column(JSON, default=list, nullable=False)
     visual_profile = Column(JSON, nullable=True)
-    metadata_json = Column(JSON, default=dict, nullable=False)  # For stats or dynamic state
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, default=dict, nullable=False
+    )  # For stats or dynamic state
     adventure_id = synonym("template_id")

@@ -24,7 +24,7 @@ class InventoryItem(BaseModel):
     """
 
     id: Optional[str] = Field(
-        None, validation_alias=AliasChoices("id", "item_id", "entity_id")
+        default=None, validation_alias=AliasChoices("id", "item_id", "entity_id")
     )  # WorldEntity ID (if linked)
     name: str
     description: Optional[str] = None
@@ -217,7 +217,7 @@ class AdventureGeneratorToolIntent(BaseModel):
 
     # Discovery
     discovered_entity_ids: Optional[list[str]] = Field(
-        None,
+        default=None,
         description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.",
     )
 
@@ -248,7 +248,7 @@ class GameEvent(BaseModel):
     new_status_effects: Optional[list[str]] = None
     new_inventory_items: Optional[list[InventoryItem]] = None
     removed_inventory_item_ids: Optional[list[str]] = Field(
-        None,
+        default=None,
         validation_alias=AliasChoices(
             "removed_inventory_item_ids", "removed_item_ids", "removed_items"
         ),
@@ -258,7 +258,7 @@ class GameEvent(BaseModel):
 
     # Mapping & Navigation
     new_scene_id: Optional[str] = Field(
-        None, validation_alias=AliasChoices("new_scene_id", "scene_id")
+        default=None, validation_alias=AliasChoices("new_scene_id", "scene_id")
     )  # Unique ID for the new location (e.g. "FOREST_CLIFF")
     scene_label: Optional[str] = None  # Human readable name (e.g. "The Whispering Woods")
     exit_label: Optional[str] = None  # How the player got here (e.g. "ventured north")
@@ -272,7 +272,7 @@ class GameEvent(BaseModel):
     updated_entities: Optional[list[WorldEntityUpdate]] = None
     deleted_entities: Optional[list[str]] = None  # List of IDs to remove
     discovered_entity_ids: Optional[list[str]] = Field(
-        None,
+        default=None,
         description="List the IDs of any hidden items or NPCs the player has just discovered, uncovered, or found during this turn.",
     )
 
@@ -285,13 +285,13 @@ class GameEvent(BaseModel):
 
     # Time Management
     extra_time_minutes: int = Field(
-        0,
+        default=0,
         validation_alias=AliasChoices(
             "extra_time_minutes", "extra_time", "extra_time_units", "time_passed"
         ),
     )  # Extra time or units this action takes (added to turn base)
     time_override_minutes: Optional[int] = Field(
-        None,
+        default=None,
         validation_alias=AliasChoices(
             "time_override_minutes", "time_override", "time_override_units"
         ),
@@ -308,12 +308,12 @@ class GameEvent(BaseModel):
 
     # Sequence System
     sequence_completed: bool = Field(
-        False,
+        default=False,
         description="Set to true if the protagonist has met the end condition for the current sequence.",
     )
 
     combination_intent: bool = Field(
-        False,
+        default=False,
         description="Set to true if the player's message indicates they are attempting to combine, craft, mix, assemble, or use multiple items together (in any language).",
     )
 

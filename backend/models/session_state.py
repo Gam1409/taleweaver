@@ -41,7 +41,7 @@ class SessionState(Base, TimestampMixin):
     world_rumors: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True, default=[]
     )
-    compressed_history: Mapped[dict[str, Any] | None] = mapped_column(
+    compressed_history: Mapped[dict[str, Any] | str | None] = mapped_column(
         JSON, nullable=True, default=None
     )
     living_world: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=None)
@@ -49,18 +49,18 @@ class SessionState(Base, TimestampMixin):
     start_datetime = Column(String(36), nullable=True)
 
     # Session-specific overrides/copies from template
-    plot = Column(String(5000), nullable=True)
-    rules = Column(String(5000), nullable=True)
+    plot: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    rules: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     walkthrough: Mapped[str | None] = mapped_column(String(20000), nullable=True)
-    completed_condition = Column(String(1000), nullable=True)
-    gameover_condition = Column(String(1000), nullable=True)
-    completed_guard_expression = Column(String(2000), nullable=True)
-    gameover_guard_expression = Column(String(2000), nullable=True)
+    completed_condition: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    gameover_condition: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    completed_guard_expression: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    gameover_guard_expression: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     # Active Sequence Tracking
     active_sequence_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     active_sequence_order = Column(Integer, default=1, nullable=False)
-    tts_director_notes = Column(String(5000), nullable=True)
+    tts_director_notes: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     selected_image_styles = Column(JSON, nullable=True)
     selected_tone = Column(JSON, nullable=True)
 

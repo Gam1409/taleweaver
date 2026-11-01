@@ -246,7 +246,7 @@ class TurnAdventureGenManager:
     async def apply_adventure_generator_tools(
         self,
         event: Any,
-        stream_callback: Callable[[str], Awaitable[None] | None] = None,
+        stream_callback: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> None:
         """Executes adventure-generator tool requests from a structured event/intent model."""
         if not self.manager.adventure.is_adventure_generator:
