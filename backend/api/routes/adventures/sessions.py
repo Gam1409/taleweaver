@@ -39,6 +39,7 @@ from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
 from backend.schemas.checkpoint import RestoreCheckpointResponse, SessionCheckpointResponse
 from backend.schemas.session import GameSessionUpdate
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     ensure_within_data_dir as ensure_within_data_dir_shared,
 )
@@ -759,12 +760,13 @@ async def delete_session(
     # Remove session-bound files from disk.
     safe_game_id = _sanitize_path_component(str(game_session.id))
     if safe_game_id:
-        session_dir = _ensure_within_data_dir(
-            os.path.join(settings.DATA_DIR, "adventures", "sessions", safe_game_id)
+        session_dir = await run_file_operation(
+            _ensure_within_data_dir,
+            os.path.join(settings.DATA_DIR, "adventures", "sessions", safe_game_id),
         )
-        if os.path.isdir(session_dir):
+        if await run_file_operation(os.path.isdir, session_dir):
             try:
-                shutil.rmtree(session_dir)
+                await run_file_operation(shutil.rmtree, session_dir)
             except OSError:
                 logger.exception("Failed to remove session directory for %s", game_id)
     else:

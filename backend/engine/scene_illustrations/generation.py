@@ -17,6 +17,7 @@ from backend.engine.media_engine import MediaEngine
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.models.session_state import SessionState
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 
 from .context import owned_context, require_snapshot
 from .render import image_request, prepare_moment_prompt
@@ -129,7 +130,9 @@ async def generate_scene_illustration(
     except HTTPException:
         if request:
             # The unique path was created by this request, never supplied by a client.
-            Path(request["target_dir"], request["filename"]).unlink(missing_ok=True)
+            await run_file_operation(
+                Path(request["target_dir"], request["filename"]).unlink, missing_ok=True
+            )
         raise
     return {
         "status": "success",

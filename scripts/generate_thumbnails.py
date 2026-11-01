@@ -7,17 +7,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from backend.core.config import settings
 from backend.engine.media_engine import MediaEngine
+from backend.utils.async_files import run_file_operation
+
+
+def _library_directories(library_dir):
+    return [d for d in os.listdir(library_dir) if os.path.isdir(os.path.join(library_dir, d))]
 
 
 async def run_migration():
     print("--- TaleWeaver Thumbnail Migration ---")
     library_dir = os.path.join(settings.DATA_DIR, "adventures", "library")
 
-    if not os.path.exists(library_dir):
+    if not await run_file_operation(os.path.exists, library_dir):
         print(f"Library directory not found: {library_dir}")
         return
 
-    adventures = [d for d in os.listdir(library_dir) if os.path.isdir(os.path.join(library_dir, d))]
+    adventures = await run_file_operation(_library_directories, library_dir)
     print(f"Found {len(adventures)} adventures in library.")
 
     for adventure_id in adventures:

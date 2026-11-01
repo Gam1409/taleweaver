@@ -130,7 +130,7 @@ class AdventureTemplateImporter:
         logger.info(f"Found {len(files)} potential adventures to import in {directory}")
 
         for filename in files:
-            file_path = os.path.abspath(os.path.join(directory, filename))
+            file_path = await run_file_operation(os.path.abspath, os.path.join(directory, filename))
             try:
                 success = await AdventureTemplateImporter.import_file(
                     db,

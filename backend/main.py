@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -13,8 +12,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import Response
 
 # Import all models so SQLAlchemy metadata registers them before create_all
 import backend.core.startup_logging
@@ -45,6 +42,7 @@ from backend.core.config import settings
 from backend.core.database import run_db_migrations
 from backend.core.diagnostic_http import DiagnosticMiddleware, session_diagnostic_context
 from backend.core.system_diagnostics import service as diagnostic_service
+from backend.utils.static_media import SafeStaticFiles
 
 logger = logging.getLogger(__name__)
 
@@ -247,53 +245,6 @@ os.makedirs(os.path.join(settings.DATA_DIR, "presets", "adventures"), exist_ok=T
 os.makedirs("adventures", exist_ok=True)
 
 
-class SafeStaticFiles(StaticFiles):
-    """Serve passive media only; runtime state and executable assets remain private."""
-
-    async def get_response(self, path: str, scope) -> Response:
-        from backend.engine.archive_safety import MEDIA_EXTENSIONS
-
-        lowered = path.lower()
-        if Path(path).suffix.lower() not in MEDIA_EXTENSIONS:
-            raise StarletteHTTPException(status_code=403, detail="Access denied")
-
-        full_path, stat_result = self.lookup_path(path)
-        if stat_result is None and "_thumb." in lowered:
-            m = re.match(r"^(.*)_thumb(\.[a-zA-Z0-9]+)$", path, re.IGNORECASE)
-            if m:
-                source_rel = f"{m.group(1)}{m.group(2)}"
-                source_full, source_stat = self.lookup_path(source_rel)
-                if source_stat is not None and os.path.isfile(source_full):
-                    try:
-                        from backend.engine.media_engine import MediaEngine
-
-                        await MediaEngine._generate_thumbnail(source_full)
-                    except Exception as e:
-                        logger.warning(
-                            "Dynamic thumbnail generation failed for %s: %s", source_full, e
-                        )
-
-        resp = await super().get_response(path, scope)
-        if resp.status_code == 200:
-            check_path = (
-                full_path
-                if (full_path and os.path.isfile(full_path))
-                else self.lookup_path(path)[0]
-            )
-            if check_path and os.path.isfile(check_path):
-                try:
-                    with open(check_path, "rb") as f:
-                        if b"<svg" in f.read(512).lower():
-                            resp.headers["Content-Type"] = "image/svg+xml"
-                except OSError:
-                    pass
-        resp.headers["Content-Security-Policy"] = (
-            "sandbox; default-src 'none'; style-src 'unsafe-inline'"
-        )
-        resp.headers["X-Content-Type-Options"] = "nosniff"
-        return resp
-
-
 # Mount the entire DATA_DIR under /data for robustness, with security filters
 app.mount("/data", SafeStaticFiles(directory=os.path.abspath(settings.DATA_DIR)), name="data")
 
@@ -308,7 +259,7 @@ BACKEND_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 if FRONTEND_DIST_DIR.is_dir():
     # First, define a route for assets that checks both backend and frontend folders
     @app.get("/assets/{path:path}")
-    async def serve_assets(path: str):
+    def serve_assets(path: str):
         # 1. Try backend static assets (like catalog images)
         backend_asset = _safe_join(str(BACKEND_ASSETS_DIR), path)
         if backend_asset and os.path.isfile(backend_asset):
@@ -323,7 +274,7 @@ if FRONTEND_DIST_DIR.is_dir():
 
     # Catch-all for SPA client-side routing
     @app.get("/{catchall:path}")
-    async def serve_spa(catchall: str):
+    def serve_spa(catchall: str):
         # Check if the specific file exists in frontend_dist (e.g. favicon.ico)
         full_path = _safe_join(str(FRONTEND_DIST_DIR), catchall)
         if catchall and full_path and os.path.isfile(full_path):

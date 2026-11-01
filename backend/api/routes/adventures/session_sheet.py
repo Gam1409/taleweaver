@@ -14,6 +14,7 @@ from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     data_url_to_local_path,
 )
@@ -294,20 +295,26 @@ async def _sheet_current_scene(db, state):
 async def _sheet_profile_image(db, avatar, state, session_manifest):
     from .logic import AdventureLogic
 
-    profile_image = AdventureLogic.resolve_session_asset(state, "protagonist", avatar.profile_image)
+    snapshot = AdventureLogic.extract_asset_snapshot(state) if state else {}
+    candidate = snapshot.get("protagonist")
+    candidate = candidate if isinstance(candidate, str) and candidate else avatar.profile_image
+    profile_image = await run_file_operation(
+        AdventureLogic.resolve_existing_data_asset_url, candidate
+    )
     if profile_image and "/adventures/sessions/" in profile_image:
-        abs_path = data_url_to_local_path(profile_image)
-        if not abs_path or not os.path.isfile(abs_path):
-            profile_image = AdventureLogic.heal_template_avatar_profile_image(
-                state.template_id, profile_image
+        abs_path = await run_file_operation(data_url_to_local_path, profile_image)
+        if not abs_path or not await run_file_operation(os.path.isfile, abs_path):
+            profile_image = await run_file_operation(
+                AdventureLogic.heal_template_avatar_profile_image, state.template_id, profile_image
             )
     if not profile_image:
         manifest_protagonist = (
             session_manifest.get("protagonist") if isinstance(session_manifest, dict) else None
         )
         if isinstance(manifest_protagonist, dict):
-            profile_image = AdventureLogic.resolve_existing_data_asset_url(
-                manifest_protagonist.get("profile_image")
+            profile_image = await run_file_operation(
+                AdventureLogic.resolve_existing_data_asset_url,
+                manifest_protagonist.get("profile_image"),
             )
     if not profile_image and state.template_id:
         avatar_image_res = await db.execute(
@@ -321,7 +328,9 @@ async def _sheet_profile_image(db, avatar, state, session_manifest):
             .limit(10)
         )
         for candidate in avatar_image_res.scalars().all():
-            resolved = AdventureLogic.resolve_existing_data_asset_url(candidate)
+            resolved = await run_file_operation(
+                AdventureLogic.resolve_existing_data_asset_url, candidate
+            )
             if resolved:
                 profile_image = resolved
                 break

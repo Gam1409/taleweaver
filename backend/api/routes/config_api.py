@@ -27,6 +27,7 @@ from backend.api.routes.settings_normalization import (
 from backend.api.routes.settings_normalization import (
     normalize_tts_settings as _normalize_tts_settings,
 )
+from backend.api.routes.upload_files import save_catalog_image
 from backend.api.routes.visual_jobs import router as visual_jobs_router
 from backend.core.auth import get_current_admin, get_current_user
 from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
@@ -55,8 +56,8 @@ from backend.core.security import encryption_util
 from backend.engine.media_engine import MediaEngine
 from backend.engine.tts_engine import TTSEngine, TTSModelSwitchSuggestionError
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
-    ensure_within_base_dir,
     ensure_within_data_dir,
     safe_data_path,
     sanitize_path_component,
@@ -1115,7 +1116,7 @@ async def test_vision_connection(
 
     try:
         test_dir = _safe_data_path("scratch", "test_connection")
-        os.makedirs(test_dir, exist_ok=True)
+        await run_file_operation(os.makedirs, test_dir, exist_ok=True)
         img_url = await MediaEngine.generate_image(
             prompt="A Wizard portrait",
             model=payload.model,
@@ -1262,7 +1263,7 @@ async def generate_catalog_image(
             return {"status": "error", "message": "Invalid catalog type."}
 
         catalog_dir = _safe_data_path("catalog", catalog_type)
-        os.makedirs(catalog_dir, exist_ok=True)
+        await run_file_operation(os.makedirs, catalog_dir, exist_ok=True)
 
         base_prompt = payload.prompt
         if not base_prompt:
@@ -1316,21 +1317,10 @@ async def upload_catalog_image(
     if not target_id or sanitize_path_component(target_id) != target_id:
         raise HTTPException(status_code=400, detail="Invalid target ID format.")
     try:
-        safe_ext = _extension_from_content_type(file.content_type)
-        filepath = _build_catalog_upload_path(catalog_type, target_id, f"upload.{safe_ext}")
-
-        safe_filepath = _ensure_within_data_dir(filepath)
-        safe_parent_dir = _ensure_within_data_dir(os.path.dirname(safe_filepath))
-        safe_filepath = ensure_within_base_dir(safe_filepath, safe_parent_dir)
-        # Re-verify containment at the sink so the taint analysis trusts the path.
-        data_root = os.path.realpath(settings.DATA_DIR)
-        if os.path.commonpath([os.path.realpath(safe_filepath), data_root]) != data_root:
-            raise ValueError("Invalid filepath: escapes DATA_DIR.")
-        with open(safe_filepath, "wb") as f:
-            f.write(await file.read())
-
-        rel_path = os.path.relpath(safe_filepath, settings.DATA_DIR).replace("\\", "/")
-        return {"status": "success", "image_url": f"/data/{rel_path}"}
+        content = await file.read()
+        return await run_file_operation(
+            save_catalog_image, catalog_type, target_id, file.content_type, content
+        )
     except (ValueError, RuntimeError, TypeError) as exc:
         return _route_error_response(
             "Catalog image upload",

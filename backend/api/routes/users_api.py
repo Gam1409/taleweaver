@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 from typing import Optional
 from uuid import uuid4
 
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.account_api import router as account_router
 from backend.api.routes.auth_api import UserResponse
+from backend.api.routes.upload_files import save_profile_image
 from backend.core.account_recovery import (
     RESET_TOKEN_TTL,
     issue_password_reset_token,
@@ -35,9 +35,9 @@ from backend.core.prompts import (
 from backend.core.security import encryption_util
 from backend.engine.media_engine import MediaEngine
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     ensure_within_data_dir,
-    local_path_to_data_url,
     safe_data_path,
     sanitize_path_component,
 )
@@ -279,17 +279,9 @@ async def upload_my_profile_image(
     if not safe_user_id:
         raise HTTPException(status_code=400, detail="Invalid user identifier")
 
-    upload_dir = safe_data_path("users")
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_ext = _sanitize_image_extension(file.filename)
-    filename = f"{safe_user_id}_{uuid4().hex[:8]}{file_ext}"
-    file_path = _ensure_within_data_dir(os.path.join(upload_dir, filename))
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    current_user.profile_image_url = local_path_to_data_url(file_path)
+    current_user.profile_image_url = await run_file_operation(
+        save_profile_image, safe_user_id, file.filename, file.file
+    )
     await db.commit()
     await db.refresh(current_user)
     return current_user

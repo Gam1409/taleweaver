@@ -81,7 +81,8 @@ exclude = [
 # C90: mccabe (cyclomatic complexity)
 # S: flake8-bandit (security checks: injections, shell executions, unsafe deserialization)
 # SIM: flake8-simplify (clean control flow, eliminating nested ifs and redundant boolean logic)
-select = ["E", "W", "F", "B", "I", "N", "UP", "PL", "C90", "S", "SIM"]
+# ASYNC230/ASYNC240: keep blocking file operations out of async request handlers
+select = ["E", "W", "F", "B", "I", "N", "UP", "PL", "C90", "S", "SIM", "ASYNC230", "ASYNC240"]
 
 # Streamlined ignores to eliminate noisy/superficial warnings and reduce false positives:
 # E501: line-too-long (handled by ruff formatter / soft wrap)

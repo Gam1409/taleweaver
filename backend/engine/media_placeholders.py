@@ -1,12 +1,12 @@
 """Static asset selection and procedural placeholder generation."""
 
-import asyncio
 import logging
 import os
 import uuid
 from typing import Optional
 
 from backend.core.config import settings
+from backend.utils.async_files import run_file_operation
 from backend.utils.image_generator import (
     ColorTheme,
     OrganicGradientStrategy,
@@ -34,8 +34,8 @@ async def generate_placeholder(
 
     safe_target_dir = target_dir
     try:
-        safe_target_dir = _resolve_output_dir(target_dir)
-        os.makedirs(safe_target_dir, exist_ok=True)
+        safe_target_dir = await run_file_operation(_resolve_output_dir, target_dir)
+        await run_file_operation(os.makedirs, safe_target_dir, exist_ok=True)
         cat = category.upper()
 
         static_svg_url = await engine._copy_static_svg_placeholder(
@@ -61,7 +61,9 @@ async def generate_placeholder(
             filename = f"placeholder_{entity_id}_{uuid.uuid4().hex[:6]}.{ext}"
         filename = _normalize_output_filename(filename, ext)
 
-        filepath = _ensure_within_data_dir(os.path.join(safe_target_dir, filename))
+        filepath = await run_file_operation(
+            _ensure_within_data_dir, os.path.join(safe_target_dir, filename)
+        )
 
         # Select strategy and theme based on category
         # Map theme string to ColorTheme enum
@@ -83,10 +85,11 @@ async def generate_placeholder(
         generator = PlaceholderImageGenerator(strategy=strategy)
 
         # Run in thread pool as PIL operations are blocking
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, generator.create_and_save, filepath, (width, height))
+        await run_file_operation(generator.create_and_save, filepath, (width, height))
 
-        rel_path = os.path.relpath(filepath, settings.DATA_DIR).replace("\\", "/")
+        rel_path = (await run_file_operation(os.path.relpath, filepath, settings.DATA_DIR)).replace(
+            "\\", "/"
+        )
         return f"/data/{rel_path}"
     except (OSError, ValueError, TypeError) as e:
         logger.error("Failed to generate high-quality placeholder: %s", e)
