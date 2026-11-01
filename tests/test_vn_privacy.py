@@ -88,17 +88,38 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
     response = await auth_client.get(f"/api/adventures/{SESSION}/vn-settings")
     assert response.json() == {
         "mode": "vn",
-        "settings": {"pace": "leisurely", "scene_staging": False},
+        "settings": {
+            "pace": "leisurely",
+            "scene_staging": False,
+            "visual_preparation": "legacy",
+            "visual_audit": True,
+            "visual_audit_failure": "block",
+        },
     }
     response = await auth_client.patch(
         f"/api/adventures/{SESSION}/vn-settings", json={"pace": "brisk"}
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"mode": "vn", "settings": {"pace": "brisk", "scene_staging": False}}
+    assert response.json() == {
+        "mode": "vn",
+        "settings": {
+            "pace": "brisk",
+            "scene_staging": False,
+            "visual_preparation": "legacy",
+            "visual_audit": True,
+            "visual_audit_failure": "block",
+        },
+    }
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
         assert state.entity_states[STATE_KEY] == social_fixture().model_dump()
-        assert state.entity_states[SETTINGS_KEY] == {"pace": "brisk", "scene_staging": False}
+        assert state.entity_states[SETTINGS_KEY] == {
+            "pace": "brisk",
+            "scene_staging": False,
+            "visual_preparation": "legacy",
+            "visual_audit": True,
+            "visual_audit_failure": "block",
+        }
 
 
 @pytest.mark.parametrize("session_id", ["other-session", "missing-session"])
@@ -121,6 +142,8 @@ async def test_settings_do_not_disclose_or_modify_another_players_session(
     "payload",
     [
         {"pace": "instant"},
+        {"visual_preparation": "automatic"},
+        {"visual_audit_failure": "ignore"},
         {"pace": "brisk", STATE_KEY: {"characters": {}}},
         {"pace": "brisk", "trust": 100},
     ],
@@ -148,3 +171,36 @@ async def test_settings_are_unavailable_for_existing_rpg_sessions(auth_client, p
             f"/api/adventures/{SESSION}/vn-settings", **fields
         )
         assert response.status_code == 409
+
+
+async def test_visual_preparation_patch_preserves_pace_and_older_client_patch_keeps_visual_choices(
+    auth_client, vn_world
+):
+    path = f"/api/adventures/{SESSION}/vn-settings"
+    response = await auth_client.patch(
+        path,
+        json={
+            "visual_preparation": "plan",
+            "visual_audit": False,
+            "visual_audit_failure": "warn",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"] == {
+        "pace": "leisurely",
+        "scene_staging": False,
+        "visual_preparation": "plan",
+        "visual_audit": False,
+        "visual_audit_failure": "warn",
+    }
+    response = await auth_client.patch(path, json={"pace": "brisk"})
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"] == {
+        "pace": "brisk",
+        "scene_staging": False,
+        "visual_preparation": "plan",
+        "visual_audit": False,
+        "visual_audit_failure": "warn",
+    }
+    loaded = await auth_client.get(path)
+    assert loaded.json() == response.json()

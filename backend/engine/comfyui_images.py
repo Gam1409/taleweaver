@@ -72,6 +72,21 @@ async def generate_comfy_image(
         if reference:
             values["image"] = await client.upload(await asyncio.to_thread(reference_png, reference))
         graph = workflow.render(values)
+        from backend.engine.scene_illustrations.plan_artifact import verify_texts
+
+        positive_binding = workflow.bindings.get("prompt")
+        negative_binding = workflow.bindings.get("negative_prompt")
+        positive = (
+            graph[positive_binding.node_id]["inputs"][positive_binding.input_name]
+            if positive_binding
+            else ""
+        )
+        negative = (
+            graph[negative_binding.node_id]["inputs"][negative_binding.input_name]
+            if negative_binding
+            else ""
+        )
+        verify_texts(positive, negative, options)
         record(
             "comfy.mapped_inputs",
             inputs={

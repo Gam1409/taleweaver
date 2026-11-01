@@ -46,7 +46,7 @@ test('VN pace loads persisted choice and generic Save sends only edited pace', a
   f.pace.value = 'brisk'
   assert.equal(await f.save(), true)
   assert.equal(calls[1].options.method, 'PATCH')
-  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk', scene_staging: false })
+  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk', scene_staging: false, visual_preparation: 'legacy', visual_audit: true, visual_audit_failure: 'block' })
 })
 
 test('a failed pace load does not overwrite settings or block unrelated Save', async t => {
@@ -146,7 +146,56 @@ test('scene staging toggle saves independently of narration pace', async t => {
   await tick()
   f.sceneStaging.value = true
   assert.equal(await f.save(), true)
-  assert.deepEqual(JSON.parse(calls[1].body), { pace: 'balanced', scene_staging: true })
+  assert.deepEqual(JSON.parse(calls[1].body), { pace: 'balanced', scene_staging: true, visual_preparation: 'legacy', visual_audit: true, visual_audit_failure: 'block' })
   assert.equal(await f.save(), true)
   assert.equal(calls.length, 2)
+})
+
+
+test('visual preparation loads persisted choices and saves them without changing narration settings', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'visualPreparation, visualAudit, auditFailure, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'leisurely', scene_staging: true, visual_preparation: 'plan', visual_audit: true, visual_audit_failure: 'block' } })
+  })
+  await tick()
+  assert.equal(f.visualPreparation.value, 'plan')
+  assert.equal(f.visualAudit.value, true)
+  f.auditFailure.value = 'warn'
+  assert.equal(await f.save(), true)
+  assert.deepEqual(JSON.parse(calls[1].body), {
+    pace: 'leisurely', scene_staging: true, visual_preparation: 'plan', visual_audit: true, visual_audit_failure: 'warn',
+  })
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 2)
+})
+
+test('older settings retain legacy preparation and auditing defaults until explicitly changed', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'visualPreparation, visualAudit, auditFailure, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'balanced' } })
+  })
+  await tick()
+  assert.equal(f.visualPreparation.value, 'legacy')
+  assert.equal(f.visualAudit.value, true)
+  assert.equal(f.auditFailure.value, 'block')
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 1)
+  f.visualPreparation.value = 'plan'
+  assert.equal(await f.save(), true)
+  assert.equal(JSON.parse(calls[1].body).visual_preparation, 'plan')
+})
+
+test('visual plans expose limits and explicitly request a rebuild', async t => {
+  const jobs = []
+  const f = await fixture(t, 'VnMomentIllustration', { sessionId: 's-a', messageId: 'm-a', canGenerate: true }, 'generate, state, planNotice', async () => reply({ available: true, plan_enabled: true, image_url: null }), async (...args) => {
+    jobs.push(args)
+    return { image_url: '/saved/plan.png', generation_details: { visual_plan: { limited_output_coverage: true, semantic_audit: 'not_run' } } }
+  })
+  await tick()
+  await f.generate(true)
+  assert.equal(jobs[0][1].refresh_plan, true)
+  assert.match(f.planNotice.value, /limited expression/)
+  assert.match(f.planNotice.value, /not been verified/)
 })

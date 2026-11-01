@@ -8,6 +8,7 @@ import { getOriginalImageUrl } from '@/utils/game_icons'
 
 const props = defineProps<{ sessionId: string; messageId: string; messageContent?: string; canGenerate: boolean }>()
 interface MomentState {
+  plan_enabled?: boolean
   staging_status?: string
   available: boolean
   reason: string | null
@@ -21,6 +22,14 @@ const error = ref('')
 const imageUrl = computed(() =>
   state.value?.image_url ? getOriginalImageUrl(state.value.image_url) : ''
 )
+const planNotice = computed(() => {
+  const plan = state.value?.generation_details?.visual_plan as Record<string, unknown> | undefined
+  if (!plan) return ''
+  const notes: string[] = []
+  if (plan.limited_output_coverage) notes.push('Some saved details have limited expression in this prompt format.')
+  if (plan.semantic_audit !== 'passed') notes.push('Visual continuity has not been verified. The image may differ from the saved scene.')
+  return notes.join(' ')
+})
 let controller: AbortController | null = null
 let revision = 0
 
@@ -54,7 +63,7 @@ async function load(): Promise<void> {
   }
 }
 
-async function generate(): Promise<void> {
+async function generate(refreshPlan = false): Promise<void> {
   if (!props.canGenerate || generating.value || !state.value?.available) return
   controller?.abort()
   const request = new AbortController()
@@ -65,7 +74,7 @@ async function generate(): Promise<void> {
   try {
     const result = await runVisualJob(
       'session_illustration',
-      { message_id: props.messageId },
+      { message_id: props.messageId, ...(refreshPlan ? { refresh_plan: true } : {}) },
       undefined,
       request.signal,
       props.sessionId
@@ -120,14 +129,15 @@ onBeforeUnmount(() => {
       <p class="text-xs text-slate-400">Saved with this reply. Later changes to the scene do not update this image.</p>
       <ImageGenerationDetails :key="imageUrl" :details="state?.generation_details" />
     </div>
-    <p v-if="state?.staging_status === 'unconfirmed'" role="status" class="text-xs text-amber-300">Pose and placement could not be confirmed for this reply. The illustration will rely on explicit details in the passage.</p>
+    <p v-if="state?.staging_status === 'unconfirmed'" role="status" class="text-xs text-amber-300">{{ state?.plan_enabled ? 'Pose and placement could not be confirmed for this reply. The saved plan leaves missing details unspecified.' : 'Pose and placement could not be confirmed for this reply. The illustration will rely on explicit details in the passage.' }}</p>
+    <p v-if="planNotice" role="status" class="text-xs text-amber-300">{{ planNotice }}</p>
     <p v-if="loading" role="status" class="text-xs text-slate-400">Loading illustration…</p>
     <button
       v-if="canGenerate && state?.available"
       type="button"
       :disabled="generating"
       class="flex items-center gap-2 rounded-lg border border-rose-300/30 px-3 py-2 text-sm text-rose-200 hover:bg-rose-400/10 disabled:opacity-60"
-      @click="generate"
+      @click="generate()"
     >
       <LoaderCircle v-if="generating" class="h-4 w-4 animate-spin" /><ImagePlus
         v-else
@@ -141,6 +151,7 @@ onBeforeUnmount(() => {
             : 'Illustrate this moment'
       }}
     </button>
+    <button v-if="canGenerate && state?.available && state?.plan_enabled" type="button" :disabled="generating" class="text-xs text-rose-200 underline disabled:opacity-60" @click="generate(true)">Rebuild visual plan and illustrate</button>
     <p v-if="canGenerate && state && !state.available" class="text-xs text-slate-400">
       {{
         state.reason ||

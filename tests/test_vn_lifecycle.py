@@ -184,7 +184,13 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
         manifest = json.loads(archive.read("session.json"))
     exported_states = manifest["session_state"]["entity_states"]
     assert exported_states[STATE_KEY] == social_fixture().model_dump()
-    assert exported_states[SETTINGS_KEY] == {"pace": "leisurely", "scene_staging": False}
+    assert exported_states[SETTINGS_KEY] == {
+        "pace": "leisurely",
+        "scene_staging": False,
+        "visual_preparation": "legacy",
+        "visual_audit": True,
+        "visual_audit_failure": "block",
+    }
     imported = await auth_client.post(
         "/api/adventures/sessions/import",
         files={"file": ("novel.ads", exported.content, "application/zip")},
@@ -195,7 +201,13 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
         assert settings_response.status_code == 200, settings_response.text
         assert settings_response.json() == {
             "mode": "vn",
-            "settings": {"pace": "leisurely", "scene_staging": False},
+            "settings": {
+                "pace": "leisurely",
+                "scene_staging": False,
+                "visual_preparation": "legacy",
+                "visual_audit": True,
+                "visual_audit_failure": "block",
+            },
         }
     async with TestSessionLocal() as db:
         original = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
@@ -208,6 +220,9 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
             assert state.entity_states[SETTINGS_KEY] == {
                 "pace": "leisurely",
                 "scene_staging": False,
+                "visual_preparation": "legacy",
+                "visual_audit": True,
+                "visual_audit_failure": "block",
             }
             registry = state.entity_states[REGISTRY_KEY]
             assert set(registry["images"]) == {message.id}
@@ -249,7 +264,13 @@ async def test_vn_export_remains_playable_when_original_template_is_unavailable(
     assert response.status_code == 200, response.text
     assert response.json() == {
         "mode": "vn",
-        "settings": {"pace": "leisurely", "scene_staging": False},
+        "settings": {
+            "pace": "leisurely",
+            "scene_staging": False,
+            "visual_preparation": "legacy",
+            "visual_audit": True,
+            "visual_audit_failure": "block",
+        },
     }
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == sid))
@@ -278,8 +299,12 @@ async def test_checkpoint_rewinds_feelings_goals_promotion_settings_and_future_p
                 },
             },
         }
+        from backend.engine.visual_plan_lifecycle import KEY, reset
+
+        state.entity_states = reset(state.entity_states)
         before = deepcopy(state.entity_states)
         checkpoint = await SessionCheckpointService.create_checkpoint(db, SESSION, "manual")
+        assert KEY not in checkpoint.state_snapshot["session_state"]["entity_states"]
         await db.commit()
         future = social_fixture()
         future.characters["NPC_NEW"].relationship.trust = -40
@@ -306,7 +331,11 @@ async def test_checkpoint_rewinds_feelings_goals_promotion_settings_and_future_p
         removed = await SessionCheckpointService.restore_checkpoint(db, SESSION, checkpoint.id)
         await db.commit()
         assert removed == 1
-        assert state.entity_states == before
+        from backend.engine.visual_plan_lifecycle import KEY, without_cache
+
+        assert without_cache(state.entity_states) == without_cache(before)
+        assert state.entity_states[KEY]["entries"] == {}
+        assert state.entity_states[KEY]["epoch"] != before[KEY]["epoch"]
         assert await db.get(ChatMessage, "vn-future-message") is None
         assert await db.get(ChatMessage, FIRST_MESSAGE) is not None
 
@@ -355,4 +384,10 @@ async def test_pace_only_patch_preserves_scene_tracking(auth_client, vn_world):
         f"/api/adventures/{SESSION}/vn-settings", json={"pace": "brisk"}
     )
     assert response.status_code == 200
-    assert response.json()["settings"] == {"pace": "brisk", "scene_staging": True}
+    assert response.json()["settings"] == {
+        "pace": "brisk",
+        "scene_staging": True,
+        "visual_preparation": "legacy",
+        "visual_audit": True,
+        "visual_audit_failure": "block",
+    }

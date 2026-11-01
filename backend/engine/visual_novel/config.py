@@ -4,12 +4,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from backend.engine.visual_plan_lifecycle import reset
+
 SETTINGS_KEY = "__vn_settings__"
 
 
 class VnSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    visual_preparation: Literal["legacy", "plan"] = "legacy"
+    visual_audit: bool = True
+    visual_audit_failure: Literal["block", "warn"] = "block"
     scene_staging: bool = False
     pace: Literal["leisurely", "balanced", "brisk"] = "balanced"
 
@@ -28,6 +33,13 @@ def write_settings(state: Any, settings: VnSettings) -> None:
     """Replace the JSON value so SQLAlchemy detects the change without touching NPCs."""
     validated = VnSettings.model_validate(settings)
     states = getattr(state, "entity_states", None)
+    old = read_settings(state)
+    if (old.visual_preparation, old.visual_audit, old.visual_audit_failure) != (
+        validated.visual_preparation,
+        validated.visual_audit,
+        validated.visual_audit_failure,
+    ):
+        states = reset(states)
     if read_settings(state).scene_staging != validated.scene_staging:
         states = dict(states or {})
         states.pop("__scene_staging__", None)

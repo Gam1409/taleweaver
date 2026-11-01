@@ -18,6 +18,7 @@ from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
 from backend.engine.memory_rag.lifecycle import invalidate_memory, memory_snapshot, restore_memory
 from backend.engine.npc_journal.lifecycle import rewind_journals
+from backend.engine.visual_plan_lifecycle import reset, without_cache
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -121,7 +122,7 @@ class SessionCheckpointService:
                 "time_system": state.time_system,
                 "time_config": deepcopy(state.time_config or {}),
                 "inventory": deepcopy(state.inventory or []),
-                "entity_states": deepcopy(state.entity_states or {}),
+                "entity_states": without_cache(state.entity_states),
                 "living_world": deepcopy(state.living_world),
                 "exit_states": deepcopy(state.exit_states or {}),
                 "discovered_scenes": deepcopy(state.discovered_scenes or []),
@@ -247,7 +248,7 @@ class SessionCheckpointService:
         previous_places = deepcopy(registry(state))
         restored_entities = deepcopy(state_snapshot.get("entity_states") or {})
         restored_entities.pop("__portrait_requests__", None)
-        state.entity_states = restored_entities
+        state.entity_states = reset(restored_entities)
         state.living_world = fork_simulation(
             state_snapshot.get("living_world"),
             absence_total=offline_total(game_session.living_world_presence),

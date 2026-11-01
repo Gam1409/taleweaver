@@ -36,6 +36,9 @@ async def generate_image(
 
     prompt = _prepare_prompt(engine, prompt, provider_key, provider_options, style_instruction)
 
+    from backend.engine.scene_illustrations.plan_artifact import verify_media
+
+    verify_media(prompt, provider_options)
     _record_prompt_details(provider_options, provider_key, model, prompt)
 
     if provider_key not in ("ollama", "stable_diffusion", "comfyui") and not api_key:

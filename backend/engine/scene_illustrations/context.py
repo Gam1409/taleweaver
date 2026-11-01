@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.presentation import session_is_vn
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -48,6 +49,7 @@ def illustration_status(state: SessionState, message: ChatMessage) -> dict:
     available = snapshot.get("content_hash") == digest
     return {
         "message_id": message.id,
+        "plan_enabled": read_settings(state).visual_preparation == "plan",
         "staging_status": (snapshot.get("visible_facts") or {}).get("staging_status"),
         "available": available,
         "reason": None

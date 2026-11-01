@@ -36,7 +36,13 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert old_reference == original
     assert state.entity_states["npc_7"] == original["npc_7"]
     assert state.entity_states["__vn_state__"] == original["__vn_state__"]
-    assert state.entity_states[SETTINGS_KEY] == {"pace": pace, "scene_staging": False}
+    assert state.entity_states[SETTINGS_KEY] == {
+        "pace": pace,
+        "scene_staging": False,
+        "visual_preparation": "legacy",
+        "visual_audit": True,
+        "visual_audit_failure": "block",
+    }
     assert read_settings(state).pace == pace
     assert f"PACING: {pace.upper()}." in prompt
     assert "VISUAL NOVEL PRESENTATION" in prompt
@@ -126,3 +132,10 @@ def test_generator_retains_its_tool_contract_even_with_vn_mode():
     )
     assert prompts.ADVENTURE_GENERATOR_INSTRUCTIONS in prompt
     assert "Text Adventure RPG" in prompt
+
+
+def test_visual_preparation_defaults_keep_legacy_path_and_enable_strict_audit():
+    settings = read_settings(SimpleNamespace(entity_states={SETTINGS_KEY: {"pace": "leisurely"}}))
+    assert settings.visual_preparation == "legacy"
+    assert settings.visual_audit is True
+    assert settings.visual_audit_failure == "block"

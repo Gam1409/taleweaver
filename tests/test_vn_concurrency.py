@@ -80,7 +80,13 @@ async def test_real_manager_lease_prevents_lost_pace_and_social_writes(
     assert response.status_code == 200
     async with TestSessionLocal() as db:
         saved = await db.scalar(select(SessionState).where(SessionState.session_id == SESSION))
-        assert saved.entity_states[SETTINGS_KEY] == {"pace": "brisk", "scene_staging": False}
+        assert saved.entity_states[SETTINGS_KEY] == {
+            "pace": "brisk",
+            "scene_staging": False,
+            "visual_preparation": "legacy",
+            "visual_audit": True,
+            "visual_audit_failure": "block",
+        }
         assert saved.entity_states[STATE_KEY]["turn"] == social_fixture().turn + 1
         assert (
             saved.entity_states[STATE_KEY]["characters"]

@@ -15,10 +15,12 @@ from backend.core.visual_trace import current_id, record, traced
 from backend.engine.image_profiles import image_timeout
 from backend.engine.media_engine import MediaEngine
 from backend.engine.memory_rag.persistence import retry_transaction
+from backend.engine.visual_novel.config import read_settings
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.utils.async_files import run_file_operation
 
+from . import plan_cache, plan_preparation
 from .context import owned_context, require_snapshot
 from .render import image_request, prepare_moment_prompt
 from .snapshots import MAX_NARRATION, REGISTRY_KEY, registry_of
@@ -26,6 +28,7 @@ from .snapshots import MAX_NARRATION, REGISTRY_KEY, registry_of
 
 class SceneIllustrationRequest(BaseModel):
     message_id: str = Field(min_length=1, max_length=128)
+    refresh_plan: bool = False
 
 
 async def _try_attach(
@@ -41,6 +44,13 @@ async def _try_attach(
     current = require_snapshot(state, message)
     if current.get("nonce") != snapshot.get("nonce"):
         raise HTTPException(409, "The story changed while generating. This image was not attached.")
+    if (
+        snapshot.get("plan_identity")
+        and plan_cache.token(state, message, current) != snapshot["plan_identity"]
+    ):
+        raise HTTPException(
+            409, "The scene or visual settings changed. This image was not attached."
+        )
     before = deepcopy(state.entity_states or {})
     after = deepcopy(before)
     registry = registry_of(after)
@@ -103,6 +113,7 @@ async def generate_scene_illustration(
     }
     # The hash-verified message also repairs old snapshots that retained the beginning.
     record("snapshot", narration=snapshot["narration"], visible_facts=snapshot["visible_facts"])
+    preferences = read_settings(state)
     request = None
     owner_id = user.id
     try:
@@ -113,7 +124,18 @@ async def generate_scene_illustration(
         details["context_mode"] = "neutral_source"
         request["provider_options"]["_generation_details"] = details
         with collect_queries() as queries:
-            await prepare_moment_prompt(request)
+            if preferences.visual_preparation == "plan":
+                snapshot["plan_identity"] = await plan_preparation.prepare(
+                    request,
+                    snapshot,
+                    session_id,
+                    payload.message_id,
+                    owner_id,
+                    preferences,
+                    payload.refresh_plan,
+                )
+            else:
+                await prepare_moment_prompt(request)
             url = await asyncio.wait_for(
                 MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
             )

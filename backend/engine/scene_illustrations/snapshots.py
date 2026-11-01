@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.visual_plan_lifecycle import prune, without_cache
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 
@@ -124,12 +125,13 @@ async def capture_scene_snapshot(
     }
     registry["snapshots"] = dict(list(registry["snapshots"].items())[-MAX_SNAPSHOTS:])
     states[REGISTRY_KEY] = registry
+    prune(states, set(registry["snapshots"]))
     state.entity_states = states
 
 
 def remap_illustrations(entity_states: dict | None, message_id_map: dict[str, str]) -> dict:
     """Copy/import exact message references, without replacing text or asset URLs."""
-    states = deepcopy(entity_states or {})
+    states = without_cache(entity_states)
     if REGISTRY_KEY not in states:
         return states
     registry = registry_of(states)

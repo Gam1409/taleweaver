@@ -17,6 +17,7 @@ from backend.engine.scene_illustrations.snapshots import (
 )
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.provenance import retract
+from backend.engine.visual_plan_lifecycle import reset
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState, MemorySummary
@@ -46,7 +47,7 @@ def refresh_visual_snapshot(state: SessionState, message: ChatMessage) -> None:
     )
     registry["images"].pop(message.id, None)
     states[REGISTRY_KEY] = registry
-    state.entity_states = states
+    state.entity_states = reset(states)
 
 
 async def refresh_evidence(db: AsyncSession, session: GameSession, message: ChatMessage) -> None:
