@@ -51,9 +51,10 @@ def _count_diff(body: str, count: int, prompt_format: str) -> list[str]:
             counts.append(1)
         # Missing count tags are ambiguous; never infer gender to fill a quota.
         return [f"Expected cast count: {count}"] if any(value != count for value in counts) else []
+    # Solo prose need not declare a count, but explicit contradictions still fail.
     return (
         [f"{count} people"]
-        if count and (not counts or any(value != count for value in counts))
+        if (count > 1 and not counts) or any(value != count for value in counts)
         else []
     )
 
@@ -69,12 +70,15 @@ def literal_diff(body: str, facts: dict, *, prompt_format: str = "description") 
 def requirements(facts: dict, *, prompt_format: str = "description") -> str:
     import json
 
+    cast = len(facts.get("characters", []))
     count_rule = (
         "Use comma-separated visual tags. Do not add a prose cast-count phrase. "
         "If gender-count tags such as 1boy or 2girls are supported by the source, "
         "their total must match the saved cast; do not infer gender to create count tags. "
         if prompt_format == "tags"
-        else f"Include '{len(facts.get('characters', []))} people' as the cast count. "
+        else f"Include '{cast} people' as the cast count. "
+        if cast > 1
+        else ""
     )
     return (
         "\nLiteral fidelity contract: include the exact character names, visible item names "

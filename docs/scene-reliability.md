@@ -19,7 +19,8 @@ Image preparation checks Latin-script literal anchors (character names, visible
 managed-clothing names and confirmed prop positions). Non-Latin source phrases
 remain in scene data but are translated, not required verbatim in English output.
 This intentionally reduces literal coverage for translated facts. Description and
-hybrid formats require a declared cast count. Tags accept counts such as `1boy,
+hybrid formats require a declared cast count for multiple characters. Solo scenes
+may omit the count; any explicit count must still agree with the saved cast. Tags accept counts such as `1boy,
 1girl` or `solo`; contradictory explicit counts fail. Without explicit count tags,
 count verification is skipped rather than inventing gender or requiring prose. A missing anchor triggers
 one feedback retry, then a visible failure before image submission. The checks

@@ -143,6 +143,7 @@ async def test_snapshot_keeps_end_and_preserves_message_hash():
         role="assistant",
         scene_id="room",
         sequence_id=None,
+        revision_id=None,
         content="Earlier scene. " * 2000
         + "The visitor leaves. The nurse stands alone at the window.",
     )

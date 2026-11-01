@@ -94,6 +94,15 @@ async def test_russian_tag_scene_renders_without_retry_or_prose_count(monkeypatc
     assert adapted.call_args.args[0] == "Сцена с книгой на столе"
 
 
+def test_single_character_scenes_do_not_require_a_count_phrase():
+    facts = {"characters": [{"name": "Lina", "clothing_tokens": ["Red coat"]}]}
+    assert fidelity.literal_diff("Lina in a Red coat, a lone figure at the window.", facts) == []
+    contract = fidelity.requirements(facts)
+    assert "1 people" not in contract
+    # Two-character scenes still enforce the declared prose count.
+    assert fidelity.literal_diff("Lina and Miki wait.", FACTS) == ["2 people"]
+
+
 def test_staging_counters_expose_rejected_delta_and_whole_turn_reset(monkeypatch):
     monkeypatch.setattr(reliability_metrics, "_staging", Counter())
     state = SimpleNamespace(current_scene_id="room", entity_states={})
@@ -114,3 +123,33 @@ def test_staging_counters_expose_rejected_delta_and_whole_turn_reset(monkeypatch
         "fail_closed_turns": 1,
         "ready_turns": 1,
     }
+
+
+@pytest.mark.parametrize("prompt_format", ["description", "hybrid"])
+@pytest.mark.parametrize(
+    "phrase,valid",
+    [
+        ("a lone figure", True),
+        ("1 person", True),
+        ("2 people", False),
+        ("0 people", False),
+        ("1 person and 2 people", False),
+    ],
+)
+def test_solo_prose_allows_missing_count_but_rejects_contradictions(prompt_format, phrase, valid):
+    facts = {"characters": [{"name": "Lina"}]}
+    assert (
+        bool(
+            fidelity.literal_diff(
+                f"Lina at the window, {phrase}.", facts, prompt_format=prompt_format
+            )
+        )
+        is not valid
+    )
+
+
+@pytest.mark.parametrize("prompt_format", ["description", "hybrid"])
+def test_empty_scene_rejects_explicit_people(prompt_format):
+    assert fidelity.literal_diff(
+        "2 people at the window.", {"characters": []}, prompt_format=prompt_format
+    )
