@@ -81,7 +81,10 @@ async def prepare_moment_prompt(request: dict) -> None:
     facts = request.get("_scene_facts")
     if facts is not None:
         policy = policy.model_copy(
-            update={"instructions": policy.instructions + fidelity.requirements(facts)}
+            update={
+                "instructions": policy.instructions
+                + fidelity.requirements(facts, prompt_format=policy.format)
+            }
         )
     source = request["prompt"]
     passage = request.pop("_scene_passage", "")
@@ -94,7 +97,9 @@ async def prepare_moment_prompt(request: dict) -> None:
     for attempt in range(2):
         body = await adapt_body(source, policy, options["_prompt_user"], **kwargs)
         diff = (
-            await fidelity.differences(body, facts, options["_prompt_user"])
+            await fidelity.differences(
+                body, facts, options["_prompt_user"], prompt_format=policy.format
+            )
             if facts is not None
             else []
         )

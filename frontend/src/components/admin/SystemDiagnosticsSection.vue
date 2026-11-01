@@ -68,6 +68,13 @@ onMounted(load)
             <dt>{{ String(key).replace(/_/g, ' ') }}</dt><dd>{{ value }}</dd>
           </template>
         </dl>
+        <h2 class="mt-4 font-bold text-white">Scene staging</h2>
+        <p>Completed reconciliations only; skipped turns and model failures are excluded. A rejected delta clears all actor staging for that turn.</p>
+        <dl class="mt-3 grid grid-cols-2 gap-2">
+          <template v-for="(value, key) in settings.reliability.staging ?? {}" :key="key">
+            <dt>{{ String(key).replace(/_/g, ' ') }}</dt><dd>{{ value }}</dd>
+          </template>
+        </dl>
         <h2 class="mt-4 font-bold text-white">Recent post-turn hooks</h2>
         <ul class="mt-2 space-y-1">
           <li v-for="(hook, index) in settings.reliability.hooks ?? []" :key="index">

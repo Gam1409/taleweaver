@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.reliability_metrics import record_staging
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.schema import INSTRUCTIONS, SceneExtraction
@@ -87,6 +88,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         )
         extraction = SceneExtraction.model_validate(response)
         result = reconcile(state, cast, narration, extraction)
+        record_staging(result, len(extraction.changes))
         props.reconcile(state, narration, extraction.props, items, valid_items=valid_items)
     except asyncio.CancelledError:
         raise

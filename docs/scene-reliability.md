@@ -15,8 +15,13 @@ but omitted from rendering. Ownership/equipment is checked again when projecting
 props. Session checkpoints carry these records with the rest of entity state.
 Turning staging off clears derived staging and props.
 
-Image preparation checks literal character names, declared cast count, visible
-managed-clothing names and confirmed prop positions. A missing anchor triggers
+Image preparation checks Latin-script literal anchors (character names, visible
+managed-clothing names and confirmed prop positions). Non-Latin source phrases
+remain in scene data but are translated, not required verbatim in English output.
+This intentionally reduces literal coverage for translated facts. Description and
+hybrid formats require a declared cast count. Tags accept counts such as `1boy,
+1girl` or `solo`; contradictory explicit counts fail. Without explicit count tags,
+count verification is skipped rather than inventing gender or requiring prose. A missing anchor triggers
 one feedback retry, then a visible failure before image submission. The checks
 prove token coverage, not semantic correctness or image accuracy. Arbitrary
 extra characters or contradictory prose cannot be ruled out by substring checks.
@@ -52,3 +57,9 @@ stored in the database. Embeddings are not silently enabled.
 
 Upgrade the database with the normal Alembic migration before starting the new
 backend (`c7e9a1b3d524`). The migration adds narration history columns and hook_runs.
+
+The diagnostics panel also counts completed staging reconciliations, proposed and
+rejected pose/placement deltas, fail-closed turns and ready turns. These counters
+exclude model failures and skipped turns, and reset on process restart. The
+fail-closed policy is unchanged. The scene `adapt_with_llm=false` addendum warning
+remains deferred; NSFW policy and prompts are unchanged.

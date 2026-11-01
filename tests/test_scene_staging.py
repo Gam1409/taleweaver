@@ -196,7 +196,9 @@ class StagingRoles(TurnRoles):
 @pytest.mark.parametrize("fail", [False, True])
 async def test_real_turn_saves_narration_and_message_time_pose(monkeypatch, fail):
     import tests.test_vn_turn_integration as turns
+    from backend.core.reliability_metrics import snapshot as metrics_snapshot
 
+    before_metrics = metrics_snapshot()["staging"].get("reconciliations", 0)
     roles = StagingRoles(fail)
     install_roles(monkeypatch, roles)
     monkeypatch.setattr("backend.engine.scene_staging.runtime.GameMasterLLM", roles)
@@ -226,6 +228,9 @@ async def test_real_turn_saves_narration_and_message_time_pose(monkeypatch, fail
         assert ("ESTABLISHED SCENE STAGING" in next_prompt) is (not fail)
         await db.refresh(session)
         assert session.entity_states[REGISTRY_KEY]["snapshots"][message.id] == first_snapshot
+    assert metrics_snapshot()["staging"].get("reconciliations", 0) - before_metrics == (
+        0 if fail else 2
+    )
 
 
 def test_moving_target_invalidates_old_relative_position_but_repetition_does_not():

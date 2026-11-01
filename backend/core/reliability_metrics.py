@@ -5,6 +5,7 @@ from threading import Lock
 
 _lock = Lock()
 _recall: Counter = Counter()
+_staging: Counter = Counter()
 
 
 def record_recall(metrics: dict, method: str) -> None:
@@ -16,9 +17,21 @@ def record_recall(metrics: dict, method: str) -> None:
             _recall[key] += metrics.get(key, 0)
 
 
+def record_staging(result: dict, proposed: int) -> None:
+    """Count completed reconciliations, not API/model failures or skipped turns."""
+    rejected = int(result.get("rejected", 0))
+    with _lock:
+        _staging["reconciliations"] += 1
+        _staging["proposed_deltas"] += proposed
+        _staging["rejected_deltas"] += rejected
+        _staging["fail_closed_turns"] += int(rejected > 0)
+        _staging["ready_turns"] += int(result.get("status") == "ready")
+
+
 def snapshot() -> dict:
     with _lock:
         return {
             "scope": "Current server process; counters reset on restart",
             "recall": dict(_recall),
+            "staging": dict(_staging),
         }
