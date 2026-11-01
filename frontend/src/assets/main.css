@@ -148,4 +148,35 @@
   display: inline-block;
 }
 
+/* Keep the story and composer usable when a phone keyboard reduces the viewport. */
+@media (max-width: 1023px) {
+  .compact-viewport:has(.game-header) .global-header,
+  .compact-viewport .game-character-stage {
+    display: none;
+  }
+}
 
+@media (min-width: 640px) and (max-width: 1023px) {
+  .compact-viewport .game-header {
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 12px;
+  }
+  .compact-viewport .game-header-title {
+    flex: 1;
+  }
+  .compact-viewport .game-header-controls {
+    max-width: 70%;
+    gap: 4px;
+  }
+}
+
+/* Tablet breakpoints must not reduce primary touch controls to desktop sizes. */
+@media (pointer: coarse) {
+  .game-header button,
+  .game-action-bar button {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+}

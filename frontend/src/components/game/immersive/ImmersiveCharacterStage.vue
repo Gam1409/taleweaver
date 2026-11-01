@@ -32,6 +32,7 @@ function scrollToTop() {
   if (!stageContainerRef.value) return
   stageContainerRef.value.scrollTo({
     top: 0,
+    left: 0,
     behavior: 'smooth'
   })
 }
@@ -87,13 +88,13 @@ function isNpcSpeaking(npc: any): boolean {
 <template>
   <aside
     ref="stageContainerRef"
-    class="flex flex-col gap-2 shrink-0 overflow-y-auto w-20 sm:w-28 md:w-36 lg:w-44 custom-scrollbar pr-1 py-1 max-h-full"
+    class="game-character-stage flex gap-2 shrink-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto w-full sm:w-28 md:w-36 lg:w-44 custom-scrollbar sm:pr-1 py-1 max-h-24 sm:max-h-full"
   >
-    <TransitionGroup name="npc-stage" tag="div" class="flex flex-col gap-2 w-full">
+    <TransitionGroup name="npc-stage" tag="div" class="flex flex-row sm:flex-col gap-2 w-max sm:w-full">
       <div
         v-for="npc in props.npcs"
         :key="npc.id"
-        class="relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
+        class="relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-14 sm:w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
         :class="[
           isNpcSpeaking(npc)
             ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.6)] ring-2 ring-amber-400/60'

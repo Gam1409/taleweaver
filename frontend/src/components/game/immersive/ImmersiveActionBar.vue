@@ -104,14 +104,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative flex items-center justify-between px-4 py-2 border-b border-slate-800/60 gap-3">
+  <div class="game-action-bar relative flex items-center justify-between px-2 sm:px-4 py-2 border-b border-slate-800/60 gap-2 sm:gap-3">
     <!-- Quick Modals Buttons -->
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
       <!-- Quests Button -->
       <button v-if="props.mode !== 'vn'"
         type="button"
         @click="emit('openQuests')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         :class="{ 'ring-2 ring-amber-400/40': props.questGlow }"
         title="Open Quest Log"
       >
@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         @click="emit('openMap')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-sky-400 hover:bg-sky-500/10 text-slate-200 hover:text-sky-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-sky-400 hover:bg-sky-500/10 text-slate-200 hover:text-sky-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         :class="{ 'ring-2 ring-sky-400/40': props.mapGlow }"
         title="Open World Map"
       >
@@ -136,7 +136,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         @click="emit('openSheet')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 hover:bg-emerald-500/10 text-slate-200 hover:text-emerald-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 hover:bg-emerald-500/10 text-slate-200 hover:text-emerald-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         :class="{ 'ring-2 ring-emerald-400/40': props.inventoryGlow }"
         title="Open Character Sheet & Inventory"
       >
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         @click="emit('openChronicles')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-400 hover:bg-indigo-500/10 text-slate-200 hover:text-indigo-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-400 hover:bg-indigo-500/10 text-slate-200 hover:text-indigo-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         title="Open Chronicles Timeline"
       >
         <History class="w-4 h-4 text-indigo-400" />
@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
       <button v-if="props.mode !== 'vn'"
         type="button"
         @click="emit('openWalkthrough')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         title="Adventure Hints & Walkthrough"
       >
         <HelpCircle class="w-4 h-4 text-amber-400" />
@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         @click="emit('openMemories')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-purple-400 hover:bg-purple-500/10 text-slate-200 hover:text-purple-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-purple-400 hover:bg-purple-500/10 text-slate-200 hover:text-purple-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
         title="World Memories & Chronicle"
       >
         <BrainCircuit class="w-4 h-4 text-purple-400" />
@@ -190,26 +190,26 @@ onBeforeUnmount(() => {
         v-if="props.debugMode"
         type="button"
         @click="emit('openDebug')"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/60 hover:border-cyan-400 hover:bg-cyan-500/10 text-cyan-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer shadow-cyan-950/30"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/60 hover:border-cyan-400 hover:bg-cyan-500/10 text-cyan-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer shadow-cyan-950/30"
         title="Open Unified Debug Inspector"
       >
         <Terminal class="w-4 h-4 text-cyan-400" />
         <span class="hidden sm:inline uppercase tracking-wider">Debug</span>
       </button>
+
+      <button type="button" title="Characters you have met" aria-label="Characters" class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900/90 text-slate-200 hover:border-amber-400 text-xs font-bold" @click="emit('openCharacters')">
+        <Users class="w-4 h-4 text-amber-300" /><span class="hidden sm:inline">Characters</span>
+      </button>
+
+      <NarrationCorrectionButton :game-id="gameId" />
     </div>
-
-    <button type="button" title="Characters you have met" aria-label="Characters" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900/90 text-slate-200 hover:border-amber-400 text-xs font-bold" @click="emit('openCharacters')">
-      <Users class="w-4 h-4 text-amber-300" /><span class="hidden sm:inline">Characters</span>
-    </button>
-
     <!-- Ideas Section with Animated Popup List -->
-    <NarrationCorrectionButton :game-id="gameId" />
     <div ref="ideasWrapperRef" class="relative shrink-0">
       <!-- Ideas Trigger Button (Always in English) -->
       <button
         type="button"
         @click="toggleIdeasPopup"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer group/ideas"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer group/ideas"
         :class="[
           showIdeasPopup
             ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-2 ring-amber-400/30'
@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
       <Transition name="popup-slide">
         <div
           v-if="showIdeasPopup"
-          class="absolute bottom-full right-0 mb-3 w-80 sm:w-96 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-amber-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.7)] p-3.5 z-50 flex flex-col gap-2.5"
+          class="absolute bottom-full right-0 mb-3 w-80 sm:w-96 max-w-[calc(100vw-1rem)] max-h-[50dvh] overflow-y-auto rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-amber-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.7)] p-3.5 z-50 flex flex-col gap-2.5"
         >
           <!-- Popup Header -->
           <div class="flex items-center justify-between pb-2 border-b border-slate-800">

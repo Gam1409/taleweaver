@@ -254,7 +254,7 @@ defineExpose({
     />
 
     <!-- 3. MAIN INTERACTIVE STAGE AREA -->
-    <div class="relative z-10 flex-grow min-h-0 flex flex-row gap-2 sm:gap-4 p-2 sm:p-4 lg:p-6 overflow-hidden">
+    <div class="relative z-10 flex-grow min-h-0 flex flex-col sm:flex-row gap-2 sm:gap-4 p-2 sm:p-4 lg:p-6 overflow-hidden">
       <!-- 3A. LEFT / CHARACTER STAGE -->
       <ImmersiveCharacterStage
           :mode="props.mode"
@@ -269,7 +269,7 @@ defineExpose({
       />
 
       <!-- 3B. CENTER / STORY AREA WITH SCENE HOTSPOTS & COMIC FEED -->
-      <main class="flex-1 flex flex-col justify-between min-h-0 relative overflow-hidden">
+      <main class="flex-1 min-w-0 flex flex-col justify-between min-h-0 relative overflow-hidden">
         <ImmersiveSceneHotspots
           :scene-exits="props.sceneExits"
           :scene-switches="props.sceneSwitches"
@@ -336,7 +336,7 @@ defineExpose({
     </div>
 
     <!-- 4. BOTTOM ACTION BAR & USER INPUT -->
-    <footer class="relative z-20 flex flex-col bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
+    <footer class="relative z-20 flex flex-col pb-[env(safe-area-inset-bottom)] bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
       <ImmersiveActionBar
         :game-id="props.gameId"
         :is-evaluating="isEvaluating"

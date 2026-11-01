@@ -16,6 +16,7 @@ function updateAppHeight() {
   const vv = window.visualViewport
   const height = vv?.height ?? window.innerHeight
   document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`)
+  document.documentElement.classList.toggle('compact-viewport', height < 500)
 }
 
 async function checkAuth() {

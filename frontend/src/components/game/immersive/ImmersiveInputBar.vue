@@ -200,7 +200,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="p-3 sm:p-4">
+  <div class="p-2 sm:p-4">
     <!-- Turn Error / Retry Banner -->
     <div
       v-if="props.turnError"
@@ -212,7 +212,7 @@ defineExpose({
         </div>
         <div class="flex flex-col min-w-0">
           <span class="font-black text-red-300 uppercase tracking-wider text-[10px]">Action Failed</span>
-          <span class="truncate font-medium text-slate-200">{{ props.turnError.message }}</span>
+          <span class="break-words font-medium text-slate-200">{{ props.turnError.message }}</span>
         </div>
       </div>
       <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -276,14 +276,16 @@ defineExpose({
       </button>
 
       <!-- Main Input Field -->
-      <div class="relative flex-1">
+      <div class="relative flex-1 min-w-0">
         <input
           ref="inputEl"
           v-model="inputText"
           type="text"
+          aria-label="Your next action"
+          title="TAB for /say, / for commands"
           :disabled="!props.canSendInput"
-          :placeholder="props.isEvaluating ? (props.statusText || 'GM is deciding...') : (props.agentActive ? 'Play-Agent is active. Use the Play-Agent panel to stop it.' : 'What do you do next? (TAB for /say, / for commands)')"
-          class="w-full bg-slate-900/90 border-2 border-slate-700/70 focus:border-amber-400/80 focus:ring-2 focus:ring-amber-400/20 rounded-xl py-2.5 pl-4 pr-10 text-sm sm:text-base text-slate-100 placeholder-slate-500 outline-none transition-all disabled:opacity-50 font-medium"
+          :placeholder="props.isEvaluating ? (props.statusText || 'GM is deciding...') : (props.agentActive ? 'Play-Agent is active. Use the Play-Agent panel to stop it.' : 'What do you do next?')"
+          class="w-full bg-slate-900/90 border-2 border-slate-700/70 focus:border-amber-400/80 focus:ring-2 focus:ring-amber-400/20 rounded-xl py-2.5 pl-4 pr-10 text-base text-slate-100 placeholder-slate-500 outline-none transition-all disabled:opacity-50 font-medium"
           @keydown.tab.prevent.stop="insertSayCommand"
           @keydown="handleKeydown"
         />

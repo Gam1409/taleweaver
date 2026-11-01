@@ -8,7 +8,8 @@ defineProps<{
 <template>
   <p
     v-if="enabled && sessionId"
-    class="mt-0.5 text-[9px] leading-tight font-mono text-slate-500 break-all select-text"
+    class="mt-0.5 text-[9px] leading-tight font-mono text-slate-500 truncate select-text"
+    :title="sessionId"
     aria-label="Session UUID"
   >{{ sessionId }}</p>
 </template>

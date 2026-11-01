@@ -75,9 +75,9 @@ const sequenceOrder = computed(() => {
 </script>
 
 <template>
-  <header class="relative z-20 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-950/75 backdrop-blur-md border-b border-slate-800/80 shadow-2xl shrink-0">
+  <header class="game-header relative z-20 flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:justify-between px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-950/75 backdrop-blur-md border-b border-slate-800/80 shadow-2xl shrink-0">
     <!-- Left: Scene & Sequence Title & Back / Chronicles -->
-    <div class="flex items-center gap-3 min-w-0">
+    <div class="game-header-title flex items-center gap-3 min-w-0 lg:flex-1">
       <button
         type="button"
         @click="emit('openChronicles')"
@@ -87,7 +87,7 @@ const sequenceOrder = computed(() => {
         <History class="w-4 h-4" />
       </button>
 
-      <div class="flex flex-col min-w-0">
+      <div class="flex flex-col min-w-0 flex-1">
         <div class="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap sm:flex-nowrap">
           <!-- Active Sequence Badge with Hover Tooltip -->
           <div
@@ -175,13 +175,13 @@ const sequenceOrder = computed(() => {
     </div>
 
     <!-- Right: Status & Audio Controls -->
-    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+    <div class="game-header-controls flex flex-wrap items-center justify-end gap-1.5 sm:gap-3 shrink-0 lg:max-w-[60%]">
       <!-- Debug Mode Active Indicator -->
       <button
         v-if="props.debugMode"
         type="button"
         @click="emit('openDebug')"
-        class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 hover:border-cyan-400 transition-all cursor-pointer shadow-sm animate-pulse"
+        class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 hover:border-cyan-400 transition-all cursor-pointer shadow-sm animate-pulse"
         title="Debug Mode Active — Click to open Debug Inspector"
       >
         <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
@@ -206,7 +206,7 @@ const sequenceOrder = computed(() => {
           v-if="audioService.isPlaying.value"
           type="button"
           @click="audioService.stop()"
-          class="flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30 transition-all animate-pulse cursor-pointer"
+          class="flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30 transition-all animate-pulse cursor-pointer"
           title="Stop Speech (SPACE)"
         >
           <VolumeX class="w-4 h-4" />
@@ -214,7 +214,7 @@ const sequenceOrder = computed(() => {
         <button
           type="button"
           @click="audioService.toggleAutoSpeech()"
-          class="flex items-center justify-center w-8 h-8 rounded-lg transition-all border cursor-pointer"
+          class="flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg transition-all border cursor-pointer"
           :class="[
             audioService.autoSpeechEnabled.value
               ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
@@ -232,7 +232,7 @@ const sequenceOrder = computed(() => {
       <button
         type="button"
         @click="emit('openSettings')"
-        class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900/80 border border-slate-700/60 text-slate-400 hover:text-white hover:border-amber-500/50 hover:bg-amber-500/10 transition-all cursor-pointer"
+        class="flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg bg-slate-900/80 border border-slate-700/60 text-slate-400 hover:text-white hover:border-amber-500/50 hover:bg-amber-500/10 transition-all cursor-pointer"
         title="Session Settings & Turn Memory"
       >
         <Sliders class="w-4 h-4" />
@@ -242,7 +242,7 @@ const sequenceOrder = computed(() => {
       <button
         type="button"
         @click="emit('exitSession')"
-        class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900/80 border border-slate-700/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/50 hover:bg-rose-500/10 transition-all cursor-pointer"
+        class="flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg bg-slate-900/80 border border-slate-700/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/50 hover:bg-rose-500/10 transition-all cursor-pointer"
         title="Exit Session (Return to Portal)"
       >
         <LogOut class="w-4 h-4" />
@@ -252,7 +252,7 @@ const sequenceOrder = computed(() => {
       <button
         type="button"
         @click="emit('toggleMobileInteract')"
-        class="md:hidden flex items-center justify-center px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 hover:bg-amber-500/30 transition-all text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 cursor-pointer"
+        class="md:hidden min-h-11 flex items-center justify-center px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 hover:bg-amber-500/30 transition-all text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 cursor-pointer"
         title="Toggle Interact Menu"
       >
         <MapIcon class="w-4 h-4" />
