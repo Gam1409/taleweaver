@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
+from starlette.responses import Response
 
 # Import all models so SQLAlchemy metadata registers them before create_all
 import backend.core.startup_logging
@@ -60,7 +62,7 @@ def _safe_join(base_dir: str, *parts: str) -> Optional[str]:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Manages application startup and shutdown lifecycle."""
     diagnostic_service.initialize()
     from backend.core.database import engine
@@ -141,7 +143,7 @@ app = FastAPI(
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception):
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, HTTPException):
         return JSONResponse(
             status_code=exc.status_code,
@@ -153,12 +155,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error occurred.", "error": str(exc)},
+        content={"detail": "Internal server error occurred."},
     )
 
 
 # Security: Allowed hosts
-# Configured via ALLOWED_HOSTS in .env (default: "*" = allow all).
+# Configured via ALLOWED_HOSTS in .env; defaults are the hosts listed in core/config.py.
 # When running behind nginx (Docker), nginx is the security boundary.
 # For a public non-proxied deployment, set ALLOWED_HOSTS=yourdomain.com
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
@@ -182,7 +184,9 @@ app.add_middleware(
 
 # Security Headers Middleware
 @app.middleware("http")
-async def add_security_headers(request, call_next):
+async def add_security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -259,7 +263,7 @@ BACKEND_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 if FRONTEND_DIST_DIR.is_dir():
     # First, define a route for assets that checks both backend and frontend folders
     @app.get("/assets/{path:path}")
-    def serve_assets(path: str):
+    def serve_assets(path: str) -> Response | dict[str, str]:
         # 1. Try backend static assets (like catalog images)
         backend_asset = _safe_join(str(BACKEND_ASSETS_DIR), path)
         if backend_asset and os.path.isfile(backend_asset):
@@ -274,7 +278,7 @@ if FRONTEND_DIST_DIR.is_dir():
 
     # Catch-all for SPA client-side routing
     @app.get("/{catchall:path}")
-    def serve_spa(catchall: str):
+    def serve_spa(catchall: str) -> FileResponse:
         # Check if the specific file exists in frontend_dist (e.g. favicon.ico)
         full_path = _safe_join(str(FRONTEND_DIST_DIR), catchall)
         if catchall and full_path and os.path.isfile(full_path):
@@ -304,7 +308,7 @@ async def health_check() -> dict:
 
 
 @app.post("/api/ping")
-async def ping():
+async def ping() -> dict[str, str]:
     return {"message": "pong"}
 
 

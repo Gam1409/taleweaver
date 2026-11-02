@@ -103,7 +103,7 @@ def recall_block(manager: Any, audience: str, npc_ids: set[str] | None = None) -
     recall = getattr(manager, "_memory_recall", None)
     if recall is None or not recall.enabled:
         return ""
-    metrics = {}
+    metrics: dict[str, Any] = {}
     block, selected = project(
         recall.documents,
         npc_ids=npc_ids,

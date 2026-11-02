@@ -23,10 +23,16 @@ pwd_context = CryptContext(
     pbkdf2_sha256__rounds=_PBKDF2_ITERATIONS,
 )
 
+
 # Use a strong secret key from settings
-SECRET_KEY = getattr(settings, "SECRET_KEY", None)
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY must be configured in settings.")
+def _signing_key() -> str:
+    key = settings.SECRET_KEY
+    if not isinstance(key, str) or not key:
+        raise RuntimeError("SECRET_KEY must be configured in settings.")
+    return key
+
+
+SECRET_KEY = _signing_key()
 ALGORITHM = "HS256"
 # Reduced from 7 days to 24 hours. A refresh-token flow can be layered on
 # top of this in a follow-up; the access-token expiry alone is the primary
@@ -45,11 +51,11 @@ _DUMMY_PASSWORD_HASH = pwd_context.hash("taleweaver-dummy-password")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bool(pwd_context.verify(plain_password, hashed_password))
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return str(pwd_context.hash(password))
 
 
 async def averify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
@@ -147,8 +153,8 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        username = payload.get("sub")
+        if not isinstance(username, str) or not username:
             raise credentials_exception
     except jwt.PyJWTError as exc:
         raise credentials_exception from exc

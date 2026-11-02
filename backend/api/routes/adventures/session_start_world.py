@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 async def clone_template_world(
     db: AsyncSession,
-    template_id,
+    template_id: str,
     new_session: GameSession,
     avatar: Avatar,
-    asset_copy_cache,
-    entity_images,
+    asset_copy_cache: dict[str, str],
+    entity_images: dict[str, str | None],
 ) -> None:
     from .sessions import _copy_data_asset_to_session
 

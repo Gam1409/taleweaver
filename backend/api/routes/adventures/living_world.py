@@ -221,3 +221,23 @@ async def schedule(
     save(state, simulation)
     await db.commit()
     return public_status(simulation)
+
+
+@router.post("/{game_id}/living-world/renew-budget", dependencies=mutation)
+async def renew_budget(
+    game_id: str,
+    payload: Command,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Explicitly authorize another configured batch; never refill silently."""
+    state = await owned(db, game_id, user)
+    simulation = read_simulation(state)
+    check_revision(simulation, payload.expected_revision)
+    if game_id in deliberation.pending or game_id in cycles.pending:
+        raise HTTPException(409, "Wait for the current decision to finish.")
+    simulation.deliberation_attempts = 0
+    live.reset(game_id)
+    save(state, simulation)
+    await db.commit()
+    return public_status(simulation)

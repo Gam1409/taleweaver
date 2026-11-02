@@ -96,17 +96,26 @@ def _job(
     return SummaryJob(*key, message_ids, sources_hash(sources, message_ids, keys), prompt, keys)
 
 
-async def _select_job(db: Any, state: Any, user_id: str) -> SummaryJob | None:
-    documents = await collect_documents(db, state, user_id)
+async def _select_job(
+    db: Any, state: Any, user_id: str, documents: list[MemoryDocument] | None = None
+) -> SummaryJob | None:
+    if documents is None:
+        documents = await collect_documents(db, state, user_id)
     existing = list(
         await db.scalars(
             select(MemorySummary).where(
-                MemorySummary.session_id == state.session_id, MemorySummary.user_id == user_id
+                MemorySummary.session_id == state.session_id,
+                MemorySummary.user_id == user_id,
+                MemorySummary.archived.is_(False),
             )
         )
     )
     by_key: dict[SummaryKey, list[MemorySummary]] = defaultdict(list)
     for row in existing:
+        sources = summary_sources(documents, row.layer, row.npc_id, row.scene_id)
+        if sources_hash(sources, row.source_message_ids, row.source_keys) != row.source_hash:
+            db.info.setdefault("stale_memory_summaries", set()).add(row.id)
+            continue
         by_key[row.layer, row.npc_id, row.scene_id].append(row)
     keys: set[SummaryKey] = {("story_summary", None, None)}
     keys.update(("npc_summary", doc.npc_id, None) for doc in documents if doc.npc_id)
@@ -123,13 +132,27 @@ async def _select_job(db: Any, state: Any, user_id: str) -> SummaryJob | None:
 
 
 async def summarize_one_group(
-    db: Any, user: Any, state: Any, *, epoch: int, lease_token: str
+    db: Any,
+    user: Any,
+    state: Any,
+    *,
+    epoch: int,
+    lease_token: str,
+    documents: list[MemoryDocument] | None = None,
 ) -> bool:
     """Requires a dedicated worker session; commits only complete, still-current sources."""
     session_id, user_id = state.session_id, user.id
     if not await fence(db, session_id, epoch, lease_token):
         return False
-    job = await _select_job(db, state, user_id)
+    job = await _select_job(db, state, user_id, documents)
+    stale = db.info.pop("stale_memory_summaries", set())
+    if stale and await lock_fence(db, session_id, epoch, lease_token):
+        await db.execute(
+            update(MemorySummary)
+            .where(MemorySummary.session_id == session_id, MemorySummary.id.in_(stale))
+            .values(archived=True)
+        )
+        await db.commit()
     if job is None:
         return False
     language = await language_instruction(db, session_id, user)

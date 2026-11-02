@@ -14,6 +14,8 @@ from typing import Optional
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.models.world_map import WorldMap
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +32,7 @@ class MapEngine:
 
     @staticmethod
     def register_visit(
-        world_map,
+        world_map: WorldMap,
         scene_id: str,
         label: Optional[str] = None,
         description: Optional[str] = None,
@@ -79,7 +81,7 @@ class MapEngine:
 
     @staticmethod
     def register_exit(
-        world_map,
+        world_map: WorldMap,
         from_scene: str,
         to_scene: str,
         exit_label: str = "",
@@ -228,7 +230,7 @@ class MapEngine:
         return map_dict
 
     @staticmethod
-    def to_dict(world_map) -> dict:
+    def to_dict(world_map: WorldMap) -> dict:
         """
         Serializes the WorldMap into a raw dictionary for frontend rendering (e.g. Rough.js).
         """

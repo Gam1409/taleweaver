@@ -10,7 +10,7 @@ from backend.engine.clothing.visuals import character_visuals
 class _NarratedNPC:
     def __init__(self, entity: Any, visual: dict | None):
         self._entity = entity
-        self.inventory = []
+        self.inventory: list[dict[str, Any]] = []
         self.description = entity.description
         if visual is not None:
             self.description = "; ".join(

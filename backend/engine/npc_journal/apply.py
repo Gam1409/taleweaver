@@ -122,6 +122,8 @@ async def _apply_character(
     if created:
         npc = _new_npc(character, message)
         db.add(npc)
+    if npc is None:
+        return None
     if (
         not created
         and _introduction(character, message)

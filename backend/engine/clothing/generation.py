@@ -108,7 +108,7 @@ def normalize_manifest_clothing(manifest: dict, *, detailed: bool) -> None:
     }
     blocked: set[str] = set()
     for obj in objects.values():
-        stored = obj.get("metadata_json") if isinstance(obj.get("metadata_json"), dict) else {}
+        stored = raw_metadata if isinstance(raw_metadata := obj.get("metadata_json"), dict) else {}
         garment = sanitize_garment(obj.get("clothing") or stored.get("clothing"))
         if garment and garment.get("underwear") and not detailed:
             blocked.add(obj["id"])

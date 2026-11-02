@@ -22,14 +22,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self.model = model
 
     async def get(self, db: AsyncSession, id: Any) -> ModelType | None:
-        result = await db.execute(select(self.model).filter(self.model.id == id))
-        return result.scalars().first()
+        return await db.get(self.model, id)
 
     async def get_multi(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         result = await db.execute(select(self.model).offset(skip).limit(limit))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
         obj_in_data = jsonable_encoder(obj_in)
@@ -53,7 +52,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         await db.refresh(db_obj)
         return db_obj
 
-    async def remove(self, db: AsyncSession, *, id: str) -> ModelType:
+    async def remove(self, db: AsyncSession, *, id: str) -> ModelType | None:
         obj = await self.get(db=db, id=id)
         if obj:
             await db.delete(obj)

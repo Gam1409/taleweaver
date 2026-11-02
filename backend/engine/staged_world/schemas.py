@@ -1,7 +1,8 @@
 """Small output contracts that assemble into the existing world schema."""
 
 from copy import deepcopy
-from typing import Literal
+from types import GenericAlias
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -30,14 +31,15 @@ DETAIL_SCHEMAS = {
 
 # Keep top-level compatibility fields in one authoritative schema. Descriptions
 # and defaults are copied, so later additions to WorldManifesto are not lost.
+_foundation_fields: dict[str, Any] = {
+    name: (field.annotation, deepcopy(field))
+    for name, field in WorldManifesto.model_fields.items()
+    if name not in {*DETAIL_SCHEMAS, "exits", "protagonist"}
+}
 Foundation = create_model(
     "WorldFoundation",
     __config__=ConfigDict(extra="forbid"),
-    **{
-        name: (field.annotation, deepcopy(field))
-        for name, field in WorldManifesto.model_fields.items()
-        if name not in {*DETAIL_SCHEMAS, "exits", "protagonist"}
-    },
+    **_foundation_fields,
 )
 
 
@@ -74,9 +76,9 @@ class Seed(BaseModel):
     ] = Field(default="", description="Required for object seeds; empty for other categories.")
 
 
-class WorldPlan(BaseModel):
+class _WorldPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    foundation: Foundation
+    foundation: BaseModel
     protagonist: Seed
     scenes: list[Seed] = Field(min_length=1)
     exits: list[WorldExitSchema]
@@ -86,6 +88,9 @@ class WorldPlan(BaseModel):
     quests: list[Seed]
     awards: list[Seed]
     scripts: list[Seed]
+
+
+WorldPlan = create_model("WorldPlan", __base__=_WorldPlan, foundation=(Foundation, ...))
 
 
 class ProtagonistDetail(BaseModel):
@@ -98,5 +103,5 @@ def batch_schema(kind: str) -> type[BaseModel]:
     return create_model(
         f"World{kind.title()}Batch",
         __config__=ConfigDict(extra="forbid"),
-        items=(list[DETAIL_SCHEMAS[kind]], ...),
+        items=(GenericAlias(list, DETAIL_SCHEMAS[kind]), ...),
     )

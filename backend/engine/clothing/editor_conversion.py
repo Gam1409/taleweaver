@@ -21,6 +21,7 @@ from backend.engine.clothing.profiles import (
 from backend.engine.clothing.schema import Appearance, Garment, VisualProfile, WornItem
 from backend.engine.clothing.settings import with_clothing_settings
 from backend.engine.clothing.visuals import canonical_inventory
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.user import User
@@ -82,7 +83,7 @@ def _actor_input(actor: Any, objects: list, *, protagonist: bool) -> dict:
             "id": item["id"],
             "name": str(item.get("name") or "")[:120],
             "description": str(item.get("description") or "")[:400],
-            "clothing": garment_for_item(item).model_dump() if garment_for_item(item) else None,
+            "clothing": garment.model_dump() if (garment := garment_for_item(item)) else None,
         }
         for item in items
     ]
@@ -98,7 +99,7 @@ def _actor_input(actor: Any, objects: list, *, protagonist: bool) -> dict:
     }
 
 
-async def _template_records(db: AsyncSession, adventure) -> tuple[list, list]:
+async def _template_records(db: AsyncSession, adventure: AdventureTemplate) -> tuple[list, list]:
     avatar = await db.scalar(
         select(Avatar)
         .where(
@@ -125,7 +126,7 @@ async def _template_records(db: AsyncSession, adventure) -> tuple[list, list]:
 
 def _validate_actor(result: PreparedActor, source: dict) -> tuple[dict, dict]:
     items = {item["id"]: deepcopy(item) for item in source["owned_items"]}
-    garments = {}
+    garments: dict[str, dict] = {}
     for proposed in result.garments:
         if proposed.item_id not in items or proposed.item_id in garments:
             raise ClothingConversionError(
@@ -140,7 +141,7 @@ def _validate_actor(result: PreparedActor, source: dict) -> tuple[dict, dict]:
     result.appearance.age_years = None
     profile = VisualProfile(appearance=result.appearance, worn=result.worn)
     if any(
-        garment_for_item(items.get(w.item_id, {})) and garment_for_item(items[w.item_id]).underwear
+        (garment := garment_for_item(items.get(w.item_id, {}))) is not None and garment.underwear
         for w in result.worn
     ):
         raise ClothingConversionError("Legacy preparation cannot infer hidden clothing is worn.")
@@ -153,8 +154,10 @@ def _validate_actor(result: PreparedActor, source: dict) -> tuple[dict, dict]:
     return validated.model_dump(), garments
 
 
-async def _prepare(user, sources: list[dict]) -> dict[str, tuple[dict, dict]]:
+async def _prepare(user: User | None, sources: list[dict]) -> dict[str, tuple[dict, dict]]:
     plans = {}
+    if user is None:
+        raise ClothingConversionError("The adventure owner must exist to prepare clothing.")
     try:
         llm = GameMasterLLM.for_role(user, "small")
         for offset in range(0, len(sources), BATCH_SIZE):
@@ -194,7 +197,10 @@ async def _prepare(user, sources: list[dict]) -> dict[str, tuple[dict, dict]]:
 
 def _export_records(actors: list, objects: list) -> dict:
     """Serialize only template rows; the general exporter also includes session rows."""
-    exported = {"npcs": [], "objects": [_serialize_world_entity(obj) for obj in objects]}
+    exported: dict[str, Any] = {
+        "npcs": [],
+        "objects": [_serialize_world_entity(obj) for obj in objects],
+    }
     for actor, protagonist in actors:
         if not protagonist:
             exported["npcs"].append(_serialize_world_entity(actor))
@@ -302,7 +308,9 @@ async def _check_unchanged(db: AsyncSession, records: list) -> None:
             )
 
 
-async def apply_editor_clothing(db: AsyncSession, adventure, detailed: bool, *, user=None) -> dict:
+async def apply_editor_clothing(
+    db: AsyncSession, adventure: AdventureTemplate, detailed: bool, *, user: User | None = None
+) -> dict:
     """Prepare all plans before writes. Caller owns commit/rollback of the whole save."""
     manifest = deepcopy(adventure.original_manifest or {})
     if not detailed:
@@ -330,7 +338,7 @@ async def apply_editor_clothing(db: AsyncSession, adventure, detailed: bool, *, 
             "Clothing preparation timed out. No settings were saved; try again."
         ) from exc
     await _check_unchanged(db, [adventure, *[actor for actor, _ in actors], *objects])
-    garments = {}
+    garments: dict[str, dict] = {}
     for _, proposed in plans.values():
         for item_id, garment in proposed.items():
             if item_id in garments and garments[item_id] != garment:

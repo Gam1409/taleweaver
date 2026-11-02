@@ -5,7 +5,8 @@ import json
 import logging
 import os
 import zipfile
-from typing import Optional
+from pathlib import PurePosixPath
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,7 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.archive_safety import validate_archive
 from backend.engine.import_archive_world import build_archive_world
+from backend.engine.import_transaction import atomic_import, register_created
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -24,7 +26,11 @@ from backend.utils.text_utils import generate_adventure_id
 logger = logging.getLogger(__name__)
 
 
-def _map_archive_images(manifest_data, prot, existing_images_mapping):
+def _map_archive_images(
+    manifest_data: dict[str, Any],
+    prot: dict[str, Any] | None,
+    existing_images_mapping: dict[str, str],
+) -> dict[str, str]:
     image_urls = {}
     if prot and prot.get("profile_image") in existing_images_mapping:
         image_urls["PROTAGONIST"] = existing_images_mapping[prot["profile_image"]]
@@ -41,7 +47,7 @@ def _map_archive_images(manifest_data, prot, existing_images_mapping):
     return image_urls
 
 
-def _extract_archive_assets(zip_file, new_template_id):
+def _extract_archive_assets(zip_file: zipfile.ZipFile, new_template_id: str) -> dict[str, str]:
     from backend.engine.adventure_importer import _ensure_within_data_dir
 
     target_base_dir = _ensure_within_data_dir(
@@ -52,11 +58,12 @@ def _extract_archive_assets(zip_file, new_template_id):
     existing_images_mapping = {}  # zip_path -> local_url
     for zip_path in zip_file.namelist():
         if zip_path.startswith("assets/"):
-            filename = os.path.basename(zip_path)
-            if not filename:
+            filename = str(PurePosixPath(zip_path).relative_to("assets"))
+            if zip_path.endswith("/"):
                 continue
             target_path = _ensure_within_data_dir(os.path.join(target_base_dir, filename))
-            with open(target_path, "wb") as f:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "xb") as f:
                 f.write(zip_file.read(zip_path))
 
             rel_path = os.path.relpath(target_path, settings.DATA_DIR).replace("\\", "/")
@@ -66,7 +73,11 @@ def _extract_archive_assets(zip_file, new_template_id):
 
 
 async def _resolve_archive_conflict(
-    db: AsyncSession, owner_id, origin_id, adv_data, overwrite
+    db: AsyncSession,
+    owner_id: str | None,
+    origin_id: str | None,
+    adv_data: dict[str, Any],
+    overwrite: bool,
 ) -> None:
     from backend.engine.adventure_importer import AdventureConflictError, AdventureTemplateImporter
 
@@ -98,7 +109,7 @@ async def _resolve_archive_conflict(
             await AdventureTemplateImporter.delete_template_for_overwrite(db, existing.id)
 
 
-def _archive_sizes_allowed(zip_file):
+def _archive_sizes_allowed(zip_file: zipfile.ZipFile) -> bool:
     from backend.engine.adventure_importer import (
         MAX_ADZ_COMPRESSION_RATIO,
         MAX_ADZ_ENTRY_BYTES,
@@ -148,12 +159,14 @@ def _archive_sizes_allowed(zip_file):
     return True
 
 
-def _read_archive_manifest(zip_file):
+def _read_archive_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any] | None:
     if "adventure.adv" not in zip_file.namelist():
         logger.error("Invalid ADZ: Missing adventure.adv")
         return None
 
-    manifest_data = json.loads(zip_file.read("adventure.adv").decode("utf-8"))
+    manifest_data: object = json.loads(zip_file.read("adventure.adv").decode("utf-8"))
+    if not isinstance(manifest_data, dict):
+        raise ValueError("Adventure manifest must be an object.")
     try:
         validate_manifest_version(manifest_data, require_format=True)
     except ValueError as exc:
@@ -168,6 +181,7 @@ def _read_archive_manifest(zip_file):
     return manifest_data
 
 
+@atomic_import
 async def import_adz(
     db: AsyncSession, adz_data: bytes, owner_id: Optional[str] = None, overwrite: bool = False
 ) -> bool:
@@ -197,6 +211,7 @@ async def import_adz(
 
             # Create new template ID
             new_template_id = generate_adventure_id(adv_data["title"])
+            register_created(db, new_template_id)
 
             enforcement_mode = adv_data.get("rule_enforcement_mode", "rpg")
             is_strict = mode_policy(enforcement_mode, adv_data.get("strict_rules")).mechanics
@@ -263,7 +278,7 @@ async def import_adz(
                     category="COVER",
                 )
 
-            await db.commit()
+            await db.flush()
             # Ensure thumbnails are generated for imported assets
             from backend.engine.media_engine import MediaEngine
 

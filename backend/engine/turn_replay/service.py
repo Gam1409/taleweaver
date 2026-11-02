@@ -32,6 +32,7 @@ async def latest(db: AsyncSession, session_id: str) -> ChatMessage | None:
 async def record_before(manager: Any, text: str) -> None:
     if (
         getattr(manager, "_replaying", False)
+        or getattr(manager, "_command_recovery", False)
         or not text
         or (text.startswith("/") and not text.lower().startswith("/say "))
         or manager.adventure.is_adventure_generator
@@ -75,6 +76,12 @@ async def record_input(manager: Any, text: str) -> ChatMessage:
 
 
 async def finish(manager: Any) -> None:
+    if getattr(manager, "_command_recovery", False):
+        row = await manager.db.get(TurnReplay, manager.game_id)
+        if row is not None:
+            row.status, row.backup, row.assistant_id = "command_complete", None, None
+            await manager.db.commit()
+        return
     if not getattr(manager, "_turn_replay_recorded", False) and not getattr(
         manager, "_replaying", False
     ):

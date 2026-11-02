@@ -157,15 +157,17 @@ def decode_image_payload(payload: str) -> bytes:
 
 
 def persist_image_bytes(filepath: str, content: bytes, image_format: str, quality: int) -> None:
-    from backend.engine.media_engine import _write_binary_file
-
-    if image_format.lower() != "jpeg":
-        _write_binary_file(filepath, content)
-        return
+    if len(content) > 32 * 1024 * 1024:
+        raise ValueError("Image exceeds the 32 MiB limit.")
+    with Image.open(io.BytesIO(content)) as probe:
+        if probe.width * probe.height > 32_000_000:
+            raise ValueError("Image exceeds the 32 megapixel limit.")
+        probe.verify()
     with Image.open(io.BytesIO(content)) as source:
-        image = source.convert("RGB") if source.mode in ("RGBA", "P") else source
+        target_format = "JPEG" if image_format.lower() == "jpeg" else "PNG"
+        image = source.convert("RGB") if target_format == "JPEG" else source
         try:
-            image.save(filepath, "JPEG", quality=quality, optimize=True)
+            image.save(filepath, target_format, quality=quality, optimize=True)
         finally:
             if image is not source:
                 image.close()

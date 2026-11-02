@@ -1254,6 +1254,7 @@ const exitDisplayName = (exit: any): string => {
 }
 
 // Recover from stale snapshots where edges lack the WorldExit UUID by refreshing once.
+let staleExitSignature = ""
 watch(sceneExits, (exits) => {
   if (!exits || exits.length === 0) return
   const needsRefresh = exits.some((e: any) => {
@@ -1261,6 +1262,9 @@ watch(sceneExits, (exits) => {
     return !id
   })
   if (needsRefresh && typeof refreshSession === 'function') {
+    const signature = JSON.stringify([props.id, sheet.value?.scene_id, exits.map((e: any) => [e.from_scene_id, e.to_scene_id, e.label])])
+    if (signature === staleExitSignature) return
+    staleExitSignature = signature
     void refreshSession()
   }
 })

@@ -69,7 +69,7 @@ async def save_preferences(
     changed = await db.execute(
         update(SessionState)
         .where(SessionState.id == state.id, cast(SessionState.entity_states, Text) == before)
-        .values(entity_states=replace_preferences(state.entity_states, payload.settings))
+        .values(entity_states=replace_preferences(state.entity_states or {}, payload.settings))
         .returning(SessionState.id)
         .execution_options(synchronize_session=False)
     )

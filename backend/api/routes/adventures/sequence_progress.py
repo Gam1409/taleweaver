@@ -70,7 +70,9 @@ def evaluate_sequence_progress(
     return _complete_sequence(sequences, current_seq_idx, state, avatar)
 
 
-def _complete_sequence(sequences, current_seq_idx, state, avatar):
+def _complete_sequence(
+    sequences: list[dict[str, Any]], current_seq_idx: int, state: SessionState, avatar: Avatar
+) -> list[str]:
     current_seq = sequences[current_seq_idx]
     system_messages: list[str] = []
     seq_title = (

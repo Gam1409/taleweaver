@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -115,7 +116,7 @@ async def _call_provider(
     provider: str,
     model: str,
     user_prompt: str,
-    response_model: type,
+    response_model: type[BaseModel],
     gm_kwargs: dict[str, Any],
     timeout_seconds: Optional[float],
 ) -> Any:
@@ -154,7 +155,7 @@ async def _generate_llm_proposals(
     *,
     user_prompt: str,
     current_user: User,
-    response_model: type,
+    response_model: type[BaseModel],
     gm_kwargs: dict[str, Any],
     timeout_seconds: Optional[float] = None,
     allow_fallback: bool = True,

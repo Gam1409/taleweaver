@@ -96,7 +96,7 @@ def _find_active_sequence(adventure: Any, state: Any) -> dict | None:
     for index, seq in enumerate(ordered):
         is_first_default = not state.active_sequence_id and index == 0
         if seq.get("id") == state.active_sequence_id or is_first_default:
-            return seq
+            return dict(seq)
     return None
 
 
@@ -106,7 +106,7 @@ def _sequence_end_condition(seq: dict) -> str:
         template.format(seq[key]) for key, template in _SEQUENCE_HARD_REQUIREMENTS if seq.get(key)
     ]
     if not hard_reqs:
-        return end_condition
+        return str(end_condition)
     req_str = " AND ".join(hard_reqs)
     if end_condition:
         return f"{end_condition} (Deterministic triggers required: {req_str})"

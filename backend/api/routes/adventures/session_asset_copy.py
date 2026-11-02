@@ -12,7 +12,13 @@ from backend.utils.path_security import (
 logger = logging.getLogger(__name__)
 
 
-def copy_uncached_session_asset(session_id, bucket, source_url, normalized_source_url, cache):
+def copy_uncached_session_asset(
+    session_id: str,
+    bucket: str,
+    source_url: str | None,
+    normalized_source_url: str,
+    cache: dict[str, str],
+) -> str | None:
     from .sessions import (
         _SAFE_IMAGE_EXTENSIONS,
         _ensure_within_data_dir,

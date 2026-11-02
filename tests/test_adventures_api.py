@@ -4,6 +4,8 @@ Tests for the Adventures REST API (Package 4).
 Covers: create, list, get, update, delete, pause/resume, and game-state
 sub-routes. All tests follow the Arrange-Act-Assert pattern.
 """
+
+import asyncio
 import json
 import os
 import time
@@ -16,17 +18,17 @@ from httpx import AsyncClient
 from PIL import Image
 from sqlalchemy import delete, func, select
 
+from backend.api.routes.adventures.schemas import StoryIdeaSuggestionResponse
 from backend.core.config import settings
 from backend.engine.debug_engine import DebugEngine
 from backend.engine.session_checkpoint_service import SessionCheckpointService
-from backend.api.routes.adventures.schemas import StoryIdeaSuggestionResponse
 from backend.models.adventure_template import AdventureTemplate as Adventure
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
-from backend.models.session_state import SessionState as GameState
 from backend.models.session_state import SessionState
+from backend.models.session_state import SessionState as GameState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.conftest import TestSessionLocal
@@ -44,6 +46,7 @@ async def client(auth_client: AsyncClient) -> AsyncClient:
 # Helper
 # ---------------------------------------------------------------------------
 
+
 async def _create_adventure(client: AsyncClient, title: str = "Test Quest") -> dict:
     """Creates a minimal adventure and returns the response JSON."""
     resp = await client.post(
@@ -58,6 +61,7 @@ async def _create_adventure(client: AsyncClient, title: str = "Test Quest") -> d
 # POST /api/adventures/
 # ---------------------------------------------------------------------------
 
+
 async def test_create_adventure_returns_ids(client: AsyncClient):
     """Creating an adventure returns game_id, adventure_id, and avatar_id."""
     # Arrange & Act
@@ -69,7 +73,9 @@ async def test_create_adventure_returns_ids(client: AsyncClient):
     assert "avatar_id" in data
 
 
-async def test_suggest_story_idea_generates_title_and_story_when_empty(client: AsyncClient, monkeypatch):
+async def test_suggest_story_idea_generates_title_and_story_when_empty(
+    client: AsyncClient, monkeypatch
+):
     """Story idea endpoint generates both title and story for empty input and clamps title length."""
 
     async def fake_story_suggest(self, system_prompt, user_prompt, response_model, model, **kwargs):
@@ -103,7 +109,9 @@ async def test_suggest_story_idea_generates_title_and_story_when_empty(client: A
     assert data["story_idea"]
 
 
-async def test_suggest_story_idea_keeps_existing_title_on_optimization(client: AsyncClient, monkeypatch):
+async def test_suggest_story_idea_keeps_existing_title_on_optimization(
+    client: AsyncClient, monkeypatch
+):
     """When input exists and title is present, endpoint keeps the existing title but updates story text."""
 
     async def fake_story_suggest(self, system_prompt, user_prompt, response_model, model, **kwargs):
@@ -153,7 +161,10 @@ async def test_start_session_emits_intro_text_once(client: AsyncClient):
     chat_resp = await client.get(f"/api/adventures/{game_id}/chat")
     assert chat_resp.status_code == 200, chat_resp.text
     messages = chat_resp.json().get("messages", [])
-    assert any(m.get("role") == "system" and "Welcome to the Archivum" in (m.get("content") or "") for m in messages)
+    assert any(
+        m.get("role") == "system" and "Welcome to the Archivum" in (m.get("content") or "")
+        for m in messages
+    )
 
 
 async def test_create_adventure_creates_one_visible_session(client: AsyncClient):
@@ -170,26 +181,34 @@ async def test_create_adventure_creates_one_visible_session(client: AsyncClient)
     assert sessions[0]["game_id"] == ids["game_id"]
 
 
-async def test_create_adventure_materializes_initial_session_as_independent_copy(client: AsyncClient, monkeypatch, tmp_path):
+def _seed_visual_files(data_dir, adv_id):
+    paths = tuple(
+        f"adventures/library/{adv_id}/{name}"
+        for name in ("cover.png", "hero.png", "scenes/start.png", "entities/npc.png")
+    )
+    for relative, content in zip(paths, (b"cover", b"hero", b"scene", b"entity"), strict=True):
+        destination = data_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+    return paths
+
+
+async def test_create_adventure_materializes_initial_session_as_independent_copy(
+    client: AsyncClient, monkeypatch, tmp_path
+):
     """After generation, the initial auto-created session should own world rows and copied visuals."""
     data_dir = tmp_path / "data"
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
 
-    async def fake_generate_world(db, user=None, template_id=None, adventure_id=None, *args, **kwargs):
+    async def fake_generate_world(
+        db, user=None, template_id=None, adventure_id=None, *args, **kwargs
+    ):
         adv_id = template_id or adventure_id
         assert adv_id
 
-        cover_rel = f"adventures/library/{adv_id}/cover.png"
-        hero_rel = f"adventures/library/{adv_id}/hero.png"
-        scene_rel = f"adventures/library/{adv_id}/scenes/start.png"
-        entity_rel = f"adventures/library/{adv_id}/entities/npc.png"
-
-        os.makedirs(data_dir / "adventures" / "library" / adv_id / "scenes", exist_ok=True)
-        os.makedirs(data_dir / "adventures" / "library" / adv_id / "entities", exist_ok=True)
-        (data_dir / cover_rel).write_bytes(b"cover")
-        (data_dir / hero_rel).write_bytes(b"hero")
-        (data_dir / scene_rel).write_bytes(b"scene")
-        (data_dir / entity_rel).write_bytes(b"entity")
+        cover_rel, hero_rel, scene_rel, entity_rel = await asyncio.to_thread(
+            _seed_visual_files, data_dir, adv_id
+        )
 
         adventure = await db.get(Adventure, adv_id)
         assert adventure is not None
@@ -223,35 +242,47 @@ async def test_create_adventure_materializes_initial_session_as_independent_copy
         )
         await db.commit()
 
-    monkeypatch.setattr("backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world
+    )
 
     ids = await _create_adventure(client, "Initial Session Materialization Quest")
     game_id = ids["game_id"]
 
-    def _url_to_file_path(url: str) -> str:
-        rel = url.replace("/data/", "", 1).lstrip("/")
-        return os.path.join(str(data_dir), rel)
-
     async with TestSessionLocal() as session:
         game_session = await session.get(GameSession, game_id)
         assert game_session is not None
-        assert game_session.adventure_image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(game_session.adventure_image_url))
+        assert game_session.adventure_image_url.startswith(
+            f"/data/adventures/sessions/{game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, game_session.adventure_image_url)
+        )
 
-        avatar_res = await session.execute(select(Avatar).where(Avatar.id == game_session.avatar_id))
+        avatar_res = await session.execute(
+            select(Avatar).where(Avatar.id == game_session.avatar_id)
+        )
         avatar = avatar_res.scalars().first()
         assert avatar is not None
         assert avatar.profile_image.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(avatar.profile_image))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, avatar.profile_image)
+        )
 
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == game_id))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == game_id)
+        )
         state = state_res.scalars().first()
         assert state is not None
         snapshot = dict((state.entity_states or {}).get("__asset_snapshot__") or {})
         assert snapshot.get("cover", "").startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert snapshot.get("protagonist", "").startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert snapshot.get("entity_images", {}).get("AUTO_NPC", "").startswith(
+        assert snapshot.get("protagonist", "").startswith(
             f"/data/adventures/sessions/{game_id}/visuals/"
+        )
+        assert (
+            snapshot.get("entity_images", {})
+            .get("AUTO_NPC", "")
+            .startswith(f"/data/adventures/sessions/{game_id}/visuals/")
         )
 
         scene_res = await session.execute(
@@ -263,7 +294,9 @@ async def test_create_adventure_materializes_initial_session_as_independent_copy
         cloned_scene = scene_res.scalars().first()
         assert cloned_scene is not None
         assert cloned_scene.image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(cloned_scene.image_url))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, cloned_scene.image_url)
+        )
 
         entity_res = await session.execute(
             select(WorldEntity).where(
@@ -274,7 +307,9 @@ async def test_create_adventure_materializes_initial_session_as_independent_copy
         cloned_entity = entity_res.scalars().first()
         assert cloned_entity is not None
         assert cloned_entity.image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(cloned_entity.image_url))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, cloned_entity.image_url)
+        )
 
 
 async def test_post_chat_stream_includes_turn_correlation_id(client: AsyncClient):
@@ -398,7 +433,9 @@ async def test_create_adventure_preserves_advanced_manifest_fields(client: Async
     assert original_manifest["start_datetime"] == "2026-04-14T08:30:00.000Z"
 
 
-async def test_create_adventure_persists_generation_status_before_world_gen(client: AsyncClient, monkeypatch):
+async def test_create_adventure_persists_generation_status_before_world_gen(
+    client: AsyncClient, monkeypatch
+):
     """The background job writes an intermediate status before the world generator starts."""
     captured: dict[str, str] = {}
 
@@ -426,6 +463,7 @@ async def test_create_adventure_persists_generation_status_before_world_gen(clie
         adv_id = template_id or adventure_id
         print(f"DEBUG: fake_generate_world called with adv_id={adv_id}")
         from sqlalchemy import select
+
         res = await db.execute(select(Adventure))
         all_advs = res.scalars().all()
         print(f"DEBUG: all adventures in DB: {[a.id for a in all_advs]}")
@@ -444,7 +482,9 @@ async def test_create_adventure_persists_generation_status_before_world_gen(clie
         )
         await db.commit()
 
-    monkeypatch.setattr("backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world
+    )
 
     resp = await client.post(
         "/api/adventures/",
@@ -595,9 +635,12 @@ async def test_debug_award_grants_all_adventure_awards():
         await session.refresh(user)
 
     assert "All adventure awards granted" in message
-    assert all(award["is_earned"] is True for award in adventure.awards)
+    assert not any(award.get("is_earned") for award in adventure.awards)
+    assert all((state.entity_states or {}).get("__awards__", {}).values())
     assert len(user.earned_awards or []) == 3
-    this_adv_awards = [a for a in (user.earned_awards or []) if a.get("adventure_id") == adventure.id]
+    this_adv_awards = [
+        a for a in (user.earned_awards or []) if a.get("adventure_id") == adventure.id
+    ]
     assert {entry["key"] for entry in this_adv_awards} == {"award-1", "award-2"}
 
 
@@ -685,7 +728,9 @@ async def test_terminal_epilogue_completed_updates_chat_flags(client: AsyncClien
 
     async with TestSessionLocal() as session:
         game_session = await session.get(GameSession, ids["game_id"])
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == ids["game_id"]))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == ids["game_id"])
+        )
         state = state_res.scalars().first()
         assert game_session is not None
         if state is None:
@@ -740,7 +785,9 @@ async def test_terminal_epilogue_game_over_locks_input(client: AsyncClient, monk
 
     async with TestSessionLocal() as session:
         game_session = await session.get(GameSession, ids["game_id"])
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == ids["game_id"]))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == ids["game_id"])
+        )
         state = state_res.scalars().first()
         assert game_session is not None
         if state is None:
@@ -817,9 +864,13 @@ async def test_translate_text_endpoint_uses_bable_fish_language(client: AsyncCli
 
 async def test_regenerate_visual_updates_protagonist_image(client: AsyncClient, monkeypatch):
     """Regenerating the protagonist uses the default prompt when none is provided."""
+
     async def fake_generate_world(*args, **kwargs):
         pass
-    monkeypatch.setattr("backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world)
+
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world
+    )
 
     ids = await _create_adventure(client, "Regenerate Quest")
 
@@ -831,13 +882,24 @@ async def test_regenerate_visual_updates_protagonist_image(client: AsyncClient, 
 
     captured: dict[str, str] = {}
 
-    async def fake_generate_entity_image(prompt, adventure_id=None, entity_id=None, entity_type=None, user_config=None, api_keys=None, **kwargs):
+    async def fake_generate_entity_image(
+        prompt,
+        adventure_id=None,
+        entity_id=None,
+        entity_type=None,
+        user_config=None,
+        api_keys=None,
+        **kwargs,
+    ):
         captured["prompt"] = prompt
         captured["entity_id"] = entity_id
         captured["entity_type"] = entity_type
         return "/data/adventures/generated/protagonist.png"
 
-    monkeypatch.setattr("backend.api.routes.adventures.assets.MediaEngine.generate_entity_image", fake_generate_entity_image)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.assets.MediaEngine.generate_entity_image",
+        fake_generate_entity_image,
+    )
 
     resp = await client.post(
         f"/api/adventures/{ids['adventure_id']}/visuals/regenerate",
@@ -858,9 +920,13 @@ async def test_regenerate_visual_updates_protagonist_image(client: AsyncClient, 
 
 async def test_regenerate_visual_injects_style_and_tone(client: AsyncClient, monkeypatch):
     """Visual prompt generation should include selected style and tone instructions."""
+
     async def fake_generate_world(*args, **kwargs):
         pass
-    monkeypatch.setattr("backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world)
+
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world
+    )
 
     ids = await _create_adventure(client, "Styled Prompt Quest")
 
@@ -873,13 +939,24 @@ async def test_regenerate_visual_injects_style_and_tone(client: AsyncClient, mon
 
     captured: dict[str, str] = {}
 
-    async def fake_generate_entity_image(prompt, adventure_id=None, entity_id=None, entity_type=None, user_config=None, api_keys=None, **kwargs):
+    async def fake_generate_entity_image(
+        prompt,
+        adventure_id=None,
+        entity_id=None,
+        entity_type=None,
+        user_config=None,
+        api_keys=None,
+        **kwargs,
+    ):
         captured["prompt"] = prompt
         captured["entity_id"] = entity_id
         captured["entity_type"] = entity_type
         return "/data/adventures/generated/protagonist-tone-style.png"
 
-    monkeypatch.setattr("backend.api.routes.adventures.assets.MediaEngine.generate_entity_image", fake_generate_entity_image)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.assets.MediaEngine.generate_entity_image",
+        fake_generate_entity_image,
+    )
 
     resp = await client.post(
         f"/api/adventures/{ids['adventure_id']}/visuals/regenerate",
@@ -892,9 +969,13 @@ async def test_regenerate_visual_injects_style_and_tone(client: AsyncClient, mon
 
 async def test_regenerate_visual_uses_custom_prompt_for_scene(client: AsyncClient, monkeypatch):
     """A custom prompt overrides the default prompt when regenerating a scene image."""
+
     async def fake_generate_world(*args, **kwargs):
         pass
-    monkeypatch.setattr("backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world)
+
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.templates.WorldGenerator.generate_world", fake_generate_world
+    )
 
     ids = await _create_adventure(client, "Scene Prompt Quest")
 
@@ -915,11 +996,16 @@ async def test_regenerate_visual_uses_custom_prompt_for_scene(client: AsyncClien
 
     captured: dict[str, str] = {}
 
-    async def fake_generate_scene_image(prompt, adventure_id=None, user_config=None, api_keys=None, **kwargs):
+    async def fake_generate_scene_image(
+        prompt, adventure_id=None, user_config=None, api_keys=None, **kwargs
+    ):
         captured["prompt"] = prompt
         return "/data/adventures/generated/scene.png"
 
-    monkeypatch.setattr("backend.api.routes.adventures.assets.MediaEngine.generate_scene_image", fake_generate_scene_image)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.assets.MediaEngine.generate_scene_image",
+        fake_generate_scene_image,
+    )
 
     resp = await client.post(
         f"/api/adventures/{ids['adventure_id']}/visuals/regenerate",
@@ -945,17 +1031,26 @@ async def test_regenerate_visual_updates_cover_image(client: AsyncClient, monkey
 
     captured: dict[str, str] = {}
 
-    async def fake_generate_adventure_cover(title=None, original_prompt=None, adventure_id=None, **kwargs):
+    async def fake_generate_adventure_cover(
+        title=None, original_prompt=None, adventure_id=None, **kwargs
+    ):
         captured["title"] = title
         captured["context"] = original_prompt or kwargs.get("context")
         captured["adventure_id"] = adventure_id
         return "/data/adventures/generated/cover.png"
 
-    monkeypatch.setattr("backend.api.routes.adventures.assets.MediaEngine.generate_adventure_cover", fake_generate_adventure_cover)
+    monkeypatch.setattr(
+        "backend.api.routes.adventures.assets.MediaEngine.generate_adventure_cover",
+        fake_generate_adventure_cover,
+    )
 
     resp = await client.post(
         f"/api/adventures/{ids['adventure_id']}/visuals/regenerate",
-        json={"target_type": "cover", "target_id": ids["adventure_id"], "prompt": "Stormbound citadel on a fractured moon."},
+        json={
+            "target_type": "cover",
+            "target_id": ids["adventure_id"],
+            "prompt": "Stormbound citadel on a fractured moon.",
+        },
     )
 
     assert resp.status_code == 200, resp.text
@@ -1161,7 +1256,9 @@ async def test_reset_adventure_preserves_existing_image_assets(client: AsyncClie
             "objects": [],
         }
 
-        state_res = await session.execute(select(SessionState).where(SessionState.template_id == ids["adventure_id"]))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.template_id == ids["adventure_id"])
+        )
         state = state_res.scalars().first()
         assert state is not None
         state.current_scene_id = "HALL"
@@ -1170,8 +1267,12 @@ async def test_reset_adventure_preserves_existing_image_assets(client: AsyncClie
         assert avatar is not None
         avatar.profile_image = protagonist_img
 
-        await session.execute(delete(WorldScene).where(WorldScene.template_id == ids["adventure_id"]))
-        await session.execute(delete(WorldEntity).where(WorldEntity.template_id == ids["adventure_id"]))
+        await session.execute(
+            delete(WorldScene).where(WorldScene.template_id == ids["adventure_id"])
+        )
+        await session.execute(
+            delete(WorldEntity).where(WorldEntity.template_id == ids["adventure_id"])
+        )
 
         session.add(
             WorldScene(
@@ -1353,6 +1454,7 @@ async def test_export_manifest_backfills_core_metadata_without_runtime_state(cli
 # GET /api/adventures
 # ---------------------------------------------------------------------------
 
+
 async def test_list_adventures_empty(client: AsyncClient):
     """Listing adventures on a fresh DB returns an empty list."""
     resp = await client.get("/api/adventures/sessions")
@@ -1374,6 +1476,7 @@ async def test_list_adventures_returns_created(client: AsyncClient):
 # GET /api/adventures/{adventure_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_get_adventure_success(client: AsyncClient):
     """Fetching an existing adventure returns its details."""
     ids = await _create_adventure(client, "Dragon's Lair")
@@ -1394,6 +1497,7 @@ async def test_get_adventure_not_found(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # PATCH /api/adventures/{adventure_id}
 # ---------------------------------------------------------------------------
+
 
 async def test_update_adventure_title(client: AsyncClient):
     """Patching the title of an adventure updates only that field."""
@@ -1451,6 +1555,7 @@ async def test_update_adventure_not_found(client: AsyncClient):
 # DELETE /api/adventures/{adventure_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_delete_adventure(client: AsyncClient):
     """Deleting an adventure removes it; subsequent GET returns 404."""
     ids = await _create_adventure(client)
@@ -1490,7 +1595,9 @@ async def test_delete_adventure_keeps_existing_sessions(client: AsyncClient):
     assert chat_resp.status_code == 200, chat_resp.text
 
 
-async def test_delete_adventure_removes_library_folder_even_with_sessions(client: AsyncClient, monkeypatch, tmp_path):
+async def test_delete_adventure_removes_library_folder_even_with_sessions(
+    client: AsyncClient, monkeypatch, tmp_path
+):
     """Deleting a template must remove its library folder, even when sessions still exist."""
     data_dir = tmp_path / "data"
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
@@ -1522,6 +1629,7 @@ async def test_delete_adventure_removes_library_folder_even_with_sessions(client
 # GET /api/adventures/{adventure_id}/state
 # ---------------------------------------------------------------------------
 
+
 async def test_get_game_state(client: AsyncClient):
     """The initial game state has scene_id='START' and in_game_time=0."""
     ids = await _create_adventure(client)
@@ -1537,6 +1645,7 @@ async def test_get_game_state(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # PATCH /api/adventures/{adventure_id}/state
 # ---------------------------------------------------------------------------
+
 
 async def test_update_game_state_scene(client: AsyncClient):
     """Patching the game state updates scene_id."""
@@ -1555,6 +1664,7 @@ async def test_update_game_state_scene(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # POST /api/adventures/{adventure_id}/pause & /resume
 # ---------------------------------------------------------------------------
+
 
 async def test_pause_and_resume_game(client: AsyncClient):
     """Pausing sets is_paused=True; resuming sets it back to False."""
@@ -1579,6 +1689,7 @@ async def test_pause_and_resume_game(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # POST /api/adventures/import
 # ---------------------------------------------------------------------------
+
 
 async def test_import_adv_payload_maps_protagonist_and_manifest(client: AsyncClient):
     """Importing an ADV payload maps protagonist fields and persists original_manifest."""
@@ -1627,6 +1738,7 @@ async def test_import_adv_payload_maps_protagonist_and_manifest(client: AsyncCli
 # ---------------------------------------------------------------------------
 # POST /api/adventures/import/session-bundle
 # ---------------------------------------------------------------------------
+
 
 async def test_import_session_bundle_uses_split_route(client: AsyncClient):
     """Session bundle imports use the dedicated split route and return SESSION type."""
@@ -1829,7 +1941,11 @@ async def test_import_adv_file_missing_start_scene_id_uses_fallback(client: Asyn
     templates_resp = await client.get("/api/adventures/templates")
     assert templates_resp.status_code == 200, templates_resp.text
     template_row = next(
-        (row for row in templates_resp.json() if row.get("title") == "ADV Missing Start Scene Import"),
+        (
+            row
+            for row in templates_resp.json()
+            if row.get("title") == "ADV Missing Start Scene Import"
+        ),
         None,
     )
     assert template_row is not None
@@ -1903,7 +2019,11 @@ async def test_import_adv_file_npc_inventory_dict_entries(client: AsyncClient):
     templates_resp = await client.get("/api/adventures/templates")
     assert templates_resp.status_code == 200, templates_resp.text
     template_row = next(
-        (row for row in templates_resp.json() if row.get("title") == "ADV NPC Inventory Dict Import"),
+        (
+            row
+            for row in templates_resp.json()
+            if row.get("title") == "ADV NPC Inventory Dict Import"
+        ),
         None,
     )
     assert template_row is not None
@@ -1992,11 +2112,17 @@ async def test_import_adz_duplicate_returns_409_with_conflict_info(client: Async
             "time_per_turn": 5,
         },
         "protagonist": {
-            "name": "Hero", "role": "Tester", "description": "x",
-            "inventory": [], "equipment": {}, "stats": {},
+            "name": "Hero",
+            "role": "Tester",
+            "description": "x",
+            "inventory": [],
+            "equipment": {},
+            "stats": {},
         },
         "scenes": [{"id": "START", "name": "Start", "description": "begin"}],
-        "exits": [], "npcs": [], "objects": [],
+        "exits": [],
+        "npcs": [],
+        "objects": [],
     }
 
     def _build_adz():
@@ -2096,7 +2222,9 @@ async def test_import_adv_preserves_item_stats_from_starting_inventory_dict(clie
     assert debug_resp.status_code == 200, debug_resp.text
     debug_data = debug_resp.json()
 
-    stat_obj = next((o for o in debug_data.get("objects", []) if o.get("id") == "OBJ_STAT_RING"), None)
+    stat_obj = next(
+        (o for o in debug_data.get("objects", []) if o.get("id") == "OBJ_STAT_RING"), None
+    )
     assert stat_obj is not None
     assert stat_obj.get("stat_modifier_charisma") == 3
 
@@ -2171,7 +2299,11 @@ async def test_import_adv_preserves_consumable_effects_in_avatar_inventory(clien
     debug_data = debug_resp.json()
 
     inv_item = next(
-        (item for item in (debug_data.get("protagonist") or {}).get("inventory", []) if item.get("id") == "HEILTRANK_1"),
+        (
+            item
+            for item in (debug_data.get("protagonist") or {}).get("inventory", [])
+            if item.get("id") == "HEILTRANK_1"
+        ),
         None,
     )
     assert inv_item is not None
@@ -2247,7 +2379,11 @@ async def test_chat_snapshot_inventory_readable_uses_text_log_content(client: As
     templates_resp = await client.get("/api/adventures/templates")
     assert templates_resp.status_code == 200, templates_resp.text
     template_row = next(
-        (row for row in templates_resp.json() if row.get("title") == "ADV Readable Inventory Snapshot"),
+        (
+            row
+            for row in templates_resp.json()
+            if row.get("title") == "ADV Readable Inventory Snapshot"
+        ),
         None,
     )
     assert template_row is not None
@@ -2260,14 +2396,17 @@ async def test_chat_snapshot_inventory_readable_uses_text_log_content(client: As
     assert chat_resp.status_code == 200, chat_resp.text
     payload = chat_resp.json()
 
-    inventory = ((payload.get("sheet") or {}).get("inventory") or [])
+    inventory = (payload.get("sheet") or {}).get("inventory") or []
     datapad = next((item for item in inventory if item.get("id") == "DATAPAD"), None)
     assert datapad is not None
     assert datapad.get("item_type") == "READABLE"
     assert datapad.get("text_log_content") == "ACHTUNG: Zugangscode 7391. Frequenz 733.3 kHz aktiv."
     assert datapad.get("text_log_format") == "DOCUMENT"
     assert isinstance(datapad.get("metadata_json"), dict)
-    assert datapad.get("metadata_json", {}).get("text_log_content") == "ACHTUNG: Zugangscode 7391. Frequenz 733.3 kHz aktiv."
+    assert (
+        datapad.get("metadata_json", {}).get("text_log_content")
+        == "ACHTUNG: Zugangscode 7391. Frequenz 733.3 kHz aktiv."
+    )
 
 
 async def test_export_adv_reimport_keeps_item_stats(client: AsyncClient):
@@ -2337,7 +2476,11 @@ async def test_export_adv_reimport_keeps_item_stats(client: AsyncClient):
     templates_resp_2 = await client.get("/api/adventures/templates")
     assert templates_resp_2.status_code == 200, templates_resp_2.text
     imported_template = next(
-        (row for row in templates_resp_2.json() if row.get("title") == "ADV Stat Roundtrip Reimport"),
+        (
+            row
+            for row in templates_resp_2.json()
+            if row.get("title") == "ADV Stat Roundtrip Reimport"
+        ),
         None,
     )
     assert imported_template is not None
@@ -2360,6 +2503,7 @@ async def test_export_adv_reimport_keeps_item_stats(client: AsyncClient):
         assert entity is not None
         assert entity.stat_modifier_charisma == 4
         assert "stat_modifier_charisma" not in (entity.metadata_json or {})
+
 
 async def test_list_templates_returns_created_template(client: AsyncClient):
     """Template endpoint returns template-centric records."""
@@ -2402,7 +2546,9 @@ async def test_start_session_persists_manifest_snapshot_copy(client: AsyncClient
     game_id = start_resp.json()["game_id"]
 
     async with TestSessionLocal() as session:
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == game_id))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == game_id)
+        )
         state = state_res.scalars().first()
         assert state is not None
         assert isinstance(state.entity_states, dict)
@@ -2442,7 +2588,9 @@ async def test_get_chat_history_uses_session_scene_without_result_reuse_error(cl
     game_id = start_resp.json()["game_id"]
 
     async with TestSessionLocal() as session:
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == game_id))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == game_id)
+        )
         state = state_res.scalars().first()
         assert state is not None
 
@@ -2480,7 +2628,9 @@ async def test_delete_session_with_chat_messages_succeeds(client: AsyncClient):
 
     async with TestSessionLocal() as session:
         session.add(ChatMessage(session_id=ids["game_id"], role="user", content="hello there"))
-        session.add(ChatMessage(session_id=ids["game_id"], role="assistant", content="general kenobi"))
+        session.add(
+            ChatMessage(session_id=ids["game_id"], role="assistant", content="general kenobi")
+        )
         await session.commit()
 
     del_resp = await client.delete(f"/api/adventures/sessions/{ids['game_id']}")
@@ -2528,7 +2678,9 @@ async def test_list_session_checkpoints_returns_seeded_entries(client: AsyncClie
     assert "Arrived" in data[0]["title"]
 
 
-async def test_list_sessions_cleans_up_stale_empty_orphan_dirs(client: AsyncClient, monkeypatch, tmp_path):
+async def test_list_sessions_cleans_up_stale_empty_orphan_dirs(
+    client: AsyncClient, monkeypatch, tmp_path
+):
     """Listing sessions should remove stale empty orphan directories but keep active session directories."""
     data_dir = tmp_path / "data"
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
@@ -2680,7 +2832,9 @@ async def test_started_session_persists_asset_snapshot(client: AsyncClient):
         assert "__asset_snapshot__" in state.entity_states
 
 
-async def test_started_session_copies_visuals_into_session_folder(client: AsyncClient, monkeypatch, tmp_path):
+async def test_started_session_copies_visuals_into_session_folder(
+    client: AsyncClient, monkeypatch, tmp_path
+):
     """Starting a session copies template visuals into session-scoped storage and rewires URLs."""
     data_dir = tmp_path / "data"
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
@@ -2688,19 +2842,9 @@ async def test_started_session_copies_visuals_into_session_folder(client: AsyncC
     ids = await _create_adventure(client, "Session Visual Isolation Quest")
     adv_id = ids["adventure_id"]
 
-    library_dir = data_dir / "adventures" / "library" / adv_id
-    os.makedirs(library_dir / "scenes", exist_ok=True)
-    os.makedirs(library_dir / "entities", exist_ok=True)
-
-    cover_rel = f"adventures/library/{adv_id}/cover.png"
-    hero_rel = f"adventures/library/{adv_id}/hero.png"
-    scene_rel = f"adventures/library/{adv_id}/scenes/start.png"
-    entity_rel = f"adventures/library/{adv_id}/entities/npc.png"
-
-    (data_dir / cover_rel).write_bytes(b"cover")
-    (data_dir / hero_rel).write_bytes(b"hero")
-    (data_dir / scene_rel).write_bytes(b"scene")
-    (data_dir / entity_rel).write_bytes(b"entity")
+    cover_rel, hero_rel, scene_rel, entity_rel = await asyncio.to_thread(
+        _seed_visual_files, data_dir, adv_id
+    )
 
     async with TestSessionLocal() as session:
         adventure = await session.get(Adventure, adv_id)
@@ -2739,31 +2883,41 @@ async def test_started_session_copies_visuals_into_session_folder(client: AsyncC
     assert start_resp.status_code == 201, start_resp.text
     game_id = start_resp.json()["game_id"]
 
-    def _url_to_file_path(url: str) -> str:
-        rel = url.replace("/data/", "", 1).lstrip("/")
-        return os.path.join(str(data_dir), rel)
-
     async with TestSessionLocal() as session:
         session_row = await session.get(GameSession, game_id)
         assert session_row is not None
-        assert session_row.adventure_image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(session_row.adventure_image_url))
+        assert session_row.adventure_image_url.startswith(
+            f"/data/adventures/sessions/{game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, session_row.adventure_image_url)
+        )
 
-        state_res = await session.execute(select(SessionState).where(SessionState.session_id == game_id))
+        state_res = await session.execute(
+            select(SessionState).where(SessionState.session_id == game_id)
+        )
         state = state_res.scalars().first()
         assert state is not None
         snapshot = dict((state.entity_states or {}).get("__asset_snapshot__") or {})
         assert snapshot.get("cover", "").startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert snapshot.get("protagonist", "").startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert snapshot.get("entity_images", {}).get("VISUAL_COPY_NPC", "").startswith(
+        assert snapshot.get("protagonist", "").startswith(
             f"/data/adventures/sessions/{game_id}/visuals/"
+        )
+        assert (
+            snapshot.get("entity_images", {})
+            .get("VISUAL_COPY_NPC", "")
+            .startswith(f"/data/adventures/sessions/{game_id}/visuals/")
         )
 
         avatar_res = await session.execute(select(Avatar).where(Avatar.id == session_row.avatar_id))
         session_avatar = avatar_res.scalars().first()
         assert session_avatar is not None
-        assert session_avatar.profile_image.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(session_avatar.profile_image))
+        assert session_avatar.profile_image.startswith(
+            f"/data/adventures/sessions/{game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, session_avatar.profile_image)
+        )
 
         scene_res = await session.execute(
             select(WorldScene).where(
@@ -2774,7 +2928,9 @@ async def test_started_session_copies_visuals_into_session_folder(client: AsyncC
         session_scene = scene_res.scalars().first()
         assert session_scene is not None
         assert session_scene.image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(session_scene.image_url))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, session_scene.image_url)
+        )
 
         entity_res = await session.execute(
             select(WorldEntity).where(
@@ -2785,10 +2941,14 @@ async def test_started_session_copies_visuals_into_session_folder(client: AsyncC
         session_entity = entity_res.scalars().first()
         assert session_entity is not None
         assert session_entity.image_url.startswith(f"/data/adventures/sessions/{game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(session_entity.image_url))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, session_entity.image_url)
+        )
 
 
-async def test_copied_session_copies_visuals_into_new_session_folder(client: AsyncClient, monkeypatch, tmp_path):
+async def test_copied_session_copies_visuals_into_new_session_folder(
+    client: AsyncClient, monkeypatch, tmp_path
+):
     """Copying a session must re-copy visuals into the new target session folder."""
     data_dir = tmp_path / "data"
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
@@ -2796,19 +2956,9 @@ async def test_copied_session_copies_visuals_into_new_session_folder(client: Asy
     ids = await _create_adventure(client, "Copied Session Visual Isolation Quest")
     adv_id = ids["adventure_id"]
 
-    library_dir = data_dir / "adventures" / "library" / adv_id
-    os.makedirs(library_dir / "scenes", exist_ok=True)
-    os.makedirs(library_dir / "entities", exist_ok=True)
-
-    cover_rel = f"adventures/library/{adv_id}/cover.png"
-    hero_rel = f"adventures/library/{adv_id}/hero.png"
-    scene_rel = f"adventures/library/{adv_id}/scenes/start.png"
-    entity_rel = f"adventures/library/{adv_id}/entities/npc.png"
-
-    (data_dir / cover_rel).write_bytes(b"cover")
-    (data_dir / hero_rel).write_bytes(b"hero")
-    (data_dir / scene_rel).write_bytes(b"scene")
-    (data_dir / entity_rel).write_bytes(b"entity")
+    cover_rel, hero_rel, scene_rel, entity_rel = await asyncio.to_thread(
+        _seed_visual_files, data_dir, adv_id
+    )
 
     async with TestSessionLocal() as session:
         adventure = await session.get(Adventure, adv_id)
@@ -2851,26 +3001,34 @@ async def test_copied_session_copies_visuals_into_new_session_folder(client: Asy
     assert copy_resp.status_code == 201, copy_resp.text
     copied_game_id = copy_resp.json()["game_id"]
 
-    def _url_to_file_path(url: str) -> str:
-        rel = url.replace("/data/", "", 1).lstrip("/")
-        return os.path.join(str(data_dir), rel)
-
     async with TestSessionLocal() as session:
         source_session = await session.get(GameSession, source_game_id)
         copied_session = await session.get(GameSession, copied_game_id)
         assert source_session is not None
         assert copied_session is not None
 
-        assert source_session.adventure_image_url.startswith(f"/data/adventures/sessions/{source_game_id}/visuals/")
-        assert copied_session.adventure_image_url.startswith(f"/data/adventures/sessions/{copied_game_id}/visuals/")
+        assert source_session.adventure_image_url.startswith(
+            f"/data/adventures/sessions/{source_game_id}/visuals/"
+        )
+        assert copied_session.adventure_image_url.startswith(
+            f"/data/adventures/sessions/{copied_game_id}/visuals/"
+        )
         assert copied_session.adventure_image_url != source_session.adventure_image_url
-        assert os.path.isfile(_url_to_file_path(copied_session.adventure_image_url))
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, copied_session.adventure_image_url)
+        )
 
-        avatar_res = await session.execute(select(Avatar).where(Avatar.id == copied_session.avatar_id))
+        avatar_res = await session.execute(
+            select(Avatar).where(Avatar.id == copied_session.avatar_id)
+        )
         copied_avatar = avatar_res.scalars().first()
         assert copied_avatar is not None
-        assert copied_avatar.profile_image.startswith(f"/data/adventures/sessions/{copied_game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(copied_avatar.profile_image))
+        assert copied_avatar.profile_image.startswith(
+            f"/data/adventures/sessions/{copied_game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, copied_avatar.profile_image)
+        )
 
         copied_scene_res = await session.execute(
             select(WorldScene).where(
@@ -2880,8 +3038,12 @@ async def test_copied_session_copies_visuals_into_new_session_folder(client: Asy
         )
         copied_scene = copied_scene_res.scalars().first()
         assert copied_scene is not None
-        assert copied_scene.image_url.startswith(f"/data/adventures/sessions/{copied_game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(copied_scene.image_url))
+        assert copied_scene.image_url.startswith(
+            f"/data/adventures/sessions/{copied_game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, copied_scene.image_url)
+        )
 
         copied_entity_res = await session.execute(
             select(WorldEntity).where(
@@ -2891,8 +3053,12 @@ async def test_copied_session_copies_visuals_into_new_session_folder(client: Asy
         )
         copied_entity = copied_entity_res.scalars().first()
         assert copied_entity is not None
-        assert copied_entity.image_url.startswith(f"/data/adventures/sessions/{copied_game_id}/visuals/")
-        assert os.path.isfile(_url_to_file_path(copied_entity.image_url))
+        assert copied_entity.image_url.startswith(
+            f"/data/adventures/sessions/{copied_game_id}/visuals/"
+        )
+        assert await asyncio.to_thread(
+            os.path.isfile, _url_to_file_path(data_dir, copied_entity.image_url)
+        )
 
 
 async def test_start_session_ignores_session_bound_template_rows(client: AsyncClient):
@@ -3022,24 +3188,26 @@ async def test_start_session_prefers_entry_scene_when_start_missing(client: Asyn
             )
         )
 
-        db.add_all([
-            WorldScene(
-                id="FINAL_ROOM",
-                template_id=template_id,
-                session_id=None,
-                label="Final Room",
-                description="The destination.",
-                image_url=None,
-            ),
-            WorldScene(
-                id="INTRO_ROOM",
-                template_id=template_id,
-                session_id=None,
-                label="Intro Room",
-                description="The true entry.",
-                image_url=None,
-            ),
-        ])
+        db.add_all(
+            [
+                WorldScene(
+                    id="FINAL_ROOM",
+                    template_id=template_id,
+                    session_id=None,
+                    label="Final Room",
+                    description="The destination.",
+                    image_url=None,
+                ),
+                WorldScene(
+                    id="INTRO_ROOM",
+                    template_id=template_id,
+                    session_id=None,
+                    label="Intro Room",
+                    description="The true entry.",
+                    image_url=None,
+                ),
+            ]
+        )
         db.add(
             WorldExit(
                 template_id=template_id,
@@ -3058,15 +3226,15 @@ async def test_start_session_prefers_entry_scene_when_start_missing(client: Asyn
     game_id = start_resp.json()["game_id"]
 
     async with TestSessionLocal() as db:
-        state_res = await db.execute(
-            select(SessionState).where(SessionState.session_id == game_id)
-        )
+        state_res = await db.execute(select(SessionState).where(SessionState.session_id == game_id))
         state = state_res.scalars().first()
         assert state is not None
         assert state.current_scene_id == "INTRO_ROOM"
 
 
-async def test_start_session_honors_manifest_start_scene_id_when_graph_has_no_entry(client: AsyncClient):
+async def test_start_session_honors_manifest_start_scene_id_when_graph_has_no_entry(
+    client: AsyncClient,
+):
     """Explicit manifest start_scene_id must take precedence when all scenes have incoming exits."""
     ids = await _create_adventure(client, "Manifest Start Scene Priority Quest")
     template_id = ids["adventure_id"]
@@ -3100,44 +3268,48 @@ async def test_start_session_honors_manifest_start_scene_id_when_graph_has_no_en
             )
         )
 
-        db.add_all([
-            WorldScene(
-                id="LOBBY",
-                template_id=template_id,
-                session_id=None,
-                label="Lobby",
-                description="The intended start.",
-                image_url=None,
-            ),
-            WorldScene(
-                id="ASSESSMENT_ROOM",
-                template_id=template_id,
-                session_id=None,
-                label="Assessment Room",
-                description="Alternative scene.",
-                image_url=None,
-            ),
-        ])
-        db.add_all([
-            WorldExit(
-                template_id=template_id,
-                session_id=None,
-                from_scene_id="LOBBY",
-                to_scene_id="ASSESSMENT_ROOM",
-                label="Forward",
-                is_locked=False,
-                lock_description=None,
-            ),
-            WorldExit(
-                template_id=template_id,
-                session_id=None,
-                from_scene_id="ASSESSMENT_ROOM",
-                to_scene_id="LOBBY",
-                label="Back",
-                is_locked=False,
-                lock_description=None,
-            ),
-        ])
+        db.add_all(
+            [
+                WorldScene(
+                    id="LOBBY",
+                    template_id=template_id,
+                    session_id=None,
+                    label="Lobby",
+                    description="The intended start.",
+                    image_url=None,
+                ),
+                WorldScene(
+                    id="ASSESSMENT_ROOM",
+                    template_id=template_id,
+                    session_id=None,
+                    label="Assessment Room",
+                    description="Alternative scene.",
+                    image_url=None,
+                ),
+            ]
+        )
+        db.add_all(
+            [
+                WorldExit(
+                    template_id=template_id,
+                    session_id=None,
+                    from_scene_id="LOBBY",
+                    to_scene_id="ASSESSMENT_ROOM",
+                    label="Forward",
+                    is_locked=False,
+                    lock_description=None,
+                ),
+                WorldExit(
+                    template_id=template_id,
+                    session_id=None,
+                    from_scene_id="ASSESSMENT_ROOM",
+                    to_scene_id="LOBBY",
+                    label="Back",
+                    is_locked=False,
+                    lock_description=None,
+                ),
+            ]
+        )
         await db.commit()
 
     start_resp = await client.post(f"/api/adventures/{template_id}/sessions/start")
@@ -3145,18 +3317,23 @@ async def test_start_session_honors_manifest_start_scene_id_when_graph_has_no_en
     game_id = start_resp.json()["game_id"]
 
     async with TestSessionLocal() as db:
-        state_res = await db.execute(
-            select(SessionState).where(SessionState.session_id == game_id)
-        )
+        state_res = await db.execute(select(SessionState).where(SessionState.session_id == game_id))
         state = state_res.scalars().first()
         assert state is not None
         assert state.current_scene_id == "LOBBY"
 
 
-async def test_started_sessions_keep_snapshot_images_after_template_avatar_edit(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+async def test_started_sessions_keep_snapshot_images_after_template_avatar_edit(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
     """Started sessions keep their snapshot cover/protagonist images after later template edits."""
     original_isfile = os.path.isfile
-    monkeypatch.setattr("os.path.isfile", lambda p: True if "cover_old.png" in p or "protagonist_old.png" in p else original_isfile(p))
+    monkeypatch.setattr(
+        "os.path.isfile",
+        lambda p: (
+            True if "cover_old.png" in p or "protagonist_old.png" in p else original_isfile(p)
+        ),
+    )
 
     ids = await _create_adventure(client, "Snapshot Image Isolation Quest")
 
@@ -3203,35 +3380,36 @@ async def test_started_sessions_keep_snapshot_images_after_template_avatar_edit(
         assert chat_data["adventure_image"] == old_cover
         assert chat_data["sheet"]["profile_image"] == old_profile
 
+
 async def test_update_adventure_frontend_payload(client: AsyncClient):
     """Patching with frontend payload should not give 422."""
     ids = await _create_adventure(client, "Test Quest")
     adv_id = ids["adventure_id"]
 
     payload = {
-      "title": 'The RPG Testing Grounds',
-      "teaser": '...',
-      "original_prompt": '',
-      "strict_rules": True,
-      "rule_enforcement_mode": 'rpg',
-      "time_per_turn": 5,
-      "pacing_minutes": 5,
-      "clock_enabled": False,
-      "time_system": 'calendar',
-      "selected_style_id": 'dark-fantasy',
-      "selected_tone_id": 'serious',
-      "game_over_rules": {},
-      "min_scenes": 1,
-      "max_scenes": 5,
-      "plot": '',
-      "rules": '',
-      "walkthrough": '',
-      "completed_condition": '',
-      "gameover_condition": '',
-      "selected_image_styles": [{"id": "dark-fantasy", "name": "dark-fantasy"}],
-      "selected_tone": {"id": "serious", "name": "serious"}
+        "title": "The RPG Testing Grounds",
+        "teaser": "...",
+        "original_prompt": "",
+        "strict_rules": True,
+        "rule_enforcement_mode": "rpg",
+        "time_per_turn": 5,
+        "pacing_minutes": 5,
+        "clock_enabled": False,
+        "time_system": "calendar",
+        "selected_style_id": "dark-fantasy",
+        "selected_tone_id": "serious",
+        "game_over_rules": {},
+        "min_scenes": 1,
+        "max_scenes": 5,
+        "plot": "",
+        "rules": "",
+        "walkthrough": "",
+        "completed_condition": "",
+        "gameover_condition": "",
+        "selected_image_styles": [{"id": "dark-fantasy", "name": "dark-fantasy"}],
+        "selected_tone": {"id": "serious", "name": "serious"},
     }
-    
+
     resp2 = await client.patch(
         f"/api/adventures/{adv_id}",
         json=payload,
@@ -3251,7 +3429,7 @@ async def test_update_adventure_quests_crud(client: AsyncClient):
             "description": "This is a main quest description",
             "exp_reward": 100,
             "is_main": True,
-            "status": "open"
+            "status": "open",
         },
         {
             "id": "quest_2",
@@ -3259,15 +3437,12 @@ async def test_update_adventure_quests_crud(client: AsyncClient):
             "description": "This is a side quest description",
             "exp_reward": 50,
             "is_main": False,
-            "status": "open"
-        }
+            "status": "open",
+        },
     ]
 
     # PATCH to update the quests
-    resp = await client.patch(
-        f"/api/adventures/{adv_id}",
-        json={"quests": quests_payload}
-    )
+    resp = await client.patch(f"/api/adventures/{adv_id}", json={"quests": quests_payload})
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "quests" in data
@@ -3301,25 +3476,31 @@ async def test_generate_quest_description_endpoint(client: AsyncClient, monkeypa
         )
 
     monkeypatch.setattr(
-        "backend.api.routes.adventures.editor.GameMasterLLM.aexecute_complex_task",
-        fake_execute
+        "backend.api.routes.adventures.editor.GameMasterLLM.aexecute_complex_task", fake_execute
     )
 
     payload = {
         "title": "Explore the Crypt",
         "is_main": True,
         "other_quests": [
-            {"id": "quest_2", "title": "Find the key", "description": "Locate the brass key in the study.", "is_main": False}
-        ]
+            {
+                "id": "quest_2",
+                "title": "Find the key",
+                "description": "Locate the brass key in the study.",
+                "is_main": False,
+            }
+        ],
     }
 
     resp = await client.post(
-        f"/api/adventures/{adv_id}/editor/generate-quest-description",
-        json=payload
+        f"/api/adventures/{adv_id}/editor/generate-quest-description", json=payload
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["description"] == "The hero must delve deep into the crypt of the ancient kings and retrieve the lost crown."
+    assert (
+        data["description"]
+        == "The hero must delve deep into the crypt of the ancient kings and retrieve the lost crown."
+    )
 
 
 async def test_generate_new_quest_endpoint(client: AsyncClient, monkeypatch):
@@ -3335,25 +3516,26 @@ async def test_generate_new_quest_endpoint(client: AsyncClient, monkeypatch):
         assert "- [Side] Find the key: Locate the brass key in the study." in user_prompt
         return QuestGenerationResponse(
             title="Slay the Dragon",
-            description="The hero must journey to the volcano and slay the red dragon."
+            description="The hero must journey to the volcano and slay the red dragon.",
         )
 
     monkeypatch.setattr(
-        "backend.api.routes.adventures.editor.GameMasterLLM.aexecute_complex_task",
-        fake_execute
+        "backend.api.routes.adventures.editor.GameMasterLLM.aexecute_complex_task", fake_execute
     )
 
     payload = {
         "is_main": True,
         "other_quests": [
-            {"id": "quest_2", "title": "Find the key", "description": "Locate the brass key in the study.", "is_main": False}
-        ]
+            {
+                "id": "quest_2",
+                "title": "Find the key",
+                "description": "Locate the brass key in the study.",
+                "is_main": False,
+            }
+        ],
     }
 
-    resp = await client.post(
-        f"/api/adventures/{adv_id}/editor/generate-new-quest",
-        json=payload
-    )
+    resp = await client.post(f"/api/adventures/{adv_id}/editor/generate-new-quest", json=payload)
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["title"] == "Slay the Dragon"
@@ -3378,24 +3560,26 @@ async def test_editor_start_scene_endpoint_updates_manifest_and_assets(client: A
                 WorldScene.session_id.is_(None),
             )
         )
-        db.add_all([
-            WorldScene(
-                id="LOBBY",
-                template_id=adv_id,
-                session_id=None,
-                label="Lobby",
-                description="Lobby scene.",
-                image_url=None,
-            ),
-            WorldScene(
-                id="ASSESSMENT_ROOM",
-                template_id=adv_id,
-                session_id=None,
-                label="Assessment Room",
-                description="Assessment scene.",
-                image_url=None,
-            ),
-        ])
+        db.add_all(
+            [
+                WorldScene(
+                    id="LOBBY",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Lobby",
+                    description="Lobby scene.",
+                    image_url=None,
+                ),
+                WorldScene(
+                    id="ASSESSMENT_ROOM",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Assessment Room",
+                    description="Assessment scene.",
+                    image_url=None,
+                ),
+            ]
+        )
         await db.commit()
 
     set_resp = await client.patch(
@@ -3441,24 +3625,26 @@ async def test_editor_scene_entity_exit_crud_endpoints(client: AsyncClient):
                 WorldScene.session_id.is_(None),
             )
         )
-        db.add_all([
-            WorldScene(
-                id="SCENE_A",
-                template_id=adv_id,
-                session_id=None,
-                label="Scene A",
-                description="A",
-                image_url=None,
-            ),
-            WorldScene(
-                id="SCENE_B",
-                template_id=adv_id,
-                session_id=None,
-                label="Scene B",
-                description="B",
-                image_url=None,
-            ),
-        ])
+        db.add_all(
+            [
+                WorldScene(
+                    id="SCENE_A",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Scene A",
+                    description="A",
+                    image_url=None,
+                ),
+                WorldScene(
+                    id="SCENE_B",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Scene B",
+                    description="B",
+                    image_url=None,
+                ),
+            ]
+        )
         await db.commit()
 
     create_scene_resp = await client.post(
@@ -3506,7 +3692,9 @@ async def test_editor_scene_entity_exit_crud_endpoints(client: AsyncClient):
     assets_before_delete = assets_before_delete_resp.json()
     assert any(scene.get("id") == "SCENE_C" for scene in assets_before_delete.get("scenes", []))
     assert any(entity.get("id") == "NPC_C" for entity in assets_before_delete.get("npcs", []))
-    assert any(world_exit.get("id") == exit_id for world_exit in assets_before_delete.get("exits", []))
+    assert any(
+        world_exit.get("id") == exit_id for world_exit in assets_before_delete.get("exits", [])
+    )
 
     delete_scene_resp = await client.delete(f"/api/adventures/{adv_id}/editor/scene/SCENE_C")
     assert delete_scene_resp.status_code == 200, delete_scene_resp.text
@@ -3516,7 +3704,9 @@ async def test_editor_scene_entity_exit_crud_endpoints(client: AsyncClient):
     assets_after_delete = assets_after_delete_resp.json()
     assert all(scene.get("id") != "SCENE_C" for scene in assets_after_delete.get("scenes", []))
     assert all(entity.get("id") != "NPC_C" for entity in assets_after_delete.get("npcs", []))
-    assert all(world_exit.get("id") != exit_id for world_exit in assets_after_delete.get("exits", []))
+    assert all(
+        world_exit.get("id") != exit_id for world_exit in assets_after_delete.get("exits", [])
+    )
 
 
 async def test_editor_quest_and_award_crud_endpoints(client: AsyncClient):
@@ -3681,7 +3871,7 @@ async def test_create_adventure_skip_generation(client: AsyncClient):
     assert resp.status_code == 201, resp.text
     ids = resp.json()
     assert ids["adventure_id"]
-    
+
     # Fetch details and ensure it is ready
     get_resp = await client.get(f"/api/adventures/{ids['adventure_id']}")
     assert get_resp.status_code == 200, get_resp.text
@@ -3700,33 +3890,47 @@ async def test_editor_asset_id_rename_and_cascade(client: AsyncClient):
         await db.execute(delete(WorldExit).where(WorldExit.template_id == adv_id))
         await db.execute(delete(WorldEntity).where(WorldEntity.template_id == adv_id))
         await db.execute(delete(WorldScene).where(WorldScene.template_id == adv_id))
-        
-        db.add_all([
-            WorldScene(id="SCENE_A", template_id=adv_id, session_id=None, label="Scene A", description="A"),
-            WorldScene(id="SCENE_B", template_id=adv_id, session_id=None, label="Scene B", description="B"),
-            WorldEntity(
-                id="BRONZE_KEY",
-                template_id=adv_id,
-                session_id=None,
-                entity_type="OBJECT",
-                name="Bronze Key",
-                description="Unlocks the door.",
-                current_scene_id="SCENE_A",
-                item_type="DEFAULT",
-            ),
-            WorldEntity(
-                id="CHEST",
-                template_id=adv_id,
-                session_id=None,
-                entity_type="OBJECT",
-                name="Locked Chest",
-                description="Contains loot.",
-                current_scene_id="SCENE_A",
-                item_type="CONTAINER",
-                combination_ingredients=["BRONZE_KEY"],
-                inventory=["BRONZE_KEY"],
-            )
-        ])
+
+        db.add_all(
+            [
+                WorldScene(
+                    id="SCENE_A",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Scene A",
+                    description="A",
+                ),
+                WorldScene(
+                    id="SCENE_B",
+                    template_id=adv_id,
+                    session_id=None,
+                    label="Scene B",
+                    description="B",
+                ),
+                WorldEntity(
+                    id="BRONZE_KEY",
+                    template_id=adv_id,
+                    session_id=None,
+                    entity_type="OBJECT",
+                    name="Bronze Key",
+                    description="Unlocks the door.",
+                    current_scene_id="SCENE_A",
+                    item_type="DEFAULT",
+                ),
+                WorldEntity(
+                    id="CHEST",
+                    template_id=adv_id,
+                    session_id=None,
+                    entity_type="OBJECT",
+                    name="Locked Chest",
+                    description="Contains loot.",
+                    current_scene_id="SCENE_A",
+                    item_type="CONTAINER",
+                    combination_ingredients=["BRONZE_KEY"],
+                    inventory=["BRONZE_KEY"],
+                ),
+            ]
+        )
         db.add(
             WorldExit(
                 template_id=adv_id,
@@ -3748,21 +3952,21 @@ async def test_editor_asset_id_rename_and_cascade(client: AsyncClient):
     # 1. Try renaming Scene A to a duplicate (SCENE_B) -> should fail with 409
     resp = await client.patch(
         f"/api/adventures/{adv_id}/editor/entity",
-        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE_B"}
+        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE_B"},
     )
     assert resp.status_code == 409
 
     # 2. Try renaming Scene A with invalid characters -> should fail with 400
     resp = await client.patch(
         f"/api/adventures/{adv_id}/editor/entity",
-        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE-A!"}
+        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE-A!"},
     )
     assert resp.status_code == 400
 
     # 3. Rename Scene A to SCENE_START -> should succeed (200)
     resp = await client.patch(
         f"/api/adventures/{adv_id}/editor/entity",
-        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE_START"}
+        json={"target_type": "scene", "target_id": "SCENE_A", "new_id": "SCENE_START"},
     )
     assert resp.status_code == 200
 
@@ -3773,38 +3977,54 @@ async def test_editor_asset_id_rename_and_cascade(client: AsyncClient):
         assert adv.original_manifest.get("start_scene_id") == "SCENE_START"
 
         # Check WorldScene exists
-        scenes = (await db.execute(select(WorldScene).where(WorldScene.template_id == adv_id))).scalars().all()
+        scenes = (
+            (await db.execute(select(WorldScene).where(WorldScene.template_id == adv_id)))
+            .scalars()
+            .all()
+        )
         scene_ids = {s.id for s in scenes}
         assert "SCENE_START" in scene_ids
         assert "SCENE_A" not in scene_ids
 
         # Check exit from_scene_id updated
-        world_exits = (await db.execute(select(WorldExit).where(WorldExit.template_id == adv_id))).scalars().all()
+        world_exits = (
+            (await db.execute(select(WorldExit).where(WorldExit.template_id == adv_id)))
+            .scalars()
+            .all()
+        )
         assert len(world_exits) == 1
         assert world_exits[0].from_scene_id == "SCENE_START"
 
         # Check entity current_scene_id updated
-        entities = (await db.execute(select(WorldEntity).where(WorldEntity.template_id == adv_id))).scalars().all()
+        entities = (
+            (await db.execute(select(WorldEntity).where(WorldEntity.template_id == adv_id)))
+            .scalars()
+            .all()
+        )
         for ent in entities:
             assert ent.current_scene_id == "SCENE_START"
 
     # 5. Try renaming BRONZE_KEY to a duplicate (SCENE_B or CHEST) -> should fail with 409
     resp = await client.patch(
         f"/api/adventures/{adv_id}/editor/entity",
-        json={"target_type": "object", "target_id": "BRONZE_KEY", "new_id": "CHEST"}
+        json={"target_type": "object", "target_id": "BRONZE_KEY", "new_id": "CHEST"},
     )
     assert resp.status_code == 409
 
     # 6. Rename BRONZE_KEY to GOLDEN_KEY -> should succeed (200)
     resp = await client.patch(
         f"/api/adventures/{adv_id}/editor/entity",
-        json={"target_type": "object", "target_id": "BRONZE_KEY", "new_id": "GOLDEN_KEY"}
+        json={"target_type": "object", "target_id": "BRONZE_KEY", "new_id": "GOLDEN_KEY"},
     )
     assert resp.status_code == 200
 
     # 7. Verify Entity ID update and cascades in database
     async with TestSessionLocal() as db:
-        entities = (await db.execute(select(WorldEntity).where(WorldEntity.template_id == adv_id))).scalars().all()
+        entities = (
+            (await db.execute(select(WorldEntity).where(WorldEntity.template_id == adv_id)))
+            .scalars()
+            .all()
+        )
         ent_ids = {e.id for e in entities}
         assert "GOLDEN_KEY" in ent_ids
         assert "BRONZE_KEY" not in ent_ids
@@ -3815,7 +4035,11 @@ async def test_editor_asset_id_rename_and_cascade(client: AsyncClient):
         assert chest.inventory == ["GOLDEN_KEY"]
 
         # Check exit item_to_unlock updated
-        world_exits = (await db.execute(select(WorldExit).where(WorldExit.template_id == adv_id))).scalars().all()
+        world_exits = (
+            (await db.execute(select(WorldExit).where(WorldExit.template_id == adv_id)))
+            .scalars()
+            .all()
+        )
         assert world_exits[0].item_to_unlock == "GOLDEN_KEY"
 
 
@@ -3861,7 +4085,12 @@ async def test_editor_scene_decorative_objects_crud(client: AsyncClient):
     scenes = assets_resp.json().get("scenes", [])
     scene = next(s for s in scenes if s["id"] == "SCENE_DECOR")
     assert scene["description"] == "An edited room."
-    assert scene["decorative_objects"] == ["glowing orb", "rusty sword", "shiny mirror", "comfy chair"]
+    assert scene["decorative_objects"] == [
+        "glowing orb",
+        "rusty sword",
+        "shiny mirror",
+        "comfy chair",
+    ]
 
     # 3. Patch the scene, updating description only (preserving decorative_objects)
     patch_resp2 = await client.patch(
@@ -3878,7 +4107,12 @@ async def test_editor_scene_decorative_objects_crud(client: AsyncClient):
     scenes = assets_resp.json().get("scenes", [])
     scene = next(s for s in scenes if s["id"] == "SCENE_DECOR")
     assert scene["description"] == "A second description edit."
-    assert scene["decorative_objects"] == ["glowing orb", "rusty sword", "shiny mirror", "comfy chair"]
+    assert scene["decorative_objects"] == [
+        "glowing orb",
+        "rusty sword",
+        "shiny mirror",
+        "comfy chair",
+    ]
 
     # 4. Patch the scene, updating decorative_objects only (preserving description)
     patch_resp3 = await client.patch(
@@ -3938,12 +4172,6 @@ async def test_editor_scene_decorative_objects_crud(client: AsyncClient):
     assert create_resp_long.status_code == 400
 
 
-
-
-
-
-
-
-
-
-
+def _url_to_file_path(data_dir, url: str) -> str:
+    rel = url.replace("/data/", "", 1).lstrip("/")
+    return os.path.join(str(data_dir), rel)

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from backend.engine.rule_engine import GameEvent
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+
 import logging
 from collections import defaultdict
 from typing import Any
@@ -46,7 +53,11 @@ def _inventory(value: Any) -> list[dict]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-async def _canonical_entities(manager, states):
+async def _canonical_entities(
+    manager: GameTurnManager, states: dict[str, Any]
+) -> list[WorldEntity]:
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
     result = await manager.db.execute(
         select(WorldEntity).where(WorldEntity.session_id == manager.game_id)
     )
@@ -61,6 +72,8 @@ async def _canonical_entities(manager, states):
     if scene:
         return []
     # Compatibility for old sessions that still read the template directly.
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
     result = await manager.db.execute(
         select(WorldEntity).where(
             WorldEntity.template_id == manager.state.template_id,
@@ -70,7 +83,13 @@ async def _canonical_entities(manager, states):
     return list(result.scalars().all())
 
 
-def _filter_targets(event, field, index, rejected, attribute=None) -> None:
+def _filter_targets(
+    event: GameEvent,
+    field: str,
+    index: TargetIndex,
+    rejected: list[str],
+    attribute: str | None = None,
+) -> None:
     accepted = []
     for target in getattr(event, field) or []:
         raw = getattr(target, attribute) if attribute else target
@@ -87,7 +106,7 @@ def _filter_targets(event, field, index, rejected, attribute=None) -> None:
         setattr(event, field, accepted)
 
 
-async def validate_mutation_targets(manager, event) -> list[str]:
+async def validate_mutation_targets(manager: GameTurnManager, event: GameEvent) -> list[str]:
     """Filter unsupported targets in place so persistence, outcomes and UI agree.
 
     Memories are unstructured and cannot reliably be attributed to individual
@@ -105,6 +124,8 @@ async def validate_mutation_targets(manager, event) -> list[str]:
     if not any(getattr(event, field) for field in fields):
         return []
 
+    if manager.state is None or manager.avatar is None:
+        raise RuntimeError("Turn must be initialized")
     states = manager.state.entity_states
     states = states if isinstance(states, dict) else {}
     entities = await _canonical_entities(manager, states)

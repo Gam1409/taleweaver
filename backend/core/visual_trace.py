@@ -5,14 +5,17 @@ import json
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 from uuid import uuid4
 
 from backend.core.config import settings
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 DIRECTORY = Path(__file__).resolve().parents[2] / "log" / "visual-traces"
 MAX_FILES = 30
@@ -61,9 +64,9 @@ def record(stage: str, **values: Any) -> None:
         logger.warning("Visual trace storage unavailable; generation continues.")
 
 
-def traced(method: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+def traced(method: Callable[P, Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]:
     @wraps(method)
-    async def wrapped(*args: Any, **kwargs: Any) -> Any:
+    async def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
         if not settings.VISUAL_TRACE_ENABLED:
             return await method(*args, **kwargs)
         trace_id = uuid4().hex

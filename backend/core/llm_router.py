@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar
@@ -136,7 +137,7 @@ class GameMasterLLM:
         return retry_kwargs
 
     @guarded_sync
-    def _completion_with_openrouter_fallback(self, kwargs: dict):
+    def _completion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Call LiteLLM completion and retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
         if self.provider == "custom_openai":
             from backend.core.custom_openai import complete
@@ -203,7 +204,7 @@ class GameMasterLLM:
                 raise
 
     @guarded_async
-    async def _acompletion_with_openrouter_fallback(self, kwargs: dict):
+    async def _acompletion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
         if self.provider == "custom_openai":
             from backend.core.custom_openai import acomplete
@@ -290,14 +291,15 @@ class GameMasterLLM:
         """
         content = content.strip()
 
-        # Check for markdown code blocks first
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            # Check if there are at least two sets of backticks
-            parts = content.split("```")
-            if len(parts) >= 3:
-                content = parts[1]
+        # A fence inside a JSON string is data, not a wrapper.
+        try:
+            json.loads(content)
+            return content
+        except json.JSONDecodeError:
+            pass
+        wrapper = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL)
+        if wrapper:
+            content = wrapper.group(1)
 
         content = content.strip()
 
@@ -404,7 +406,7 @@ class GameMasterLLM:
 
     @staticmethod
     def _to_canonical_voice_tag(tag: str) -> str:
-        return tag.strip().lower()
+        return tag.strip().lower() if tag.strip().lower() in VOICE_TAG_SET else tag
 
     @staticmethod
     def normalize_voice_tags(text: str) -> str:
@@ -449,7 +451,7 @@ class GameMasterLLM:
                 speaker_part = sp_match.group("speaker")
                 speech_part = sp_match.group("speech").strip()
                 tag_match = tag_extract_re.match(speech_part)
-                if tag_match:
+                if tag_match and tag_match.group("tag").strip().lower() in VOICE_TAG_SET:
                     canon_tag = GameMasterLLM._to_canonical_voice_tag(tag_match.group("tag"))
                     body = tag_match.group("body").strip()
                     body = (
@@ -482,17 +484,17 @@ class GameMasterLLM:
         return clean_voice_repetition("\n".join(normalized_lines))
 
     @staticmethod
-    async def _clean_stream_voice_tags(stream):
+    async def _clean_stream_voice_tags(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
         """Async generator that buffers the start of the stream and normalizes voice tags."""
         async for chunk in clean_stream_voice_tags(stream, GameMasterLLM.normalize_voice_tags):
             yield chunk
 
     @staticmethod
     async def _with_stream_timeout(
-        stream,
+        stream: AsyncIterator[Any],
         initial_timeout: float,
         chunk_timeout: float,
-    ):
+    ) -> AsyncIterator[Any]:
         """Bound provider silence; partial failures remain visible to the caller."""
         from backend.core.llm_stream_timeout import with_stream_timeout
 
@@ -502,7 +504,7 @@ class GameMasterLLM:
             yield chunk
 
     @staticmethod
-    async def _clean_stream_thinking(stream):
+    async def _clean_stream_thinking(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
         """Async generator that strips <think>...</think> blocks from stream chunks on-the-fly."""
         async for chunk in clean_stream_thinking(stream):
             yield chunk
@@ -550,7 +552,7 @@ class GameMasterLLM:
         retry_kwargs["messages"] = retry_messages
         return retry_kwargs
 
-    async def _retry_blank_json_content_async(self, kwargs: dict, response: Any):
+    async def _retry_blank_json_content_async(self, kwargs: dict, response: Any) -> Any:
         """Retry once when JSON-mode providers return only reasoning_content and an empty content channel."""
         try:
             message = response.choices[0].message
@@ -568,7 +570,7 @@ class GameMasterLLM:
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
         return await self._acompletion_with_openrouter_fallback(retry_kwargs)
 
-    def _retry_blank_json_content(self, kwargs: dict, response: Any):
+    def _retry_blank_json_content(self, kwargs: dict, response: Any) -> Any:
         """Sync variant of retry for empty content with populated reasoning_content."""
         try:
             message = response.choices[0].message
@@ -1054,7 +1056,7 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
-    ):
+    ) -> AsyncIterator[Any]:
         """
         Streams a free narrative task.
         """
@@ -1211,10 +1213,9 @@ class GameMasterLLM:
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
                 logger.error(
-                    "LLM response appears truncated. Length: %d, finish_reason: %s. Full content: %s",
+                    "LLM response appears truncated. Length: %d, finish_reason: %s",
                     len(content),
                     finish_reason,
-                    content,
                 )
                 raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
             repaired = self._attempt_repair_truncated_json(content)
@@ -1230,14 +1231,11 @@ class GameMasterLLM:
                     data = None
             if data is None:
                 logger.error(
-                    "LLM response was not valid JSON. Length: %d, finish_reason: %s. Full content: %s",
+                    "LLM response was not valid JSON. Length: %d, finish_reason: %s",
                     len(content),
                     finish_reason,
-                    content,
                 )
-                raise ValueError(
-                    f"Failed to parse LLM response as JSON. Preview: {self._content_preview(content)}"
-                ) from exc
+                raise ValueError("Failed to parse LLM response as JSON.") from exc
             return data
 
     @staticmethod
@@ -1258,15 +1256,15 @@ class GameMasterLLM:
         content = response.choices[0].message.content
         finish_reason = response.choices[0].finish_reason
         if not content:
-            logger.error(f"LLM returned empty content. Raw response: {response.model_dump()}")
+            logger.error("LLM returned empty content; finish_reason=%s", finish_reason)
             raise self._empty_content_error(finish_reason)
 
         try:
             content = self._clean_json_string(self.clean_thinking_tags(content))
             if not content:
                 logger.error(
-                    "LLM returned content that was empty after JSON cleanup. Raw response: %s",
-                    response.model_dump(),
+                    "LLM returned content that was empty after JSON cleanup; finish_reason=%s",
+                    finish_reason,
                 )
                 raise self._empty_content_error(finish_reason)
             data = self._parse_json_payload(self._repair_json(content), finish_reason)
@@ -1274,13 +1272,11 @@ class GameMasterLLM:
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
                 raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
-            raise ValueError(
-                f"Failed to parse LLM response as JSON. Preview: {self._content_preview(content)}"
-            ) from exc
+            raise ValueError("Failed to parse LLM response as JSON.") from exc
         except ValidationError as exc:
             raise ValueError(
                 f"LLM returned JSON that does not match expected schema {response_model.__name__}. "
-                f"Preview: {self._content_preview(content)}. Validation: {exc}"
+                f"Validation errors: {exc.error_count()}."
             ) from exc
 
     @async_call("structured")

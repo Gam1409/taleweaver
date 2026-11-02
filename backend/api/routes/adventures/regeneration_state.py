@@ -74,7 +74,10 @@ async def refresh_evidence(db: AsyncSession, session: GameSession, message: Chat
         direction = (state.entity_states or {}).get("__vn_story_direction__") or {}
         if (direction.get("focus") or {}).get("message_id") == message.id:
             direction = {key: value for key, value in direction.items() if key != "focus"}
-            state.entity_states = {**state.entity_states, "__vn_story_direction__": direction}
+            state.entity_states = {
+                **(state.entity_states or {}),
+                "__vn_story_direction__": direction,
+            }
         refresh_visual_snapshot(state, message)
         await retract_chronicle(db, state, message)
     summaries = await db.scalars(

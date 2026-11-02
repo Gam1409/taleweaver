@@ -77,7 +77,7 @@ def _journal_source_ids(npcs: list[Any], budget: int) -> set[str]:
     if budget <= 0:
         return set()
     ids: set[str] = set()
-    groups = [list(reversed(journal_of(npc).get("entries") or [])) for npc in npcs]
+    groups = [list(reversed(journal_of(npc, full=True).get("entries") or [])) for npc in npcs]
     for offset in range(max((len(group) for group in groups), default=0)):
         ids.update(
             group[offset]["message_id"]

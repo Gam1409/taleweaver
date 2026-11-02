@@ -88,7 +88,7 @@ async def build_user_profile_data(db: AsyncSession, user: User) -> dict[str, Any
         "adventure_count": adventure_count,
         "total_xp": total_xp,
         "game_log": [
-            {**entry, "xp": session_xp.get(entry.get("session_id"), 0)}
+            {**entry, "xp": session_xp.get(str(entry.get("session_id") or ""), 0)}
             for entry in (user.game_log or [])
         ],
         "has_imported_defaults": user.has_imported_defaults,
@@ -103,7 +103,7 @@ def _snapshot_sequences(state: Optional[SessionState]) -> list:
         return []
     for source in (snapshot.get("original_manifest"), snapshot.get("adventure")):
         if isinstance(source, dict) and isinstance(source.get("sequences"), list):
-            return source["sequences"]
+            return list(source["sequences"])
     return []
 
 

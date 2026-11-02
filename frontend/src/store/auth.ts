@@ -49,6 +49,7 @@ export function setToken(token: string, rememberMe: boolean = false) {
 }
 
 export function clearAuth() {
+  void apiFetch('/auth/media-session', { method: 'DELETE' }).catch(() => undefined)
   authState.user = null
   authState.token = null
   authState.isAuthenticated = false

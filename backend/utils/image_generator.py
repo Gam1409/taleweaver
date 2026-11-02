@@ -272,7 +272,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
             bg_color = self._adjust_brightness(bg_color, self.config.background_brightness)
 
         img = Image.new("RGBA", (width, height), (0, 0, 0, 255))
-        ImageDraw.Draw(img, "RGBA").rectangle([0, 0, width, height], fill=bg_color + (255,))
+        ImageDraw.Draw(img, "RGBA").rectangle((0, 0, width, height), fill=bg_color + (255,))
 
         self._draw_blobs(
             img,
@@ -460,7 +460,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
         elif "heart" in name:
             top = size * 0.35
             draw.pieslice(
-                [cx - r, top - r * 0.5, cx, top + r * 0.5],
+                ((cx - r, top - r * 0.5), (cx, top + r * 0.5)),
                 180,
                 360,
                 fill=fill,
@@ -468,7 +468,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
                 width=stroke_width,
             )
             draw.pieslice(
-                [cx, top - r * 0.5, cx + r, top + r * 0.5],
+                ((cx, top - r * 0.5), (cx + r, top + r * 0.5)),
                 180,
                 360,
                 fill=fill,
@@ -510,7 +510,16 @@ class BlobIconStrategy(ImageGenerationStrategy):
         return canvas
 
     @staticmethod
-    def _draw_equipment_icon(name, draw, cx, cy, r, stroke, fill, stroke_width) -> None:
+    def _draw_equipment_icon(
+        name: str,
+        draw: ImageDraw.ImageDraw,
+        cx: float,
+        cy: float,
+        r: float,
+        stroke: str | tuple[int, int, int] | tuple[int, int, int, int] | None,
+        fill: str | tuple[int, int, int] | tuple[int, int, int, int] | None,
+        stroke_width: int,
+    ) -> None:
         if "sword" in name:
             # Blade
             draw.line([(cx, cy + r), (cx, cy - r * 0.7)], fill=stroke, width=stroke_width * 2)
@@ -539,7 +548,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
                 width=stroke_width,
             )
             draw.rectangle(
-                [cx - r * 0.2, cy - r * 0.7, cx + r * 0.2, cy - r * 0.2],
+                (cx - r * 0.2, cy - r * 0.7, cx + r * 0.2, cy - r * 0.2),
                 outline=stroke,
                 fill=fill,
                 width=stroke_width,
@@ -560,7 +569,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
             )
         elif "book" in name:
             draw.rectangle(
-                [cx - r * 0.6, cy - r * 0.8, cx + r * 0.6, cy + r * 0.8],
+                (cx - r * 0.6, cy - r * 0.8, cx + r * 0.6, cy + r * 0.8),
                 outline=stroke,
                 fill=fill,
                 width=stroke_width,
@@ -572,7 +581,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
             )
         elif "helm" in name:
             draw.pieslice(
-                [cx - r, cy - r, cx + r, cy + r],
+                ((cx - r, cy - r), (cx + r, cy + r)),
                 180,
                 360,
                 outline=stroke,
@@ -580,7 +589,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
                 width=stroke_width,
             )
             draw.rectangle(
-                [cx - r, cy, cx + r, cy + r * 0.2], outline=stroke, fill=fill, width=stroke_width
+                (cx - r, cy, cx + r, cy + r * 0.2), outline=stroke, fill=fill, width=stroke_width
             )
             draw.line([(cx, cy - r), (cx, cy - r * 1.2)], fill=stroke, width=stroke_width)
         else:
@@ -652,13 +661,10 @@ class PlaceholderImageGenerator:
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Optimization parameters for JPEG
-        save_kwargs = (
-            {"quality": quality, "optimize": True}
-            if out_path.suffix.lower() in [".jpg", ".jpeg"]
-            else {}
-        )
-
-        img.save(out_path, **save_kwargs)
+        if out_path.suffix.lower() in [".jpg", ".jpeg"]:
+            img.save(out_path, quality=quality, optimize=True)
+        else:
+            img.save(out_path)
         return out_path
 
 
@@ -674,9 +680,7 @@ if __name__ == "__main__":
     print(f"Saved: {saved_path_jpg}")
 
     # Generates an 800x800 PNG in Green Woods style
-    generator_woods = PlaceholderImageGenerator(
-        OrganicGradientStrategy(theme=ColorTheme.GREEN_WOODS)
-    )
+    generator_woods = PlaceholderImageGenerator(OrganicGradientStrategy(theme=ColorTheme.RPG))
     saved_path_png = generator_woods.create_and_save(
         "placeholders/avatar_woods.png", size=(800, 800)
     )

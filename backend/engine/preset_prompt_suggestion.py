@@ -2,6 +2,7 @@
 
 from fastapi import HTTPException
 
+from backend.api.routes.adventures.schemas import SuggestPromptRequest
 from backend.core import prompts
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.llm_router import GameMasterLLM
@@ -10,9 +11,17 @@ from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.story_visual_presets import story_t2i
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.user import User
 
 
-async def suggest_image_prompt(user, adventure, payload, name: str, description: str) -> str:
+async def suggest_image_prompt(
+    user: User,
+    adventure: AdventureTemplate,
+    payload: SuggestPromptRequest,
+    name: str,
+    description: str,
+) -> str:
     suggested = await suggest_preset_prompt(user, adventure, payload, name, description)
     if suggested is not None:
         return suggested
@@ -29,7 +38,11 @@ async def suggest_image_prompt(user, adventure, payload, name: str, description:
 
 
 async def suggest_preset_prompt(
-    user, adventure, payload, name: str, description: str
+    user: User,
+    adventure: AdventureTemplate,
+    payload: SuggestPromptRequest,
+    name: str,
+    description: str,
 ) -> str | None:
     try:
         t2i = story_t2i(user.t2i_settings, adventure)

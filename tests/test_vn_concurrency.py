@@ -86,6 +86,7 @@ async def test_real_manager_lease_prevents_lost_pace_and_social_writes(
             "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
+            "nsfw_guard": "warn",
         }
         assert saved.entity_states[STATE_KEY]["turn"] == social_fixture().turn + 1
         assert (

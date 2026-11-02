@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import VnNarrationSettings from './VnNarrationSettings.vue'
 import SessionContentSettings from './SessionContentSettings.vue'
 import DynamicLocationSettings from './DynamicLocationSettings.vue'
@@ -20,6 +21,9 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'save', payload: { turns: number; enableCompression: boolean; autoSpeakNarration: boolean; autoSpeakDialogues: boolean }): void
 }>()
+
+const dialog = ref<HTMLElement | null>(null)
+useDialogFocus(dialog, () => emit('close'))
 
 const vnNarration = ref<InstanceType<typeof VnNarrationSettings> | null>(null)
 const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(null)
@@ -90,7 +94,7 @@ function handleInput(event: Event) {
 
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in" @click.self="emit('close')">
-    <div class="w-full max-w-lg rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
+    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="session-settings-title" tabindex="-1" class="w-full max-w-lg rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
       <!-- Header -->
       <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between bg-slate-950/40">
         <div class="flex items-center gap-3">
@@ -98,7 +102,7 @@ function handleInput(event: Event) {
             <Sliders class="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <h3 class="text-base sm:text-lg font-black text-white font-display uppercase tracking-wider">Session Memory & Settings</h3>
+            <h3 id="session-settings-title" class="text-base sm:text-lg font-black text-white font-display uppercase tracking-wider">Session Memory & Settings</h3>
             <p class="text-xs text-slate-400">Configure LLM context memory for this active session.</p>
           </div>
         </div>

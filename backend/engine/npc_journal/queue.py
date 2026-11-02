@@ -1,9 +1,11 @@
 """Durable eligibility and claims for bounded, non-blocking journal extraction."""
 
 import time
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement
@@ -64,15 +66,19 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
             func.coalesce(ChatMessage.npc_journal["lease_until"].as_float(), 0) <= now,
         )
         .values(
-            npc_journal={
-                "status": "failed",
-                "attempts": MAX_ATTEMPTS,
-                "error": "Processing was interrupted repeatedly. Retry from Characters.",
-            }
+            npc_journal=func.json_set(
+                ChatMessage.npc_journal,
+                "$.status",
+                "failed",
+                "$.attempts",
+                MAX_ATTEMPTS,
+                "$.error",
+                "Processing was interrupted repeatedly. Retry from Characters.",
+            )
         )
     )
     await db.commit()
-    return await db.scalar(
+    message_id: str | None = await db.scalar(
         select(ChatMessage.id)
         .where(
             ChatMessage.session_id == session_id,
@@ -83,6 +89,7 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
         .order_by(ChatMessage.created_at, ChatMessage.id)
         .limit(1)
     )
+    return message_id
 
 
 async def next_retry_at(db: AsyncSession, session_id: str) -> float | None:
@@ -147,7 +154,7 @@ async def claim(
         .values(npc_journal=task)
         .execution_options(synchronize_session=False)
     )
-    if updated.rowcount != 1:
+    if cast(CursorResult[Any], updated).rowcount != 1:
         await db.rollback()
         return None
     await db.commit()
@@ -164,7 +171,7 @@ async def fence(db: AsyncSession, message: ChatMessage, token: str) -> bool:
         .values(npc_journal=task)
         .execution_options(synchronize_session=False)
     )
-    return result.rowcount == 1
+    return cast(CursorResult[Any], result).rowcount == 1
 
 
 async def requeue_dependents(db: AsyncSession, recovered: ChatMessage) -> None:

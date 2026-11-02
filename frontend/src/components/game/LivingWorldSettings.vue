@@ -62,6 +62,16 @@ async function resume(): Promise<void> {
   finally { busy.value = false }
 }
 
+async function renewBudget(): Promise<void> {
+  if (!status.value || busy.value) return
+  busy.value = true
+  try {
+    await livingWorldRequest(props.sessionId, '/renew-budget', 'POST', { expected_revision: status.value.revision })
+    await load()
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Could not renew budget.' }
+  finally { busy.value = false }
+}
+
 async function stop(): Promise<void> {
   try { await livingWorldRequest(props.sessionId, '/stop', 'POST'); await load() }
   catch (cause) { error.value = cause instanceof Error ? cause.message : 'Could not stop simulation.' }
@@ -98,6 +108,10 @@ defineExpose({ save })
         <p role="status">{{ busy ? 'Working…' : status.status }} · Game minute {{ status.cursor }} / {{ status.target }}</p>
         <p class="text-xs text-slate-400">{{ status.pending_events }} pending events · {{ status.last_run_events }} processed last run · {{ status.llm_calls }} decision attempts</p>
         <p v-if="status.status === 'WAITING_FOR_LLM'" class="text-xs text-amber-300">A decision is waiting. Continue with private decisions enabled, or disable the experiment to resume normal play. No outcome has been invented.</p>
+        <div v-if="status.llm_calls >= status.settings.max_deliberations" class="text-xs text-amber-300">
+          Decision budget exhausted. Renewing permits another {{ status.settings.max_deliberations }} model calls and may use provider credits.
+          <button type="button" :disabled="busy || status.decision_running" class="mt-2 rounded border px-3 py-2" @click="renewBudget">Renew decision budget</button>
+        </div>
         <LivingWorldReasoning v-model="draft" :busy="busy" :concordia-available="status.concordia_available ?? false" />
         <div class="flex flex-wrap gap-2">
           <button type="button" :disabled="busy" class="rounded bg-teal-800 px-3 py-2 disabled:opacity-40" @click="resume">Continue catch-up</button>

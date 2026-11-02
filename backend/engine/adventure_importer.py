@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.adventure_format import validate_manifest_version
 from backend.core.auth import get_password_hash
 from backend.core.config import settings
+from backend.engine.import_transaction import atomic_import, defer_replacement
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.utils.async_files import run_file_operation
@@ -99,9 +100,12 @@ def _build_local_default_user() -> User:
     )
 
 
-def _read_json_file(file_path):
+def _read_json_file(file_path: str) -> dict[str, Any]:
     with open(file_path, encoding="utf-8") as source:
-        return json.load(source)
+        data: object = json.load(source)
+    if not isinstance(data, dict):
+        raise ValueError("Adventure manifest must be an object.")
+    return data
 
 
 class AdventureTemplateImporter:
@@ -154,7 +158,8 @@ class AdventureTemplateImporter:
         """Helper to cleanly delete a template, decoupling sessions and cleaning assets before overwrite import."""
         from backend.api.routes.adventures.logic import AdventureLogic
 
-        await AdventureLogic.delete_adventure(db, template_id)
+        if not defer_replacement(db, template_id):
+            await AdventureLogic.delete_adventure(db, template_id)
 
     @staticmethod
     async def import_file(
@@ -186,6 +191,7 @@ class AdventureTemplateImporter:
         return await import_adz(db, adz_data, owner_id, overwrite)
 
     @staticmethod
+    @atomic_import
     async def import_adv_manifest(
         db: AsyncSession,
         payload: dict[str, Any],

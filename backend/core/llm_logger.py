@@ -50,14 +50,9 @@ def _write_entry(entry: dict[str, Any]) -> None:
     if not _TELEMETRY_ENABLED:
         return
 
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR, exist_ok=True)
+    from backend.core.telemetry_writer import enqueue
 
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(_prepare_value(entry), ensure_ascii=False, default=str) + "\n")
-    except OSError as exc:
-        logger.error("Failed to write to LLM debug log: %s", exc)
+    enqueue(LOG_FILE, json.dumps(_prepare_value(entry), ensure_ascii=False, default=str))
 
 
 def log_structured_event(event_type: str, **fields: Any) -> None:

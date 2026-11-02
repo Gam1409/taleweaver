@@ -169,14 +169,7 @@ async def test_checkpoint_retention_keeps_pinned_and_manual_and_restores_status(
 
     async with TestSessionLocal() as db:
         user, _, state = await _seed(db)
-        session = GameSession(
-            id=state.session_id,
-            user_id=user.id,
-            avatar_id=state.avatar_id,
-            template_id=state.template_id,
-            status="active",
-        )
-        db.add(session)
+        session = await db.get(GameSession, state.session_id)
         await db.commit()
         manual = await SessionCheckpointService.create_checkpoint(db, state.session_id, "MANUAL")
         pinned = await SessionCheckpointService.create_checkpoint(

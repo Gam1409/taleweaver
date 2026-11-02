@@ -30,7 +30,9 @@ def retry_transaction(operation: Callable[P, Awaitable[T]]) -> Callable[P, Await
             # Wait outside any SQL session: a turn can own the SQLite writer
             # while awaiting its model, much longer than a transient retry delay.
             task = asyncio.current_task()
-            if scheduling.scheduler.active_turns and not (task and task.cancelling()):
+            if scheduling.scheduler.active_turns and not (
+                task and getattr(task, "cancelling", lambda: 0)()
+            ):
                 await scheduling.scheduler.wait_idle()
             try:
                 return await operation(*args, **kwargs)

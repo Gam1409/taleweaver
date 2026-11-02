@@ -38,7 +38,7 @@ def registry_of(entity_states: dict | None) -> dict:
 def _visible_facts(value: dict | None) -> dict:
     """Accept only caller-selected public appearance facts; never copy inventory/goals."""
     facts = value or {}
-    result = {
+    result: dict[str, Any] = {
         key: str(facts[key])[:2000]
         for key in ("setting", "lighting", "visible_action", "staging_status")
         if facts.get(key)

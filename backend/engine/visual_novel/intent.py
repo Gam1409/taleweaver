@@ -2,6 +2,7 @@
 
 import json
 from copy import copy
+from types import GenericAlias
 from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, create_model
@@ -71,7 +72,7 @@ VNEntityUpdate = create_model(
     "VNEntityUpdate",
     __config__=ConfigDict(extra="ignore"),
     **_fields(WorldEntityUpdate, _ENTITY_FIELDS),
-    inventory=(list[VNInventoryItem] | None, None),
+    inventory=(GenericAlias(list, VNInventoryItem) | None, None),
 )
 VNProgressionIntent = create_model(
     "VNProgressionIntent",
@@ -91,10 +92,10 @@ VNProgressionIntent = create_model(
             description="Principal autonomous NPC initiative for continuity validation, not a limit on narrative development; separate from completed events.",
         ),
     ),
-    new_inventory_items=(list[VNInventoryItem] | None, None),
-    updated_inventory_items=(list[VNInventoryItem] | None, None),
-    spawned_items=(list[VNInventoryItem] | None, None),
-    updated_entities=(list[VNEntityUpdate] | None, None),
+    new_inventory_items=(GenericAlias(list, VNInventoryItem) | None, None),
+    updated_inventory_items=(GenericAlias(list, VNInventoryItem) | None, None),
+    spawned_items=(GenericAlias(list, VNInventoryItem) | None, None),
+    updated_entities=(GenericAlias(list, VNEntityUpdate) | None, None),
     wardrobe_actions=(list[WardrobeAction], Field(default_factory=list, max_length=6)),
     garment_creations=(list[GarmentCreation], Field(default_factory=list, max_length=3)),
     extra_time_minutes=(
@@ -191,7 +192,9 @@ def _items(raw: Any) -> list[dict[str, Any]]:
 
 
 def _npc(npc: dict[str, Any]) -> dict[str, Any]:
-    result = {key: npc[key] for key in ("id", "name", "scene_id", "position") if key in npc}
+    result: dict[str, Any] = {
+        key: npc[key] for key in ("id", "name", "scene_id", "position") if key in npc
+    }
     result["inventory"] = _items(npc.get("inventory"))
     return result
 

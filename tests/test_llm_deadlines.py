@@ -43,6 +43,7 @@ def test_custom_provider_deadline_matches_http_router(monkeypatch, role, configu
     # Compression and generator inherit the provider from small when unset.
     settings = {
         "small_model_provider": "custom_openai",
+        "small_model": "test-model",
         "custom_openai_url": "http://localhost:5001/v1",
         "custom_openai_timeout": configured,
     }

@@ -11,7 +11,10 @@ def is_sqlite_busy(error: BaseException) -> bool:
         return False
     code = getattr(original, "sqlite_errorcode", None)
     if isinstance(code, int):
-        return code & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+        return code & 0xFF in (
+            getattr(sqlite3, "SQLITE_BUSY", 5),
+            getattr(sqlite3, "SQLITE_LOCKED", 6),
+        )
     # Older drivers and hand-raised SQLite errors do not expose a numeric code.
     return (
         str(original)

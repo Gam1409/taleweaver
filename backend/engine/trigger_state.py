@@ -2,10 +2,11 @@
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.engine.scripting.context import ScriptChangeset
 from backend.models.session_state import SessionState
 
 
-def apply_trigger_changes(state: SessionState, changeset) -> None:
+def apply_trigger_changes(state: SessionState, changeset: ScriptChangeset) -> None:
     """Apply variable, entity and exit updates in the original trigger order."""
     if not (changeset.var_updates or changeset.entity_updates or changeset.exit_updates):
         return
@@ -14,7 +15,7 @@ def apply_trigger_changes(state: SessionState, changeset) -> None:
         _apply_trigger_exit_changes(state, changeset.exit_updates)
 
 
-def _apply_trigger_entity_changes(state: SessionState, changeset) -> None:
+def _apply_trigger_entity_changes(state: SessionState, changeset: ScriptChangeset) -> None:
     cur_states = dict(state.entity_states or {})
     if changeset.var_updates:
         sv = dict(cur_states.get("__script_vars__", {}))

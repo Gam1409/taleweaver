@@ -177,8 +177,18 @@ SAFE_BUILTINS: dict[str, Any] = {
 }
 
 
+def _reserved_binding(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        return node.id in _RESERVED_NAMES
+    if isinstance(node, ast.arg):
+        return node.arg in _RESERVED_NAMES
+    return isinstance(node, ast.FunctionDef) and node.name in _RESERVED_NAMES
+
+
 def _inspect_ast_node(node: ast.AST) -> str | None:
     """Returns a security error string if the node violates sandbox rules, else None."""
+    if _reserved_binding(node):
+        return "Cannot replace a reserved script binding."
     if type(node) not in ALLOWED_AST_NODES:
         return f"Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
     if isinstance(node, ast.Attribute):
@@ -245,6 +255,11 @@ def _guard_call_arguments(func: Any, args: list[Any], kwargs: dict[str, Any]) ->
         total = sum(len(part) for part in args[0] if isinstance(part, _SIZE_SENSITIVE_TYPES))
         if total > MAX_SEQUENCE_LENGTH:
             raise ScriptSecurityError("join() result exceeds safe memory limit.")
+
+
+_BREAK = object()
+_CONTINUE = object()
+_RESERVED_NAMES = frozenset({"tw", "game"})
 
 
 class SafeAstInterpreter:
@@ -356,12 +371,14 @@ class SafeAstInterpreter:
         try:
             for stmt in tree.body:
                 self._eval_stmt(stmt)
+        except RecursionError:
+            raise ScriptExecutionError("Script recursion limit exceeded.") from None
         except _ReturnSignalError:
             raise ScriptExecutionError("SyntaxError: 'return' outside function") from None
 
         # Sync back created/modified variables to caller context
         for k, v in self.env.items():
-            if k not in SAFE_BUILTINS:
+            if k not in SAFE_BUILTINS and k not in _RESERVED_NAMES:
                 context[k] = v
 
     def evaluate_expression(self, expr_str: str, context: dict[str, Any]) -> Any:
@@ -376,7 +393,10 @@ class SafeAstInterpreter:
 
         self.validate_ast(tree)
         self.env = {**SAFE_BUILTINS, **context}
-        return self._eval_expr(tree.body)
+        try:
+            return self._eval_expr(tree.body)
+        except RecursionError:
+            raise ScriptExecutionError("Script recursion limit exceeded.") from None
 
     # -------------------------------------------------------------------------
     # Statement Handlers
@@ -407,18 +427,20 @@ class SafeAstInterpreter:
         new_val = self._apply_binop(stmt.op, current_val, right_val)
         self._assign_target(stmt.target, new_val)
 
-    def _eval_If(self, stmt: ast.If) -> None:
+    def _eval_If(self, stmt: ast.If) -> object:
         test_val = self._eval_expr(stmt.test)
         if bool(test_val):
             for s in stmt.body:
                 res = self._eval_stmt(s)
-                if res in ("break", "continue"):
+                if res is _BREAK or res is _CONTINUE:
                     return res
         else:
             for s in stmt.orelse:
                 res = self._eval_stmt(s)
-                if res in ("break", "continue"):
+                if res is _BREAK or res is _CONTINUE:
                     return res
+
+        return None
 
     def _eval_For(self, stmt: ast.For) -> None:
         iterable = self._eval_expr(stmt.iter)
@@ -433,10 +455,10 @@ class SafeAstInterpreter:
             should_break = False
             for s in stmt.body:
                 res = self._eval_stmt(s)
-                if res == "break":
+                if res is _BREAK:
                     should_break = True
                     break
-                elif res == "continue":
+                elif res is _CONTINUE:
                     break
             if should_break:
                 break
@@ -444,11 +466,11 @@ class SafeAstInterpreter:
             for s in stmt.orelse:
                 self._eval_stmt(s)
 
-    def _eval_Break(self, stmt: ast.Break) -> str:
-        return "break"
+    def _eval_Break(self, stmt: ast.Break) -> object:
+        return _BREAK
 
-    def _eval_Continue(self, stmt: ast.Continue) -> str:
-        return "continue"
+    def _eval_Continue(self, stmt: ast.Continue) -> object:
+        return _CONTINUE
 
     def _eval_Return(self, stmt: ast.Return) -> None:
         self._tick()
@@ -532,6 +554,8 @@ class SafeAstInterpreter:
     # -------------------------------------------------------------------------
 
     def _assign_target(self, target: ast.AST, val: Any) -> None:
+        if isinstance(target, ast.Name) and target.id in _RESERVED_NAMES:
+            raise ScriptSecurityError("Cannot replace a reserved script binding.")
         if isinstance(target, ast.Name):
             if target.id.startswith("_"):
                 raise ScriptSecurityError(f"Cannot assign to private variable '{target.id}'")
@@ -751,9 +775,13 @@ class SafeAstInterpreter:
         parts = []
         for val in expr.values:
             parts.append(str(self._eval_expr(val)))
-        return _check_sequence_size("".join(parts))
+        result = "".join(parts)
+        _check_sequence_size(result)
+        return result
 
     def _eval_formatted_value(self, expr: ast.FormattedValue) -> str:
+        if expr.format_spec is not None or expr.conversion != -1:
+            raise ScriptExecutionError("Format specifications and conversions are not supported.")
         val = self._eval_expr(expr.value)
         return str(val)
 

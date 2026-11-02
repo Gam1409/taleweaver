@@ -34,7 +34,7 @@ def detect_preset_template(graph: dict, reference_graph: dict | None = None) -> 
 
 
 def detect_template(graph: dict) -> dict:
-    names = []
+    names: list[str] = []
     for node in graph.values():
         node_type = str(node.get("class_type", "")).lower()
         if not any(kind in node_type for kind in ("checkpoint", "unet", "diffusionmodel")):

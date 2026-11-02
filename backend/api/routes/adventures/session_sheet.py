@@ -146,7 +146,12 @@ async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSes
     return snapshot
 
 
-def _sheet_start_datetime(adventure, state: SessionState, session_snapshot, session_manifest):
+def _sheet_start_datetime(
+    adventure: AdventureTemplate | None,
+    state: SessionState,
+    session_snapshot: dict[str, Any],
+    session_manifest: dict[str, Any],
+) -> str | None:
     from .logic import AdventureLogic
 
     adventure_time_config = (
@@ -155,7 +160,7 @@ def _sheet_start_datetime(adventure, state: SessionState, session_snapshot, sess
         else (session_snapshot.get("adventure") or {}).get("time_config")
     )
     start_datetime = AdventureLogic.resolve_start_datetime(
-        adventure.original_manifest if adventure else session_manifest,
+        (adventure.original_manifest or {}) if adventure else session_manifest,
         state=state,
         time_config=adventure_time_config,
     )
@@ -299,8 +304,8 @@ async def _sheet_current_scene(db: AsyncSession, state: SessionState) -> WorldSc
 
 
 async def _sheet_profile_image(
-    db: AsyncSession, avatar: Avatar, state: SessionState, session_manifest
-):
+    db: AsyncSession, avatar: Avatar, state: SessionState, session_manifest: dict[str, Any]
+) -> str | None:
     from .logic import AdventureLogic
 
     snapshot = AdventureLogic.extract_asset_snapshot(state) if state else {}

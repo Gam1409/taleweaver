@@ -200,5 +200,5 @@ async def persist_npcs(
             image_cache[npc["id"]] = image_url
         processed.append(npc)
         ctx.db.add(_npc_entity(ctx, npc, image_url, default_scene_id))
-        await ctx.commit_and_refresh()
+        await ctx.guard_write()
     return {npc["id"]: npc_inventory_ids(npc) for npc in npcs}

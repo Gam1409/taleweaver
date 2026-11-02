@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Any, Optional
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -50,6 +51,8 @@ async def update_cover(
     db: AsyncSession, template_id: str, adv: AdventureTemplate, payload: EntityUpdateRequest
 ) -> None:
     if given(payload, "name"):
+        if payload.name is None:
+            raise HTTPException(400, "Adventure title cannot be null.")
         adv.title = payload.name
     if given(payload, "teaser"):
         adv.teaser = payload.teaser

@@ -2,15 +2,19 @@
 
 import logging
 import os
+from collections.abc import Sequence
 from typing import Any
 
-from backend.models.world_entity import WorldExit, WorldScene
+from backend.models.avatar import Avatar
+from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.utils.path_security import data_url_to_local_path
 
 logger = logging.getLogger(__name__)
 
 
-def normalize_exported_equipment(avatar, entities):
+def normalize_exported_equipment(
+    avatar: Avatar | None, entities: Sequence[WorldEntity]
+) -> tuple[list[str], dict[str, str]]:
     # Normalize legacy avatar inventory/equipment to ID references for the manifest.
     # NOTE: This must NOT mutate the database — exporting is a read-only operation.
     # Mutating during export causes "database is locked" errors on SQLite when
@@ -49,7 +53,7 @@ def normalize_exported_equipment(avatar, entities):
     return local_final_inventory, local_final_equipment
 
 
-def serialize_world_location(obj):
+def serialize_world_location(obj: WorldScene | WorldExit | None) -> dict[str, Any] | None:
     from backend.engine.adventure_exporter import _SYSTEM_ENTITY_KEYS
 
     if not obj:
@@ -71,7 +75,9 @@ def serialize_world_location(obj):
     return data
 
 
-def localize_archive_asset(path, adventure_dir, asset_mapping):
+def localize_archive_asset(
+    path: str | None, adventure_dir: str, asset_mapping: dict[str, str]
+) -> str | None:
     from backend.engine.adventure_exporter import _ensure_within_data_dir, _safe_zip_asset_name
 
     if not path or not path.startswith("/data/"):
@@ -101,11 +107,12 @@ def localize_archive_asset(path, adventure_dir, asset_mapping):
     return path
 
 
-def _clean_avatar_item_references(avatar):
+def _clean_avatar_item_references(avatar: Avatar) -> tuple[list[str], dict[str, str]]:
     def _normalize_item(item: Any) -> str | None:
         if isinstance(item, dict):
-            return item.get("id")
-        return item
+            value = item.get("id")
+            return value if isinstance(value, str) else None
+        return item if isinstance(item, str) else None
 
     cleaned_inventory: list[str] = []
     for item in avatar.inventory or []:

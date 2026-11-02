@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.export_archives import pack_export_ads
 from backend.engine.memory_rag.lifecycle import export_summaries
 from backend.models.avatar import Avatar
+from backend.models.base import Base
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -94,7 +95,7 @@ class SessionExporter:
         world_map = map_res.scalars().first()
 
         # Helper to convert SQL Alchemy model to dictionary
-        def to_dict(obj):
+        def to_dict(obj: Base | None) -> dict[str, Any] | None:
             if not obj:
                 return None
             return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
@@ -117,7 +118,7 @@ class SessionExporter:
         }
 
         # Localize any session URL paths inside the database JSON
-        manifest = localize_session_paths(manifest, session_id)
+        manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
 
         return manifest
 

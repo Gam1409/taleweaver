@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.turn_slash import SlashCommandState, SlashInteractions
+
 from datetime import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
@@ -10,7 +15,7 @@ from backend.api.routes.adventures.gameplay_logic import (
 from backend.core.awards import SPOILER_SEEKER_AWARD
 
 
-async def reveal_walkthrough(self, command) -> None:
+async def reveal_walkthrough(self: SlashInteractions, command: SlashCommandState) -> None:
     self.avatar.exp = (self.avatar.exp or 0) - WALKTHROUGH_REVEAL_COST
     self.state.is_walkthrough_revealed = True
     flag_modified(self.avatar, "exp")

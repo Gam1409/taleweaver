@@ -41,7 +41,7 @@ async def load_session_object(
         and entity.entity_type == "OBJECT"
         and str(entity.item_type or "").upper() == item_type
     )
-    if not is_match:
+    if not is_match or entity is None:
         raise HTTPException(status_code=404, detail=not_found)
     return entity
 
@@ -247,7 +247,7 @@ async def resolve_switch_flip(
         raise HTTPException(
             status_code=400, detail="No transition definition found for this state change."
         )
-    gates = transition.get("gates") if isinstance(transition.get("gates"), dict) else {}
+    gates = raw_gates if isinstance(raw_gates := transition.get("gates"), dict) else {}
     return SwitchFlip(entity, config, transition, gates, target_state, session_states, entry)
 
 

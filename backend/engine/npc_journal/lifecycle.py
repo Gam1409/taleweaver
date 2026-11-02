@@ -5,6 +5,7 @@ from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.npc_journal.archive import compact, expanded
 from backend.engine.npc_journal.records import JOURNAL_KEY, journal_of
 from backend.models.world_entity import WorldEntity
 
@@ -14,6 +15,7 @@ def remap_journal(metadata: dict | None, message_ids: dict[str, str]) -> dict:
     journal = result.get(JOURNAL_KEY)
     if not isinstance(journal, dict):
         return result
+    journal = expanded(journal)
     original = journal.get("introduced_message_id")
     if original:
         journal["introduced_message_id"] = message_ids.get(original, original)
@@ -27,6 +29,7 @@ def remap_journal(metadata: dict | None, message_ids: dict[str, str]) -> dict:
     # Running image jobs belong to the old session/process, never the copy.
     if journal.get("portrait_status") == "running":
         journal["portrait_status"] = "interrupted"
+    result[JOURNAL_KEY] = compact(journal)
     return result
 
 
@@ -47,7 +50,7 @@ async def rewind_journals(
 
 
 async def _rewind_npc(db: AsyncSession, npc: WorldEntity, removed: set[str]) -> None:
-    journal = journal_of(npc)
+    journal = journal_of(npc, full=True)
     if not journal:
         return
     if journal.get("origin") == "introduced" and journal.get("introduced_message_id") in removed:
@@ -66,4 +69,4 @@ async def _rewind_npc(db: AsyncSession, npc: WorldEntity, removed: set[str]) -> 
             if e.get("category") == "appearance" and e.get("source") == "observed"
         ]
         npc.description = appearances[0][:1000] if appearances else ""
-    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}
+    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: compact(journal)}

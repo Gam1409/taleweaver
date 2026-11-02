@@ -93,7 +93,7 @@ class SVGPlaceholderGenerator:
 
         return "\n".join(shapes)
 
-    def _load_svg_asset(self, filename: str, color_override: str = None) -> str:
+    def _load_svg_asset(self, filename: str, color_override: str | None = None) -> str:
         """Lädt eine SVG-Datei aus dem Assets-Ordner und passt optional die Farbe an."""
         path = os.path.join(self.assets_dir, filename)
         if not os.path.exists(path):
@@ -170,7 +170,7 @@ class SVGPlaceholderGenerator:
 
         return self._generate_fallback_svg()
 
-    def _generate_item_svg(self, cat):
+    def _generate_item_svg(self, cat: str) -> str:
         # Check for specific item types
         if "WEAPON" in cat:
             return (

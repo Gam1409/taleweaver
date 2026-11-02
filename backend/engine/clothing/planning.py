@@ -32,7 +32,7 @@ def _grounded(change: Any, actor: dict, user_msg: str, narration: str) -> bool:
     if change.evidence not in text:
         return False
     if change.actor_id == PLAYER:
-        return change.agency != "npc_choice"
+        return bool(change.agency != "npc_choice")
     if change.source == "player_action":
         return (
             change.agency in {"npc_choice", "consented_assistance"}

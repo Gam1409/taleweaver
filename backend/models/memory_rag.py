@@ -45,6 +45,9 @@ class MemorySummary(Base, TimestampMixin):
     layer: Mapped[str] = mapped_column(String(30), nullable=False)
     npc_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     scene_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False, index=True
+    )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     source_message_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     source_hash: Mapped[str] = mapped_column(String(128), nullable=False)

@@ -116,7 +116,7 @@ async def list_characters(
         "characters": [_card(npc, state) for npc in npcs if _known(npc, state)],
         "pending": sum(s in ("pending", "running") for s in statuses),
         "failed": statuses.count("failed"),
-        "learning": learning_progress(game_id, tasks),
+        "learning": learning_progress(game_id, list(tasks)),
     }
 
 
@@ -139,7 +139,7 @@ async def character_details(
     )
     if npc is None or not _known(npc, state):
         raise HTTPException(404, "Character not found.")
-    entries = list(reversed(public_entries(journal_of(npc).get("entries") or [])))
+    entries = list(reversed(public_entries(journal_of(npc, full=True).get("entries") or [])))
     return {
         **_card(npc, state),
         "overview": character_overview(entries),
@@ -165,7 +165,12 @@ async def retry_learning(
         )
     ).all()
     for message in messages:
-        message.npc_journal = {"status": "pending", "attempts": 0, "recovering": True}
+        message.npc_journal = {
+            **(message.npc_journal or {}),
+            "status": "pending",
+            "attempts": 0,
+            "recovering": True,
+        }
     await db.commit()
     schedule(game_id, user.id, retry=True)
     return {"queued": len(messages)}

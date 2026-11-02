@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 from typing import Any
 from urllib.parse import urlsplit
@@ -32,6 +33,8 @@ def validate_custom_url(url: str) -> str:
             raise ValueError("Base URL must not contain credentials, a query, or a fragment.")
         if not parsed.path.endswith("/v1"):
             raise ValueError("Base URL must end in /v1 (for example http://127.0.0.1:8080/v1).")
+        if parsed.hostname is None:
+            raise ValueError("Endpoint hostname is required.")
         addresses = _resolve_host_ips(parsed.hostname)
         if not addresses:
             raise ValueError("Could not resolve endpoint hostname.")
@@ -55,7 +58,20 @@ def validate_custom_url(url: str) -> str:
 
 def configure_custom_router(router: Any, llm_settings: dict) -> None:
     """Require an explicit validated base and use the existing encrypted provider vault."""
-    router.api_base = validate_custom_url(llm_settings.get("custom_openai_url") or "")
+    # Full network validation runs in a worker before each transport request.
+    base = str(llm_settings.get("custom_openai_url") or "").strip().rstrip("/")
+    if not base:
+        raise HTTPException(400, "URL must be a non-empty string.")
+    parsed = urlsplit(base)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or not parsed.path.endswith("/v1")
+    ):
+        raise HTTPException(400, "Base URL must end in /v1 (for example http://127.0.0.1:8080/v1).")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise HTTPException(400, "Base URL must not contain credentials, a query, or a fragment.")
+    router.api_base = base
     router.api_key = None
     if (router.user.encrypted_api_keys or {}).get("custom_openai"):
         router.api_key = router._get_decrypted_key("custom_openai")
@@ -65,7 +81,7 @@ def configure_custom_router(router: Any, llm_settings: dict) -> None:
 
 async def discover_models(base: str, api_key: str | None) -> list[str]:
     """Fetch /models without redirects or a required credential; failures remain actionable."""
-    base = validate_custom_url(base)
+    base = await asyncio.to_thread(validate_custom_url, base)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
@@ -137,7 +153,7 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         httpx.AsyncClient(follow_redirects=False) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=validate_custom_url(router.api_base),
+            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
@@ -156,7 +172,7 @@ async def _stream(router: Any, kwargs: dict) -> Any:
         httpx.AsyncClient(follow_redirects=False) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=validate_custom_url(router.api_base),
+            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
@@ -201,4 +217,4 @@ async def test_connection(router: Any, model: str) -> str:
         response_model=ConnectionTestResult,
         model=model,
     )
-    return result.message
+    return str(result.message)

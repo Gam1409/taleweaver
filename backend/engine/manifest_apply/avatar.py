@@ -182,7 +182,7 @@ async def _portrait(ctx: ApplyContext, avatar: Any, prot: dict[str, Any]) -> Opt
     if not needs_image(image_url):
         return image_url
     current = avatar.profile_image
-    if current and current.startswith("/data/"):
+    if isinstance(current, str) and current.startswith("/data/"):
         return current
     return await placeholder_image(ctx, "PROTAGONIST", category="SCENE")
 

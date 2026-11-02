@@ -45,7 +45,7 @@ def _remove_previous_owners(
             item
             for item in previous
             if _item_id(item) not in removed
-            and destinations.get(_item_id(item), entity.id) == entity.id
+            and destinations.get(_item_id(item) or "", entity.id) == entity.id
         ]
         if kept != previous:
             states.setdefault(entity.id, {})["inventory"] = deepcopy(kept)

@@ -20,7 +20,7 @@ class StoryPresets(BaseModel):
     selection: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
 
 
-async def _owned(db: AsyncSession, template_id, user: User):
+async def _owned(db: AsyncSession, template_id: str, user: User) -> AdventureTemplate:
     adventure = await db.get(AdventureTemplate, template_id)
     if not adventure or adventure.owner_id != user.id:
         raise HTTPException(404, "Adventure template not found.")

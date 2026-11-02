@@ -148,7 +148,7 @@ def _best_heal(situation: CombatSituation) -> tuple[str, str, float] | None:
     """Returns (command, label, effective heal) of the strongest available heal."""
     player = situation.player
     missing = int(player.get("max_hp") or 0) - int(player.get("hp") or 0)
-    options = [
+    options: list[tuple[str, str, float]] = [
         (f"/consume {c.name}", c.name, min(c.deltas.get("hp", 0), missing))
         for c in situation.consumables
         if c.deltas.get("hp", 0) > 0

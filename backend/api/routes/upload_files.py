@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from typing import BinaryIO
 from uuid import uuid4
 
 from backend.core.config import settings
@@ -12,7 +13,9 @@ from backend.utils.path_security import (
 )
 
 
-def save_catalog_image(catalog_type, target_id, content_type, content):
+def save_catalog_image(
+    catalog_type: str, target_id: str, content_type: str | None, content: bytes
+) -> dict[str, str]:
     from backend.api.routes.config_api import (
         _build_catalog_upload_path,
         _ensure_within_data_dir,
@@ -34,7 +37,7 @@ def save_catalog_image(catalog_type, target_id, content_type, content):
     return {"status": "success", "image_url": f"/data/{rel_path}"}
 
 
-def save_profile_image(safe_user_id, original_filename, source):
+def save_profile_image(safe_user_id: str, original_filename: str | None, source: BinaryIO) -> str:
     from backend.api.routes.users_api import _ensure_within_data_dir, _sanitize_image_extension
 
     upload_dir = safe_data_path("users")

@@ -2,11 +2,12 @@
 
 from typing import Any
 
+from backend.engine.npc_journal.archive import compact
 from backend.engine.npc_journal.records import JOURNAL_KEY, journal_of
 
 
 def retract_reply(npc: Any, message_id: str) -> None:
-    journal = journal_of(npc)
+    journal = journal_of(npc, full=True)
     if not journal:
         return
     entries = journal.get("entries") or []
@@ -22,8 +23,8 @@ def retract_reply(npc: Any, message_id: str) -> None:
     if journal.get("introduced_message_id") == message_id:
         journal.pop("introduction", None)
     _retract_description(npc, journal, removed, message_id)
-    if journal != journal_of(npc):
-        npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}
+    if journal != journal_of(npc, full=True):
+        npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: compact(journal)}
 
 
 def _retract_description(npc: Any, journal: dict, removed: list[dict], message_id: str) -> None:

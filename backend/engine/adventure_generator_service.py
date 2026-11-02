@@ -77,7 +77,7 @@ class AdventureGeneratorService:
         if not catalog:
             catalog = default_image_styles_catalog()
         # Return names/IDs of styles
-        return [s.get("id") or s.get("name") for s in catalog if s.get("id") or s.get("name")]
+        return [str(s.get("id") or s.get("name")) for s in catalog if s.get("id") or s.get("name")]
 
     @staticmethod
     async def get_available_tones(user: User) -> list[str]:
@@ -95,7 +95,7 @@ class AdventureGeneratorService:
                 "Cyberpunk",
                 "Post-Apocalyptic",
             ]
-        return [t.get("id") or t.get("name") for t in catalog if t.get("id") or t.get("name")]
+        return [str(t.get("id") or t.get("name")) for t in catalog if t.get("id") or t.get("name")]
 
     @staticmethod
     async def generate_adventure(

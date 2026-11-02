@@ -1,6 +1,7 @@
 """Build a moment illustration using the story's existing image provider and style."""
 
 import json
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +14,17 @@ from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
 from backend.engine.media_engine import MediaEngine
 from backend.engine.session_portraits import _settings
+from backend.models.session_state import SessionState
+from backend.models.user import User
 from backend.utils.path_security import safe_data_path
 
 from . import fidelity, nsfw_guard, source_quality
 from .visual_context import VisualContext
 
 
-async def image_request(db: AsyncSession, state, user, snapshot: dict) -> tuple[dict, dict]:
+async def image_request(
+    db: AsyncSession, state: SessionState, user: User, snapshot: dict
+) -> tuple[dict, dict]:
     t2i, style, tone = await _settings(db, state, user, kind="scene")
     profile = "advanced" if advanced_for(t2i, "scene") else "simple"
     provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
@@ -150,7 +155,7 @@ async def prepare_moment_prompt(request: dict) -> None:
         max_words=150,
         instructions=instructions,
     )
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if rules and rules.adapt_with_llm:
         policy = rules.model_copy(update={"instructions": instructions + "\n" + rules.instructions})
         kwargs["mature_themes"] = getattr(select_profile(options), "mature_themes", False)

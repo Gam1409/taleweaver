@@ -132,7 +132,7 @@ async def generate_item_draft(
     payload: ItemDraftRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ItemDraft:
     adventure = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     draft = await _generate(
         current_user,

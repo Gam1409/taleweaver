@@ -1,7 +1,11 @@
 """Owner-only NPC card disclosure preferences with guarded session JSON updates."""
 
+from typing import Any
+from typing import cast as type_cast
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import Text, cast, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
@@ -48,7 +52,7 @@ async def _save(
         .values(entity_states={**states, SETTINGS_KEY: payload.model_dump()})
         .execution_options(synchronize_session=False)
     )
-    if result.rowcount != 1:
+    if type_cast(CursorResult[Any], result).rowcount != 1:
         await db.rollback()
         raise HTTPException(409, BUSY_DETAIL)
     await db.commit()

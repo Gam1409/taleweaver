@@ -1,11 +1,16 @@
 """Restore template metadata from the adventure section of a session bundle."""
 
+from typing import Any
+
 from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.user import User
 from backend.utils.text_utils import generate_adventure_id
 
 
-def build_session_template(data, user, origin_id):
+def build_session_template(
+    data: dict[str, Any], user: User, origin_id: str | None
+) -> AdventureTemplate:
     from backend.engine.adventure_importer import _resolve_license_url
 
     old_adv = data["adventure"]
@@ -107,6 +112,6 @@ def build_session_template(data, user, origin_id):
         language=old_adv.get("language") or data.get("language"),
         origin_id=origin_id,
         is_adventure_generator=old_adv.get("is_adventure_generator", False),
-        is_ready=True,
+        is_ready=False,
         creation_status="Ready",
     )

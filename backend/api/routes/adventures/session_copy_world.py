@@ -15,8 +15,8 @@ async def clone_saved_world(
     db: AsyncSession,
     original_session: GameSession,
     copied_session: GameSession,
-    asset_copy_cache,
-    message_ids,
+    asset_copy_cache: dict[str, str],
+    message_ids: dict[str, str],
 ) -> None:
     from .sessions import _copy_data_asset_to_session
 

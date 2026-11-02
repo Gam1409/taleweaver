@@ -98,7 +98,7 @@ class AdventureLogic:
     def extract_manifest_snapshot(state: Optional[SessionState]) -> dict[str, Any]:
         if not state:
             return {}
-        raw = state.entity_states or {}
+        raw: object = state.entity_states or {}
         if not isinstance(raw, dict):
             return {}
         snapshot = raw.get(SESSION_MANIFEST_SNAPSHOT_KEY)
@@ -116,7 +116,7 @@ class AdventureLogic:
         return {}
 
     @staticmethod
-    def calculate_quest_progress(quests: list[dict[str, Optional[Any]]]) -> int:
+    def calculate_quest_progress(quests: list[dict[str, Any]] | None) -> int:
         if not quests:
             return 0
         total = len(quests)
@@ -129,17 +129,17 @@ class AdventureLogic:
     def extract_asset_snapshot(state: Optional[SessionState]) -> dict[str, Any]:
         if not state:
             return {}
-        raw = state.entity_states or {}
+        raw: object = state.entity_states or {}
         if not isinstance(raw, dict):
             return {}
         snap = raw.get("__asset_snapshot__")
         return snap if isinstance(snap, dict) else {}
 
     @staticmethod
-    def get_combat_snapshot(state: Optional[SessionState]) -> dict[str, Optional[Any]]:
+    def get_combat_snapshot(state: Optional[SessionState]) -> dict[str, Any] | None:
         if not state:
             return None
-        raw = state.entity_states or {}
+        raw: object = state.entity_states or {}
         if not isinstance(raw, dict):
             return None
         combat = raw.get("__combat__")
@@ -200,14 +200,14 @@ class AdventureLogic:
 
     @staticmethod
     def resolve_start_datetime(
-        manifest: dict[str, Optional[Any]],
+        manifest: dict[str, Any] | None,
         state: Optional[SessionState] = None,
         time_config: Optional[dict] = None,
     ) -> Optional[str]:
         """Returns a usable ISO datetime string. Prioritizes session-specific state over manifest."""
         from .session_initial_state import resolve_start_datetime
 
-        return resolve_start_datetime(manifest, state, time_config)
+        return resolve_start_datetime(manifest or {}, state, time_config)
 
     @staticmethod
     async def resolve_initial_scene_id(db: AsyncSession, template_id: Optional[str]) -> str:
@@ -553,7 +553,7 @@ class AdventureLogic:
         npc_res = await db.execute(npc_query)
         metadata = {}
         for npc in npc_res.scalars().all():
-            if vn_mode and not known_character(npc, state):
+            if vn_mode and state is not None and not known_character(npc, state):
                 continue
             data = {
                 "name": npc.name,
@@ -566,7 +566,7 @@ class AdventureLogic:
         return metadata
 
     @staticmethod
-    async def delete_adventure(db: AsyncSession, template_id: str) -> None:
+    async def delete_adventure(db: AsyncSession, template_id: str, *, commit: bool = True) -> None:
         """
         Deletes an adventure template and all associated content.
         Decouples game sessions so they remain playable.
@@ -626,6 +626,9 @@ class AdventureLogic:
         # 4. Finally delete the template itself
         await db.execute(delete(AdventureTemplate).where(AdventureTemplate.id == template_id))
 
+        if not commit:
+            await db.flush()
+            return
         await db.commit()
 
         # 5. Always clean up template-owned library assets.
@@ -694,16 +697,22 @@ class AdventureLogic:
 
 
 def _apply_discovery_visibility(
-    ent, session_overrides, norm_overrides_by_id, eid, eid_upper
+    ent: dict[str, Any],
+    session_overrides: dict[str, Any],
+    norm_overrides_by_id: dict[str, Any],
+    eid: str | None,
+    eid_upper: str,
 ) -> None:
     if str(ent.get("item_type") or "").upper() == "CONSTRUCTABLE":
-        override = session_overrides.get(eid) or norm_overrides_by_id.get(eid_upper) or {}
+        override = session_overrides.get(eid or "") or norm_overrides_by_id.get(eid_upper) or {}
         if "is_hidden" not in override:
             ent["is_hidden"] = True
-    metadata_json = ent.get("metadata_json") if isinstance(ent.get("metadata_json"), dict) else {}
+    metadata_json = (
+        raw_metadata if isinstance(raw_metadata := ent.get("metadata_json"), dict) else {}
+    )
     discovery_visibility = (
-        metadata_json.get("discovery_visibility")
-        if isinstance(metadata_json.get("discovery_visibility"), dict)
+        raw_visibility
+        if isinstance(raw_visibility := metadata_json.get("discovery_visibility"), dict)
         else {}
     )
     listed_in_discoveries = discovery_visibility.get("listed_in_discoveries")

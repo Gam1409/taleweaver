@@ -1569,6 +1569,9 @@ async def test_traverse_exit_with_lowercase_uuid_id(setup_test_db, monkeypatch):
             )
 
         mock_llm_instance = MagicMock()
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=GameEvent(narrative_description="You step into the courtyard.")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",

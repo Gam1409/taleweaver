@@ -139,7 +139,7 @@ def _with_start_scenes(
     normalized: list[dict[str, Any]] = []
     for item in items:
         item_copy = dict(item)
-        scene_id = entity_scene_map.get(item_copy.get("id"))
+        scene_id = entity_scene_map.get(str(item_copy.get("id") or ""))
         if not item_copy.get("start_scene_id") and scene_id in valid_scene_ids:
             item_copy["start_scene_id"] = scene_id
         normalized.append(item_copy)

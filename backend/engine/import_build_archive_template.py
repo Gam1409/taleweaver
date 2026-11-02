@@ -1,20 +1,22 @@
 """Map ADZ metadata to template fields while preserving archive-specific defaults."""
 
+from typing import Any
+
 from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 
 
 def build_archive_template(
-    new_template_id,
-    owner_id,
-    adv_data,
-    manifest_data,
-    origin_id,
-    enforcement_mode,
-    is_strict,
-    resolved_license,
-    resolved_license_url,
-):
+    new_template_id: str,
+    owner_id: str | None,
+    adv_data: dict[str, Any],
+    manifest_data: dict[str, Any],
+    origin_id: str | None,
+    enforcement_mode: str,
+    is_strict: bool,
+    resolved_license: str | None,
+    resolved_license_url: str | None,
+) -> AdventureTemplate:
     return AdventureTemplate(
         living_world_settings=stored_defaults(
             adv_data.get("living_world_settings", manifest_data.get("living_world_settings"))
@@ -222,7 +224,7 @@ def build_archive_template(
         else manifest_data.get("allow_reuse_source_assets", True),
         is_adventure_generator=adv_data.get("is_adventure_generator", False)
         or manifest_data.get("is_adventure_generator", False),
-        is_ready=True,
+        is_ready=False,
         creation_status="Ready",
         original_manifest=manifest_data,
         language=adv_data.get("language") or manifest_data.get("language"),

@@ -137,6 +137,10 @@ export function useGameSocket(): UseGameSocket {
   const worldRumors = ref<any[]>([])
   const systemDebugEnabled = ref(false)
   const debugLogs = ref<{ timestamp: string, content: string }[]>([])
+  const appendDebugLog = (entry: any): void => {
+    debugLogs.value.push(entry)
+    if (debugLogs.value.length > 200) debugLogs.value.splice(0, debugLogs.value.length - 200)
+  }
   const inventoryGlow = ref(false)
   const mapGlow = ref(false)
   const questGlow = ref(false)
@@ -627,7 +631,7 @@ export function useGameSocket(): UseGameSocket {
       resetIdleTimeout()
       turnId = res.headers.get('x-taleweaver-turn-id') || ''
       if (turnId) {
-        debugLogs.value.push({
+        appendDebugLog({
           timestamp: new Date().toLocaleTimeString(),
           content: `Turn-ID: ${turnId}`
         })
@@ -688,7 +692,7 @@ export function useGameSocket(): UseGameSocket {
             if (data.content) _pushMessage('user', data.content)
           } else if (event === 'status') {
             statusText.value = data.content
-            debugLogs.value.push({
+            appendDebugLog({
               timestamp: new Date().toLocaleTimeString(),
               content: data.content
             })
@@ -923,7 +927,7 @@ export function useGameSocket(): UseGameSocket {
 
           if (event === 'status') {
             statusText.value = data.content
-            debugLogs.value.push({
+            appendDebugLog({
               timestamp: new Date().toLocaleTimeString(),
               content: data.content
             })

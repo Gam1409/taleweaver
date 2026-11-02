@@ -68,7 +68,11 @@ async def build_session_map(
 
 
 async def load_full_world_debug(db: AsyncSession, state: SessionState, requested: bool) -> Any:
-    if not requested or not (settings.TALEWEAVER_DEBUG_ENABLED or state.is_debug_enabled):
+    if (
+        not requested
+        or not state.template_id
+        or not (settings.TALEWEAVER_DEBUG_ENABLED or state.is_debug_enabled)
+    ):
         return None
     try:
         from backend.api.routes.adventures.editor import _build_adventure_editor_assets

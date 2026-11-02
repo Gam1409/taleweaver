@@ -1,5 +1,8 @@
 """Persist generated narrative and load existing assets for cover generation."""
 
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,12 +15,12 @@ from backend.models.adventure_template import AdventureTemplate
 
 async def persist_generated_narrative(
     db: AsyncSession,
-    adventure,
-    template_id,
-    manifest_dict,
-    original_prompt,
-    language,
-    status_callback,
+    adventure: AdventureTemplate | None,
+    template_id: str,
+    manifest_dict: dict[str, Any],
+    original_prompt: str,
+    language: str | None,
+    status_callback: Callable[[str], Awaitable[None]] | None,
 ) -> None:
     from backend.engine.world_generator import _publish_generation_status_with_callback
 
@@ -63,8 +66,8 @@ async def persist_generated_narrative(
 
 
 async def load_cover_source_assets(
-    db: AsyncSession, cover_source_adventure_id, allow_reuse_source_assets
-):
+    db: AsyncSession, cover_source_adventure_id: str | None, allow_reuse_source_assets: bool
+) -> dict[str, Any] | None:
     # Load source assets for cover-mode image reuse
     cover_source_assets = None
     if allow_reuse_source_assets and cover_source_adventure_id:

@@ -137,7 +137,10 @@ async def test_runtime_and_executable_files_are_not_public(tmp_path, filename):
     assert result.status_code == 403
 
 
-async def test_svg_media_retains_sandbox_through_security_middleware(tmp_path):
+async def test_svg_media_retains_sandbox_through_security_middleware(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("backend.utils.media_access.authorize_media", AsyncMock())
     from backend.main import add_security_headers
 
     (tmp_path / "image.svg").write_text(

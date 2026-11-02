@@ -37,7 +37,7 @@ def build_vn_world_prompts(
     title: str,
     original_prompt: str,
     language: str | None,
-    selected_tone: str | None,
+    selected_tone: str | dict[str, Any] | None,
     scene_requirement: str,
     item_requirement: str,
     cover_guidance: str,

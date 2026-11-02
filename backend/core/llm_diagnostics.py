@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import aclosing
 from functools import wraps
 from inspect import signature
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar, cast
 from uuid import UUID, uuid4
 
 from backend.core.diagnostic_fields import ENUMS
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -172,10 +174,10 @@ async def _stream(stream: Any, context: dict, start: float) -> AsyncIterator:
         _finish(context, start)
 
 
-def async_call(kind: str) -> Callable:
+def async_call(kind: str) -> Callable[[_F], _F]:
     """Observe the public operation without inspecting its prompt arguments or result."""
 
-    def decorate(method: Callable) -> Callable:
+    def decorate(method: _F) -> _F:
         @wraps(method)
         async def observed(router: Any, *args: Any, **kwargs: Any) -> Any:
             context, start = _context(router, kind, kwargs), time.perf_counter()
@@ -190,13 +192,13 @@ def async_call(kind: str) -> Callable:
             _finish(context, start)
             return result
 
-        return observed
+        return cast(_F, observed)
 
     return decorate
 
 
-def sync_call(kind: str) -> Callable:
-    def decorate(method: Callable) -> Callable:
+def sync_call(kind: str) -> Callable[[_F], _F]:
+    def decorate(method: _F) -> _F:
         @wraps(method)
         def observed(router: Any, *args: Any, **kwargs: Any) -> Any:
             context, start = _context(router, kind, kwargs), time.perf_counter()
@@ -209,7 +211,7 @@ def sync_call(kind: str) -> Callable:
             _finish(context, start)
             return result
 
-        return observed
+        return cast(_F, observed)
 
     return decorate
 

@@ -1,13 +1,21 @@
 """Map blueprint metadata to template fields without applying session-bundle defaults."""
 
+from typing import Any
+
 from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 from backend.utils.text_utils import generate_adventure_id
 
 
 def build_blueprint_template(
-    payload, manifest, adv_meta, owner_id, origin_id, enforcement_mode, is_strict
-):
+    payload: dict[str, Any],
+    manifest: dict[str, Any],
+    adv_meta: dict[str, Any],
+    owner_id: str | None,
+    origin_id: str | None,
+    enforcement_mode: str,
+    is_strict: bool,
+) -> AdventureTemplate:
     from backend.engine.adventure_importer import _resolve_license_url
 
     return AdventureTemplate(
@@ -137,6 +145,6 @@ def build_blueprint_template(
         language=adv_meta.get("language") or manifest.get("language"),
         origin_id=origin_id,
         is_adventure_generator=adv_meta.get("is_adventure_generator", False),
-        is_ready=True,
+        is_ready=False,
         creation_status="Ready",
     )

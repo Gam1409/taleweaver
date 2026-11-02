@@ -41,7 +41,7 @@ def _item(raw: Any) -> dict | None:
 def _inventory_values(inventory: Any) -> list:
     if isinstance(inventory, dict):
         return list(inventory.values())
-    return inventory if isinstance(inventory, list | tuple) else []
+    return list(inventory) if isinstance(inventory, list | tuple) else []
 
 
 def owned_items(inventory: Any, *, equipment: Any = None) -> dict[str, dict]:

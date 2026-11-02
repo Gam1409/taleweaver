@@ -190,6 +190,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
         "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
+        "nsfw_guard": "warn",
     }
     imported = await auth_client.post(
         "/api/adventures/sessions/import",
@@ -207,6 +208,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
                 "visual_preparation": "plan",
                 "visual_audit": True,
                 "visual_audit_failure": "block",
+                "nsfw_guard": "warn",
             },
         }
     async with TestSessionLocal() as db:
@@ -223,6 +225,7 @@ async def test_copy_and_export_import_preserve_private_state_with_local_provenan
                 "visual_preparation": "plan",
                 "visual_audit": True,
                 "visual_audit_failure": "block",
+                "nsfw_guard": "warn",
             }
             registry = state.entity_states[REGISTRY_KEY]
             assert set(registry["images"]) == {message.id}
@@ -270,6 +273,7 @@ async def test_vn_export_remains_playable_when_original_template_is_unavailable(
             "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
+            "nsfw_guard": "warn",
         },
     }
     async with TestSessionLocal() as db:
@@ -390,4 +394,5 @@ async def test_pace_only_patch_preserves_scene_tracking(auth_client, vn_world):
         "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
+        "nsfw_guard": "warn",
     }

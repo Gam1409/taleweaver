@@ -436,7 +436,8 @@ class AgentService:
         )
 
         inventory_names = [
-            i.get("name") if isinstance(i, dict) else str(i) for i in (avatar.inventory or [])
+            str(i.get("name") or i.get("id") or "") if isinstance(i, dict) else str(i)
+            for i in (avatar.inventory or [])
         ]
 
         llm_settings = getattr(user, "llm_settings", None) or {}

@@ -52,13 +52,15 @@ export async function apiFetch(path: string, init: ApiFetchInit = {}): Promise<R
   // null delegates the deadline to the backend (long-running model requests).
   const timeoutId = timeoutMs === null ? undefined : window.setTimeout(() => controller.abort('request-timeout'), timeoutMs)
   try {
-    return await fetch(buildApiUrl(path), {
+    const response = await fetch(buildApiUrl(path), {
       ...rest,
       headers: mergedHeaders,
       signal: controller.signal,
       credentials: 'same-origin',
       cache: cache ?? 'no-store',
     })
+    if (response.status === 401) window.dispatchEvent(new Event('auth-unauthorized'))
+    return response
   } finally {
     clearTimeout(timeoutId)
   }

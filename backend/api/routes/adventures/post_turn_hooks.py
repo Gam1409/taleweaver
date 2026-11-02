@@ -54,7 +54,9 @@ class PostTurnHooks:
 
     async def _collect_messages(self) -> list[str]:
         combat = self.manager.combat
-        messages = await run(self.manager, "special_unlocks", combat.check_special_unlocks)
+        messages: list[str] = await run(
+            self.manager, "special_unlocks", combat.check_special_unlocks
+        )
         attack_msg = await run(
             self.manager, "npc_attack_triggers", combat.check_npc_attack_triggers
         )
@@ -84,6 +86,8 @@ class PostTurnHooks:
 
     async def _refreshed_final(self, data: dict[str, Any]) -> str:
         m = self.manager
+        if m.avatar is None or m.state is None:
+            raise RuntimeError("Turn context must be initialized")
         await m.db.commit()
         combat_snap = AdventureLogic.get_combat_snapshot(m.state)
         data.update(

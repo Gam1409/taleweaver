@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict, cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.adventure_creation import (
@@ -85,7 +86,7 @@ async def suggest_story_idea(
     model = gm.model
     user_prompt = STORY_IDEA_GENERATION_USER_PROMPT_TEMPLATE.format(
         selected_tone=tone_label or "Neutral",
-        rule_enforcement_mode=(payload.rule_enforcement_mode or "story").upper(),
+        rule_enforcement_mode=payload.rule_enforcement_mode.upper(),
         language=payload.language or "Default",
         has_existing_input="yes" if has_existing_input else "no",
         title=title or "(empty)",
@@ -835,22 +836,22 @@ async def get_adventure_status(
 
     stats = None
     if adv.is_ready:
-        avatar = await db.execute(select(Avatar).where(Avatar.template_id == template_id))
-        avatar = avatar.scalars().first()
+        avatar_result = await db.execute(select(Avatar).where(Avatar.template_id == template_id))
+        avatar = avatar_result.scalars().first()
 
-        scenes = await db.execute(
+        scenes_result = await db.execute(
             select(WorldScene).where(
                 WorldScene.template_id == template_id, WorldScene.session_id.is_(None)
             )
         )
-        scenes = scenes.scalars().all()
+        scenes = scenes_result.scalars().all()
 
-        entities = await db.execute(
+        entities_result = await db.execute(
             select(WorldEntity).where(
                 WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)
             )
         )
-        entities = entities.scalars().all()
+        entities = entities_result.scalars().all()
 
         stats = {
             "cover": {
@@ -944,12 +945,13 @@ async def patch_adventure_state(
         raise HTTPException(status_code=404, detail="Session state not found.")
 
     updated = False
-    if "scene_id" in payload:
-        state.current_scene_id = payload.get("scene_id")
+    scene_id = payload.get("scene_id")
+    if isinstance(scene_id, str) and scene_id:
+        state.current_scene_id = scene_id
         updated = True
     if "in_game_time" in payload:
         try:
-            state.in_game_time = int(payload.get("in_game_time"))
+            state.in_game_time = int(payload["in_game_time"])
             updated = True
         except (TypeError, ValueError):
             logger.warning("Ignoring invalid in_game_time %r", payload.get("in_game_time"))
@@ -1033,7 +1035,7 @@ async def cancel_adventure_generation(
         )
         .values(creation_status="Cancelled", generation_run_id=None)
     )
-    if result.rowcount != 1:
+    if cast(CursorResult[Any], result).rowcount != 1:
         await db.rollback()
         raise HTTPException(409, "Generation finished or changed before cancellation.")
     await db.commit()

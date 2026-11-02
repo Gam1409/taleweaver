@@ -37,6 +37,8 @@ class ChatMessage(Base, TimestampMixin):
     # Durable optional background extraction task; old narration is not rescanned implicitly.
     npc_journal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
+    illustration: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
     revision_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, default=lambda: str(uuid6.uuid7())
     )

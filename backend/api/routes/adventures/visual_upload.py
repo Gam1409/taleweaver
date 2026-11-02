@@ -2,10 +2,11 @@
 
 import os
 from io import BytesIO
+from typing import Any
 
 from fastapi import HTTPException
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
@@ -53,6 +54,7 @@ async def resolve_visual_upload_target(
     db: AsyncSession, adventure: AdventureTemplate, target_type: str, target_id: str
 ) -> AdventureTemplate | Avatar | WorldScene | WorldEntity:
     """Resolve only template assets after the route has verified ownership."""
+    statement: Select[Any]
     if target_type == "cover":
         return adventure
     if target_type == "protagonist":
@@ -80,7 +82,7 @@ async def resolve_visual_upload_target(
     else:
         raise HTTPException(status_code=400, detail="Invalid visual target type.")
     result = await db.execute(statement)
-    target = result.scalars().first()
+    target: Avatar | AdventureTemplate | WorldScene | WorldEntity | None = result.scalars().first()
     if not target:
         raise HTTPException(status_code=404, detail=missing_detail)
     return target

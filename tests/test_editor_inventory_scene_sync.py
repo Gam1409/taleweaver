@@ -1,9 +1,12 @@
+import asyncio
 import os
 import shutil
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.auth import create_access_token
 from backend.core.database import get_db
 from backend.main import app
@@ -12,7 +15,6 @@ from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldScene
-from backend.api.routes.adventures.logic import AdventureLogic
 from tests.conftest import TestSessionLocal
 
 
@@ -117,8 +119,7 @@ async def test_editor_inventory_to_scene_sync(client, setup_test_db):
         assert ent.current_scene_id == "ROOM_A"
         assert ent.is_in_inventory is False
         assert not any(
-            (i if isinstance(i, str) else i.get("id")) == "KEY_1"
-            for i in (av.inventory or [])
+            (i if isinstance(i, str) else i.get("id")) == "KEY_1" for i in (av.inventory or [])
         )
 
     # 3. Act: Start a new session for this template
@@ -143,10 +144,14 @@ async def test_editor_inventory_to_scene_sync(client, setup_test_db):
 
 
 @pytest.mark.asyncio
-async def test_session_copy_asset_and_dynamic_thumbnail(client, tmp_path):
+async def test_session_copy_asset_and_dynamic_thumbnail(client, tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("backend.utils.media_access.authorize_media", AsyncMock())
     from PIL import Image
-    from backend.core.config import settings
+
     from backend.api.routes.adventures.sessions import _copy_data_asset_to_session
+    from backend.core.config import settings
     from backend.utils.path_security import data_url_to_local_path
 
     # Create dummy source image in DATA_DIR
@@ -159,29 +164,32 @@ async def test_session_copy_asset_and_dynamic_thumbnail(client, tmp_path):
     try:
         session_id = "test_thumb_sess_1"
         cache = {}
-        copied_url = _copy_data_asset_to_session(session_id, "entities", f"/data/adventures/library/test_thumb_lib/test_badge.png", cache)
+        copied_url = _copy_data_asset_to_session(
+            session_id, "entities", "/data/adventures/library/test_thumb_lib/test_badge.png", cache
+        )
         assert copied_url is not None
         assert "/data/adventures/sessions/test_thumb_sess_1/visuals/entities/" in copied_url
 
         # Verify that thumbnail was generated automatically by _copy_data_asset_to_session
         local_path = data_url_to_local_path(copied_url)
         assert local_path is not None
-        assert os.path.isfile(local_path)
+        assert await asyncio.to_thread(os.path.isfile, local_path)
         stem, ext = os.path.splitext(local_path)
         thumb_path = f"{stem}_thumb{ext}"
-        assert os.path.isfile(thumb_path)
+        assert await asyncio.to_thread(os.path.isfile, thumb_path)
 
         # Now delete the thumbnail to test on-demand generation in SafeStaticFiles
         os.remove(thumb_path)
-        assert not os.path.isfile(thumb_path)
+        assert not await asyncio.to_thread(os.path.isfile, thumb_path)
 
         # Request the missing thumbnail via client
         thumb_url = f"{copied_url.rsplit('.', 1)[0]}_thumb.{copied_url.rsplit('.', 1)[1]}"
         res = await client.get(thumb_url)
         assert res.status_code == 200
-        assert os.path.isfile(thumb_path)
+        assert await asyncio.to_thread(os.path.isfile, thumb_path)
     finally:
         shutil.rmtree(src_dir, ignore_errors=True)
-        shutil.rmtree(os.path.join(settings.DATA_DIR, "adventures", "sessions", "test_thumb_sess_1"), ignore_errors=True)
-
-
+        shutil.rmtree(
+            os.path.join(settings.DATA_DIR, "adventures", "sessions", "test_thumb_sess_1"),
+            ignore_errors=True,
+        )

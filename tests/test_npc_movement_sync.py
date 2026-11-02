@@ -103,7 +103,7 @@ async def test_generated_destination_passes_guardrails_and_living_world(setup_te
             )
         )
         manager = WorldRulesMixin()
-        manager.state, manager.adventure, manager.avatar = state, adventure, avatar
+        manager.manager = SimpleNamespace(state=state, adventure=adventure, avatar=avatar)
         movement = EntityMovement(entity_id=npc.id, to_scene_id="GENERATED")
         assert manager._npc_move_violation(npc, movement) is None
         assert "GENERATED" in await destinations(db, state, npc, origin)

@@ -160,7 +160,9 @@ async def _commit_fix(
     return _run_snapshot(run)
 
 
-def _apply_result(applied: int, total: int, failed_resolution: bool) -> tuple[str, str]:
+def _apply_result(
+    applied: int, total: int, failed_resolution: bool
+) -> tuple[Literal["applied", "no_op", "partial"], str]:
     status: Literal["applied", "no_op", "partial"] = "no_op"
     if applied:
         status = "partial" if applied < total else "applied"
@@ -195,6 +197,7 @@ async def ai_apply_fix_proposal(
             status="no_op",
             applied_targets=[],
             message="The selected proposal contained no patches to apply.",
+            validation_run=None,
         )
 
     applied_tags, failed_resolution = await _apply_patches(db, template_id, adv, proposal_patches)

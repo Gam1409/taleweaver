@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+from typing import Any
 
 from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
@@ -12,6 +13,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.visual_trace import record
 from backend.engine.image_profiles import advanced_for
 from backend.engine.visual_progress import report
+from backend.models.user import User
 
 # Compatibility export for callers importing the former instruction constant.
 MATURE_THEMES_INSTRUCTION = mature_content_prompts.IMAGE_PROMPT_ADDENDUM
@@ -33,7 +35,7 @@ def cover_source(title: str, original_prompt: str, provider: str, options: dict)
     return prompts.ADVENTURE_COVER_PROMPT_TEMPLATE.format(title=title, original_prompt=clean)
 
 
-def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
+def asset_source(t2i: dict, kind: str, legacy: str, **facts: Any) -> str:
     profile = "advanced" if advanced_for(t2i, kind) else "simple"
     if t2i.get(f"{profile}_model_provider") != "comfyui":
         return legacy
@@ -54,7 +56,7 @@ def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
 async def adapt_body(
     description: str,
     rules: ImagePromptRules,
-    user,
+    user: User | None,
     *,
     mature_themes: bool = False,
     nsfw_enabled: bool = False,

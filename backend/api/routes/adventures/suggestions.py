@@ -32,7 +32,7 @@ async def get_prompt_suggestions(
         raise HTTPException(status_code=404, detail="Session state not found.")
 
     manager = GameTurnManager(db, state.session_id, current_user)
-    if not await manager.initialize():
+    if not await manager.initialize() or manager.state is None:
         raise HTTPException(status_code=404, detail="Failed to initialize session.")
 
     suggestions = manager.suggestions.extract_prompt_suggestions(manager.state.exit_states or {})
@@ -46,6 +46,8 @@ async def get_prompt_suggestions(
 
 async def _context_version(manager: GameTurnManager) -> tuple[Any, ...]:
     """Detect a move or language change made while the model was answering."""
+    if manager.state is None:
+        raise HTTPException(404, "Session state not found.")
     return (
         manager.state.current_scene_id,
         manager.state.in_game_time,
@@ -69,7 +71,7 @@ async def shuffle_prompt_suggestions(
     if owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session state not found.")
     manager = GameTurnManager(db, state.session_id, current_user)
-    if not await manager.initialize():
+    if not await manager.initialize() or manager.state is None:
         raise HTTPException(status_code=404, detail="Failed to initialize session.")
 
     version = await _context_version(manager)

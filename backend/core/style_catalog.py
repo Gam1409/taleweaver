@@ -15,7 +15,7 @@ def default_tones_catalog() -> list[dict[str, Any]]:
 
 def resolve_style_instruction(
     selected_image_styles: Optional[list[Any]],
-    user_catalog: list[dict[str, Optional[Any]]],
+    user_catalog: list[dict[str, Any]] | None,
 ) -> str:
     """Resolve style instruction from selected style, then user catalog, then default catalog."""
     if not selected_image_styles:
@@ -40,12 +40,12 @@ def resolve_style_instruction(
             if entry.get("id") == style_id or entry.get("name") == style_id:
                 return (entry.get("instruction") or "").strip()
 
-    return style_id
+    return str(style_id)
 
 
 def resolve_tone_instruction(
     selected_tone: Optional[str | dict[str, Any]],
-    user_catalog: list[dict[str, Optional[Any]]],
+    user_catalog: list[dict[str, Any]] | None,
 ) -> str:
     """Resolve tone instruction from selected tone, then user catalog, then default catalog."""
     if not selected_tone:

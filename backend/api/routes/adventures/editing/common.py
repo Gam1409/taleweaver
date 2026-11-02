@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
-from backend.models.world_entity import WorldScene
+from backend.models.world_entity import WorldEntity, WorldScene
 from backend.utils.path_security import (
     data_url_to_local_path,
     local_path_to_data_url,
@@ -27,11 +27,11 @@ _SAFE_SCENE_ID_RE = re.compile(r"^[A-Z0-9_]+$")
 EDITOR_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
-def _is_npc_entity(ent):
+def _is_npc_entity(ent: WorldEntity) -> bool:
     return ent.entity_type == "NPC"
 
 
-def _is_object_entity(ent):
+def _is_object_entity(ent: WorldEntity) -> bool:
     return ent.entity_type == "OBJECT"
 
 

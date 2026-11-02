@@ -899,6 +899,9 @@ class GameTurnManager:
             yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
             return
 
+        from backend.engine.turn_replay.commands import prepare_command
+
+        await prepare_command(self, user_msg)
         cmd_parts = user_msg.strip().split(None, 1)
         if cmd_parts and cmd_parts[0].lower() in PLAYAGENT_COMMANDS:
             cmd_args = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
@@ -1482,21 +1485,35 @@ class GameTurnManager:
                             game_event.updated_entities = []
 
                         # Find current HP
-                        current_hp = 50  # Default
+                        current_hp = (
+                            self.avatar.hp
+                            if target_id in {"PLAYER", "PROTAGONIST", self.avatar.id}
+                            else None
+                        )
                         if "hp" in target_state:
                             current_hp = target_state["hp"]
                         else:
                             # Re-fetch entity to get baseline HP if needed
                             target_res = await self.db.execute(
-                                select(WorldEntity).where(
+                                select(WorldEntity)
+                                .where(
                                     WorldEntity.id == target_id,
-                                    WorldEntity.session_id == self.game_id,
+                                    (
+                                        (WorldEntity.session_id == self.game_id)
+                                        | (
+                                            (WorldEntity.session_id.is_(None))
+                                            & (WorldEntity.template_id == self.adventure.id)
+                                        )
+                                    ),
                                 )
+                                .order_by(WorldEntity.session_id.desc())
                             )
                             target_ent = target_res.scalars().first()
                             if target_ent and target_ent.hp is not None:
                                 current_hp = target_ent.hp
 
+                        if current_hp is None:
+                            raise ValueError("This target has no combat health configured.")
                         new_hp = max(0, current_hp - attack_result.damage_total)
                         game_event.updated_entities.append(
                             WorldEntityUpdate(entity_id=target_id, hp=new_hp)

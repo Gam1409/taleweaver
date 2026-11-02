@@ -1,13 +1,15 @@
 """Apply requested container and readable-object generation limits."""
 
+from typing import Any
+
 
 def constrain_generated_objects(
-    manifest_dict,
-    max_containers,
-    max_text_logs,
-    scripts_generation_enabled,
-    container_generation_enabled,
-    text_log_generation_enabled,
+    manifest_dict: dict[str, Any],
+    max_containers: int | None,
+    max_text_logs: int | None,
+    scripts_generation_enabled: bool,
+    container_generation_enabled: bool,
+    text_log_generation_enabled: bool,
 ) -> None:
     from backend.engine.world_generator import (
         _ensure_containers_have_minimum_inventory,
@@ -62,7 +64,7 @@ def constrain_generated_objects(
 
 
 def _constrain_readable_objects(
-    objects, text_log_generation_enabled, clamped_max_text_logs
+    objects: list[dict[str, Any]], text_log_generation_enabled: bool, clamped_max_text_logs: int
 ) -> None:
     from backend.engine.world_generator import _normalize_text_log_content
 

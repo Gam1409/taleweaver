@@ -147,6 +147,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
     const target = e.target as HTMLElement
     const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
 

@@ -149,7 +149,7 @@ def _check_adventure_level(
     return findings
 
 
-def _check_scenes(scenes: list[dict[str, Any]]) -> list[ValidationFinding]:
+def _check_scenes(scenes: list[Any]) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     for scene in scenes:
         if not isinstance(scene, dict):
@@ -171,7 +171,7 @@ def _check_scenes(scenes: list[dict[str, Any]]) -> list[ValidationFinding]:
     return findings
 
 
-def _check_exits(exits: list[dict[str, Any]]) -> list[ValidationFinding]:
+def _check_exits(exits: list[Any]) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     for ex in exits:
         if not isinstance(ex, dict):
@@ -251,7 +251,7 @@ def _check_switch_transitions(
     return findings
 
 
-def _check_entities(entities: list[dict[str, Any]]) -> list[ValidationFinding]:
+def _check_entities(entities: list[Any]) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     for ent in entities:
         if not isinstance(ent, dict):

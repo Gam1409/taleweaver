@@ -89,6 +89,8 @@ def static_directory(tmp_path):
 
 @pytest.mark.asyncio
 async def test_static_lookup_and_svg_sniffing_run_in_workers(static_directory, monkeypatch):
+
+    monkeypatch.setattr("backend.utils.media_access.authorize_media", AsyncMock())
     from backend.utils import static_media
 
     media = SafeStaticFiles(directory=static_directory)
@@ -108,6 +110,8 @@ async def test_static_lookup_and_svg_sniffing_run_in_workers(static_directory, m
 
 @pytest.mark.asyncio
 async def test_missing_thumbnail_is_generated(static_directory, monkeypatch):
+
+    monkeypatch.setattr("backend.utils.media_access.authorize_media", AsyncMock())
     from backend.engine.media_engine import MediaEngine
 
     async def generate(source):

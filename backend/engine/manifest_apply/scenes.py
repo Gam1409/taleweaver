@@ -87,7 +87,9 @@ async def _scene_image(
                 api_keys,
                 style_instruction=ctx.style_instruction,
                 use_advanced_model=(
-                    (ctx.user.t2i_settings or {}).get("scene_model_quality", "advanced")
+                    ((ctx.user.t2i_settings if ctx.user else None) or {}).get(
+                        "scene_model_quality", "advanced"
+                    )
                     == "advanced"
                 ),
             ),

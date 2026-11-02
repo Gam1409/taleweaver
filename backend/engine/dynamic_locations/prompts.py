@@ -1,11 +1,14 @@
 """Small proposals during mechanics; focused confirmation only on proposed arrivals."""
 
 import json
+from typing import TypeVar
 
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 
 from backend.engine.dynamic_locations.schema import PlaceProposal, policy, registry
 from backend.models.session_state import SessionState
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 INSTRUCTION = (
     "DYNAMIC LOCAL PLACES: Only when enabled, use new_local_place for an immediate, "
@@ -24,7 +27,7 @@ INSTRUCTION = (
 )
 
 
-def intent_schema(base, state: SessionState):
+def intent_schema(base: type[ModelT], state: SessionState) -> type[ModelT]:
     if not policy(state).enabled:
         return base
     return create_model(

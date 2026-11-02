@@ -86,8 +86,11 @@ def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
             copy_asset(zip_file, zip_info, safe_dest_path)
 
 
-def _read_session_manifest(zip_file):
-    return json.loads(zip_file.read("session.json").decode("utf-8"))
+def _read_session_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any]:
+    data: object = json.loads(zip_file.read("session.json").decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Session manifest must be an object.")
+    return data
 
 
 class SessionImporter:

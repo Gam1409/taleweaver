@@ -240,7 +240,9 @@ async def delete_user(
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    await db.delete(user)
+    from backend.core.relational_delete import delete_owned_rows
+
+    await delete_owned_rows(db, User.__table__, User.__table__.c.id == user.id)
     await db.commit()
     return {"message": "User deleted"}
 

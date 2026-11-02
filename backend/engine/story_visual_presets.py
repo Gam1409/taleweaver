@@ -1,18 +1,23 @@
 """Story choices reference administrator presets, never embedded server workflows."""
 
+from types import SimpleNamespace
+
 from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.core.comfyui_presets import normalize_comfy_presets
 from backend.engine.nsfw.settings import nsfw_settings
+from backend.models.adventure_template import AdventureTemplate
 
 
-def preserve_story_presets(manifest: dict, adventure) -> dict:
+def preserve_story_presets(
+    manifest: dict, adventure: AdventureTemplate | SimpleNamespace | None
+) -> dict:
     original = getattr(adventure, "original_manifest", None) or {}
     if "visual_presets" not in original:
         return dict(manifest)
     return {**manifest, "visual_presets": dict(story_selection(adventure))}
 
 
-def story_selection(adventure) -> dict[str, str]:
+def story_selection(adventure: AdventureTemplate | SimpleNamespace | None) -> dict[str, str]:
     manifest = getattr(adventure, "original_manifest", None) or {}
     selection = manifest.get("visual_presets", {})
     if not isinstance(selection, dict):
@@ -22,7 +27,7 @@ def story_selection(adventure) -> dict[str, str]:
     return selection
 
 
-def story_t2i(t2i: dict | None, adventure) -> dict:
+def story_t2i(t2i: dict | None, adventure: AdventureTemplate | SimpleNamespace | None) -> dict:
     result = normalize_comfy_presets(t2i or {})
     nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
     result["_nsfw_enabled"] = nsfw["enabled"]

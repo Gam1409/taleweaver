@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Column, Integer, String, select
+from sqlalchemy import JSON, Boolean, Integer, String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.sql.elements import KeyedColumnElement
 
 from backend.api.routes.adventures.assets import _build_uploaded_visual_path
 from backend.api.routes.adventures.editor import _get_template_avatar
@@ -327,7 +329,9 @@ def _store_image(template_id: str, bundle: EntityBundle, token: str) -> Optional
 _MISSING = object()
 
 
-def _coerce_values(data: dict[str, Any], columns: dict[str, Column]) -> dict[str, Any]:
+def _coerce_values(
+    data: dict[str, Any], columns: Mapping[str, KeyedColumnElement[Any]]
+) -> dict[str, Any]:
     coerced: dict[str, Any] = {}
     for name, column in columns.items():
         if name not in data:
@@ -338,7 +342,7 @@ def _coerce_values(data: dict[str, Any], columns: dict[str, Column]) -> dict[str
     return coerced
 
 
-def _coerce_column_value(column: Column, value: Any) -> Any:
+def _coerce_column_value(column: KeyedColumnElement[Any], value: Any) -> Any:
     if value is None:
         return None if column.nullable else _MISSING
     column_type = column.type

@@ -5,7 +5,7 @@ import shutil
 logger = logging.getLogger(__name__)
 
 
-def copy_session_asset_thumbnail(source_path, target_path, ext) -> None:
+def copy_session_asset_thumbnail(source_path: str, target_path: str, ext: str) -> None:
     from .sessions import _is_svg_file
 
     # Ensure thumbnail exists in session visuals

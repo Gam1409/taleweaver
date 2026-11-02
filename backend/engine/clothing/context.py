@@ -38,7 +38,7 @@ def resolved_inventory(inventory: list, entities: list[Any], states: dict) -> li
 def actor_records(manager: Any, entities: list[Any], states: dict | None = None) -> dict[str, dict]:
     states = (getattr(manager.state, "entity_states", None) or {}) if states is None else states
     avatar = manager.avatar
-    records = {
+    records: dict[str, dict[str, Any]] = {
         PLAYER: {
             "id": PLAYER,
             "name": getattr(avatar, "name", ""),
@@ -87,7 +87,7 @@ def actor_records(manager: Any, entities: list[Any], states: dict | None = None)
 
 def source_records(manager: Any, entities: list[Any], scenes: list[Any]) -> dict[str, dict]:
     snapshot = possession_snapshot(manager, entities)
-    records = {}
+    records: dict[str, dict[str, Any]] = {}
     for entity in entities:
         if entity.id not in snapshot.npcs and entity.id not in snapshot.containers:
             continue
@@ -121,12 +121,12 @@ def build_clothing_context(manager: Any, entities: list[Any], scenes: list[Any])
             {
                 "id": item["id"],
                 "name": item.get("name", ""),
-                "clothing": garment_for_item(item).model_dump(),
+                "clothing": garment.model_dump(),
             }
             for item in owned_items(
                 actor.pop("resolved_inventory"), equipment=actor.pop("equipment")
             ).values()
-            if garment_for_item(item) is not None
+            if (garment := garment_for_item(item)) is not None
         ][:48]
         actor.pop("inventory")
     return {

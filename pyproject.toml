@@ -47,6 +47,7 @@ flake8 = ">=7.0.0"
 types-pillow = ">=10.0.0"
 types-python-jose = ">=3.3.0"
 types-cryptography = ">=3.3.0"
+pyarrow-stubs = ">=20.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -131,6 +132,7 @@ max-returns = 6
 max-statements = 50
 
 [tool.mypy]
+mypy_path = "typings"
 python_version = "3.10"
 exclude = [
     "venv",

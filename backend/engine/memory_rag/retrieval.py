@@ -111,7 +111,7 @@ def _canonical_scores(
     canonical = {doc.id: doc for doc in documents}
     scores = {}
     for rank, candidate in enumerate(candidates):
-        document = canonical.get(candidate.get("id"))
+        document = canonical.get(str(candidate.get("id") or ""))
         if document is None or document.source_hash != candidate.get("source_hash"):
             continue
         expected = (
@@ -171,8 +171,10 @@ async def prepare_recall(
 ) -> TurnRecall:
     """Cache the result through state-context rebuilds and every actual turn audience."""
     token = (manager.state.session_id, getattr(manager, "_vn_player_message_id", None), user_msg)
-    if getattr(manager, "_memory_recall_token", None) == token:
-        return manager._memory_recall
+    if getattr(manager, "_memory_recall_token", None) == token and isinstance(
+        cached := getattr(manager, "_memory_recall", None), TurnRecall
+    ):
+        return cached
     started = time.perf_counter()
     recall = TurnRecall()
     try:

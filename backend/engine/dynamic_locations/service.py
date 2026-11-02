@@ -1,5 +1,16 @@
 """Validate and materialize one bounded local scene before normal movement guards."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from pydantic import BaseModel
+
+from backend.engine.dynamic_locations.schema import LocationPolicy
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+
 import asyncio
 import json
 import logging
@@ -22,6 +33,11 @@ from backend.engine.dynamic_locations.schema import (
 )
 from backend.models.world_entity import WorldExit, WorldScene
 
+
+class _SceneIntent(Protocol):
+    new_scene_id: str | None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +45,15 @@ def normalized(value: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKC", value).casefold() if c.isalnum())
 
 
-async def _context(manager, proposal, user_msg, history, language):
+async def _context(
+    manager: GameTurnManager,
+    proposal: PlaceProposal,
+    user_msg: str,
+    history: list[dict[str, Any]],
+    language: str | None,
+) -> tuple[list[WorldScene], list[WorldExit], dict[str, Any], str]:
+    if manager.state is None or manager.adventure is None:
+        raise RuntimeError("Turn context must be initialized")
     scenes = list(
         (
             await manager.db.scalars(
@@ -85,7 +109,7 @@ async def _context(manager, proposal, user_msg, history, language):
     return scenes, exits, context, recent
 
 
-def _confirmed_arrival(decision, proposal, user_msg):
+def _confirmed_arrival(decision: PlaceDecision, proposal: PlaceProposal, user_msg: str) -> bool:
     return (
         decision.arrival_now
         and decision.player_moves
@@ -99,7 +123,14 @@ def _confirmed_arrival(decision, proposal, user_msg):
     )
 
 
-def _eligible(decision, user_msg, recent, data, selected, parent_id):
+def _eligible(
+    decision: PlaceDecision,
+    user_msg: str,
+    recent: str,
+    data: dict[str, Any],
+    selected: LocationPolicy,
+    parent_id: str,
+) -> bool:
     places = data.get("places") or {}
     depth = int(places.get(parent_id, {}).get("depth", 0)) + 1
     if depth > MAX_DEPTH or decision.granularity == "detail":
@@ -119,7 +150,14 @@ def _eligible(decision, user_msg, recent, data, selected, parent_id):
     return not (scale == "regional" and decision.granularity == "site" and depth > 1)
 
 
-def _existing(decision, proposal, scenes, exits, data, parent):
+def _existing(
+    decision: PlaceDecision,
+    proposal: PlaceProposal,
+    scenes: list[WorldScene],
+    exits: list[WorldExit],
+    data: dict[str, Any],
+    parent: str,
+) -> str | None:
     if decision.existing_scene_id:
         return decision.existing_scene_id
     names = {normalized(proposal.label), normalized(decision.label)} - {""}
@@ -130,7 +168,7 @@ def _existing(decision, proposal, scenes, exits, data, parent):
     return next((s.id for s in scenes if s.id in local_ids and normalized(s.label) in names), None)
 
 
-def _open_exit(exits, current, target):
+def _open_exit(exits: list[WorldExit], current: str, target: str) -> WorldExit | None:
     return next(
         (
             e
@@ -149,8 +187,18 @@ def _open_exit(exits, current, target):
     )
 
 
-async def materialize(manager, proposal, decision, user_msg, recent, scenes, exits) -> str | None:
+async def materialize(
+    manager: GameTurnManager,
+    proposal: PlaceProposal,
+    decision: PlaceDecision,
+    user_msg: str,
+    recent: str,
+    scenes: list[WorldScene],
+    exits: list[WorldExit],
+) -> str | None:
     state = manager.state
+    if state is None:
+        raise RuntimeError("Turn state must be initialized")
     data = registry(state)
     selected = policy(state)
     parent = state.current_scene_id
@@ -207,9 +255,17 @@ async def materialize(manager, proposal, decision, user_msg, recent, scenes, exi
     return scene_id
 
 
-async def resolve_proposal(manager, intent, user_msg, history, language) -> None:
+async def resolve_proposal(
+    manager: GameTurnManager,
+    intent: BaseModel,
+    user_msg: str,
+    history: list[dict[str, Any]],
+    language: str | None,
+) -> None:
+    if manager.state is None or manager.user is None:
+        raise RuntimeError("Turn context must be initialized")
     raw = getattr(intent, "new_local_place", None)
-    if not raw or not policy(manager.state).enabled or intent.new_scene_id:
+    if not raw or not policy(manager.state).enabled or getattr(intent, "new_scene_id", None):
         return
     try:
         proposal = PlaceProposal.model_validate(raw)
@@ -238,14 +294,17 @@ async def resolve_proposal(manager, intent, user_msg, history, language) -> None
         logger.exception("Local place generation failed for session %s", manager.game_id)
         return
     async with manager.db.begin_nested():
-        intent.new_scene_id = await materialize(
+        destination = await materialize(
             manager, proposal, decision, user_msg, recent, scenes, exits
         )
+        cast(_SceneIntent, intent).new_scene_id = destination
 
 
-async def discard_unentered(manager) -> None:
+async def discard_unentered(manager: GameTurnManager) -> None:
     from backend.engine.dynamic_locations.lifecycle import prune
 
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
     ids = set(getattr(manager, "_dynamic_scene_images", []))
     removed = ids - {manager.state.current_scene_id}
     if not removed:

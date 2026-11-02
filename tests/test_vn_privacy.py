@@ -94,6 +94,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
             "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
+            "nsfw_guard": "warn",
         },
     }
     response = await auth_client.patch(
@@ -108,6 +109,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
             "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
+            "nsfw_guard": "warn",
         },
     }
     async with TestSessionLocal() as db:
@@ -119,6 +121,7 @@ async def test_pace_changes_persist_without_modifying_private_simulation(auth_cl
             "visual_preparation": "plan",
             "visual_audit": True,
             "visual_audit_failure": "block",
+            "nsfw_guard": "warn",
         }
 
 
@@ -183,6 +186,7 @@ async def test_visual_preparation_patch_preserves_pace_and_older_client_patch_ke
             "visual_preparation": "plan",
             "visual_audit": False,
             "visual_audit_failure": "warn",
+            "nsfw_guard": "warn",
         },
     )
     assert response.status_code == 200, response.text
@@ -192,6 +196,7 @@ async def test_visual_preparation_patch_preserves_pace_and_older_client_patch_ke
         "visual_preparation": "plan",
         "visual_audit": False,
         "visual_audit_failure": "warn",
+        "nsfw_guard": "warn",
     }
     response = await auth_client.patch(path, json={"pace": "brisk"})
     assert response.status_code == 200, response.text
@@ -201,6 +206,7 @@ async def test_visual_preparation_patch_preserves_pace_and_older_client_patch_ke
         "visual_preparation": "plan",
         "visual_audit": False,
         "visual_audit_failure": "warn",
+        "nsfw_guard": "warn",
     }
     loaded = await auth_client.get(path)
     assert loaded.json() == response.json()

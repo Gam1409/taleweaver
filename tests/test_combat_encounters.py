@@ -5,6 +5,7 @@ import pytest
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
@@ -79,6 +80,9 @@ async def _seed(db, special_actions=None):
         _npc("ORC", "Orc", inventory=[{"id": "AXE", "name": "Axe"}]),
         _npc("MERCHANT", "Merchant", is_attackable=False),
     ])  # fmt: skip
+    db.add(
+        GameSession(id=state.session_id, user_id=user.id, avatar_id=avatar.id, template_id=adv.id)
+    )
     await db.commit()
     return user, avatar, state
 

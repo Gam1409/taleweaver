@@ -19,7 +19,7 @@ async def with_stream_timeout(
             chunk = await asyncio.wait_for(anext(iterator), timeout=timeout)
         except StopAsyncIteration:
             return
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             if finished:
                 return
             detail = (

@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
@@ -94,7 +96,7 @@ async def reset_index(db: AsyncSession, user: User, template_id: str, *, paused:
             .values(status="paused")
             .execution_options(synchronize_session=False)
         )
-        if locked.rowcount != 1:
+        if cast(CursorResult[Any], locked).rowcount != 1:
             await db.rollback()
             raise HTTPException(409, "Index settings changed during cleanup. Please retry.")
     try:
@@ -118,7 +120,7 @@ async def reset_index(db: AsyncSession, user: User, template_id: str, *, paused:
                 .values(paused=False, status="pending")
                 .execution_options(synchronize_session=False)
             )
-            if changed.rowcount != 1:
+            if cast(CursorResult[Any], changed).rowcount != 1:
                 await db.rollback()
                 raise HTTPException(409, "Index settings changed during cleanup. Please retry.")
         await db.commit()

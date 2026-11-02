@@ -93,7 +93,7 @@ def unpack_entity_bundle(data: bytes) -> EntityBundle:
     except zipfile.BadZipFile as exc:
         raise EntityBundleError("File is not a valid entity bundle (ZIP expected).") from exc
 
-    source = manifest.get("source") if isinstance(manifest.get("source"), dict) else {}
+    source = raw_source if isinstance(raw_source := manifest.get("source"), dict) else {}
     return EntityBundle(
         kind=manifest["kind"],
         entity=manifest["entity"],

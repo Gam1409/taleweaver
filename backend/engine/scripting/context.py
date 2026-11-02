@@ -11,7 +11,7 @@ import logging
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Generic, Optional, TypeVar
 
 from backend.engine.scripting.switch_proxy import SwitchesProxy, SwitchProxy
 
@@ -23,7 +23,7 @@ class ScriptMessage(str):
 
     role: str = "system"
 
-    def __new__(cls, content: str, role: str = "system"):
+    def __new__(cls, content: str, role: str = "system") -> ScriptMessage:
         obj = super().__new__(cls, content)
         obj.role = role
         return obj
@@ -236,8 +236,8 @@ class SceneProxy:
         self,
         current_scene_id: str,
         changeset: ScriptChangeset,
-        npcs_mgr: EntityManagerProxy,
-        objects_mgr: EntityManagerProxy,
+        npcs_mgr: EntityManagerProxy[NPCProxy],
+        objects_mgr: EntityManagerProxy[ObjectProxy],
     ):
         self._current_scene_id = current_scene_id
         self._changeset = changeset
@@ -713,14 +713,17 @@ class ObjectProxy(EntityProxy):
             self._entity_mgr.give_item(npc_id, self._data or {"id": self._id, "name": self.name})
 
 
-class EntityManagerProxy:
+ProxyT = TypeVar("ProxyT", bound=EntityProxy)
+
+
+class EntityManagerProxy(Generic[ProxyT]):
     """Access point for querying NPCs or objects."""
 
     def __init__(
         self,
         entities: dict[str, dict[str, Any]],
         changeset: ScriptChangeset,
-        proxy_cls: type[EntityProxy],
+        proxy_cls: type[ProxyT],
         current_player_scene_id: str = "",
     ):
         self._entities = entities
@@ -728,7 +731,7 @@ class EntityManagerProxy:
         self._proxy_cls = proxy_cls
         self._current_player_scene_id = current_player_scene_id
 
-    def get(self, entity_id: str) -> EntityProxy:
+    def get(self, entity_id: str) -> ProxyT:
         if entity_id in self._entities:
             return self._proxy_cls(
                 entity_id,
@@ -757,7 +760,7 @@ class EntityManagerProxy:
             self,
         )
 
-    def all(self) -> list[EntityProxy]:
+    def all(self) -> list[ProxyT]:
         return [self.get(eid) for eid in self._entities]
 
     def exists(self, entity_id: str) -> bool:

@@ -272,7 +272,9 @@ def _extract_item_id(entry: Any) -> Optional[str]:
     return None
 
 
-def _normalize_container_inventories(container_objs, object_ids_set):
+def _normalize_container_inventories(
+    container_objs: list[dict[str, Any]], object_ids_set: set[str]
+) -> set[str]:
     assigned_ids: set[str] = set()
     for container in container_objs:
         container_id = str(container.get("id") or "").strip()
@@ -292,7 +294,7 @@ def _normalize_container_inventories(container_objs, object_ids_set):
     return assigned_ids
 
 
-def _ensure_containers_have_minimum_inventory(objects: list[dict[str, Any]]) -> None:
+def _ensure_containers_have_minimum_inventory(objects: list[Any]) -> None:
     """Ensure every generated CONTAINER references at least one item ID in inventory.
 
     Only reuses existing valid item IDs; never fabricates new items.
@@ -343,7 +345,7 @@ def _ensure_containers_have_minimum_inventory(objects: list[dict[str, Any]]) -> 
 # ---------------------------------------------------------------------------
 
 
-def _world_generator_llm(user, provider, model):
+def _world_generator_llm(user: User, provider: str | None, model: str | None) -> GameMasterLLM:
     configured = user.llm_settings or {}
     provider_keys = (
         "generator_model_provider",
@@ -361,13 +363,13 @@ def _world_generator_llm(user, provider, model):
 
 class WorldGenerator:
     @staticmethod
-    def preprocess_manifest_object_ids(manifest_dict):
+    def preprocess_manifest_object_ids(manifest_dict: dict[str, Any]) -> None:
         from backend.engine.world_manifest_text import preprocess_manifest_object_ids
 
         return preprocess_manifest_object_ids(manifest_dict)
 
     @staticmethod
-    def _extract_sequences_from_prompt(prompt_str):
+    def _extract_sequences_from_prompt(prompt_str: str) -> tuple[str, list[dict[str, Any]]]:
         from backend.engine.world_manifest_text import _extract_sequences_from_prompt
 
         return _extract_sequences_from_prompt(prompt_str)
@@ -409,7 +411,7 @@ class WorldGenerator:
         can_damage_npcs: bool = True,
         npcs_can_damage_protagonist: bool = True,
         selected_image_styles: Optional[list[str]] = None,
-        selected_tone: Optional[str] = None,
+        selected_tone: str | dict[str, Any] | None = None,
         language: Optional[str] = None,
         cover_source_manifest: Optional[dict[str, Any]] = None,
         cover_source_adventure_id: Optional[str] = None,
@@ -479,7 +481,7 @@ class WorldGenerator:
                 original_prompt = cleaned_prompt
 
         system_prompt, user_prompt = build_world_generation_prompts(
-            rule_enforcement_mode=effective_mode,
+            rule_enforcement_mode=effective_mode or "rpg",
             title=title,
             original_prompt=original_prompt,
             sequences=sequences,
@@ -516,7 +518,7 @@ class WorldGenerator:
         )
 
         system_prompt += generation_instruction(
-            getattr(adventure, "original_manifest", None), mode=effective_mode
+            getattr(adventure, "original_manifest", None), mode=effective_mode or "rpg"
         )
 
         from backend.engine.staged_world import generate_manifest
@@ -531,7 +533,7 @@ class WorldGenerator:
             adventure=adventure,
             llm=llm,
             status=publish_stage,
-            mode=effective_mode,
+            mode=effective_mode or "rpg",
             template_id=template_id,
             system_prompt=system_prompt,
             user_prompt=user_prompt,

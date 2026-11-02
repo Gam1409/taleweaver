@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.turn_slash import SlashCommandState, SlashInteractions
+
 import json
 
 from sqlalchemy import and_, func, or_, select
@@ -7,7 +13,9 @@ from sqlalchemy import and_, func, or_, select
 from backend.models.world_entity import WorldEntity
 
 
-async def drop_item(self, command):
+async def drop_item(
+    self: SlashInteractions, command: SlashCommandState
+) -> AsyncGenerator[str, None]:
     item_name = command.response[14:].strip()
     if not item_name:
         command.response = "Usage: /drop <item name>"
@@ -44,7 +52,9 @@ async def drop_item(self, command):
                 yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': drop_meta['on_drop_text']})}\n\n"
 
 
-async def equip_item(self, command):
+async def equip_item(
+    self: SlashInteractions, command: SlashCommandState
+) -> AsyncGenerator[str, None]:
     parts = command.response.replace("[TRIGGER_EQUIP]", "").strip().split("|", 1)
     item_id = parts[0].strip() if len(parts) > 0 else ""
     msg = parts[1].strip() if len(parts) > 1 else command.response
@@ -71,7 +81,9 @@ async def equip_item(self, command):
     command.response = msg
 
 
-async def unequip_item(self, command):
+async def unequip_item(
+    self: SlashInteractions, command: SlashCommandState
+) -> AsyncGenerator[str, None]:
     parts = command.response.replace("[TRIGGER_UNEQUIP]", "").strip().split("|", 1)
     item_id = parts[0].strip() if len(parts) > 0 else ""
     msg = parts[1].strip() if len(parts) > 1 else command.response
@@ -98,7 +110,9 @@ async def unequip_item(self, command):
     command.response = msg
 
 
-async def consume_item(self, command):
+async def consume_item(
+    self: SlashInteractions, command: SlashCommandState
+) -> AsyncGenerator[str, None]:
     item_name = command.response.replace("[TRIGGER_CONSUME]", "").strip()
     action_msg = self._consume_item_now(item_name)
     await self._save_chat_message("system", action_msg)
@@ -106,7 +120,9 @@ async def consume_item(self, command):
     command.response = action_msg  # Allow it to fall through to persist and yield final state
 
 
-async def _drop_metadata(self, dropped_item):
+async def _drop_metadata(
+    self: SlashInteractions, dropped_item: dict[str, Any]
+) -> tuple[dict[str, Any], str | None]:
     drop_meta = dict(dropped_item.get("metadata_json") or {})
     dropped_id = dropped_item.get("id")
     adv_id = (

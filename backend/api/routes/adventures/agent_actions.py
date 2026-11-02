@@ -270,13 +270,13 @@ async def _unlock(manager: Any, args: str) -> AgentActionOutcome:
     )
     scene_exit = _match_exit(scene_exits, target)
     container = None if scene_exit else await _match_container(manager, target)
-    if not scene_exit and not container:
+    if scene_exit is None and container is None:
         return AgentActionOutcome(message=f"There is nothing called '{target}' to unlock here.")
 
     try:
         if scene_exit:
             msg = await _unlock_exit(manager, scene_exit.exit, item_id, code)
-        else:
+        elif container is not None:
             msg = await _unlock_container(manager, container, item_id, code)
     except HTTPException as exc:
         msg = f"Unlocking {target} failed: {exc.detail}"

@@ -5,6 +5,7 @@ import unicodedata
 from copy import deepcopy
 from typing import Any, get_args
 
+from backend.engine.npc_journal.archive import compact, expanded
 from backend.engine.npc_journal.schema import CharacterObservation, Observation, Significance
 
 JOURNAL_KEY = "npc_journal"
@@ -19,10 +20,12 @@ def supported_quote(quote: str | None, narration: str) -> bool:
     return bool(quote and len(quote.strip()) >= 3 and normalized(quote) in normalized(narration))
 
 
-def journal_of(npc: Any) -> dict:
+def journal_of(npc: Any, *, full: bool = False) -> dict:
     meta = getattr(npc, "metadata_json", None) or {}
     value = meta.get(JOURNAL_KEY)
-    return deepcopy(value) if isinstance(value, dict) else {}
+    if not isinstance(value, dict):
+        return {}
+    return expanded(value) if full else deepcopy(value)
 
 
 def is_significant(observation: Observation) -> bool:
@@ -73,7 +76,7 @@ def _repeats_known_fact(entries: list[dict], record: dict, message_id: str) -> b
 
 
 def append_observations(npc: Any, extraction: CharacterObservation, message: Any) -> None:
-    journal = journal_of(npc)
+    journal = journal_of(npc, full=True)
     entries = list(journal.get("entries") or [])
     existing = {entry.get("id") for entry in entries}
     for observation in extraction.observations:
@@ -104,7 +107,7 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
             sources[alias] = message.id
     entries.sort(key=lambda e: (e.get("recorded_at", ""), e.get("message_id", "")))
     journal.update(version=1, entries=entries, aliases=aliases[:20], alias_sources=sources)
-    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}
+    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: compact(journal)}
 
 
 def fact_topic(entry: dict) -> str:
@@ -120,7 +123,7 @@ def fact_topic(entry: dict) -> str:
 
 def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) -> str:
     """Keep the full journal in storage, but cap material repeated in model prompts."""
-    journal = journal_of(npc)
+    journal = journal_of(npc, full=True)
     latest: dict[str, dict] = {}
     for entry in journal.get("entries") or []:
         if visual_only and entry.get("source") != "observed":

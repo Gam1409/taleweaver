@@ -77,7 +77,7 @@ CATALOG = {
 }
 
 
-def choice(key: str):
+def choice(key: str) -> Any:
     return Field(default="", json_schema_extra={"enum": ["", *CATALOG[key][1]]})
 
 
@@ -94,7 +94,7 @@ class PersonalityProfile(BaseModel):
     @field_validator("*")
     @classmethod
     def validate_choice(cls, value: str, info: ValidationInfo) -> str:
-        if value and value not in CATALOG[info.field_name][1]:
+        if value and (info.field_name is None or value not in CATALOG[info.field_name][1]):
             raise ValueError("Unknown personality choice")
         return value
 

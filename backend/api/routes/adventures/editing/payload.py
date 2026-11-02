@@ -1,8 +1,9 @@
 """Serializes the editor world state (scenes, entities, exits, protagonist)."""
 
 import logging
+from collections.abc import Callable, Sequence
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any, Optional, overload
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -26,6 +27,7 @@ from backend.core.database import get_db
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.base import Base
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -159,7 +161,7 @@ def _entity_extras(entity: WorldEntity, _data: dict[str, Any]) -> dict[str, Any]
     return {}
 
 
-_EXTRAS_BY_TYPE = (
+_EXTRAS_BY_TYPE: tuple[tuple[type[Base], Callable[..., dict[str, Any]]], ...] = (
     (WorldScene, _scene_extras),
     (WorldExit, _exit_extras),
     (Avatar, _avatar_extras),
@@ -168,7 +170,15 @@ _EXTRAS_BY_TYPE = (
 )
 
 
-def _serialize_model(obj):
+@overload
+def _serialize_model(obj: Base) -> dict[str, Any]: ...
+
+
+@overload
+def _serialize_model(obj: None) -> None: ...
+
+
+def _serialize_model(obj: Base | None) -> dict[str, Any] | None:
     if not obj:
         return None
     data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
@@ -179,7 +189,7 @@ def _serialize_model(obj):
 
 
 def _serialize_protagonist_with_items(
-    avatar: Optional[Avatar], entities: list[WorldEntity]
+    avatar: Optional[Avatar], entities: Sequence[WorldEntity]
 ) -> Optional[dict[str, Any]]:
     """Serialize the avatar with inventory/equipment backfilled as full item dicts.
 

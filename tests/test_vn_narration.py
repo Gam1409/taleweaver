@@ -42,6 +42,7 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
         "visual_preparation": "plan",
         "visual_audit": True,
         "visual_audit_failure": "block",
+        "nsfw_guard": "warn",
     }
     assert read_settings(state).pace == pace
     assert f"PACING: {pace.upper()}." in prompt

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,13 @@ async def _collect_existing_images(db: AsyncSession, template_id: str) -> dict[s
     images: dict[str, str] = {}
     for model in (WorldEntity, WorldScene):
         res = await db.execute(select(model).where(model.template_id == template_id))
-        images.update({row.id: row.image_url for row in res.scalars().all() if row.image_url})
+        images.update(
+            {
+                row.id: row.image_url
+                for row in cast(Sequence[WorldEntity | WorldScene], res.scalars().all())
+                if row.image_url
+            }
+        )
     return images
 
 
@@ -205,6 +212,9 @@ async def apply_manifest(
         "status_callback": status_callback,
         "selected_image_styles": selected_image_styles,
     }
+    from backend.engine.manifest_apply.validation import validate_world_references
+
+    validate_world_references(manifest_dict)
     ctx = await _prepare_context(db, template_id, manifest_dict, user, options)
     counts = _manifest_counts(manifest_dict)
     log_structured_event(
@@ -229,3 +239,5 @@ async def apply_manifest(
         image_successes=ctx.image_counters["successes"],
     )
     await _report_image_warnings(ctx)
+    if "adventure_import_transaction" not in db.info:
+        await db.commit()

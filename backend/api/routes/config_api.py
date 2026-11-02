@@ -196,7 +196,7 @@ def _default_tone_catalog() -> list[dict[str, Any]]:
 
 
 def _normalize_catalog(
-    catalog: list[dict[str, Optional[Any]]], *, fallback: list[dict[str, Any]]
+    catalog: list[Any] | None, *, fallback: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     if not catalog:
         return fallback
@@ -441,34 +441,34 @@ def _normalize_game_settings(game_settings: Optional[dict]) -> dict:
     return normalized
 
 
-def _is_llm_configured(user: User, db_keys: dict) -> bool:
+def _is_llm_configured(user: User, db_keys: dict | None) -> bool:
     llm = _normalize_llm_settings(user.llm_settings)
     small_provider = llm.get("small_model_provider", "openai")
     complex_provider = llm.get("complex_model_provider", "openai")
     small_model = llm.get("small_model")
     complex_model = llm.get("complex_model")
 
-    def has_key(provider):
+    def has_key(provider: str) -> bool:
         if provider == "custom_openai":
             return bool(llm.get("custom_openai_url"))
         if provider == "ollama":
             return True
-        return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
+        return bool(settings.get_env_api_key(provider)) or bool(db_keys and provider in db_keys)
 
     return all(
         [has_key(small_provider), bool(small_model), has_key(complex_provider), bool(complex_model)]
     )
 
 
-def _is_t2i_configured(user: User, db_keys: dict) -> bool:
+def _is_t2i_configured(user: User, db_keys: dict | None) -> bool:
     t2i = _normalize_t2i_settings(user.t2i_settings)
     simple_provider = t2i.get("simple_model_provider", "openai")
     simple_model = t2i.get("simple_model")
 
-    def has_key(provider):
+    def has_key(provider: str) -> bool:
         if provider in ("ollama", "stable_diffusion", "comfyui"):
             return True
-        return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
+        return bool(settings.get_env_api_key(provider)) or bool(db_keys and provider in db_keys)
 
     if simple_provider == "comfyui":
         try:
@@ -598,7 +598,7 @@ class TTSSettingsPayload(BaseModel):
     use_text_chunking: bool = True
     use_streaming: bool = False
     voice_list: list[str] = Field(default_factory=list)
-    voice_catalog: list[dict[str, Optional[str]]] = None
+    voice_catalog: list[dict[str, Optional[str]]] | None = None
     speech_rate: float = 1.0
 
 
@@ -646,8 +646,8 @@ async def get_settings(
         }
     )
 
-    def get_keys_status(db_keys):
-        status = {}
+    def get_keys_status(db_keys: dict[str, str] | None) -> dict[str, dict[str, str | bool]]:
+        status: dict[str, dict[str, str | bool]] = {}
         all_providers = (
             {p["id"] for p in LLM_PROVIDERS}
             | {p["id"] for p in IMAGE_PROVIDERS}
@@ -966,7 +966,7 @@ class TestLLMPayload(OllamaConnectionSettings):
 async def test_llm_connection(
     payload: TestLLMPayload,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> dict[str, Any]:
     """Tests the connection to an LLM provider with a simple prompt and measures latency."""
     user = await _resolve_global_settings_owner(db, current_user)
@@ -1103,7 +1103,7 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
 async def test_vision_connection(
     payload: TestVisionPayload,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> dict[str, Any]:
     """Tests the connection to an image provider by generating a wizard portrait."""
     user = await _resolve_global_settings_owner(db, current_user)
@@ -1146,7 +1146,7 @@ async def test_vision_connection(
 @router.post("/test-tts", response_model=None)
 async def test_tts_connection(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> dict[str, Any]:
     """Generates a short test sentence to verify TTS configuration."""
     user = await _resolve_global_settings_owner(db, current_user)

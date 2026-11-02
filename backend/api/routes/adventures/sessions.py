@@ -3,7 +3,9 @@ import logging
 import os
 import shutil
 import time
+from collections.abc import Iterator
 from copy import deepcopy
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -197,7 +199,8 @@ def _rewrite_avatar_item_visual_urls(
 ) -> None:
     """Rewrite avatar inventory/equipment image URLs to copied session-local assets."""
     rewritten_inventory = []
-    for item in avatar.inventory or []:
+    raw_inventory: list[Any] = list(avatar.inventory or [])
+    for item in raw_inventory:
         if isinstance(item, dict):
             item_copy = dict(item)
             item_copy["image_url"] = _copy_data_asset_to_session(
@@ -259,7 +262,7 @@ def _rewrite_asset_snapshot_urls(
     return rewritten
 
 
-def _to_int_or_none(value):
+def _to_int_or_none(value: Any) -> int | None:
     if isinstance(value, (int, float)):
         return int(value)
     return None
@@ -316,7 +319,7 @@ def _backfill_item_from_entity(item: dict, entity: WorldEntity) -> dict:
         metadata.get("stat_modifier_armor_class"),
     )
 
-    effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
+    effects = raw_effects if isinstance(raw_effects := metadata.get("effects"), dict) else {}
     fill(
         "hp_change",
         metadata.get("hp_change"),
@@ -352,7 +355,7 @@ def _reconstruct_item_dict_from_entity(entity: WorldEntity) -> dict:
         item_slot = guessed_slot
 
     metadata = entity.metadata_json or {}
-    effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
+    effects = raw_effects if isinstance(raw_effects := metadata.get("effects"), dict) else {}
     item_type = entity.item_type or "PICKABLE"
 
     text_log_content = str(metadata.get("text_log_content") or "").strip()[:1000]
@@ -360,7 +363,7 @@ def _reconstruct_item_dict_from_entity(entity: WorldEntity) -> dict:
     if text_log_format not in {"DOCUMENT", "SCROLL", "BOOK", "SIGN"}:
         text_log_format = "DOCUMENT"
 
-    def get_val(*candidates):
+    def get_val(*candidates: Any) -> Any:
         for candidate in candidates:
             val = _to_int_or_none(candidate)
             if val is not None:
@@ -411,10 +414,11 @@ def _reconstruct_item_dict_from_entity(entity: WorldEntity) -> dict:
 
 
 def _backfill_avatar_items_from_template_entities(
-    avatar: Avatar, entities_by_id: dict[str, WorldEntity]
+    avatar: Avatar | SimpleNamespace, entities_by_id: dict[str, WorldEntity]
 ) -> None:
     inventory = []
-    for item in avatar.inventory or []:
+    raw_inventory: list[Any] = list(avatar.inventory or [])
+    for item in raw_inventory:
         if isinstance(item, str) and item in entities_by_id:
             inventory.append(_reconstruct_item_dict_from_entity(entities_by_id[item]))
         elif isinstance(item, dict) and item.get("id") in entities_by_id:
@@ -435,7 +439,7 @@ def _backfill_avatar_items_from_template_entities(
     avatar.equipment = equipment
 
 
-def _iter_avatar_items(avatar: Avatar):
+def _iter_avatar_items(avatar: Avatar) -> Iterator[tuple[str, dict[str, Any]]]:
     for index, item in enumerate(avatar.inventory or []):
         if isinstance(item, dict):
             yield (f"inventory[{index}]", item)
@@ -742,7 +746,9 @@ async def delete_session(
     await db.execute(delete(WorldExit).where(WorldExit.session_id == game_id))
     await db.execute(delete(WorldMap).where(WorldMap.session_id == game_id))
 
-    await db.delete(game_session)
+    from backend.core.relational_delete import delete_owned_rows
+
+    await delete_owned_rows(db, GameSession.__table__, GameSession.__table__.c.id == game_id)
 
     # Remove avatar only if no other session references it.
     other_session_res = await db.execute(
@@ -989,7 +995,7 @@ async def copy_session(
 
     # 6. Clone the conversation and map evidence to its new message IDs.
     message_ids = await copy_messages(db, original_session.id, copied_session.id)
-    if original_state:
+    if original_state is not None and cloned_state is not None:
         restore_memory(cloned_state, memory_snapshot(original_state), message_ids)
         cloned_state.entity_states = copy_vn_state(
             cloned_state.entity_states,
@@ -1338,7 +1344,7 @@ async def import_session_ads(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
 
 
-def _backfill_readable_fields(merged, metadata) -> None:
+def _backfill_readable_fields(merged: dict[str, Any], metadata: dict[str, Any]) -> None:
     if not merged.get("text_log_content"):
         merged["text_log_content"] = str(metadata.get("text_log_content") or "").strip()[:1000]
     if not merged.get("text_log_format"):

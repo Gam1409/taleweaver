@@ -11,6 +11,7 @@ import requests
 
 from backend.core.config import settings
 from backend.engine.bfl_payloads import build_bfl_payload
+from backend.engine.image_errors import ImageProviderError
 
 if TYPE_CHECKING:
     from backend.engine.media_engine import MediaEngine
@@ -37,6 +38,7 @@ async def _generate_image_black_forest_labs_direct(
     payload = build_bfl_payload(model_slug, prompt, provider_options)
     logger.info("BFL submission payload prepared (prompt_%s)", _safe_prompt_summary(prompt))
 
+    deadline = time.monotonic() + settings.VISUAL_TIMEOUT
     response = await asyncio.to_thread(
         requests.post,
         endpoint,
@@ -45,8 +47,7 @@ async def _generate_image_black_forest_labs_direct(
         timeout=settings.VISUAL_TIMEOUT,
     )
     if response.status_code != 200:
-        logger.error("BFL image generation submit failed. status=%s", response.status_code)
-        return None
+        raise ImageProviderError("BFL", response.status_code)
 
     body = response.json()
     polling_url = body.get("polling_url")
@@ -54,26 +55,34 @@ async def _generate_image_black_forest_labs_direct(
         logger.error("BFL response did not include polling_url")
         return None
 
-    return await _poll_bfl_result(engine, polling_url, api_key, target_dir, filename)
+    return await _poll_bfl_result(
+        engine, polling_url, api_key, target_dir, filename, deadline=deadline
+    )
 
 
 async def _poll_bfl_result(
-    engine: type[MediaEngine], polling_url: str, api_key: str, target_dir: str, filename: str | None
+    engine: type[MediaEngine],
+    polling_url: str,
+    api_key: str,
+    target_dir: str,
+    filename: str | None,
+    *,
+    deadline: float | None = None,
 ) -> str | None:
-    poll_deadline = time.monotonic() + 600.0
+    poll_deadline = deadline if deadline is not None else time.monotonic() + settings.VISUAL_TIMEOUT
     while time.monotonic() < poll_deadline:
         poll_response = await asyncio.to_thread(
             requests.get,
             polling_url,
             headers={"accept": "application/json", "x-key": api_key},
-            timeout=max(30, settings.VISUAL_TIMEOUT),
+            timeout=max(0.1, min(30, poll_deadline - time.monotonic())),
         )
         if poll_response.status_code != 200:
             logger.error(
                 "BFL polling failed. status=%s",
                 poll_response.status_code,
             )
-            return None
+            raise ImageProviderError("BFL", poll_response.status_code)
 
         poll_body = poll_response.json()
         status = str(poll_body.get("status") or "").lower()
@@ -96,5 +105,4 @@ async def _poll_bfl_result(
 
         await asyncio.sleep(2.0)
 
-    logger.error("BFL polling timed out after 600s")
-    return None
+    raise TimeoutError("BFL generation timed out; the remote task may still be running.")

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world.state import fork as fork_simulation
+from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -17,9 +18,9 @@ async def clone_saved_session_state(
     original_session: GameSession,
     copied_session: GameSession,
     current_user: User,
-    cloned_avatar,
-    asset_copy_cache,
-):
+    cloned_avatar: Avatar,
+    asset_copy_cache: dict[str, str],
+) -> tuple[SessionState | None, SessionState | None]:
     from .sessions import _rewrite_asset_snapshot_urls
 
     # 5. Clone SessionState

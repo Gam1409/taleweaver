@@ -167,7 +167,7 @@ class HardRuleEvaluator:
         if not isinstance(npc_st, dict):
             return False
         return npc_st.get("is_defeated") is True or (
-            npc_st.get("hp") is not None and npc_st.get("hp") <= 0
+            (hp := npc_st.get("hp")) is not None and hp <= 0
         )
 
     @classmethod

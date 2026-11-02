@@ -1,16 +1,25 @@
 """Restore a blueprint and its initial world without creating a game session."""
 
 import os
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.import_build_blueprint_template import build_blueprint_template
+from backend.engine.import_transaction import register_created
 from backend.engine.world_generator import WorldGenerator
+from backend.models.user import User
 
 
-async def restore_blueprint(db: AsyncSession, payload, user, owner_id, origin_id):
+async def restore_blueprint(
+    db: AsyncSession,
+    payload: dict[str, Any],
+    user: User | None,
+    owner_id: str | None,
+    origin_id: str | None,
+) -> bool:
     manifest = payload.get("original_manifest") or payload.get("manifest") or payload
     adv_meta = payload.get("adventure") or payload
 
@@ -25,6 +34,7 @@ async def restore_blueprint(db: AsyncSession, payload, user, owner_id, origin_id
         payload, manifest, adv_meta, owner_id, origin_id, enforcement_mode, is_strict
     )
 
+    register_created(db, new_template.id)
     normalize_vn_template(new_template)
     db.add(new_template)
     await db.flush()
@@ -64,7 +74,7 @@ async def restore_blueprint(db: AsyncSession, payload, user, owner_id, origin_id
     new_template.is_ready = True
     new_template.creation_status = "Ready"
     new_template.creation_error = None
-    await db.commit()
+    await db.flush()
     # Ensure thumbnails are generated for imported assets
     from backend.engine.media_engine import MediaEngine
 

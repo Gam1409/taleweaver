@@ -5,7 +5,7 @@ import time
 from collections import defaultdict
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -34,7 +34,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Simple in-memory rate limiting for setup-root bootstrap
-_setup_root_attempts = defaultdict(list)
+_setup_root_attempts: defaultdict[str, list[float]] = defaultdict(list)
 SETUP_ROOT_RATE_LIMIT = 3  # attempts
 SETUP_ROOT_WINDOW = 3600  # seconds (1 hour)
 
@@ -214,10 +214,15 @@ async def reset_password_with_token(
 
 @router.get("/auth/me", response_model=UserResponse)
 async def read_users_me(
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     from backend.engine.adventure_importer import AdventureTemplateImporter
+    from backend.utils.media_access import issue_media_cookie
+
+    issue_media_cookie(response, request, current_user)
 
     # Import default adventures on first login.
     if not current_user.has_imported_defaults:
@@ -300,3 +305,11 @@ async def get_bootstrap_status(db: AsyncSession = Depends(get_db)) -> BootstrapS
         app_version=settings.APP_VERSION,
         password_policy=_password_policy(),
     )
+
+
+@router.delete("/auth/media-session", status_code=204)
+async def clear_media_session(response: Response) -> None:
+    """Remove the read-only browser media credential on logout."""
+    from backend.utils.media_access import COOKIE
+
+    response.delete_cookie(COOKIE, path="/data", httponly=True, samesite="strict")

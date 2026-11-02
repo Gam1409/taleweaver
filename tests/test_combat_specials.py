@@ -1,14 +1,12 @@
-import json
-import random
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import select
 
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.rule_engine import GameEvent
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -199,6 +197,9 @@ async def _seed_combat_context(db):
     )
 
     db.add_all([wand, sword, scroll, armor, npc])
+    db.add(
+        GameSession(id=state.session_id, user_id=user.id, avatar_id=avatar.id, template_id=adv.id)
+    )
     await db.commit()
     return user, adv, avatar, state, npc, wand, sword, scroll, armor
 
@@ -407,6 +408,9 @@ async def test_special_action_unlock_conditions(setup_test_db, monkeypatch):
 
         # Mock LLM for read command response
         mock_llm = MagicMock()
+        mock_llm.aexecute_complex_task = AsyncMock(
+            return_value=GameEvent(narrative_description="You read the scroll of fire.")
+        )
 
         async def mock_stream(*args, **kwargs):
             yield MagicMock(

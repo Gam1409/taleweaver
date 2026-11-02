@@ -167,7 +167,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_data_dir(cls, values):
+    def normalize_data_dir(cls, values: object) -> object:
         if isinstance(values, dict):
             data_dir = values.get("DATA_DIR")
             if not isinstance(data_dir, str) or not data_dir.strip():

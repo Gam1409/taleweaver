@@ -11,6 +11,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.visual_trace import record
 from backend.engine.visual_progress import report
 from backend.engine.visual_text import visual_text
+from backend.models.user import User
 
 
 class Figure(BaseModel):
@@ -104,7 +105,7 @@ Unspecified details stay unspecified. This extraction cannot change clothing or 
 """
 
 
-async def extract_frame(user, passage: str, characters: list[dict]) -> VisibleFrame:
+async def extract_frame(user: User, passage: str, characters: list[dict]) -> VisibleFrame:
     """Only enum values and validated IDs leave the model that sees raw story text."""
     report("analyzing")
     passage = visual_text(passage)

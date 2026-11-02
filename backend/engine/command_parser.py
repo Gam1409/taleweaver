@@ -128,7 +128,7 @@ def _resolve_equip_slot(item: dict) -> str | None:
     if not slot or slot == "None":
         slot = item.get("slot")
     if slot and slot != "Hands":
-        return slot
+        return str(slot)
 
     item_type = item.get("item_type")
     name = item.get("name", "").lower()

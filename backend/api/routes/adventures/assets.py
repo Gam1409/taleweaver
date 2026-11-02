@@ -15,6 +15,7 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
 from backend.models.user import User
 from backend.utils.path_security import (
     ensure_within_base_dir,
@@ -48,7 +49,7 @@ def _build_visual_prompt(
     if tone_instruction:
         prompt_suffix += f" Narrative tone reference: {tone_instruction}."
 
-    def get_attr(obj, attr, default=""):
+    def get_attr(obj: Any, attr: str, default: str = "") -> Any:
         if isinstance(obj, dict):
             return obj.get(attr) or default
         return getattr(obj, attr, None) or default
@@ -215,24 +216,24 @@ async def suggest_prompt(
         avatar = av_res.scalars().first()
         if avatar:
             name = avatar.name
-            description = avatar.description
+            description = avatar.description or ""
     elif payload.target_type == "scene":
-        res = await db.execute(
+        scene_result = await db.execute(
             select(WorldScene).where(
                 WorldScene.id == payload.target_id, WorldScene.template_id == template_id
             )
         )
-        scene = res.scalars().first()
+        scene = scene_result.scalars().first()
         if scene:
             name = scene.label
             description = scene.description
     elif payload.target_type in ["npc", "object"]:
-        res = await db.execute(
+        entity_result = await db.execute(
             select(WorldEntity).where(
                 WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id
             )
         )
-        entity = res.scalars().first()
+        entity = entity_result.scalars().first()
         if entity:
             name = entity.name
             description = entity.description
@@ -288,7 +289,7 @@ async def upload_visual(
             trusted_target_token=trusted_target_token,
         )
         relative_url = write_visual_upload(full_path, content)
-        if target_type == "protagonist":
+        if isinstance(target, Avatar):
             target.profile_image = relative_url
         else:
             target.image_url = relative_url

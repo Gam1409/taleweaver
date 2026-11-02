@@ -47,7 +47,9 @@ def _parse_version_tuple(v: Optional[str]) -> tuple[int, ...]:
     return tuple(int(p) for p in parts)
 
 
-def _has_newer_manifest_format(file_format_version, db_format_version):
+def _has_newer_manifest_format(
+    file_format_version: str | None, db_format_version: str | None
+) -> bool:
     if file_format_version and db_format_version:
         try:
             pv_file_fmt = parse_semver(str(file_format_version).strip())
@@ -461,7 +463,9 @@ async def migrate_single_adventure(
         raise ValueError("Adventure template not found or unauthorized.")
 
     manifest = template.original_manifest or {}
-    adv_manifest = manifest.get("adventure") if isinstance(manifest.get("adventure"), dict) else {}
+    adv_manifest = (
+        raw_adventure if isinstance(raw_adventure := manifest.get("adventure"), dict) else {}
+    )
 
     walkthrough_text = (
         template.walkthrough or adv_manifest.get("walkthrough") or manifest.get("walkthrough") or ""
@@ -548,7 +552,7 @@ async def migrate_single_adventure(
     }
 
 
-def _read_adventure_candidate(file_path, filename, ext):
+def _read_adventure_candidate(file_path: str, filename: str, ext: str) -> dict[str, Any] | None:
     try:
         if ext == ".adz":
             with open(file_path, "rb") as f, zipfile.ZipFile(io.BytesIO(f.read()), "r") as zf:
@@ -556,8 +560,8 @@ def _read_adventure_candidate(file_path, filename, ext):
                     return None
                 manifest = json.loads(zf.read("adventure.adv").decode("utf-8"))
         else:
-            with open(file_path, encoding="utf-8") as f:
-                manifest = json.load(f)
+            with open(file_path, encoding="utf-8") as source:
+                manifest = json.load(source)
 
         is_session = manifest.get("type") == "SESSION_BUNDLE"
         adv_data = (

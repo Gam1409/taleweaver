@@ -1,5 +1,5 @@
 import type { ClothingDraft } from '@/services/clothingAuthoring'
-import { API_BASE, authHeaders } from '@/services/http'
+import { apiFetch, authHeaders } from '@/services/http'
 
 export interface ExitBehaviorData {
   unlock_expression?: string | null
@@ -187,24 +187,24 @@ export interface EntityBundleImportResult {
  */
 export const entityService = {
   async saveEntityText(adventureId: string, data: EntityEditData): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity`, {
       method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const respData = await res.json()
+      const respData = await res.json().catch(() => ({}))
       throw new Error(respData.detail || 'Failed to save entity text')
     }
   },
 
   async cloneEntity(adventureId: string, entityId: string): Promise<{ new_id: string; source_id: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}/clone`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}/clone`, {
       method: 'POST',
       headers: authHeaders(true),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to clone entity')
     }
     const payload = await res.json()
@@ -216,7 +216,7 @@ export const entityService = {
     const path = kind === 'protagonist'
       ? 'protagonist'
       : `entity/${encodeURIComponent(entityId || '')}`
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/transfer/${path}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/transfer/${path}`, {
       headers: authHeaders(),
     })
     if (!res.ok) {
@@ -231,7 +231,7 @@ export const entityService = {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('expected_kind', expectedKind)
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/transfer/import`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/transfer/import`, {
       method: 'POST',
       headers: authHeaders(),
       body: formData,
@@ -244,7 +244,7 @@ export const entityService = {
   },
 
   async generateTraits(adventureId: string, name: string, description: string, targetType: string, targetField?: 'goal' | 'character'): Promise<{ goal: string, character: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-traits`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-traits`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -255,14 +255,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate traits')
     }
     return await res.json()
   },
 
   async generateBiography(adventureId: string, name: string, goal: string, character: string, targetType: 'npc' | 'protagonist', adventureTheme?: string): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-biography`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-biography`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -274,14 +274,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate biography')
     }
     return await res.json()
   },
 
   async generateSceneDescription(adventureId: string, name: string, adventureTheme?: string): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-scene-description`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-scene-description`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -290,7 +290,7 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate scene description')
     }
     return await res.json()
@@ -302,7 +302,7 @@ export const entityService = {
     existingItems: string[],
     options?: { description?: string; adventureTheme?: string }
   ): Promise<{ items: string[] }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-decorative-items`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-decorative-items`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -313,14 +313,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate decorative items')
     }
     return await res.json()
   },
 
   async generateQuestDescription(adventureId: string, title: string, isMain: boolean, otherQuests: any[]): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-quest-description`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-quest-description`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -330,14 +330,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate quest description')
     }
     return await res.json()
   },
 
   async generateNewQuest(adventureId: string, isMain: boolean, otherQuests: any[]): Promise<{ title: string, description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-new-quest`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-new-quest`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -346,128 +346,128 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || 'Failed to generate new quest')
     }
     return await res.json()
   },
 
   async createScene(adventureId: string, data: SceneCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/scene`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/scene`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to create scene')
     }
     return await res.json()
   },
 
   async deleteScene(adventureId: string, sceneId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/scene/${encodeURIComponent(sceneId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/scene/${encodeURIComponent(sceneId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to delete scene')
     }
   },
 
   async createExit(adventureId: string, data: ExitCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/exit`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/exit`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to create exit')
     }
     return await res.json()
   },
 
   async deleteExit(adventureId: string, exitId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/exit/${encodeURIComponent(exitId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/exit/${encodeURIComponent(exitId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to delete exit')
     }
   },
 
   async createEntity(adventureId: string, data: EntityCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to create entity')
     }
     return await res.json()
   },
 
   async deleteEntity(adventureId: string, entityId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to delete entity')
     }
   },
 
   async createQuest(adventureId: string, data: QuestCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/quest`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/quest`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to create quest')
     }
     return await res.json()
   },
 
   async deleteQuest(adventureId: string, questId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/quest/${encodeURIComponent(questId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/quest/${encodeURIComponent(questId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to delete quest')
     }
   },
 
   async createAward(adventureId: string, data: AwardCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/award`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/award`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to create award')
     }
     return await res.json()
   },
 
   async deleteAward(adventureId: string, awardKey: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/award/${encodeURIComponent(awardKey)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/award/${encodeURIComponent(awardKey)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
+      const payload = await res.json().catch(() => ({}))
       throw new Error(payload.detail || 'Failed to delete award')
     }
   },

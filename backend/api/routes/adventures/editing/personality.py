@@ -38,7 +38,7 @@ async def suggest_personality(
     payload: ProfileRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PersonalityProfile:
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     gm = GameMasterLLM.for_role(current_user, "small")
     try:

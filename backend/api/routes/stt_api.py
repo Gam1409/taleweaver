@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 import asyncio
 import io
 import logging
@@ -18,13 +24,15 @@ router = APIRouter(prefix="/stt", tags=["STT"])
 logger = logging.getLogger(__name__)
 
 # Cache loaded Whisper models and track loading states.
-_whisper_models = {}
-_whisper_model_states = {}  # model_name -> "not_loaded" | "loading" | "loaded" | "error"
-_active_background_loaders = set()
+_whisper_models: dict[str, WhisperModel] = {}
+_whisper_model_states: dict[
+    str, str
+] = {}  # model_name -> "not_loaded" | "loading" | "loaded" | "error"
+_active_background_loaders: set[str] = set()
 _state_lock = threading.Lock()
 
 
-def get_whisper_model(model_name: str, is_background_loader: bool = False):
+def get_whisper_model(model_name: str, is_background_loader: bool = False) -> WhisperModel:
     from faster_whisper import WhisperModel
 
     # Check if already loaded

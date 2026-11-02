@@ -162,7 +162,7 @@ def select_profile(options: dict) -> ComfyProfile | ComfyPreset | None:
 def select_workflow(options: dict, *, reference: bool = False) -> ComfyWorkflow:
     profile = select_profile(options)
     workflow = getattr(profile, "reference" if reference else "generate", None)
-    if not workflow:
+    if not isinstance(workflow, ComfyWorkflow):
         mode = "image" if reference else "base"
         raise ValueError(
             f"No {mode} ComfyUI workflow configured for {options.get('comfyui_profile', 'simple')}."

@@ -3,10 +3,12 @@
 import asyncio
 from copy import deepcopy
 from pathlib import Path
+from typing import Any, cast
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
@@ -54,11 +56,14 @@ async def _try_attach(
     before = deepcopy(state.entity_states or {})
     after = deepcopy(before)
     registry = registry_of(after)
-    registry["images"][message_id] = {
+    message.illustration = {
         "image_url": url,
         "content_hash": current["content_hash"],
         "generation_details": deepcopy(details) if details else None,
     }
+    registry["images"].pop(message_id, None)
+    registry["images"][message_id] = {"image_url": url, "content_hash": current["content_hash"]}
+    registry["images"] = dict(list(registry["images"].items())[-100:])
     after[REGISTRY_KEY] = registry
     # Compare-and-swap keeps unrelated concurrent state changes intact.
     result = await db.execute(
@@ -67,7 +72,7 @@ async def _try_attach(
         .values(entity_states=after)
         .execution_options(synchronize_session=False)
     )
-    if result.rowcount != 1:
+    if cast(CursorResult[Any], result).rowcount != 1:
         await db.rollback()
         return False
     await db.commit()

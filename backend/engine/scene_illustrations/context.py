@@ -45,7 +45,7 @@ async def owned_context(
 def illustration_status(state: SessionState, message: ChatMessage) -> dict:
     registry = registry_of(state.entity_states)
     snapshot = registry["snapshots"].get(message.id) or {}
-    image = registry["images"].get(message.id) or {}
+    image = getattr(message, "illustration", None) or registry["images"].get(message.id) or {}
     digest = content_hash(message)
     available = snapshot.get("content_hash") == digest
     return {

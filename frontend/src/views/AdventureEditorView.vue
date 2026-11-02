@@ -31,7 +31,6 @@ import ScriptsTab from '@/components/editor/ScriptsTab.vue'
 import AdvancedTab from '@/components/editor/AdvancedTab.vue'
 import ValidationTab from '@/components/editor/ValidationTab.vue'
 import EntityTooltip from '@/components/editor/EntityTooltip.vue'
-import NotificationToast from '@/components/editor/NotificationToast.vue'
 import EditEntityModal from '@/components/editor/EditEntityModal.vue'
 import ItemTypeSelectorModal from '@/components/editor/ItemTypeSelectorModal.vue'
 import AddExistingItemModal from '@/components/editor/AddExistingItemModal.vue'
@@ -539,7 +538,7 @@ function getTabLabel(key: string): string {
 }
 
 // Use notification service
-const notifications = notificationService.all
+
 
 function addNotification(message: string, type: 'error' | 'success' | 'info' = 'info') {
   notificationService.add(message, type)
@@ -2991,10 +2990,7 @@ watch(
       </div>
     </div>
 
-    <NotificationToast 
-      :notifications="notifications"
-      @close="notificationService.remove($event)"
-    />
+
 
     <input
       ref="uploadInput"

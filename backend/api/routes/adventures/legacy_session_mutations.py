@@ -1,6 +1,8 @@
 """Pin legacy template-scoped mutations to concrete sessions before writing."""
 
+from collections.abc import Sequence
 from contextlib import ExitStack
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
@@ -110,7 +112,9 @@ async def reset_sessions(db: AsyncSession, template_id: str, user_id: str) -> di
     return {"status": "success"}
 
 
-async def _purge_captured_sessions(db: AsyncSession, targets: list, identifiers: list[str]) -> None:
+async def _purge_captured_sessions(
+    db: AsyncSession, targets: Sequence[Any], identifiers: list[str]
+) -> None:
     """Fence derived data first; new sessions created after selection are untouched.
 
     Template assets and avatars intentionally survive this legacy reset operation.

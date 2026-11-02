@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -75,7 +76,7 @@ def _normalize_default(model: str) -> str:
     return model.split("/", 1)[1].strip() if "/" in model else model
 
 
-_MODEL_NORMALIZERS = {
+_MODEL_NORMALIZERS: dict[str, Callable[[str], str]] = {
     "ollama": lambda model: model,
     # LiteLLM removes one adapter prefix; always add it so raw vendor/openai slashes survive.
     "custom_openai": lambda model: f"openai/{model}",

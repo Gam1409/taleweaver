@@ -1,7 +1,10 @@
 """Shared profile selection and readiness checks for image entry points."""
 
+from types import SimpleNamespace
+
 from backend.core.comfyui_config import select_workflow
 from backend.core.config import settings
+from backend.models.user import User
 
 LOCAL_IMAGE_PROVIDERS = ("ollama", "stable_diffusion", "comfyui")
 PROFILE_SETTINGS = {
@@ -17,7 +20,7 @@ def advanced_for(t2i: dict, kind: str, override: bool | None = None) -> bool:
     if override is not None:
         return override
     key, default = PROFILE_SETTINGS[kind]
-    return t2i.get(key, default) == "advanced"
+    return bool(t2i.get(key, default) == "advanced")
 
 
 def image_timeout(t2i: dict | None) -> float:
@@ -30,7 +33,7 @@ def image_timeout(t2i: dict | None) -> float:
     )
 
 
-def validate_image_profiles(user, kinds: list[str]) -> None:
+def validate_image_profiles(user: User | SimpleNamespace | None, kinds: list[str]) -> None:
     if not user:
         return
     t2i = user.t2i_settings or {}

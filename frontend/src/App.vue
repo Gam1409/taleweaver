@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import NotificationToast from '@/components/editor/NotificationToast.vue'
+import { notificationService } from '@/services/notificationService'
+const notifications = notificationService.all
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { authState, clearAuth } from '@/store/auth'
@@ -59,6 +62,7 @@ async function checkAuth() {
     const user = await api.getMe()
     authState.user = user
     authState.isAuthenticated = true
+    if (route.name === 'admin' && user.role !== 'admin') await router.replace({ name: 'portal' })
   } catch (err: any) {
     console.error('Initial auth check failed:', err)
     clearAuth()
@@ -105,6 +109,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <NotificationToast :notifications="notifications" @close="notificationService.remove($event)" />
   <div class="h-app flex flex-col bg-[#050b14] overflow-hidden">
     <GlobalHeader />
     <VisualJobProgress />

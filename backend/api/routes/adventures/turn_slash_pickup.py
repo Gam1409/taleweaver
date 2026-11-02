@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.turn_slash import SlashCommandState, SlashInteractions
+
 import json
 
 from fastapi.encoders import jsonable_encoder
@@ -9,7 +15,9 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.models.world_entity import WorldEntity
 
 
-async def take_direct(self, command):
+async def take_direct(
+    self: SlashInteractions, command: SlashCommandState
+) -> AsyncGenerator[str, None]:
     entity_id_or_name = command.response[21:].strip()
     take_npc = await self._find_scene_npc_by_hint(entity_id_or_name)
     if take_npc and self._is_npc_defeated(take_npc):
@@ -27,7 +35,7 @@ async def take_direct(self, command):
         and any(
             (isinstance(i, dict) and str(i.get("id") or "").lower() == ent.id.lower())
             or (isinstance(i, str) and i.lower() == ent.id.lower())
-            for i in (self.avatar.inventory or [])
+            for i in cast(list[dict[str, Any] | str], self.avatar.inventory or [])
         )
     )
 
@@ -70,7 +78,7 @@ async def take_direct(self, command):
         command.response = "You cannot take that."
 
 
-async def _pickup_target(self, entity_id_or_name):
+async def _pickup_target(self: SlashInteractions, entity_id_or_name: str) -> WorldEntity | None:
     # Find portable OBJECT in current scene (snapshot), matching by name or ID (case-insensitive).
     ent_res = await self.db.execute(
         select(WorldEntity).where(
@@ -120,7 +128,7 @@ async def _pickup_target(self, entity_id_or_name):
     return ent
 
 
-async def _pickup_metadata(self, ent):
+async def _pickup_metadata(self: SlashInteractions, ent: WorldEntity) -> dict[str, Any]:
     pickup_meta = dict(ent.metadata_json or {}) if isinstance(ent.metadata_json, dict) else {}
     adv_id = (
         getattr(self.manager.adventure, "id", None)
@@ -146,7 +154,7 @@ async def _pickup_metadata(self, ent):
     return pickup_meta
 
 
-async def _acquire_pickup(self, ent):
+async def _acquire_pickup(self: SlashInteractions, ent: WorldEntity) -> str:
     # Move to inventory
     new_inv = list(self.avatar.inventory or [])
     item_dict = jsonable_encoder({c.name: getattr(ent, c.name) for c in ent.__table__.columns})

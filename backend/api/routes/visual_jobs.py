@@ -62,14 +62,14 @@ class VisualJob:
 _jobs: dict[str, VisualJob] = {}
 
 
-def _typed_payload(request: VisualJobRequest):
+def _typed_payload(request: VisualJobRequest) -> BaseModel:
     from backend.api.routes.adventures.assets import RegenerateVisualRequest
     from backend.api.routes.config_api import CatalogGeneratePayload, TestVisionPayload
     from backend.api.routes.users_api import ProfileImageGenerateRequest
     from backend.engine.scene_illustrations import SceneIllustrationRequest
     from backend.engine.session_portraits import SessionPortraitRequest
 
-    schemas = {
+    schemas: dict[str, type[BaseModel]] = {
         "test": TestVisionPayload,
         "asset": RegenerateVisualRequest,
         "catalog": CatalogGeneratePayload,
@@ -87,29 +87,48 @@ def _typed_payload(request: VisualJobRequest):
         raise HTTPException(422, "Invalid visual job parameters or workflow.") from exc
 
 
-async def _dispatch(request: VisualJobRequest, user: User, db: AsyncSession):
-    from backend.api.routes.adventures.assets import regenerate_visual
-    from backend.api.routes.config_api import generate_catalog_image, test_vision_connection
-    from backend.api.routes.users_api import UserResponse, generate_my_profile_image
-    from backend.engine.scene_illustrations import generate_scene_illustration
-    from backend.engine.session_portraits import regenerate_session_portrait
+async def _dispatch(request: VisualJobRequest, user: User, db: AsyncSession) -> dict[str, Any]:
+    from backend.api.routes.adventures.assets import RegenerateVisualRequest, regenerate_visual
+    from backend.api.routes.config_api import (
+        CatalogGeneratePayload,
+        TestVisionPayload,
+        generate_catalog_image,
+        test_vision_connection,
+    )
+    from backend.api.routes.users_api import (
+        ProfileImageGenerateRequest,
+        UserResponse,
+        generate_my_profile_image,
+    )
+    from backend.engine.scene_illustrations import (
+        SceneIllustrationRequest,
+        generate_scene_illustration,
+    )
+    from backend.engine.session_portraits import SessionPortraitRequest, regenerate_session_portrait
 
     payload = _typed_payload(request)
-    if request.operation == "session_illustration":
+    if isinstance(payload, SceneIllustrationRequest):
+        if request.session_id is None:
+            raise HTTPException(422, "A saved session is required.")
         return await generate_scene_illustration(request.session_id, payload, db, user)
-    if request.operation == "session_npc":
+    if isinstance(payload, SessionPortraitRequest):
+        if request.session_id is None:
+            raise HTTPException(422, "A saved session is required.")
         return await regenerate_session_portrait(request.session_id, payload, db, user)
-    if request.operation == "asset":
+    if isinstance(payload, RegenerateVisualRequest):
+        if request.template_id is None:
+            raise HTTPException(422, "An adventure template is required.")
         return await regenerate_visual(request.template_id, payload, db, user)
-    functions = {
-        "test": test_vision_connection,
-        "catalog": generate_catalog_image,
-        "avatar": generate_my_profile_image,
-    }
-    result = await functions[request.operation](payload=payload, db=db, current_user=user)
-    if request.operation == "avatar":
-        return UserResponse.model_validate(result, from_attributes=True).model_dump(mode="json")
-    return result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+    if isinstance(payload, TestVisionPayload):
+        result = await test_vision_connection(payload=payload, db=db, current_user=user)
+    elif isinstance(payload, CatalogGeneratePayload):
+        result = await generate_catalog_image(payload=payload, db=db, current_user=user)
+    elif isinstance(payload, ProfileImageGenerateRequest):
+        account = await generate_my_profile_image(payload=payload, db=db, current_user=user)
+        return UserResponse.model_validate(account, from_attributes=True).model_dump(mode="json")
+    else:
+        raise HTTPException(422, "Unsupported visual operation.")
+    return result
 
 
 async def _run(job: VisualJob) -> None:
@@ -192,12 +211,8 @@ async def create_visual_job(
     payload: VisualJobRequest, user: User = Depends(get_current_user)
 ) -> dict[str, Any]:
     _prune()
-    if (
-        payload.operation == "test"
-        and payload.payload.get("provider") == "comfyui"
-        and user.role != "admin"
-    ):
-        raise HTTPException(403, "Only administrators can execute workflow drafts.")
+    if payload.operation == "test" and user.role != "admin":
+        raise HTTPException(403, "Only administrators can run provider connection tests.")
     job_id = str(payload.id)
     existing = _jobs.get(job_id)
     if existing:

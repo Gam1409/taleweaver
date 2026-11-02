@@ -4,11 +4,13 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any, cast
 from uuid import uuid4
 
 from anyio import CancelScope
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
@@ -133,7 +135,7 @@ async def _claim(session_id: str, user_id: str) -> Claim | None:
             .values(lease_token=token, lease_until=time.time() + lease_seconds)
             .execution_options(synchronize_session=False)
         )
-        if not claimed.rowcount:
+        if not cast(CursorResult[Any], claimed).rowcount:
             return None
         claim = Claim(
             session_id, user_id, row.epoch, row.desired_revision, token, row.signature, row.paused
@@ -172,11 +174,19 @@ async def _load(claim: Claim) -> tuple[User | None, SessionState | None, list[Me
         )
         if user is None or state is None:
             return user, state, []
-        documents = await collect_documents(db, state, claim.user_id)
+        from backend.engine.memory_rag import document_cache
+
+        key = (claim.user_id, claim.session_id, claim.epoch, claim.revision)
+        documents = document_cache.get(key)
+        if documents is None:
+            documents = await collect_documents(db, state, claim.user_id)
+            document_cache.put(key, documents)
         return user, state, documents
 
 
-async def _summarize(claim: Claim, *, chronicle: bool) -> bool:
+async def _summarize(
+    claim: Claim, *, chronicle: bool, documents: list[MemoryDocument] | None = None
+) -> bool:
     from backend.engine.memory_rag.summaries import summarize_one_group
 
     if chronicle:
@@ -192,7 +202,11 @@ async def _summarize(claim: Claim, *, chronicle: bool) -> bool:
         )
         if user is None or state is None:
             return False
-        return await summarize(db, user, state, epoch=claim.epoch, lease_token=claim.token)
+        if chronicle:
+            return await summarize(db, user, state, epoch=claim.epoch, lease_token=claim.token)
+        return await summarize_one_group(
+            db, user, state, epoch=claim.epoch, lease_token=claim.token, documents=documents
+        )
 
 
 @retry_transaction
@@ -206,7 +220,7 @@ async def _write_batch(
             .where(*_fence(claim), MemoryIndexState.paused.is_(False))
             .values(signature=signature, status="indexing", last_error=None)
         )
-        if not fenced.rowcount:
+        if not cast(CursorResult[Any], fenced).rowcount:
             return False
         store = LanceMemoryStore()
         await store.upsert(scope, [document.to_dict() for document in documents], vectors)
@@ -255,7 +269,7 @@ async def _complete(claim: Claim, documents: list[MemoryDocument]) -> None:
             .where(*_fence(claim), MemoryIndexState.paused.is_(False))
             .values(indexed_revision=claim.revision, status="ready", last_error=None)
         )
-        if not fenced.rowcount:
+        if not cast(CursorResult[Any], fenced).rowcount:
             return
         if claim.signature:
             scope = Scope(claim.user_id, claim.session_id, claim.epoch, claim.signature)
@@ -272,7 +286,7 @@ async def _step(claim: Claim) -> bool:
     if await _summarize(claim, chronicle=True):
         await _release(claim)
         return True
-    if enabled and await _summarize(claim, chronicle=False):
+    if enabled and await _summarize(claim, chronicle=False, documents=documents):
         await _release(claim)
         return True
     # Canonical summaries must progress even when the optional embedder is unavailable.
@@ -285,15 +299,15 @@ async def _step(claim: Claim) -> bool:
     return False
 
 
-async def _failed(claim: Claim) -> None:
+async def _failed(claim: Claim, error_code: str = "internal") -> None:
     failures = _failures.get(claim.session_id, 0) + 1
     _failures[claim.session_id] = failures
     delay = min(RETRY_SECONDS * (2 ** min(failures - 1, 4)), 900)
-    await _record_failure(claim, delay)
+    await _record_failure(claim, delay, error_code)
 
 
 @retry_transaction
-async def _record_failure(claim: Claim, delay: float) -> None:
+async def _record_failure(claim: Claim, delay: float, error_code: str = "internal") -> None:
     async with database.AsyncSessionLocal() as db:
         await db.execute(
             update(MemoryIndexState)
@@ -302,7 +316,7 @@ async def _record_failure(claim: Claim, delay: float) -> None:
                 lease_token=None,
                 lease_until=time.time() + delay,
                 status="paused" if claim.paused else "error",
-                last_error="Memory maintenance failed. Check embedding and utility model settings, then retry.",
+                last_error=f"Memory maintenance failed ({error_code}). Check model settings and retry.",
             )
         )
         await db.commit()
@@ -332,7 +346,16 @@ async def _process_claim(claim: Claim) -> bool:
             await _release(claim)
             return True
         logger.exception("Memory maintenance failed for session %s", claim.session_id)
-        await _failed(claim)
+        await _failed(
+            claim,
+            "timeout"
+            if isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+            else "provider"
+            if isinstance(exc, ConnectionError)
+            else "invalid_response"
+            if isinstance(exc, ValueError)
+            else "internal",
+        )
         return False
 
 
@@ -380,6 +403,9 @@ def _finish(session_id: str, task: asyncio.Task) -> None:
 
 
 async def shutdown() -> None:
+    from backend.engine.memory_rag import document_cache
+
+    document_cache.clear()
     from backend.engine.memory_rag.dirty_queue import shutdown as stop_queue
 
     await stop_queue()

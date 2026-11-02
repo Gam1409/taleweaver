@@ -18,9 +18,9 @@ def pack_export_adz(manifest: dict, template_id: str) -> bytes:
     if not os.path.exists(adventure_dir):
         # Legacy fallback for pre-migration adventures.
         adventure_dir = _safe_data_path("adventures", template_id)
-    asset_mapping = {}  # local_path -> zip_path
+    asset_mapping: dict[str, str] = {}  # local_path -> zip_path
 
-    def localize_path(path):
+    def localize_path(path: str | None) -> str | None:
         return localize_archive_asset(path, adventure_dir, asset_mapping)
 
     # Localize all image fields

@@ -1,26 +1,32 @@
 """Restore a session bundle, including avatar, inventory and state snapshot."""
 
 from copy import deepcopy
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.game_modes import normalize_vn_template
 from backend.engine.import_build_session_template import build_session_template
+from backend.engine.import_transaction import register_created
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.world_generator import WorldGenerator
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
+from backend.models.user import User
 from backend.utils.text_utils import generate_session_id
 
 
-async def restore_session_bundle(db: AsyncSession, payload, user, origin_id):
+async def restore_session_bundle(
+    db: AsyncSession, payload: dict[str, Any], user: User, origin_id: str | None
+) -> bool:
     data = payload
     old_adv = data["adventure"]
 
     new_template = build_session_template(data, user, origin_id)
 
+    register_created(db, new_template.id)
     normalize_vn_template(new_template)
     db.add(new_template)
     await db.flush()
@@ -129,7 +135,7 @@ async def restore_session_bundle(db: AsyncSession, payload, user, origin_id):
             )
         )
 
-    await db.commit()
+    await db.flush()
     # Ensure thumbnails are generated for imported assets
     from backend.engine.media_engine import MediaEngine
 

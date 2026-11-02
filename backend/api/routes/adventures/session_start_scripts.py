@@ -1,6 +1,8 @@
 import json
 import logging
+from collections.abc import Sequence
 from copy import deepcopy
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,17 +10,23 @@ from backend.core.config import settings
 from backend.core.game_modes import is_vn
 from backend.engine.scripting.context import GameContext
 from backend.engine.scripting.runner import ScriptRunner
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.base import utc_now
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
+from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
 
 
 def run_adventure_initialization(
-    adventure, template_entities, avatar: Avatar, first_scene_id, initial_entity_states
-):
+    adventure: AdventureTemplate,
+    template_entities: Sequence[WorldEntity],
+    avatar: Avatar,
+    first_scene_id: str,
+    initial_entity_states: dict[str, Any],
+) -> list[str]:
     # Execute adventure initialization script and on_init triggers if configured
     manifest = getattr(adventure, "original_manifest", None) or {}
     adv_scripts = manifest.get("scripts", [])
@@ -74,7 +82,10 @@ def run_adventure_initialization(
 
 
 async def add_initial_session_messages(
-    db: AsyncSession, adventure, new_session: GameSession, init_narrative_messages
+    db: AsyncSession,
+    adventure: AdventureTemplate,
+    new_session: GameSession,
+    init_narrative_messages: list[str],
 ) -> None:
     # Add Creator, Copyright, License details as a dedicated license_info message
     # Pin created_at explicitly so the license_info row sorts before intro_text

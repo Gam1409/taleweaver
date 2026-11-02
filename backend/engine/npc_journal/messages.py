@@ -17,7 +17,7 @@ def restore_messages(
 ) -> dict[str, str]:
     ids: dict[str, str] = {raw["id"]: str(uuid4()) for raw in messages if raw.get("id")}
     for raw in messages:
-        message_id = ids.get(raw.get("id"), str(uuid4()))
+        message_id = ids.get(str(raw.get("id") or ""), str(uuid4()))
         journal = deepcopy(raw.get("npc_journal"))
         if isinstance(journal, dict):
             journal["gaps"] = [ids[gap] for gap in journal.get("gaps", []) if gap in ids]

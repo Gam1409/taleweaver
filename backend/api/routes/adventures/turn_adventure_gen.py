@@ -102,7 +102,7 @@ class TurnAdventureGenManager(TurnContext):
                 system_prompt,
                 text,
                 small_model,
-                adventure_id=self.manager.adventure.id,
+                adventure_id=self.manager.adventure.id if self.manager.adventure else None,
                 game_id=self.manager.game_id,
                 operation="chat_turn",
                 phase=phase,
@@ -250,7 +250,7 @@ class TurnAdventureGenManager(TurnContext):
         stream_callback: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> None:
         """Executes adventure-generator tool requests from a structured event/intent model."""
-        if not self.manager.adventure.is_adventure_generator:
+        if self.manager.adventure is None or not self.manager.adventure.is_adventure_generator:
             return
 
         if event.request_available_image_styles:
@@ -274,7 +274,9 @@ class TurnAdventureGenManager(TurnContext):
         if event.requested_adventure_generation:
             await self._generate_requested_adventure(event, stream_callback)
 
-    async def _generate_requested_adventure(self, event: Any, stream_callback) -> None:
+    async def _generate_requested_adventure(
+        self, event: Any, stream_callback: Callable[[str], Awaitable[None] | None] | None
+    ) -> None:
         """Generate the requested library adventure and report its outcome to the session."""
         self.set_last_ag_generation_request(event.requested_adventure_generation)
 

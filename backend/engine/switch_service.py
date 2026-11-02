@@ -152,7 +152,7 @@ class SwitchService:
             code_matches = (
                 provided_code is not None
                 and str(provided_code).strip().lower() == required_code.lower()
-            ) or (lowered_prompt and required_code.lower() in lowered_prompt)
+            ) or (lowered_prompt.strip() == required_code.lower())
             if not code_matches:
                 return False, fail_msg or f"Incorrect code for {switch_name}."
 

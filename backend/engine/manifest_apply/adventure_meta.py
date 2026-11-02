@@ -84,7 +84,7 @@ _FINAL_FIELDS: tuple[tuple[str, Any], ...] = (
 
 def adventure_field(manifest: dict[str, Any], key: str, default: Any = None) -> Any:
     """Reads ``adventure.<key>`` (standard ADV layout) with a top-level fallback."""
-    block = manifest.get("adventure") if isinstance(manifest.get("adventure"), dict) else {}
+    block = raw_adventure if isinstance(raw_adventure := manifest.get("adventure"), dict) else {}
     if block.get(key) is not None:
         return block[key]
     if manifest.get(key) is not None:
@@ -194,7 +194,7 @@ async def _create_cover(
     user_config, api_keys = t2i_config(ctx)
     cover_url = await MediaEngine.generate_adventure_cover(
         title=adventure.title,
-        original_prompt=adventure.teaser or adventure.original_prompt,
+        original_prompt=adventure.teaser or adventure.original_prompt or "",
         adventure_id=ctx.template_id,
         user_config=user_config,
         api_keys=api_keys,

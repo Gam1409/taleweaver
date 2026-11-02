@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database, prompts
@@ -34,7 +36,9 @@ def status(session_id: str, scene_id: str, image: str | None) -> str:
     return "generating" if key in _tasks else _results.get(key, "missing")
 
 
-async def _load(db: AsyncSession, session_id, scene_id, user_id):
+async def _load(
+    db: AsyncSession, session_id: str, scene_id: str, user_id: str
+) -> tuple[SessionState | None, WorldScene | None]:
     state = await db.scalar(
         select(SessionState)
         .join(GameSession)
@@ -58,7 +62,7 @@ async def _generate(session_id: str, scene_id: str, user_id: str) -> bool:
     async with database.AsyncSessionLocal() as db:
         state, scene = await _load(db, session_id, scene_id, user_id)
         user = await db.get(User, user_id)
-        if scene is None or user is None:
+        if state is None or scene is None or user is None:
             return False
         if scene.image_url:
             return True
@@ -136,11 +140,11 @@ async def _save_image(
             .execution_options(synchronize_session=False)
         )
         await db.commit()
-        return saved.rowcount == 1
+        return cast(CursorResult[Any], saved).rowcount == 1
 
 
 @diagnostic_job("scene_background")
-async def _run(session_id, scene_id, user_id) -> None:
+async def _run(session_id: str, scene_id: str, user_id: str) -> None:
     key = (session_id, scene_id)
     try:
         async with _capacity:
@@ -158,13 +162,13 @@ async def _run(session_id, scene_id, user_id) -> None:
             _results.pop(next(iter(_results)))
 
 
-def schedule(session_id, scene_id, user_id) -> None:
+def schedule(session_id: str, scene_id: str, user_id: str) -> None:
     key = (session_id, scene_id)
     if key not in _tasks:
         _tasks[key] = asyncio.create_task(_run(session_id, scene_id, user_id))
 
 
-def schedule_images(state: SessionState, user_id, ids) -> None:
+def schedule_images(state: SessionState, user_id: str, ids: list[str]) -> None:
     if policy(state).generate_images:
         for scene_id in ids:
             if scene_id in registry(state).get("places", {}):

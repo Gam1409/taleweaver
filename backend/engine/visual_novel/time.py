@@ -32,7 +32,7 @@ def apply_elapsed_time(state: Any, event: Any, adventure: Any) -> bool:
         # Narration must see the actual allowed duration, including configured caps.
         event.extra_time_minutes = elapsed
         state.in_game_time = max(0, int(before) + elapsed)
-    return state.in_game_time != before
+    return bool(state.in_game_time != before)
 
 
 def boundary_elapsed_time(adventure: Any, event: Any = None) -> int:

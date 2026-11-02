@@ -21,6 +21,7 @@ async function fixture(t, component, props, exports, request, job = async () => 
   source = `import {computed, ref, watch, onScopeDispose as onBeforeUnmount} from '${import.meta.resolve('vue')}';
 const window = globalThis;
 const onMounted = () => {};
+const useDialogFocus = () => {};
 const apiFetch = (...args) => globalThis['${key}'].request(...args);
 const runVisualJob = (...args) => globalThis['${key}'].job(...args);
 const getOriginalImageUrl = path => path;

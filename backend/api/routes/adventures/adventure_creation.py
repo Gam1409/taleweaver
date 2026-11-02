@@ -5,7 +5,7 @@ import logging
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -21,6 +21,7 @@ from backend.api.routes.adventures.session_materializer import (
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.clothing.settings import with_clothing_settings
+from backend.engine.generation_bounds import GenerationBounds
 from backend.engine.generation_control import (
     assert_generation_current,
     generation_run,
@@ -127,7 +128,8 @@ def _pacing_minutes(payload: CreateAdventureTemplatePayload) -> Optional[int]:
     """Backward compatibility for older pacing configs."""
     pacing_minutes = payload.pacing_minutes or payload.time_per_turn
     if payload.pacing and isinstance(payload.pacing, dict):
-        return payload.pacing.get("minutes_per_turn", pacing_minutes)
+        value = payload.pacing.get("minutes_per_turn", pacing_minutes)
+        return int(value) if value is not None else None
     return pacing_minutes
 
 
@@ -182,7 +184,7 @@ def build_template(
                 payload.detailed_clothing,
             ),
             payload.nsfw_enabled,
-            payload.nsfw_level,
+            payload.nsfw_level or "hard",
         ),
         teaser=payload.teaser,
         version=payload.version,
@@ -354,7 +356,7 @@ def _count_objects_of_type(objects: list[Any], item_type: str) -> int:
 
 def effective_generation_bounds(
     payload: CreateAdventureTemplatePayload, cover_manifest: Optional[dict[str, Any]]
-) -> dict[str, Optional[int]]:
+) -> GenerationBounds:
     """Min/max bounds per category for the world generator.
 
     In cover mode, a category left on "auto" (min=None, max=None) gets tight
@@ -368,7 +370,7 @@ def effective_generation_bounds(
         for edge in ("min", "max")
     }
     if not cover_manifest:
-        return bounds
+        return cast(GenerationBounds, bounds)
 
     objects = cover_manifest.get("objects") or []
     policy = mode_policy(payload.rule_enforcement_mode)
@@ -402,7 +404,7 @@ def effective_generation_bounds(
         is_auto = bounds[f"min_{cat}"] is None and bounds[f"max_{cat}"] is None
         if enabled and is_auto and src_count > 0:
             bounds[f"min_{cat}"], bounds[f"max_{cat}"] = _cover_bounds(src_count, hard_min)
-    return bounds
+    return cast(GenerationBounds, bounds)
 
 
 @dataclass
@@ -422,6 +424,8 @@ async def _load_template(db: AsyncSession, template_id: str) -> Optional[Adventu
 
 
 async def _generate_world(db: AsyncSession, user: Optional[User], job: GenerationJob) -> None:
+    if user is None:
+        raise ValueError("Adventure owner no longer exists.")
     payload = job.payload
     policy = mode_policy(payload.rule_enforcement_mode)
     await WorldGenerator.generate_world(
@@ -473,6 +477,8 @@ async def _record_generation_failure(db: AsyncSession, template_id: str, exc: Ex
 
 async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
     user = (await db.execute(select(User).where(User.id == job.user_id))).scalars().first()
+    if user is None:
+        raise ValueError("Adventure owner no longer exists.")
 
     adv = await _load_template(db, job.template_id)
     if adv:

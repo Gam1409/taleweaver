@@ -1,21 +1,23 @@
 """Editable starting points, not guarantees for every derivative checkpoint."""
 
+from typing import Any, Literal
+
 from backend.core.image_prompt_rules import ImagePromptRules
 
 
 def _template(
-    key,
-    name,
-    format,
-    instructions,
+    key: str,
+    name: str,
+    format: Literal["tags", "hybrid", "description"],
+    instructions: str,
     *,
-    words=100,
-    prefix="",
-    suffix="",
-    negative="",
-    source="",
-    notes="",
-):
+    words: int = 100,
+    prefix: str = "",
+    suffix: str = "",
+    negative: str = "",
+    source: str = "",
+    notes: str = "",
+) -> dict[str, Any]:
     return {
         "id": key,
         "name": name,

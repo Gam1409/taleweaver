@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+from typing import Any, cast
 
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 
 from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
@@ -65,7 +67,7 @@ async def _try_mark(session_id: str, npc_id: str, status: str) -> tuple[bool, bo
             .values(metadata_json={**(before or {}), JOURNAL_KEY: journal})
             .execution_options(synchronize_session=False)
         )
-        if updated.rowcount != 1:
+        if cast(CursorResult[Any], updated).rowcount != 1:
             return False, False
         await db.commit()
         return True, not bool(previous_image)

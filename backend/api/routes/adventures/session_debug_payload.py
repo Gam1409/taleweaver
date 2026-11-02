@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -27,7 +29,7 @@ _NPC_RESOURCE_DEFAULTS = (
 _STAT_FIELDS = ("strength", "dexterity", "intelligence", "wisdom", "charisma", "armor_class")
 
 
-def _session_or_template(model: Any, state: SessionState):
+def _session_or_template(model: Any, state: SessionState) -> ColumnElement[bool]:
     """Rows of the session plus the template rows not shadowed by a session copy."""
     return or_(
         model.session_id == state.session_id,
@@ -35,7 +37,9 @@ def _session_or_template(model: Any, state: SessionState):
     )
 
 
-def _prefer_session_rows(rows: list[Any], key_fn, session_id: str) -> dict[str, Any]:
+def _prefer_session_rows(
+    rows: list[Any], key_fn: Callable[[Any], Any], session_id: str
+) -> dict[str, Any]:
     lookup: dict[str, Any] = {}
     for row in rows:
         key = key_fn(row)
@@ -323,7 +327,9 @@ async def _load_blueprint(db: AsyncSession, template_id: str) -> dict[str, Any] 
         return None
 
 
-async def _load_world(db: AsyncSession, state: SessionState):
+async def _load_world(
+    db: AsyncSession, state: SessionState
+) -> tuple[dict[str, WorldScene], dict[str, WorldExit], dict[str, WorldEntity]]:
     scenes = (
         (
             await db.execute(
@@ -408,6 +414,6 @@ async def build_session_debug_payload(
             "current_scene_id": state.current_scene_id,
             "scene_npcs": scene_npcs,
         },
-        "blueprint": await _load_blueprint(db, state.template_id),
+        "blueprint": await _load_blueprint(db, state.template_id) if state.template_id else None,
         **_runtime_sections(state, avatar),
     }

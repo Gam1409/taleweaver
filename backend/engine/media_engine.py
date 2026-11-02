@@ -303,11 +303,12 @@ class MediaEngine:
 
     @staticmethod
     def _sanitize_prompt(prompt: str) -> str:
-        """Corrects common typos that trigger safety filters (e.g. 'raping' -> 'rapping')."""
-        # Case-insensitive replacement of 'raping' with 'rapping', but only if preceded by 'rap', 'battle', etc.
-        # or as a standalone word that is clearly a typo in this context.
-        # Actually, in a TTRPG/Creative context, 'raping' is almost always a typo for 'rapping'.
-        return re.sub(r"(\b)raping(\b)", r"\1rapping\2", prompt, flags=re.IGNORECASE)
+        """Reject ambiguous unsupported input rather than silently changing its meaning."""
+        if re.search(r"\braping\b", prompt, flags=re.IGNORECASE):
+            raise ValueError(
+                "The image description contains an unsupported term. Revise the description before generating."
+            )
+        return prompt
 
     @staticmethod
     def _apply_no_text_instruction(prompt: str) -> str:
@@ -590,29 +591,18 @@ class MediaEngine:
     ) -> Optional[str]:
         """Downloads a remote image and persists it in the specified directory."""
         try:
-            response = await asyncio.to_thread(requests.get, url, timeout=30)
-            if response.status_code == 200:
-                safe_target_dir = _resolve_output_dir(target_dir)
-                ext = "jpg" if image_format.lower() == "jpeg" else "png"
-                filepath = await run_file_operation(
-                    _build_output_filepath, safe_target_dir, filename, ext
-                )
+            from backend.engine.image_download import download_image
 
-                await run_file_operation(
-                    persist_image_bytes, filepath, response.content, image_format, quality
-                )
+            content = await asyncio.to_thread(download_image, url)
+            safe_target_dir = _resolve_output_dir(target_dir)
+            ext = "jpg" if image_format.lower() == "jpeg" else "png"
+            filepath = await run_file_operation(
+                _build_output_filepath, safe_target_dir, filename, ext
+            )
+            await run_file_operation(persist_image_bytes, filepath, content, image_format, quality)
+            await MediaEngine._generate_thumbnail(filepath)
+            return local_path_to_data_url(filepath)
 
-                # Generate thumbnail
-                await MediaEngine._generate_thumbnail(filepath)
-
-                return local_path_to_data_url(filepath)
-            else:
-                logger.error(
-                    "Failed to download image from %s, status: %s",
-                    _redact_url_for_logs(url),
-                    response.status_code,
-                )
-                return None
         except (requests.RequestException, OSError, ValueError):
             logger.exception("Error saving remote image")
             return None
@@ -893,7 +883,7 @@ class MediaEngine:
         )
 
 
-def _extract_mapping_image_payload(response):
+def _extract_mapping_image_payload(response: dict[str, Any]) -> tuple[str | None, str | None]:
     images = response.get("images")
     if isinstance(images, list) and images:
         first = images[0]

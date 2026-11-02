@@ -1,5 +1,7 @@
 """Small, editable ComfyUI starter graphs with explicit architecture choices."""
 
+from typing import Any
+
 from backend.core.comfyui_config import ComfyWorkflow
 
 FAMILIES = {
@@ -26,7 +28,7 @@ FAMILIES = {
 }
 
 
-def node(kind: str, **inputs) -> dict:
+def node(kind: str, **inputs: Any) -> dict:
     return {"class_type": kind, "inputs": inputs}
 
 

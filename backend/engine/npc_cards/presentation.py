@@ -132,7 +132,7 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         return _unavailable()
     social = load_state(state)
     character = social.characters.get(npc_id) if social else None
-    if character is None:
+    if character is None or social is None:
         return _unavailable()
     source_ids = set(social.reviewed_scene_message_ids)
     if character.emotion_source_message_id:
@@ -172,9 +172,11 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         ),
         None,
     )
-    if memory is None and emotion_message is None:
+    source = emotion_message
+    if source is None and memory is not None:
+        source = next(m for m in messages if m.id == memory.source_message_id)
+    if source is None:
         return _unavailable()
-    source = emotion_message or next(m for m in messages if m.id == memory.source_message_id)
     newer = await db.scalar(
         select(func.count())
         .select_from(ChatMessage)
@@ -193,6 +195,10 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         "newer_responses": int(newer or 0),
         "relationship": character.relationship.model_dump() if memory else None,
         "emotion": character.emotion if emotion_message else None,
-        "evidence": character.emotion_cause if emotion_message else memory.evidence,
-        "source_message_id": emotion_message.id if emotion_message else memory.source_message_id,
+        "evidence": character.emotion_cause
+        if emotion_message
+        else (memory.evidence if memory else None),
+        "source_message_id": emotion_message.id
+        if emotion_message
+        else (memory.source_message_id if memory else None),
     }

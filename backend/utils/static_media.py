@@ -6,7 +6,9 @@ import stat
 from pathlib import Path
 
 from starlette.exceptions import HTTPException
+from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from backend.engine.archive_safety import MEDIA_EXTENSIONS
 from backend.utils.async_files import run_file_operation
@@ -14,7 +16,7 @@ from backend.utils.async_files import run_file_operation
 logger = logging.getLogger(__name__)
 
 
-def _is_svg(path):
+def _is_svg(path: str) -> bool:
     try:
         with open(path, "rb") as source:
             return b"<svg" in source.read(512).lower()
@@ -25,7 +27,7 @@ def _is_svg(path):
 class SafeStaticFiles(StaticFiles):
     """Serve passive media only; runtime state and executable assets remain private."""
 
-    async def _ensure_thumbnail(self, path) -> None:
+    async def _ensure_thumbnail(self, path: str) -> None:
         match = re.match(r"^(.*)_thumb(\.[a-zA-Z0-9]+)$", path, re.IGNORECASE)
         if not match:
             return
@@ -41,9 +43,12 @@ class SafeStaticFiles(StaticFiles):
         except Exception:
             logger.exception("Dynamic thumbnail generation failed for %s", source_path)
 
-    async def get_response(self, path, scope):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        from backend.utils.media_access import authorize_media
+
         if Path(path).suffix.lower() not in MEDIA_EXTENSIONS:
             raise HTTPException(status_code=403, detail="Access denied")
+        await authorize_media(path, scope)
         full_path, stat_result = await run_file_operation(self.lookup_path, path)
         if stat_result is None:
             await self._ensure_thumbnail(path)
@@ -59,5 +64,6 @@ class SafeStaticFiles(StaticFiles):
         response.headers["Content-Security-Policy"] = (
             "sandbox; default-src 'none'; style-src 'unsafe-inline'"
         )
+        response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response

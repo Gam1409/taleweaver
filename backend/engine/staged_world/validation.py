@@ -187,7 +187,7 @@ def _validate_switch_targets(
 def _identity(kind: str, row: dict[str, Any]) -> tuple[str, Any]:
     identifier = row.get("key") if kind == "awards" else row.get("id")
     name_field = "title" if kind in {"sequences", "quests", "awards"} else "name"
-    return identifier, row.get(name_field)
+    return str(identifier or ""), row.get(name_field)
 
 
 def _validate_row(kind: str, row: dict[str, Any], plan: dict[str, Any]) -> str:
@@ -236,7 +236,11 @@ def _owner_items(row: dict[str, Any], *, protagonist: bool = False) -> set[str]:
         equipment = (row.get("starting_equipment") or {}).values()
         return set(row.get("starting_inventory") or []) | {ref for ref in equipment if ref}
     inventory = set(row.get("inventory") or [])
-    equipment = {row.get("equipped_weapon_id"), row.get("equipped_armor_id")} - {None, ""}
+    equipment = {
+        value
+        for key in ("equipped_weapon_id", "equipped_armor_id")
+        if isinstance(value := row.get(key), str) and value
+    }
     return inventory | equipment
 
 

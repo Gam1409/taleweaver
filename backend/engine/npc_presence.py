@@ -19,7 +19,7 @@ Do not use is_hidden for departures: that field controls discovery.
 def presence(entity: Any, state: Any = None) -> str:
     """Legacy entities default to physically present; location filtering is separate."""
     raw = entity if isinstance(entity, dict) else vars(entity)
-    override = {}
+    override: Any = {}
     if state is not None:
         override = (getattr(state, "entity_states", None) or {}).get(raw.get("id"), {})
     if not isinstance(override, dict):

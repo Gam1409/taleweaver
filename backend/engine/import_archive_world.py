@@ -1,7 +1,11 @@
 """Reconstruct world fields from an ADZ manifest without changing its defaults."""
 
+from typing import Any
 
-def build_archive_world(manifest_data, adv_data, resolved_license_url):
+
+def build_archive_world(
+    manifest_data: dict[str, Any], adv_data: dict[str, Any], resolved_license_url: str | None
+) -> dict[str, Any]:
     # Reconstruct world
     prot = manifest_data.get("protagonist")
     world_manifest = {

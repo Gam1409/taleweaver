@@ -58,7 +58,7 @@ async def rewind_created_garments(
     """
     raw_known = snapshot.get(CHECKPOINT_KEY)
     explicit = isinstance(raw_known, list) and all(isinstance(item, str) for item in raw_known)
-    known = set(raw_known) if explicit else set()
+    known = set(raw_known) if isinstance(raw_known, list) and explicit else set()
     known.update(
         _stored_item_ids(snapshot.get("avatar") or {}, snapshot.get("session_state") or {})
     )
@@ -72,7 +72,11 @@ async def rewind_created_garments(
     for row in rows:
         metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
         origin = metadata.get("clothing_origin")
-        if not _runtime_origin(origin, session_id) or row.id in known:
+        if (
+            not isinstance(origin, dict)
+            or not _runtime_origin(origin, session_id)
+            or row.id in known
+        ):
             continue
         if explicit or origin.get("source_message_id") in removed:
             await db.delete(row)

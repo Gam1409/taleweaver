@@ -141,7 +141,7 @@ def _journal_documents(
     state: Any, user_id: str, npc: WorldEntity, messages: dict[str, ChatMessage]
 ) -> list[MemoryDocument]:
     documents = []
-    for entry in journal_of(npc).get("entries") or []:
+    for entry in journal_of(npc, full=True).get("entries") or []:
         message = messages.get(entry.get("message_id"))
         if not message or message.role != "assistant":
             continue
@@ -247,19 +247,9 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
     )
     if current is None:
         return []
-    rows = await db.scalars(
-        select(ChatMessage)
-        .where(
-            ChatMessage.session_id == state.session_id, ChatMessage.role.in_(["user", "assistant"])
-        )
-        .order_by(ChatMessage.created_at, ChatMessage.id)
-        .execution_options(populate_existing=True)
-    )
-    messages = {
-        message.id: message
-        for message in rows
-        if message.content and (message.npc_journal or {}).get("status") != "incomplete"
-    }
+    from backend.engine.memory_rag.transcript_pages import transcript_messages
+
+    messages = await transcript_messages(db, state.session_id)
     documents = [
         document
         for message in messages.values()
@@ -277,18 +267,22 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
     documents = [chunk for document in documents for chunk in _bounded_document(document)]
     summaries = await db.scalars(
         select(MemorySummary).where(
-            MemorySummary.session_id == state.session_id, MemorySummary.user_id == user_id
+            MemorySummary.session_id == state.session_id,
+            MemorySummary.user_id == user_id,
+            MemorySummary.archived.is_(False),
         )
     )
     raw_documents = list(documents)
     for summary in summaries:
         if not summary.source_message_ids or not set(summary.source_message_ids) <= messages.keys():
+            db.info.setdefault("stale_memory_summaries", set()).add(summary.id)
             continue
         sources = summary_sources(raw_documents, summary.layer, summary.npc_id, summary.scene_id)
         if (
             sources_hash(sources, summary.source_message_ids, summary.source_keys)
             != summary.source_hash
         ):
+            db.info.setdefault("stale_memory_summaries", set()).add(summary.id)
             continue
         documents.append(
             _document(
@@ -316,7 +310,7 @@ async def validate_candidates(
     seen = set()
     for candidate in candidates:
         row = candidate.to_dict() if isinstance(candidate, MemoryDocument) else candidate
-        document = canonical.get(row.get("id"))
+        document = canonical.get(str(row.get("id") or ""))
         if not document or document.id in seen or document.source_hash != row.get("source_hash"):
             continue
         if row.get("user_id") != user_id or row.get("session_id") != state.session_id:

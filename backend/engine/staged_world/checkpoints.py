@@ -3,7 +3,7 @@
 import hashlib
 import json
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -25,7 +25,7 @@ class Checkpoints:
         self.db = db
         self.adventure = adventure
         saved = (getattr(adventure, "generation_checkpoint", None) or {}) if adventure else {}
-        self.data = (
+        self.data: dict[str, Any] = (
             deepcopy(saved)
             if saved.get("version") == VERSION and saved.get("fingerprint") == fingerprint
             else {"version": VERSION, "fingerprint": fingerprint, "results": {}}
@@ -33,7 +33,7 @@ class Checkpoints:
 
     @property
     def results(self) -> dict:
-        return self.data["results"]
+        return cast(dict[str, Any], self.data["results"])
 
     async def check(self) -> None:
         if self.adventure is None:

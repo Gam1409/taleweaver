@@ -101,7 +101,7 @@ class StagedGeneration:
                     metadata={**self.metadata, "stage": key, "attempt": attempt + 1},
                 )
                 await self.store.check()
-                result = response.model_dump()
+                result: dict[str, Any] = response.model_dump()
                 validate(result)
                 return result
             except ValueError as exc:

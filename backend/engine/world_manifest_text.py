@@ -1,10 +1,13 @@
 """Object-reference annotation and authored sequence parsing for world manifests."""
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 
-def _annotate_narrative_fields(record, fields, replace_ids_in_text) -> None:
+def _annotate_narrative_fields(
+    record: object, fields: tuple[str, ...], replace_ids_in_text: Callable[[Any], Any]
+) -> None:
     if not isinstance(record, dict):
         return
     for field in fields:
@@ -12,7 +15,7 @@ def _annotate_narrative_fields(record, fields, replace_ids_in_text) -> None:
             record[field] = replace_ids_in_text(record[field])
 
 
-def _normalize_sequence_requirements(sequence) -> None:
+def _normalize_sequence_requirements(sequence: object) -> None:
     if not isinstance(sequence, dict):
         return
     for field in ("required_item_id", "required_scene_id", "required_defeated_npc_id"):
@@ -22,7 +25,7 @@ def _normalize_sequence_requirements(sequence) -> None:
         sequence[field] = value.upper() if value else ""
 
 
-def preprocess_manifest_object_ids(manifest_dict: dict) -> None:
+def preprocess_manifest_object_ids(manifest_dict: object) -> None:
     """Replace bare object-ID references in narrative text with ##OBJECTID tokens.
 
     Finds all object IDs in the manifest and annotates references to them
@@ -35,9 +38,9 @@ def preprocess_manifest_object_ids(manifest_dict: dict) -> None:
         return
 
     object_ids = [
-        obj.get("id").strip()
+        value.strip()
         for obj in objects
-        if isinstance(obj, dict) and isinstance(obj.get("id"), str) and obj.get("id").strip()
+        if isinstance(obj, dict) and isinstance(value := obj.get("id"), str) and value.strip()
     ]
     if not object_ids:
         return
@@ -106,7 +109,7 @@ def _clean_id(raw_val: str) -> str:
     return clean.upper()
 
 
-def _parse_sequence_block(i, block):
+def _parse_sequence_block(i: int, block: str) -> dict[str, Any]:
     lines = [line.strip() for line in block.strip().split("\n") if line.strip()]
     title = lines[0] if lines else f"Sequence {i}"
     raw_lines = lines[1:] if len(lines) > 1 else []
@@ -165,7 +168,11 @@ def _parse_sequence_block(i, block):
     }
 
 
-def _annotate_world_entity_text(manifest_dict, objects, replace_ids_in_text) -> None:
+def _annotate_world_entity_text(
+    manifest_dict: dict[str, Any],
+    objects: list[dict[str, Any]],
+    replace_ids_in_text: Callable[[Any], Any],
+) -> None:
     for scene in manifest_dict.get("scenes") or []:
         _annotate_narrative_fields(scene, ("description",), replace_ids_in_text)
 

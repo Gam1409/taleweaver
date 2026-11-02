@@ -415,7 +415,7 @@ def build_world_generation_prompts(
     title: str,
     original_prompt: str,
     language: Optional[str],
-    selected_tone: Optional[str],
+    selected_tone: str | dict[str, Any] | None,
     automatic_npc_voice_assignment: bool,
     available_voice_list: Optional[list[str]],
     can_damage_npcs: bool,

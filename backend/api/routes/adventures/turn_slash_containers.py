@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 
-async def open_container(self, command) -> None:
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.turn_slash import SlashCommandState, SlashInteractions
+
+
+async def open_container(self: SlashInteractions, command: SlashCommandState) -> None:
     container_hint = command.response.replace("[TRIGGER_OPEN]", "").strip()
     if not container_hint:
         command.response = "Usage: /open <container>"
@@ -10,7 +15,7 @@ async def open_container(self, command) -> None:
             container_hint
         )
         container_name = (
-            (scene_container.name if scene_container else inventory_container.get("name"))
+            (scene_container.name if scene_container else (inventory_container or {}).get("name"))
             if (scene_container or inventory_container)
             else None
         )
@@ -27,7 +32,7 @@ async def open_container(self, command) -> None:
                 command.response = f"{container_name} contains {len(container_inventory)} item(s)."
 
 
-async def take_all(self, command) -> None:
+async def take_all(self: SlashInteractions, command: SlashCommandState) -> None:
     container_hint = command.response.replace("[TRIGGER_CONTAINER_TAKE_ALL]", "").strip()
     if not container_hint:
         command.response = "Usage: /container_take_all <container>"
@@ -38,7 +43,7 @@ async def take_all(self, command) -> None:
             inventory_idx,
         ) = await self._resolve_container_target(container_hint)
         container_name = (
-            (scene_container.name if scene_container else inventory_container.get("name"))
+            (scene_container.name if scene_container else (inventory_container or {}).get("name"))
             if (scene_container or inventory_container)
             else None
         )
@@ -69,7 +74,7 @@ async def take_all(self, command) -> None:
                     )
 
 
-async def drop_contents(self, command) -> None:
+async def drop_contents(self: SlashInteractions, command: SlashCommandState) -> None:
     container_hint = command.response.replace("[TRIGGER_CONTAINER_DROP_SCENE]", "").strip()
     if not container_hint:
         command.response = "Usage: /container_drop_scene <container>"
@@ -80,7 +85,7 @@ async def drop_contents(self, command) -> None:
             inventory_idx,
         ) = await self._resolve_container_target(container_hint)
         container_name = (
-            (scene_container.name if scene_container else inventory_container.get("name"))
+            (scene_container.name if scene_container else (inventory_container or {}).get("name"))
             if (scene_container or inventory_container)
             else None
         )

@@ -28,12 +28,13 @@ async def debug_award(
     if not all_awards:
         return "DEBUG: This adventure has no awards defined."
 
+    session_awards = (state.entity_states or {}).get("__awards__", {})
     updated_awards = deepcopy(all_awards)
     granted: list[str] = []
     now = datetime.utcnow().isoformat()
 
     for award in updated_awards:
-        if award.get("is_earned"):
+        if session_awards.get(award.get("key", "")):
             continue  # already earned — skip
 
         award["is_earned"] = True
@@ -57,7 +58,7 @@ async def debug_award(
                     "tier": award.get("tier"),
                     "adventure_id": adventure.id,
                     "adventure_title": adventure.title,
-                    "session_id": state.id,
+                    "session_id": state.session_id,
                     "earned_at": now,
                 }
             )
@@ -67,8 +68,10 @@ async def debug_award(
     if not granted:
         return "DEBUG: All awards are already earned."
 
-    adventure.awards = updated_awards
-    flag_modified(adventure, "awards")
+    states = dict(state.entity_states or {})
+    states["__awards__"] = {award.get("key", ""): True for award in updated_awards}
+    state.entity_states = states
+    flag_modified(state, "entity_states")
 
     lines = ["[DEBUG] All adventure awards granted:"] + granted
     return "\n".join(lines)

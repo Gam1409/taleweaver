@@ -8,10 +8,12 @@ Two detail levels exist:
   guardrails, so the narrator neither needs nor should be able to leak them.
 """
 
+from collections.abc import Sequence
 from typing import Any, Optional
 
 from backend.engine.npc_journal.records import memory_context
 from backend.engine.personality.profile import personality_context
+from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 
 def _format_item_refs(items: Optional[list]) -> list[str]:
@@ -99,7 +101,7 @@ def _switch_details(e: Any, detail: str) -> str:
         if not isinstance(t, dict):
             continue
         to_s = str(t.get("to") or t.get("to_state") or "").strip()
-        gates = t.get("gates") if isinstance(t.get("gates"), dict) else {}
+        gates = raw_gates if isinstance(raw_gates := t.get("gates"), dict) else {}
         reqs = [
             f"{label}:{value}"
             for label, value in (
@@ -161,7 +163,7 @@ def _describe_object(e: Any, detail: str) -> str:
     return f"- {e.name} (ID: {e.id}):{type_str}{desc_str}{pos_str}{hidden_str}{extra}"
 
 
-def _describe_exits(exits: list, detail: str) -> str:
+def _describe_exits(exits: Sequence[Any], detail: str) -> str:
     if detail == "concise":
         exit_list = []
         for e in exits:
@@ -187,7 +189,10 @@ def _describe_exits(exits: list, detail: str) -> str:
 
 
 def build_location_context(
-    current_scene=None, entities=None, exits=None, detail_level: str = "full"
+    current_scene: WorldScene | None = None,
+    entities: Sequence[WorldEntity] | None = None,
+    exits: Sequence[WorldExit] | None = None,
+    detail_level: str = "full",
 ) -> str:
     if not current_scene:
         return ""

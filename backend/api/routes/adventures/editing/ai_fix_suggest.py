@@ -226,6 +226,7 @@ async def generate_fix_proposals(
         finding_signature=signature,
         proposals=[p for p in (_clean_proposal(raw) for raw in raw_proposals) if p],
         generated_at=generated_at,
+        error=None,
     )
     if response.proposals:
         await _cache_response(db, template_id, user_id, response)

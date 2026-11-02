@@ -1,7 +1,16 @@
 import random
+from typing import TypedDict
 
 from backend.engine.stat_aggregator import calculate_total_stats
 from backend.models.avatar import Avatar
+
+
+class DiceRoll(TypedDict):
+    total: int
+    dice_total: int
+    rolls: list[int]
+    bonus: int
+    dice_str: str
 
 
 def roll_skill_check(avatar: Avatar, base_stat: str, challenge_rating: int) -> dict:
@@ -34,19 +43,22 @@ def parse_dice(dice_str: str) -> int:
     return res["total"]
 
 
-def roll_dice_detailed(dice_str: str) -> dict:
+def roll_dice_detailed(dice_str: str) -> DiceRoll:
     """
     Parses a dice string and returns detailed roll results.
     """
     import re
 
-    match = re.match(r"(\d+)d(\d+)([+-]\d+)?", dice_str.lower().replace(" ", ""))
+    match = re.fullmatch(r"(\d{1,3})d(\d{1,6})([+-]\d{1,6})?", dice_str.lower().replace(" ", ""))
     if not match:
-        return {"total": 0, "dice_total": 0, "rolls": [], "bonus": 0, "dice_str": dice_str}
+        raise ValueError("Invalid dice expression. Use NdS with an optional modifier.")
 
     num_dice = int(match.group(1))
     sides = int(match.group(2))
     bonus = int(match.group(3)) if match.group(3) else 0
+
+    if not 1 <= num_dice <= 50 or not 1 <= sides <= 100000 or abs(bonus) > 100000:
+        raise ValueError("Dice must use 1–50 rolls, 1–100000 sides and a bounded modifier.")
 
     rolls = [random.randint(1, sides) for _ in range(num_dice)]
     dice_total = sum(rolls)
@@ -83,7 +95,13 @@ def roll_attack(avatar: Avatar, hit_stat: str, target_ac: int, damage_dice: str)
     is_crit = d20_roll >= crit_threshold
     is_hit = is_crit or (hit_total >= target_ac)
 
-    damage_info = {"total": 0, "dice_total": 0, "rolls": [], "bonus": 0, "dice_str": damage_dice}
+    damage_info: DiceRoll = {
+        "total": 0,
+        "dice_total": 0,
+        "rolls": [],
+        "bonus": 0,
+        "dice_str": damage_dice,
+    }
     damage_total = 0
     if is_hit:
         damage_info = roll_dice_detailed(damage_dice)

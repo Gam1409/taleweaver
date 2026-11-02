@@ -59,14 +59,17 @@ def _summarize_for_ai(payload: dict, *, max_field_len: int = 1500) -> dict:
     if hasattr(payload, "model_dump"):
         payload = payload.model_dump()
 
-    def _walk(value):
+    def _walk(value: Any) -> Any:
         if isinstance(value, dict):
             return {k: _walk(v) for k, v in value.items()}
         if isinstance(value, (list, tuple)):
             return [_walk(v) for v in value]
         return _coerce_for_json(value, max_field_len)
 
-    return _walk(payload)
+    result = _walk(payload)
+    if not isinstance(result, dict):
+        raise ValueError("Validation payload must be an object.")
+    return result
 
 
 def _build_ai_validation_prompt(debug_payload: Any) -> str:
@@ -121,6 +124,9 @@ async def _run_ai_validation(
     from backend.api.routes.adventures.schemas import AIValidationResponse
 
     try:
+        prompt = _build_ai_validation_prompt(debug_payload)
+        if len(prompt) > 48000:
+            return [], "context_budget_exceeded"
         gm = GameMasterLLM.for_role(user, "complex")
         model = gm.model
         response = await gm.aexecute_complex_task(
@@ -128,7 +134,7 @@ async def _run_ai_validation(
                 AI_VALIDATION_SYSTEM_PROMPT
                 + vn_editor_guidance(_summarize_for_ai(debug_payload).get("adventure") or {})
             ),
-            user_prompt=_build_ai_validation_prompt(debug_payload),
+            user_prompt=prompt,
             response_model=AIValidationResponse,
             model=model,
         )

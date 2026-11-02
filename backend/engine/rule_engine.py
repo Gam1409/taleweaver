@@ -347,6 +347,11 @@ STATUS_EFFECT_TICKS: dict = {
 }
 
 
+def _resource_limit(avatar: Avatar, resource: str) -> int:
+    maximum = getattr(avatar, f"max_{resource}", None)
+    return max(0, maximum) if isinstance(maximum, int) else RESOURCE_CAP
+
+
 class RuleEngine:
     @staticmethod
     def apply_ticks(avatar: Avatar) -> list[str]:
@@ -363,15 +368,33 @@ class RuleEngine:
             parts: list[str] = []
 
             if "hp" in deltas:
-                avatar.hp = max(0, min(RESOURCE_CAP, avatar.hp + deltas["hp"]))
+                avatar.hp = max(
+                    0,
+                    min(
+                        _resource_limit(avatar, "hp"),
+                        avatar.hp + deltas["hp"],
+                    ),
+                )
                 parts.append(f"HP {deltas['hp']:+d}")
 
             if "stamina" in deltas:
-                avatar.stamina = max(0, min(RESOURCE_CAP, avatar.stamina + deltas["stamina"]))
+                avatar.stamina = max(
+                    0,
+                    min(
+                        _resource_limit(avatar, "stamina"),
+                        avatar.stamina + deltas["stamina"],
+                    ),
+                )
                 parts.append(f"Stamina {deltas['stamina']:+d}")
 
             if "mana" in deltas:
-                avatar.mana = max(0, min(RESOURCE_CAP, avatar.mana + deltas["mana"]))
+                avatar.mana = max(
+                    0,
+                    min(
+                        _resource_limit(avatar, "mana"),
+                        avatar.mana + deltas["mana"],
+                    ),
+                )
                 parts.append(f"Mana {deltas['mana']:+d}")
 
             if parts:
@@ -385,9 +408,18 @@ class RuleEngine:
         Applies a validated GameEvent struct to an Avatar model.
         Throws GameOverException if HP drops below or to 0.
         """
-        avatar.hp += event.hp_change
-        avatar.stamina += event.stamina_change
-        avatar.mana += event.mana_change
+        avatar.hp = min(
+            _resource_limit(avatar, "hp"),
+            avatar.hp + event.hp_change,
+        )
+        avatar.stamina = min(
+            _resource_limit(avatar, "stamina"),
+            avatar.stamina + event.stamina_change,
+        )
+        avatar.mana = min(
+            _resource_limit(avatar, "mana"),
+            avatar.mana + event.mana_change,
+        )
 
         if event.game_over:
             avatar.hp = 0

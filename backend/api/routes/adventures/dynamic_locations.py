@@ -18,7 +18,7 @@ from backend.models.world_entity import WorldScene
 router = APIRouter(tags=["Dynamic locations"])
 
 
-async def _owned(db: AsyncSession, game_id, user: User):
+async def _owned(db: AsyncSession, game_id: str, user: User) -> SessionState:
     state = await db.scalar(
         select(SessionState)
         .join(GameSession)

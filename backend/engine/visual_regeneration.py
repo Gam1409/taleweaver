@@ -1,5 +1,18 @@
 """Regenerate one owned visual with a common profile and optional local reference."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
+
+from sqlalchemy import Select
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.orm import InstanceState
+
+from backend.models.user import User
+
+if TYPE_CHECKING:
+    from backend.api.routes.adventures.assets import RegenerateVisualRequest
+
 from fastapi import HTTPException
 from sqlalchemy import inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +34,10 @@ from backend.utils.path_security import (
 )
 
 
-async def _target(db: AsyncSession, adventure, payload):
+async def _target(
+    db: AsyncSession, adventure: AdventureTemplate, payload: RegenerateVisualRequest
+) -> tuple[AdventureTemplate | Avatar | WorldScene | WorldEntity, str]:
+    query: Select[Any]
     if payload.target_type == "cover":
         return adventure, "image_url"
     if payload.target_type == "protagonist":
@@ -44,7 +60,13 @@ async def _target(db: AsyncSession, adventure, payload):
     return target, field
 
 
-def _reference_options(t2i: dict, target, field: str, template_id: str, advanced: bool) -> dict:
+def _reference_options(
+    t2i: dict,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    field: str,
+    template_id: str,
+    advanced: bool,
+) -> dict:
     profile = "advanced" if advanced else "simple"
     if t2i.get(f"{profile}_model_provider") != "comfyui":
         raise ValueError("Using the current image requires a ComfyUI image workflow.")
@@ -56,7 +78,9 @@ def _reference_options(t2i: dict, target, field: str, template_id: str, advanced
     return {**t2i, "reference_image_url": url}
 
 
-async def regenerate_owned_visual(db: AsyncSession, adventure, user, payload) -> dict:
+async def regenerate_owned_visual(
+    db: AsyncSession, adventure: AdventureTemplate, user: User, payload: RegenerateVisualRequest
+) -> dict:
     from backend.api.routes.adventures.assets import _build_visual_prompt
 
     target, field = await _target(db, adventure, payload)
@@ -66,7 +90,7 @@ async def regenerate_owned_visual(db: AsyncSession, adventure, user, payload) ->
     if payload.use_current_image:
         t2i = _reference_options(t2i, target, field, adventure.id, advanced)
     style = resolve_style_instruction(adventure.selected_image_styles, user.image_styles_catalog)
-    common = {
+    common: dict[str, Any] = {
         "adventure_id": adventure.id,
         "user_config": {"t2i_settings": t2i, "prompt_user": user},
         "api_keys": user.encrypted_api_keys or {},
@@ -108,9 +132,13 @@ async def regenerate_owned_visual(db: AsyncSession, adventure, user, payload) ->
     return {"status": "success", "image_url": image_url}
 
 
-def _source(adventure, target, field: str) -> dict:
+def _source(
+    adventure: AdventureTemplate,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    field: str,
+) -> dict:
     return {
-        "identity": inspect(target).identity,
+        "identity": cast(InstanceState[Any], inspect(target)).identity,
         "updated_at": target.updated_at,
         "image": getattr(target, field),
         "template_updated_at": adventure.updated_at,
@@ -119,7 +147,7 @@ def _source(adventure, target, field: str) -> dict:
 
 @retry_transaction
 async def _save_visual(
-    template_id: str, user_id: str, payload, source: dict, image_url: str
+    template_id: str, user_id: str, payload: RegenerateVisualRequest, source: dict, image_url: str
 ) -> None:
     async with database.AsyncSessionLocal() as db:
         adventure = await db.get(AdventureTemplate, template_id)
@@ -131,7 +159,7 @@ async def _save_visual(
                 409, "The visual target changed while generating. The current image was kept."
             )
         model = type(target)
-        primary_keys = inspect(model).primary_key
+        primary_keys = model.__mapper__.primary_key
         owned = (
             select(AdventureTemplate.id)
             .where(
@@ -155,14 +183,19 @@ async def _save_visual(
             .values(**{field: image_url})
             .execution_options(synchronize_session=False)
         )
-        if changed.rowcount != 1:
+        if cast(CursorResult[Any], changed).rowcount != 1:
             raise HTTPException(
                 409, "The visual target changed while saving. The current image was kept."
             )
         await db.commit()
 
 
-async def _generate_target(payload, target, prompt: str, common: dict):
+async def _generate_target(
+    payload: RegenerateVisualRequest,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    prompt: str,
+    common: dict,
+) -> str | None:
     if payload.target_type == "scene":
         return await MediaEngine.generate_scene_image(prompt=prompt, **common)
     return await MediaEngine.generate_entity_image(

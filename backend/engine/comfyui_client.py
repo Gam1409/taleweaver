@@ -105,7 +105,7 @@ class ComfyClient:
             output = await self._wait(prompt_id, output_node, timeout)
             report("downloading")
             return await self._download(output)
-        except (asyncio.CancelledError, TimeoutError, httpx.TimeoutException):
+        except (asyncio.CancelledError, Exception):
             # Dequeue only this job. An already running job may continue remotely.
             with suppress(httpx.HTTPError, ValueError):
                 await self.json("POST", "/queue", json={"delete": [prompt_id]})

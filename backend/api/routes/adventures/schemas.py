@@ -454,7 +454,7 @@ class GameSessionResponse(BaseModel):
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_session_image_styles(cls, v):
+    def parse_session_image_styles(cls, v: object) -> object:
         if isinstance(v, list):
             res = []
             for item in v:
@@ -511,7 +511,7 @@ class AdventureTemplateSummaryResponse(BaseModel):
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_template_image_styles(cls, v):
+    def parse_template_image_styles(cls, v: object) -> object:
         if isinstance(v, list):
             res = []
             for item in v:
