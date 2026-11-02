@@ -6,14 +6,12 @@ import {
   Image,
   TextCursorInput,
   FlaskConical,
-  Plug,
   X,
   Plus,
   Copy,
   SlidersHorizontal
 } from 'lucide-vue-next'
 import ComfyWorkflowEditor from './ComfyWorkflowEditor.vue'
-import ComfySettingsEditor from './ComfySettingsEditor.vue'
 import ComfyPresetLibrary from './ComfyPresetLibrary.vue'
 import ComfyPresetPrompt from './ComfyPresetPrompt.vue'
 import ComfyPresetTest from './ComfyPresetTest.vue'
@@ -45,7 +43,6 @@ const {
   preview,
   invalid,
   ready,
-  connection,
   add,
   result,
   setAutomatic,
@@ -81,12 +78,6 @@ const tabs = [
     label: 'Test',
     icon: FlaskConical,
     hint: 'Preview the prompt or generate a test image.'
-  },
-  {
-    id: 'connection',
-    label: 'Connection',
-    icon: Plug,
-    hint: 'Server address and execution timeout.'
   }
 ] as const
 const tab = ref<string>('presets')
@@ -331,18 +322,6 @@ function create(copy = false): void {
               @preview="previewPrompt"
               @generate="testImage"
             />
-          </section>
-          <section
-            v-show="tab === 'connection'"
-            :id="`${id}-panel-connection`"
-            role="tabpanel"
-            :aria-labelledby="`${id}-tab-connection`"
-            class="mx-auto max-w-3xl"
-          >
-            <p class="mb-4 text-sm text-slate-400">
-              Connection settings are shared by both ComfyUI profiles.
-            </p>
-            <ComfySettingsEditor v-model="connection" />
           </section>
           <p
             v-if="error"

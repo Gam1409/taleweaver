@@ -13,11 +13,11 @@ function setTimeoutValue(event: Event): void {
 
 <template>
   <section class="rounded-2xl border border-cyan-800 bg-slate-900 p-5 space-y-5">
-    <h3 class="text-sm font-semibold text-white">ComfyUI (Local)</h3>
+    <h3 class="text-sm font-semibold text-white">ComfyUI connection</h3>
     <label class="block text-xs text-slate-300">ComfyUI API URL
       <input :value="modelValue.comfyui_url" placeholder="http://127.0.0.1:8188" class="block mt-2 w-full rounded-lg bg-slate-950 border border-slate-700 p-3 font-mono" @input="setUrl" />
     </label>
-    <p class="text-xs text-slate-400">This address must be reachable from the TaleWeaver backend. Localhost refers to the backend machine. Models and custom nodes must already be installed in ComfyUI.</p>
+    <p class="text-xs text-slate-400">Shared by all presets and both quality profiles. This address must be reachable from the TaleWeaver backend. Localhost refers to the backend machine. Models and custom nodes must already be installed in ComfyUI.</p>
     <p class="text-xs text-slate-400">Final images are reduced without cropping to fit TaleWeaver's limits: covers 2048×1024, scenes 1600×900, portraits 1024×1280, items 1024×1024. Large files may be reduced further to fit the upload size limits. Smaller images are not enlarged.</p>
     <details>
       <summary class="text-xs text-slate-300 cursor-pointer">Advanced connection settings</summary>

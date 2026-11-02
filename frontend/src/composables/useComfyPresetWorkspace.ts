@@ -42,11 +42,11 @@ export function useComfyPresetWorkspace(props: {
   )
   const connectionProblem = computed(() =>
     !workspace.value.url.trim()
-      ? 'Enter the ComfyUI server address.'
+      ? 'Enter the ComfyUI server address in Visual Generation > ComfyUI connection.'
       : !Number.isInteger(workspace.value.timeout) ||
           workspace.value.timeout < 30 ||
           workspace.value.timeout > 3600
-        ? 'Choose a timeout between 30 and 3600 seconds.'
+        ? 'Choose a timeout between 30 and 3600 seconds in Visual Generation > ComfyUI connection.'
         : ''
   )
   const ready = computed(
@@ -163,17 +163,6 @@ export function useComfyPresetWorkspace(props: {
       if (version === previewVersion) previewing.value = false
     }
   }
-  const connection = computed<ComfyOptions>({
-    get: () => ({
-      ...props.modelValue,
-      comfyui_url: workspace.value.url,
-      comfyui_timeout: workspace.value.timeout
-    }),
-    set: value => {
-      workspace.value.url = value.comfyui_url
-      workspace.value.timeout = value.comfyui_timeout
-    }
-  })
   function add(copy = false): void {
     newPreset(workspace.value, copy)
   }
@@ -197,7 +186,6 @@ export function useComfyPresetWorkspace(props: {
     preview,
     invalid,
     ready,
-    connection,
     add,
     result,
     setAutomatic,

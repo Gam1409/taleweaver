@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import ComfyPresetSelector from './ComfyPresetSelector.vue'
+import ComfySettingsEditor from './ComfySettingsEditor.vue'
 import type { ComfyOptions } from '@/types/comfyui'
 
 const props = defineProps<{
@@ -260,6 +261,11 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         <span>{{ isSubmitting ? 'Painting...' : 'Save Visuals Settings' }}</span>
       </button>
     </div>
+
+    <ComfySettingsEditor
+      v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui'"
+      v-model="comfyOptions"
+    />
 
     <!-- API KEY WARNING -->
     <div v-if="missingProviders.length > 0" class="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3">
