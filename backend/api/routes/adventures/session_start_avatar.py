@@ -2,15 +2,17 @@ import logging
 from copy import deepcopy
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.avatar import Avatar
+from backend.models.user import User
 
 logger = logging.getLogger(__name__)
 
 
-async def resolve_start_avatar(db, template_id, current_user, adventure):
+async def resolve_start_avatar(db: AsyncSession, template_id, current_user: User, adventure):
     # 1. Resolve Avatar (Template-based or fresh manifest-based)
     av_res = await db.execute(
         select(Avatar)

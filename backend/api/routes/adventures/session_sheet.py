@@ -1,5 +1,6 @@
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import asdict
 from typing import Any
 
@@ -145,7 +146,7 @@ async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSes
     return snapshot
 
 
-def _sheet_start_datetime(adventure, state, session_snapshot, session_manifest):
+def _sheet_start_datetime(adventure, state: SessionState, session_snapshot, session_manifest):
     from .logic import AdventureLogic
 
     adventure_time_config = (
@@ -172,7 +173,7 @@ def _sheet_start_datetime(adventure, state, session_snapshot, session_manifest):
     return start_datetime
 
 
-async def _sheet_item_images(db, state):
+async def _sheet_item_images(db: AsyncSession, state: SessionState) -> dict[str, str]:
     from .logic import AdventureLogic
 
     snapshot = AdventureLogic.extract_asset_snapshot(state)
@@ -198,6 +199,7 @@ async def _sheet_item_images(db, state):
 def _entity_to_item_dict(ent: WorldEntity) -> dict:
     """Build a minimal item dict from a WorldEntity for character sheet display."""
     guessed_slot = get_item_slot(ent.name or "", ent.item_type or "PICKABLE")
+    item_slot: str | None
     wearable = ent.wearable_slots
     if isinstance(wearable, list) and wearable:
         item_slot = wearable[0]
@@ -206,18 +208,19 @@ def _entity_to_item_dict(ent: WorldEntity) -> dict:
     else:
         item_slot = guessed_slot
     metadata = ent.metadata_json or {}
-    effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
+    raw_effects = metadata.get("effects")
+    effects = raw_effects if isinstance(raw_effects, dict) else {}
 
-    def _get_val(*candidates):
+    def _get_val(*candidates: object) -> int | None:
         for c in candidates:
-            if c is not None:
+            if isinstance(c, (int, float, str)):
                 try:
                     return int(c)
                 except (TypeError, ValueError):
                     pass
         return None
 
-    def _get_str(*candidates):
+    def _get_str(*candidates: object) -> str | None:
         for c in candidates:
             if isinstance(c, str) and c.strip():
                 return c.strip()
@@ -246,11 +249,14 @@ def _entity_to_item_dict(ent: WorldEntity) -> dict:
     }
 
 
-async def _sheet_inventory_entities(db, avatar, state):
+async def _sheet_inventory_entities(
+    db: AsyncSession, avatar: Avatar, state: SessionState
+) -> dict[str, WorldEntity]:
 
     # Pre-load entity records for any string item IDs (legacy format: equipment stored as IDs)
     item_ids_to_resolve: set[str] = set()
-    for _item in avatar.inventory or []:
+    inventory: list[object] = list(avatar.inventory or [])
+    for _item in inventory:
         if isinstance(_item, str) and _item:
             item_ids_to_resolve.add(_item)
     normalized_eq_check = normalize_equipment_keys(avatar.equipment)
@@ -258,7 +264,7 @@ async def _sheet_inventory_entities(db, avatar, state):
         if isinstance(_item, str) and _item:
             item_ids_to_resolve.add(_item)
 
-    entity_lookup: dict[str, Any] = {}
+    entity_lookup: dict[str, WorldEntity] = {}
     if item_ids_to_resolve:
         ent_res = await db.execute(
             select(WorldEntity).where(WorldEntity.id.in_(item_ids_to_resolve))
@@ -273,7 +279,7 @@ async def _sheet_inventory_entities(db, avatar, state):
     return entity_lookup
 
 
-async def _sheet_current_scene(db, state):
+async def _sheet_current_scene(db: AsyncSession, state: SessionState) -> WorldScene | None:
 
     scene_res = await db.execute(
         select(WorldScene).where(
@@ -292,7 +298,9 @@ async def _sheet_current_scene(db, state):
     return current_scene
 
 
-async def _sheet_profile_image(db, avatar, state, session_manifest):
+async def _sheet_profile_image(
+    db: AsyncSession, avatar: Avatar, state: SessionState, session_manifest
+):
     from .logic import AdventureLogic
 
     snapshot = AdventureLogic.extract_asset_snapshot(state) if state else {}
@@ -337,7 +345,9 @@ async def _sheet_profile_image(db, avatar, state, session_manifest):
     return profile_image
 
 
-def _sheet_item(item, entity_lookup, img_map):
+def _sheet_item(
+    item: str | dict[str, Any], entity_lookup: dict[str, WorldEntity], img_map: dict[str, str]
+) -> dict[str, Any]:
     """Hydrate one supported item payload without mutating inventory or equipment."""
     if isinstance(item, str):
         payload = (
@@ -356,7 +366,11 @@ def _sheet_item(item, entity_lookup, img_map):
     return item_copy
 
 
-def _sheet_inventory(inventory, entity_lookup, img_map):
+def _sheet_inventory(
+    inventory: Sequence[object] | None,
+    entity_lookup: dict[str, WorldEntity],
+    img_map: dict[str, str],
+) -> list[dict[str, Any]]:
     return [
         _sheet_item(item, entity_lookup, img_map)
         for item in (inventory or [])
@@ -364,7 +378,9 @@ def _sheet_inventory(inventory, entity_lookup, img_map):
     ]
 
 
-def _sheet_equipment(equipment, entity_lookup, img_map):
+def _sheet_equipment(
+    equipment: dict[str, Any] | None, entity_lookup: dict[str, WorldEntity], img_map: dict[str, str]
+) -> dict[str, Any]:
     return {
         slot: _sheet_item(item, entity_lookup, img_map)
         if item and isinstance(item, (str, dict))

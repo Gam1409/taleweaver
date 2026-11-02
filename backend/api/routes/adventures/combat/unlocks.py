@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.combat.context import CombatContextMixin
 from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 
 # Special action field -> hard rule key understood by HardRuleEvaluator.
@@ -27,7 +28,7 @@ def unlock_message(action: dict[str, Any]) -> str:
     return f"{msg} {text}" if text else msg
 
 
-class CombatUnlockMixin:
+class CombatUnlockMixin(CombatContextMixin):
     """Evaluates unlock rules after every turn and announces new special attacks."""
 
     async def _rule_met(self, rule: dict[str, Any]) -> bool:

@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from backend.api.routes.adventures.guardrails.base import GuardrailBase
 from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity
@@ -47,7 +48,7 @@ def _mentions(text_lower: str, ent: WorldEntity) -> bool:
     )
 
 
-class ProgressGuardMixin:
+class ProgressGuardMixin(GuardrailBase):
     """Blocks quest/award grants that depend on unreachable entities or unmet hard rules."""
 
     def _accessibility(self, event: GameEvent, entities: list[WorldEntity]) -> Accessibility:
@@ -146,12 +147,20 @@ class ProgressGuardMixin:
         entities = await self._session_entities()
         context = (event, entities, self._accessibility(event, entities))
         if event.completed_quest_ids:
-            quests = {q.get("id"): q for q in reversed(self.state.quests or [])}
+            quests = {
+                q["id"]: q
+                for q in reversed(self.state.quests or [])
+                if isinstance(q.get("id"), str)
+            }
             event.completed_quest_ids = self._validated(
                 event.completed_quest_ids, quests, ("goal", "description"), "Quest", context
             )
         if event.earned_award_keys:
-            awards = {a.get("key"): a for a in reversed(self.adventure.awards or [])}
+            awards = {
+                a["key"]: a
+                for a in reversed((self.adventure.awards if self.adventure else []) or [])
+                if isinstance(a.get("key"), str)
+            }
             event.earned_award_keys = self._validated(
                 event.earned_award_keys, awards, ("requirement", "description"), "Award", context
             )

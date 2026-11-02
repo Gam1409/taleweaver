@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.combat.setup import CombatSetupMixin
 from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 from backend.models.world_entity import WorldEntity
 
@@ -17,7 +18,7 @@ TRIGGER_FIRED_KEY = "attack_trigger_fired"
 ATTACK_ON_SIGHT = "ATTACK_ON_SIGHT"
 
 
-class CombatTriggerMixin:
+class CombatTriggerMixin(CombatSetupMixin):
     """Starts enemy-initiated fights after a turn when an NPC's attack condition is met."""
 
     def _consume_scene_entry(self) -> bool:

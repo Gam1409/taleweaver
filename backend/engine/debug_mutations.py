@@ -1,10 +1,25 @@
+from __future__ import annotations
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.session_state import SessionState
+from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 
 
-async def debug_log(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_log(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) >= 2:
         cmd = parts[1].lower()
@@ -15,25 +30,55 @@ async def debug_log(db, state, args, user=None, adventure=None, avatar=None):
             state.is_debug_enabled = False
             return "[DEBUG_LOG_OFF] Technical logging disabled."
 
+    return None
 
-async def debug_on(db, state, args, user=None, adventure=None, avatar=None):
+
+async def debug_on(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     state.is_debug_enabled = True
     return "[DEBUG_LOG_ON] Technical logging enabled. You will now see GameEvent outcomes in chat."
 
 
-async def debug_off(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_off(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     state.is_debug_enabled = False
     return "[DEBUG_LOG_OFF] Technical logging disabled."
 
 
-async def debug_npc(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_npc(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) >= 2 and parts[1].lower() == "drop_items":
         return "[TRIGGER_NPC_DROP_ITEMS]"
     return "DEBUG ERROR: Usage: /debug npc drop_items"
 
 
-async def debug_item(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_item(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) >= 3 and parts[1].lower() == "dynamic":
         cmd = parts[2].lower()
@@ -47,7 +92,14 @@ async def debug_item(db, state, args, user=None, adventure=None, avatar=None):
     return "DEBUG ERROR: Usage: /debug item dynamic [on/off]"
 
 
-async def debug_delete_item(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_delete_item(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug delete_item [ITEM_KEY]"
@@ -65,7 +117,14 @@ async def debug_delete_item(db, state, args, user=None, adventure=None, avatar=N
     return f"DEBUG: Item '{item_key}' removed from inventory."
 
 
-async def debug_heal(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_heal(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug heal [NPC_NAME] [AMOUNT?]"
@@ -100,7 +159,14 @@ async def debug_heal(db, state, args, user=None, adventure=None, avatar=None):
     return f"DEBUG: Entity '{target.name}' (ID: {target.id}) restored to {final_hp} HP."
 
 
-async def debug_unhide(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_unhide(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug unhide [ENTITY_ID|NAME|all]"
@@ -144,7 +210,14 @@ async def debug_unhide(db, state, args, user=None, adventure=None, avatar=None):
     return f"DEBUG: Entity '{found.name}' (ID: {found.id}) is now visible."
 
 
-async def debug_npc_note(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_npc_note(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ", 2)
     if len(parts) < 3:
         return "DEBUG ERROR: Usage: /debug npc_note [NPC_ID|NAME] [note text]"
@@ -178,7 +251,14 @@ async def debug_npc_note(db, state, args, user=None, adventure=None, avatar=None
     return f"DEBUG: NPC '{found.name}' notes set to: \"{note_val}\""
 
 
-async def debug_open_exit(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_open_exit(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug open_exit [EXIT_ID]"
@@ -193,17 +273,38 @@ async def debug_open_exit(db, state, args, user=None, adventure=None, avatar=Non
     return f"DEBUG: Exit '{exit_id}' is now unlocked."
 
 
-async def debug_walkthrough(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_walkthrough(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     if not state.walkthrough:
         return "DEBUG: No walkthrough available for this adventure."
     return f"[TRIGGER_WALKTHROUGH_REVEAL_FREE] --- DEBUG: WALKTHROUGH ---\n{state.walkthrough}"
 
 
-async def debug_game_over(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_game_over(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     return "[TRIGGER_GAME_OVER] Debug: Manual game over trigger."
 
 
-async def debug_gen_item(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_gen_item(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ", 1)
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug gen_item [PROMPT]"

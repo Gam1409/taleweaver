@@ -6,7 +6,7 @@ from backend.core.database import engine
 from backend.models.base import Base
 
 
-async def init_db():
+async def init_db() -> None:
     print("Initializing database...")
     async with engine.begin() as conn:
         # Create all tables

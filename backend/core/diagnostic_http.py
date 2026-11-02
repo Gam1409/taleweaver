@@ -1,19 +1,23 @@
 """Observe ASGI transport metadata without reading request or response content."""
 
+from __future__ import annotations
+
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from uuid import uuid4
 
 from fastapi import Request
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend.core.system_diagnostics import service
 
 
 class DiagnosticMiddleware:
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         started = time.perf_counter()
@@ -22,14 +26,14 @@ class DiagnosticMiddleware:
         disconnected = False
         failed = False
 
-        async def observed_receive():
+        async def observed_receive() -> Message:
             nonlocal disconnected
             message = await receive()
             if message["type"] == "http.disconnect":
                 disconnected = True
             return message
 
-        async def observed_send(message):
+        async def observed_send(message: Message) -> None:
             nonlocal status_code, byte_count
             if message["type"] == "http.response.start":
                 status_code = message["status"]
@@ -61,7 +65,7 @@ class DiagnosticMiddleware:
                 )
 
 
-async def session_diagnostic_context(request: Request):
+async def session_diagnostic_context(request: Request) -> AsyncIterator[None]:
     """Bind session identity after routing; spawned jobs inherit only safe IDs."""
     with service.context(session_id=request.path_params.get("game_id")):
         yield

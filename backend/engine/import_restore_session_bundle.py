@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.core.game_modes import normalize_vn_template
 from backend.engine.import_build_session_template import build_session_template
 from backend.engine.item_logic import normalize_equipment_keys
@@ -13,7 +15,7 @@ from backend.models.session_state import SessionState
 from backend.utils.text_utils import generate_session_id
 
 
-async def restore_session_bundle(db, payload, user, origin_id):
+async def restore_session_bundle(db: AsyncSession, payload, user, origin_id):
     data = payload
     old_adv = data["adventure"]
 

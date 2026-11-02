@@ -173,7 +173,7 @@ async def ai_suggest_fix_for_finding(
     payload: AIFixSuggestionsRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AIFixSuggestionsResponse:
     """Suggest up to 3 different fixes for an AI-detected validation finding.
 
     Fast-path on cache hit (per (template, user, finding_signature)).

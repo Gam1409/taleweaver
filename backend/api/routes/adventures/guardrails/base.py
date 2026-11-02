@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.rule_engine import EntityMovement, GameEvent, WorldEntityUpdate
 from backend.models.world_entity import WorldEntity
 
@@ -44,44 +45,17 @@ def inventory_ids_upper(inventory: list[Any] | None) -> set[str]:
     return {str(i.get("id") or "").strip().upper() for i in inventory or [] if isinstance(i, dict)}
 
 
-class GuardrailBase:
+class GuardrailBase(TurnContext):
     """Proxies the turn manager and offers helpers shared by every guardrail."""
 
     manager: GameTurnManager
 
     @property
-    def db(self):
-        return self.manager.db
-
-    @property
-    def game_id(self):
-        return self.manager.game_id
-
-    @property
-    def user(self):
-        return self.manager.user
-
-    @property
-    def state(self):
-        return self.manager.state
-
-    @property
-    def avatar(self):
-        return self.manager.avatar
-
-    @property
-    def adventure(self):
-        return self.manager.adventure
-
-    @property
-    def turn_language(self):
+    def turn_language(self) -> str | None:
         return self.manager.turn_language
 
-    def _switch_story_flags(self, *args, **kwargs):
-        return self.manager._switch_story_flags(*args, **kwargs)
-
-    async def _save_chat_message(self, *args, **kwargs):
-        return await self.manager._save_chat_message(*args, **kwargs)
+    def _switch_story_flags(self) -> dict[str, bool]:
+        return self.manager._switch_story_flags()
 
     @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any] | None:

@@ -158,14 +158,14 @@ class CreateAdventureTemplatePayload(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
@@ -378,14 +378,14 @@ class AdventureTemplateResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
@@ -447,7 +447,7 @@ class GameSessionResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
@@ -504,7 +504,7 @@ class AdventureTemplateSummaryResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
@@ -799,14 +799,14 @@ class AdventureTemplateUpdate(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v

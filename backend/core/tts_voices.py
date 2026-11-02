@@ -7,8 +7,8 @@ from typing_extensions import NotRequired
 
 class VoiceCatalogEntry(TypedDict):
     name: str
-    gender: Optional[NotRequired[str]]
-    description: Optional[NotRequired[str]]
+    gender: NotRequired[Optional[str]]
+    description: NotRequired[Optional[str]]
 
 
 GOOGLE_TTS_VOICE_CATALOG: list[VoiceCatalogEntry] = [

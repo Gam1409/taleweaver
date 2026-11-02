@@ -566,7 +566,7 @@ class AdventureLogic:
         return metadata
 
     @staticmethod
-    async def delete_adventure(db: AsyncSession, template_id: str):
+    async def delete_adventure(db: AsyncSession, template_id: str) -> None:
         """
         Deletes an adventure template and all associated content.
         Decouples game sessions so they remain playable.
@@ -693,7 +693,9 @@ class AdventureLogic:
         return result
 
 
-def _apply_discovery_visibility(ent, session_overrides, norm_overrides_by_id, eid, eid_upper):
+def _apply_discovery_visibility(
+    ent, session_overrides, norm_overrides_by_id, eid, eid_upper
+) -> None:
     if str(ent.get("item_type") or "").upper() == "CONSTRUCTABLE":
         override = session_overrides.get(eid) or norm_overrides_by_id.get(eid_upper) or {}
         if "is_hidden" not in override:

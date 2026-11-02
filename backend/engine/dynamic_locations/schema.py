@@ -1,8 +1,12 @@
 """Bounded proposals for session-local places; no executable content or model IDs."""
 
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from backend.models.session_state import SessionState
 
 KEY = "__dynamic_locations__"
 MAX_PLACES = 48
@@ -40,17 +44,17 @@ class PlaceDecision(BaseModel):
     description: str = Field(default="", max_length=1800)
 
 
-def registry(state) -> dict:
+def registry(state: SessionState) -> dict:
     raw = (state.entity_states or {}).get(KEY)
     return raw if isinstance(raw, dict) else {}
 
 
-def policy(state) -> LocationPolicy:
+def policy(state: SessionState) -> LocationPolicy:
     try:
         return LocationPolicy.model_validate(registry(state).get("policy") or {})
     except ValidationError:
         return LocationPolicy()
 
 
-def save_registry(state, data: dict) -> None:
+def save_registry(state: SessionState, data: dict) -> None:
     state.entity_states = {**(state.entity_states or {}), KEY: data}

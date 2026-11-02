@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from backend.api.routes.adventures.guardrails.base import entity_view
+from backend.api.routes.adventures.guardrails.base import GuardrailBase, entity_view
 from backend.core.prompts import INSPECT_SEARCH_INTENT_GUARD_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ _STRIP_LEADING = " \t\n\r\v\f:,-"
 _STRIP_TRAILING = " \t\n\r\v\f.,!?:;"
 
 
-class InspectGuardMixin:
+class InspectGuardMixin(GuardrailBase):
     """Blocks inspect/search on entities that exist but are out of reach."""
 
     @staticmethod
@@ -46,7 +46,7 @@ class InspectGuardMixin:
                 INSPECT_SEARCH_INTENT_GUARD_SYSTEM_PROMPT,
                 text,
                 model,
-                adventure_id=self.adventure.id,
+                adventure_id=self.adventure.id if self.adventure else self.state.template_id,
                 game_id=self.game_id,
                 operation="chat_turn",
                 phase="inspect_search_intent_guard",

@@ -7,7 +7,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from backend.api.routes.adventures.guardrails.locks import LockSpec
+from backend.api.routes.adventures.guardrails.locks import LockEngineMixin, LockSpec
+from backend.api.routes.adventures.guardrails.world_rules import WorldRulesMixin
 from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
 from backend.models.world_entity import WorldEntity
 
@@ -32,7 +33,7 @@ def _metadata_of(container: Any) -> dict[str, Any]:
     return dict(meta) if isinstance(meta, dict) else {}
 
 
-class ContainerGuardMixin:
+class ContainerGuardMixin(LockEngineMixin, WorldRulesMixin):
     """Locked containers only open when every configured requirement is met."""
 
     @staticmethod
@@ -49,7 +50,7 @@ class ContainerGuardMixin:
         container_id = (
             scene_container.id
             if scene_container is not None
-            else str(inventory_container.get("id") or "").strip()
+            else str((inventory_container or {}).get("id") or "").strip()
         )
         state_locked = (states.get(container_id) or {}).get("locked") if container_id else None
         if isinstance(state_locked, bool):

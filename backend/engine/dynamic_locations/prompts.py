@@ -5,6 +5,7 @@ import json
 from pydantic import create_model
 
 from backend.engine.dynamic_locations.schema import PlaceProposal, policy, registry
+from backend.models.session_state import SessionState
 
 INSTRUCTION = (
     "DYNAMIC LOCAL PLACES: Only when enabled, use new_local_place for an immediate, "
@@ -23,7 +24,7 @@ INSTRUCTION = (
 )
 
 
-def intent_schema(base, state):
+def intent_schema(base, state: SessionState):
     if not policy(state).enabled:
         return base
     return create_model(
@@ -33,7 +34,7 @@ def intent_schema(base, state):
     )
 
 
-def prompt_block(state) -> str:
+def prompt_block(state: SessionState) -> str:
     selected = policy(state)
     if not selected.enabled:
         return ""

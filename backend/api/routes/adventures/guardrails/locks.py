@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backend.api.routes.adventures.guardrails.base import inventory_ids_upper
+from backend.api.routes.adventures.guardrails.items import ItemIntegrityMixin
 from backend.engine.switch_service import SwitchService
 
 
@@ -36,7 +37,7 @@ class LockSpec:
     rule_failure_text: str = ""
 
 
-class LockEngineMixin:
+class LockEngineMixin(ItemIntegrityMixin):
     """Evaluates lock requirements and runs failure hooks."""
 
     def _rule_failure(self, spec: LockSpec, switch_flags: set[str]) -> str | None:

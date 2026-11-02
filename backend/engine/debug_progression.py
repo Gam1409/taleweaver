@@ -1,10 +1,26 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from datetime import datetime
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.session_state import SessionState
+from backend.models.user import User
 
-async def debug_award(db, state, args, user=None, adventure=None, avatar=None):
+
+async def debug_award(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     if adventure is None or user is None:
         return "DEBUG ERROR: Award command requires adventure and user context."
 
@@ -58,7 +74,14 @@ async def debug_award(db, state, args, user=None, adventure=None, avatar=None):
     return "\n".join(lines)
 
 
-async def debug_game_won(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_game_won(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     if state.quests:
         new_quests = deepcopy(state.quests)
         for q in new_quests:
@@ -69,7 +92,14 @@ async def debug_game_won(db, state, args, user=None, adventure=None, avatar=None
     return "[TRIGGER_GAME_COMPLETED] Debug: Manual victory trigger."
 
 
-async def debug_quest_finished(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_quest_finished(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     if not state.quests:
         return "DEBUG: No quests found in session state."
     new_quests = deepcopy(state.quests)
@@ -82,11 +112,25 @@ async def debug_quest_finished(db, state, args, user=None, adventure=None, avata
     return "DEBUG: No open quests found to finish."
 
 
-async def debug_claim_awards(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_claim_awards(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     return await debug_award(db, state, "awards", user, adventure, avatar)
 
 
-async def debug_exp(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_exp(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split(" ")
     if len(parts) < 2:
         return "DEBUG ERROR: Usage: /debug exp [AMOUNT]"

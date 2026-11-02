@@ -151,12 +151,16 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
     return result
 
 
-def _canonical(snapshot: Possessions, item_id: str) -> CanonicalInventoryItem:
+def _canonical(snapshot: Possessions, item_id: str | None) -> CanonicalInventoryItem:
+    if item_id is None:
+        raise ValueError("Item identity is required.")
     return CanonicalInventoryItem.model_validate(deepcopy(snapshot.items[item_id]))
 
 
-def _assign(destinations: dict[str, str], snapshot: Possessions, item_id: str, owner: str) -> None:
-    if item_id not in snapshot.items:
+def _assign(
+    destinations: dict[str, str], snapshot: Possessions, item_id: str | None, owner: str
+) -> None:
+    if item_id is None or item_id not in snapshot.items:
         raise ValueError("Unknown or unavailable item.")
     if item_id in destinations and destinations[item_id] != owner:
         raise ValueError("Conflicting item destinations.")
@@ -174,7 +178,7 @@ def _destinations(intent: ChatProgressionIntent, snapshot: Possessions) -> dict[
         if update.entity_id not in snapshot.npcs and update.entity_id not in snapshot.containers:
             raise ValueError("Inventory owner is not present or accessible.")
         for item in update.inventory:
-            if snapshot.owners.get(item.id) != update.entity_id:
+            if item.id is None or snapshot.owners.get(item.id) != update.entity_id:
                 _assign(result, snapshot, item.id, update.entity_id)
             elif item.id not in snapshot.items:
                 raise ValueError("Unknown inventory item.")
@@ -188,7 +192,7 @@ def _validate_player_changes(
         *(intent.removed_inventory_item_ids or []),
         *[i.id for i in intent.updated_inventory_items or []],
     ]
-    if any(snapshot.owners.get(item_id) != PLAYER for item_id in ids):
+    if any(item_id is None or snapshot.owners.get(item_id) != PLAYER for item_id in ids):
         raise ValueError("The player does not carry this item.")
     if any(item_id not in snapshot.items for item_id in intent.deleted_entities or []):
         raise ValueError("Only existing available items can be consumed or removed.")
@@ -246,7 +250,7 @@ def _hydrate(intent: ChatProgressionIntent, snapshot: Possessions) -> None:
     if any(destinations.get(item_id) == PLAYER for item_id in player_removed):
         raise ValueError("A player item cannot be removed and retained in the same proposal.")
     intent.removed_inventory_item_ids = sorted(player_removed)
-    hydrated_updates = []
+    hydrated_updates: list[InventoryItem] = []
     for item in intent.updated_inventory_items or []:
         known = _canonical(snapshot, item.id)
         # Identity is immutable here; condition annotations are applied separately.
@@ -275,7 +279,8 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         }
         for item in result.updated_inventory_items or []:
             if item.id in conditions:
-                item.condition_note = conditions[item.id]
+                field_name = "condition_note"
+                setattr(item, field_name, conditions[item.id])
         if any(
             proposed.name != item.name
             or (proposed.description is not None and proposed.description != item.description)

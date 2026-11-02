@@ -50,7 +50,7 @@ def resolve_start_datetime(
     return _configured_year_start(merged_time_config)
 
 
-def _parse_start_datetime(value):
+def _parse_start_datetime(value: object) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -59,7 +59,7 @@ def _parse_start_datetime(value):
         return None
 
 
-def _parse_start_date_and_time(start_date, start_time):
+def _parse_start_date_and_time(start_date: object, start_time: object) -> str | None:
     if not isinstance(start_date, str) or not start_date.strip():
         return None
     time_part = (
@@ -71,7 +71,7 @@ def _parse_start_date_and_time(start_date, start_time):
         return None
 
 
-def _configured_year_start(merged_time_config):
+def _configured_year_start(merged_time_config: dict[str, Any]) -> str | None:
     # Build from start_time (e.g. "14:30") + optional start_year_override.
     base_hour, base_minute = 8, 0
     configured_start = merged_time_config.get("start_time")
@@ -147,7 +147,7 @@ async def resolve_initial_scene_id(db: AsyncSession, template_id: Optional[str])
     return sorted(scene_set)[0]
 
 
-def _manifest_initial_scene(original_manifest, scene_set):
+def _manifest_initial_scene(original_manifest: object, scene_set: set[str]) -> str | None:
     if isinstance(original_manifest, dict):
         explicit_start = (
             original_manifest.get("start_scene_id")

@@ -370,7 +370,7 @@ class GameMasterLLM:
     @staticmethod
     async def _append_generation_log_async(
         adventure_id: Optional[str], log_type: str, content: str, image_url: Optional[str] = None
-    ):
+    ) -> None:
         """Append a status, thinking, or image generation log to the adventure template's generation_logs list."""
         if not adventure_id:
             return

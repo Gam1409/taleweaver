@@ -3,7 +3,7 @@
 from typing import Any
 
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
-from backend.engine.clothing.schema import REGIONS, Garment, VisualProfile, WornItem
+from backend.engine.clothing.schema import REGIONS, Garment, Region, VisualProfile, WornItem
 
 
 def _worn_items(profile: VisualProfile, items: dict[str, dict], equipment: Any) -> list[WornItem]:
@@ -20,7 +20,7 @@ def _worn_items(profile: VisualProfile, items: dict[str, dict], equipment: Any) 
     return worn
 
 
-def _covered(garment: Garment, worn: WornItem) -> set[str]:
+def _covered(garment: Garment, worn: WornItem) -> set[Region]:
     return set(garment.coverage) - set(worn.uncovered_regions)
 
 
@@ -37,16 +37,17 @@ def visible_character(
         return None
     items = owned_items(inventory, equipment=equipment)
     worn = [w for w in _worn_items(profile, items, equipment) if w.item_id in items]
-    garments = {w.item_id: garment_for_item(items[w.item_id]) for w in worn}
-    result = {
+    candidates = {w.item_id: garment_for_item(items[w.item_id]) for w in worn}
+    result: dict[str, Any] = {
         "appearance": profile.appearance.model_dump(),
         "clothing": [],
         "clothing_detail_limited": False,
     }
     # Unknown coverage cannot justify exposing the names of lower layers.
-    if any(garments[w.item_id] is None for w in worn):
+    if any(candidates[w.item_id] is None for w in worn):
         result["clothing_detail_limited"] = True
         return result
+    garments = {key: value for key, value in candidates.items() if value is not None}
     if any(not set(w.uncovered_regions).issubset(garments[w.item_id].coverage) for w in worn):
         result["clothing_detail_limited"] = True
         return result

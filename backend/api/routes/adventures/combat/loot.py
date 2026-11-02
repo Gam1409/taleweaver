@@ -9,6 +9,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.combat.context import CombatContextMixin
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def _find_loot_index(loot_items: list[dict[str, Any]], ref: str) -> int:
     return -1
 
 
-class CombatLootMixin:
+class CombatLootMixin(CombatContextMixin):
     """Loot normalization, scene drops and /loot commands."""
 
     async def _spawn_scene_item(self, item: dict[str, Any]) -> None:
@@ -148,7 +149,6 @@ class CombatLootMixin:
         return f"{dropped.get('name', 'Item')} dropped to the current scene."
 
     async def _clear_combat_state(self) -> None:
-        self.state.combat_json = None
         self.state.entity_states = {
             k: v for k, v in (self.state.entity_states or {}).items() if k != "__combat__"
         }

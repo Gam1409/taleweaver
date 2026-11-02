@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -72,7 +71,7 @@ async def generate_narration(
         )
         + prose_language_instruction(
             default_language(
-                cast(str | None, session.content_language),
+                session.content_language,
                 user.default_language,
             )
         )

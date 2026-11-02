@@ -60,10 +60,10 @@ async def update_content_language(
     if session is None or session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found.")
     manager = GameTurnManager(db, game_id, current_user)
-    if not await manager.initialize() or manager.state.session is None:
+    if not await manager.initialize() or manager.state is None or manager.state.session is None:
         raise HTTPException(status_code=404, detail="Session not found.")
     language = payload.language or default_language(
-        current_user.default_language, manager.adventure.language
+        current_user.default_language, getattr(manager.adventure, "language", None)
     )
     manager.state.session.content_language = language
     manager.turn_language = language

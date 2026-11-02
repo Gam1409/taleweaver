@@ -279,7 +279,7 @@ def _backfill_item_from_entity(item: dict, entity: WorldEntity) -> dict:
     else:
         merged["metadata_json"] = dict(metadata)
 
-    def fill(key: str, *candidates):
+    def fill(key: str, *candidates: object) -> None:
         if merged.get(key) is not None:
             return
         for candidate in candidates:
@@ -342,6 +342,7 @@ def _reconstruct_item_dict_from_entity(entity: WorldEntity) -> dict:
     from backend.engine.item_logic import get_item_slot
 
     guessed_slot = get_item_slot(entity.name, entity.item_type or "PICKABLE")
+    item_slot: str | None
     slots = entity.wearable_slots
     if isinstance(slots, list) and len(slots) > 0:
         item_slot = slots[0]
@@ -707,19 +708,19 @@ async def start_session_for_template(
     return {"game_id": new_session.id, "template_id": template_id, "avatar_id": avatar.id}
 
 
-@router.post("/{template_id}/reset")
+@router.post("/{template_id}/reset", response_model=None)
 async def reset_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     return await legacy_session_mutations.reset_sessions(db, template_id, current_user.id)
 
 
-@router.delete("/sessions/{game_id}", status_code=200)
+@router.delete("/sessions/{game_id}", status_code=200, response_model=None)
 async def delete_session(
     game_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> dict[str, Any]:
     result = await db.execute(
         select(GameSession).where(
             (GameSession.id == game_id) & (GameSession.user_id == current_user.id)
@@ -775,13 +776,13 @@ async def delete_session(
     return {"status": "deleted", "game_id": game_id}
 
 
-@router.delete("/sessions/{game_id}/messages/{message_id}", status_code=200)
+@router.delete("/sessions/{game_id}/messages/{message_id}", status_code=200, response_model=None)
 async def delete_chat_message(
     game_id: str,
     message_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deletes a single chat message from the session history in debug mode."""
     session_res = await db.execute(
         select(GameSession).where(
@@ -1222,7 +1223,7 @@ async def update_session(
     payload: GameSessionUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> GameSessionResponse:
     result = await db.execute(
         select(GameSession).where(
             (GameSession.id == game_id) & (GameSession.user_id == current_user.id)
@@ -1307,12 +1308,12 @@ async def restore_session_checkpoint(
     )
 
 
-@router.post("/sessions/import")
+@router.post("/sessions/import", response_model=None)
 async def import_session_ads(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Import a game session from a portable .ads (ZIP) file."""
     try:
         from backend.engine.archive_safety import MAX_UPLOAD_BYTES
@@ -1337,7 +1338,7 @@ async def import_session_ads(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
 
 
-def _backfill_readable_fields(merged, metadata):
+def _backfill_readable_fields(merged, metadata) -> None:
     if not merged.get("text_log_content"):
         merged["text_log_content"] = str(metadata.get("text_log_content") or "").strip()[:1000]
     if not merged.get("text_log_format"):

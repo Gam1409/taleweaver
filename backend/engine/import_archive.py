@@ -65,7 +65,9 @@ def _extract_archive_assets(zip_file, new_template_id):
     return existing_images_mapping
 
 
-async def _resolve_archive_conflict(db, owner_id, origin_id, adv_data, overwrite):
+async def _resolve_archive_conflict(
+    db: AsyncSession, owner_id, origin_id, adv_data, overwrite
+) -> None:
     from backend.engine.adventure_importer import AdventureConflictError, AdventureTemplateImporter
 
     query = select(AdventureTemplate).where(

@@ -17,6 +17,9 @@ from backend.api.routes.adventures.combat.context import (
     is_enemy_alive,
     system_event,
 )
+from backend.api.routes.adventures.combat.narration import CombatNarrationMixin
+from backend.api.routes.adventures.combat.outcomes import CombatOutcomeMixin
+from backend.api.routes.adventures.combat.special_scripts import CombatSpecialScriptMixin
 from backend.engine.combat.special_attacks import (
     can_afford,
     describe_special_result,
@@ -53,12 +56,12 @@ def special_chance(enemy: dict[str, Any]) -> float:
     return max(0.0, min(100.0, float(percent))) / 100
 
 
-class CombatEnemyMixin:
+class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarrationMixin):
     """Decides and resolves what an engaged NPC does on its turn."""
 
     def _choose_enemy_special(self, enemy: dict[str, Any]) -> dict[str, Any] | None:
         damage_allowed = bool(getattr(self.adventure, "npcs_can_damage_protagonist", True))
-        specials = [
+        specials: list[dict[str, Any]] = [
             a
             for a in enemy.get("special_actions") or []
             if npc_can_afford(a, enemy) and (damage_allowed or not a["targets_enemy"])

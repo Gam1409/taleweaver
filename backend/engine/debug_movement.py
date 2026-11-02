@@ -1,11 +1,26 @@
 """Explicit session-wide movement changes and template restriction synchronization."""
 
-from sqlalchemy import select
+from __future__ import annotations
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.session_state import SessionState
+from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 
 
-async def debug_moveable(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_moveable(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     parts = args.split()
     if len(parts) != 3 or parts[2].lower() not in {"true", "false", "1", "0", "yes", "no"}:
         return "DEBUG ERROR: Usage: /debug moveable [NPC_ID|NAME|all] [true|false]"

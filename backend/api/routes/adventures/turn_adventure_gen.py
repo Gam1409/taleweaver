@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.session_language import resolve_content_language
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.core.content_language import prose_language_instruction
 from backend.core.content_language_fallbacks import EPILOGUES
 from backend.core.llm_router import GameMasterLLM
@@ -37,7 +38,7 @@ AG_LAST_REQUEST_STATE_KEY = "__ag_last_generation_request__"
 AG_LAST_ERROR_STATE_KEY = "__ag_last_generation_error__"
 
 
-class TurnAdventureGenManager:
+class TurnAdventureGenManager(TurnContext):
     """Handles adventure generator tools, image confirmations, retry detection, and terminal epilogues."""
 
     def __init__(self, manager: GameTurnManager) -> None:
@@ -62,7 +63,7 @@ class TurnAdventureGenManager:
                 return None
 
     def get_pending_ag_image_confirmation(self) -> dict[str, Any] | None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         pending = exit_states.get(AG_IMAGE_CONFIRMATION_STATE_KEY)
         if not isinstance(pending, dict):
             return None
@@ -71,20 +72,20 @@ class TurnAdventureGenManager:
         return pending
 
     def set_pending_ag_image_confirmation(self, request: AdventureGenerationRequest) -> None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         exit_states[AG_IMAGE_CONFIRMATION_STATE_KEY] = {
             "request_id": str(uuid.uuid4()),
             "request": request.model_dump(),
         }
-        self.manager.state.exit_states = exit_states
-        flag_modified(self.manager.state, "exit_states")
+        self.state.exit_states = exit_states
+        flag_modified(self.state, "exit_states")
 
     def clear_pending_ag_image_confirmation(self) -> None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         if AG_IMAGE_CONFIRMATION_STATE_KEY in exit_states:
             exit_states.pop(AG_IMAGE_CONFIRMATION_STATE_KEY, None)
-            self.manager.state.exit_states = exit_states
-            flag_modified(self.manager.state, "exit_states")
+            self.state.exit_states = exit_states
+            flag_modified(self.state, "exit_states")
 
     async def classify_short_intent(
         self, user_msg: str, system_prompt: str, phase: str
@@ -188,13 +189,13 @@ class TurnAdventureGenManager:
         return any(re.search(p, text) for p in retry_patterns)
 
     def set_last_ag_generation_request(self, request: AdventureGenerationRequest) -> None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         exit_states[AG_LAST_REQUEST_STATE_KEY] = request.model_dump()
-        self.manager.state.exit_states = exit_states
-        flag_modified(self.manager.state, "exit_states")
+        self.state.exit_states = exit_states
+        flag_modified(self.state, "exit_states")
 
     def get_last_ag_generation_request(self) -> AdventureGenerationRequest | None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         raw = exit_states.get(AG_LAST_REQUEST_STATE_KEY)
         if not isinstance(raw, dict):
             return None
@@ -204,16 +205,16 @@ class TurnAdventureGenManager:
             return None
 
     def set_last_ag_generation_error(self, error_type: str | None) -> None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         if error_type:
             exit_states[AG_LAST_ERROR_STATE_KEY] = error_type
         else:
             exit_states.pop(AG_LAST_ERROR_STATE_KEY, None)
-        self.manager.state.exit_states = exit_states
-        flag_modified(self.manager.state, "exit_states")
+        self.state.exit_states = exit_states
+        flag_modified(self.state, "exit_states")
 
     def get_last_ag_generation_error(self) -> str | None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         value = exit_states.get(AG_LAST_ERROR_STATE_KEY)
         return value if isinstance(value, str) and value else None
 
@@ -325,18 +326,10 @@ class TurnAdventureGenManager:
             await self.manager._emit_system_message(msg, stream_callback=stream_callback)
 
     async def generate_terminal_epilogue_text(self, language: str | None = None) -> str:
-        status = (
-            self.manager.state.session.status
-            if self.manager.state and self.manager.state.session
-            else None
-        )
-        status_note = (
-            self.manager.state.session.status_note
-            if self.manager.state and self.manager.state.session
-            else None
-        )
+        status = self.state.session.status if self.state and self.state.session else None
+        status_note = self.state.session.status_note if self.state and self.state.session else None
 
-        quests = list(self.manager.state.quests or []) if self.manager.state else []
+        quests = list(self.state.quests or []) if self.state else []
         main_quests = [q for q in quests if q.get("is_main")]
         completed_main = [q for q in main_quests if q.get("status") == "completed"]
         side_quests = [q for q in quests if not q.get("is_main")]
@@ -376,8 +369,8 @@ class TurnAdventureGenManager:
                 "earned": len(earned_for_adventure),
                 "total": len(adventure_awards),
             },
-            "exp": self.manager.avatar.exp if self.manager.avatar else 0,
-            "in_game_time_minutes": self.manager.state.in_game_time if self.manager.state else 0,
+            "exp": self.avatar.exp if self.avatar else 0,
+            "in_game_time_minutes": self.state.in_game_time if self.state else 0,
         }
 
         if status == "completed":
@@ -388,7 +381,7 @@ class TurnAdventureGenManager:
             fallback = FINAL_REPORT_GAMEOVER_FALLBACK
 
         language = resolve_content_language(
-            self.manager.state, self.manager.user, self.manager.adventure, language
+            self.state, self.manager.user, self.manager.adventure, language
         )
         system_prompt += prose_language_instruction(language, "closing narration")
         if language != "English":
@@ -414,10 +407,10 @@ class TurnAdventureGenManager:
         if not await self.manager.initialize():
             raise HTTPException(status_code=404, detail="Game session not found.")
 
-        if not self.manager.state or not self.manager.state.session:
+        if not self.state or not self.state.session:
             raise HTTPException(status_code=404, detail="Session state not found.")
 
-        if self.manager.state.session.status not in {"completed", "game_over"}:
+        if self.state.session.status not in {"completed", "game_over"}:
             raise HTTPException(
                 status_code=400,
                 detail="Terminal epilogue is only available for completed or game-over sessions.",
@@ -433,7 +426,7 @@ class TurnAdventureGenManager:
         if epilogue_text:
             await self.manager._save_chat_message("assistant", epilogue_text)
 
-        self.manager._set_terminal_epilogue_sent(self.manager.state.session.status, sent=True)
+        self.manager._set_terminal_epilogue_sent(self.state.session.status, sent=True)
         await self.manager.db.commit()
 
         return {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-async def open_container(self, command):
+async def open_container(self, command) -> None:
     container_hint = command.response.replace("[TRIGGER_OPEN]", "").strip()
     if not container_hint:
         command.response = "Usage: /open <container>"
@@ -27,7 +27,7 @@ async def open_container(self, command):
                 command.response = f"{container_name} contains {len(container_inventory)} item(s)."
 
 
-async def take_all(self, command):
+async def take_all(self, command) -> None:
     container_hint = command.response.replace("[TRIGGER_CONTAINER_TAKE_ALL]", "").strip()
     if not container_hint:
         command.response = "Usage: /container_take_all <container>"
@@ -69,7 +69,7 @@ async def take_all(self, command):
                     )
 
 
-async def drop_contents(self, command):
+async def drop_contents(self, command) -> None:
     container_hint = command.response.replace("[TRIGGER_CONTAINER_DROP_SCENE]", "").strip()
     if not container_hint:
         command.response = "Usage: /container_drop_scene <container>"

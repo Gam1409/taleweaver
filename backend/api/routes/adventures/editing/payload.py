@@ -328,7 +328,7 @@ async def get_adventure_editor_assets(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AdventureTemplateDebugResponse:
     """Returns full world/editor asset data for the AdventureTemplate Editor UI (owner only)."""
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     return await _build_adventure_editor_assets(template_id, db)
@@ -339,7 +339,7 @@ async def get_adventure_debug(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AdventureTemplateDebugResponse:
     """Legacy debug endpoint (owner only)."""
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     return await _build_adventure_editor_assets(template_id, db)

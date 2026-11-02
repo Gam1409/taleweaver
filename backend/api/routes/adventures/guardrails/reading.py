@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.combat.unlocks import unlock_message
+from backend.api.routes.adventures.guardrails.base import GuardrailBase
 from backend.models.world_entity import WorldEntity
 
 
@@ -18,7 +20,7 @@ def _is_readable(item: dict[str, Any], meta: dict[str, Any]) -> bool:
     )
 
 
-class ReadingMixin:
+class ReadingMixin(GuardrailBase):
     """Runs read hooks and unlocks special actions tied to reading or finding items."""
 
     async def _execute_read_payload(
@@ -31,7 +33,8 @@ class ReadingMixin:
         await self._check_special_action_unlocks("READ_ITEM", item_id)
 
     async def _read_from_inventory(self, target_lower: str) -> bool:
-        for item in self.avatar.inventory or []:
+        inventory: Sequence[object] = self.avatar.inventory or []
+        for item in inventory:
             if not isinstance(item, dict):
                 continue
             if target_lower not in (
@@ -39,11 +42,12 @@ class ReadingMixin:
                 (item.get("id") or "").lower(),
             ):
                 continue
-            meta = item.get("metadata_json") if isinstance(item.get("metadata_json"), dict) else {}
+            raw_meta = item.get("metadata_json")
+            meta = raw_meta if isinstance(raw_meta, dict) else {}
             if _is_readable(item, meta):
                 script = item.get("on_read_script") or meta.get("on_read_script")
                 text = item.get("on_read_text") or meta.get("on_read_text")
-                await self._execute_read_payload(item.get("id"), script, text)
+                await self._execute_read_payload(str(item.get("id") or ""), script, text)
                 return True
         return False
 

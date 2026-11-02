@@ -2,6 +2,7 @@
 
 from fastapi import HTTPException
 from sqlalchemy import inspect, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.comfyui_config import prompt_rules
@@ -20,7 +21,7 @@ from backend.utils.path_security import (
 )
 
 
-async def _target(db, adventure, payload):
+async def _target(db: AsyncSession, adventure, payload):
     if payload.target_type == "cover":
         return adventure, "image_url"
     if payload.target_type == "protagonist":
@@ -55,7 +56,7 @@ def _reference_options(t2i: dict, target, field: str, template_id: str, advanced
     return {**t2i, "reference_image_url": url}
 
 
-async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
+async def regenerate_owned_visual(db: AsyncSession, adventure, user, payload) -> dict:
     from backend.api.routes.adventures.assets import _build_visual_prompt
 
     target, field = await _target(db, adventure, payload)

@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 
-def _annotate_narrative_fields(record, fields, replace_ids_in_text):
+def _annotate_narrative_fields(record, fields, replace_ids_in_text) -> None:
     if not isinstance(record, dict):
         return
     for field in fields:
@@ -12,7 +12,7 @@ def _annotate_narrative_fields(record, fields, replace_ids_in_text):
             record[field] = replace_ids_in_text(record[field])
 
 
-def _normalize_sequence_requirements(sequence):
+def _normalize_sequence_requirements(sequence) -> None:
     if not isinstance(sequence, dict):
         return
     for field in ("required_item_id", "required_scene_id", "required_defeated_npc_id"):
@@ -165,7 +165,7 @@ def _parse_sequence_block(i, block):
     }
 
 
-def _annotate_world_entity_text(manifest_dict, objects, replace_ids_in_text):
+def _annotate_world_entity_text(manifest_dict, objects, replace_ids_in_text) -> None:
     for scene in manifest_dict.get("scenes") or []:
         _annotate_narrative_fields(scene, ("description",), replace_ids_in_text)
 

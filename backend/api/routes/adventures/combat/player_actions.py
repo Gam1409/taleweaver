@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import backend.api.routes.adventures.gameplay_logic as gl
@@ -11,7 +12,13 @@ from backend.api.routes.adventures.combat.attacks import (
     attack_event_data,
     attack_log_text,
 )
-from backend.api.routes.adventures.combat.context import engaged_enemies, find_enemy, is_enemy_alive
+from backend.api.routes.adventures.combat.combatants import CombatCombatantMixin
+from backend.api.routes.adventures.combat.consumables import CombatConsumableMixin
+from backend.api.routes.adventures.combat.context import (
+    engaged_enemies,
+    find_enemy,
+    is_enemy_alive,
+)
 from backend.engine.combat.initiative import PLAYER_ID
 from backend.engine.combat.special_attacks import (
     STAT_LABELS,
@@ -60,7 +67,7 @@ def action_error(text: str) -> dict[str, Any]:
     return {"error": text}
 
 
-class CombatPlayerMixin:
+class CombatPlayerMixin(CombatCombatantMixin, CombatConsumableMixin):
     """Resolves the protagonist's chosen action. Handlers return a result or an error dict."""
 
     def _resolve_target(self, combat: dict[str, Any], hint: str) -> dict[str, Any] | None:
@@ -225,7 +232,9 @@ class CombatPlayerMixin:
         text = f"Run check failed ({player_roll} vs {best_roll}). {best_name} keeps you in combat."
         return action_result(text, "run", data)
 
-    def _player_action_handler(self, verb: str | None):
+    def _player_action_handler(
+        self, verb: str | None
+    ) -> Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]] | None:
         handlers = {
             "attack": self._player_attack,
             "special": self._player_special,

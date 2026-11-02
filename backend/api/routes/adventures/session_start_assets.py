@@ -1,14 +1,19 @@
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
 
 
-async def initialize_session_assets(db, template_id, new_session, avatar, adventure):
+async def initialize_session_assets(
+    db: AsyncSession, template_id, new_session: GameSession, avatar: Avatar, adventure
+):
     from .sessions import _copy_data_asset_to_session
 
     asset_copy_cache: dict[str, str] = {}

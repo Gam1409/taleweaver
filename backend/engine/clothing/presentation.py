@@ -16,6 +16,8 @@ def player_clothing(avatar: Any, manifest: Any) -> dict | None:
     inventory = getattr(avatar, "inventory", None)
     equipment = getattr(avatar, "equipment", None)
     visible = visible_character(raw, inventory, detailed=detailed, equipment=equipment)
+    if visible is None:
+        return None
     visible_ids = {item["item_id"] for item in visible["clothing"]}
     items = owned_items(inventory, equipment=equipment)
     worn_ids = {item.item_id for item in profile.worn}
@@ -28,7 +30,7 @@ def player_clothing(avatar: Any, manifest: Any) -> dict | None:
     for identifier in sorted(worn_ids):
         item = items.get(identifier)
         garment = garment_for_item(item) if item else None
-        if garment is None or (garment.underwear and not (detailed and adult)):
+        if item is None or garment is None or (garment.underwear and not (detailed and adult)):
             continue
         if not detailed and identifier not in visible_ids:
             continue

@@ -5,6 +5,7 @@ import logging
 from uuid import uuid4
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database, prompts
 from backend.core.diagnostic_operations import diagnostic_job
@@ -33,7 +34,7 @@ def status(session_id: str, scene_id: str, image: str | None) -> str:
     return "generating" if key in _tasks else _results.get(key, "missing")
 
 
-async def _load(db, session_id, scene_id, user_id):
+async def _load(db: AsyncSession, session_id, scene_id, user_id):
     state = await db.scalar(
         select(SessionState)
         .join(GameSession)
@@ -139,7 +140,7 @@ async def _save_image(
 
 
 @diagnostic_job("scene_background")
-async def _run(session_id, scene_id, user_id):
+async def _run(session_id, scene_id, user_id) -> None:
     key = (session_id, scene_id)
     try:
         async with _capacity:
@@ -157,20 +158,20 @@ async def _run(session_id, scene_id, user_id):
             _results.pop(next(iter(_results)))
 
 
-def schedule(session_id, scene_id, user_id):
+def schedule(session_id, scene_id, user_id) -> None:
     key = (session_id, scene_id)
     if key not in _tasks:
         _tasks[key] = asyncio.create_task(_run(session_id, scene_id, user_id))
 
 
-def schedule_images(state, user_id, ids):
+def schedule_images(state: SessionState, user_id, ids) -> None:
     if policy(state).generate_images:
         for scene_id in ids:
             if scene_id in registry(state).get("places", {}):
                 schedule(state.session_id, scene_id, user_id)
 
 
-async def shutdown():
+async def shutdown() -> None:
     tasks = list(_tasks.values())
     for task in tasks:
         task.cancel()

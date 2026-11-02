@@ -2,15 +2,23 @@ import logging
 from copy import deepcopy
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
 
 
 async def clone_template_world(
-    db, template_id, new_session, avatar, asset_copy_cache, entity_images
-):
+    db: AsyncSession,
+    template_id,
+    new_session: GameSession,
+    avatar: Avatar,
+    asset_copy_cache,
+    entity_images,
+) -> None:
     from .sessions import _copy_data_asset_to_session
 
     # --- DEEP CLONE WORLD DATA ---
@@ -81,9 +89,10 @@ async def clone_template_world(
         if ent.current_scene_id != "INVENTORY":
             is_in_inventory = False
         elif avatar and avatar.inventory:
+            inventory: list[object] = list(avatar.inventory)
             avatar_inv_ids = {
                 (i if isinstance(i, str) else (i.get("id") if isinstance(i, dict) else None))
-                for i in avatar.inventory
+                for i in inventory
             }
             if ent.id not in avatar_inv_ids:
                 is_in_npc = any(

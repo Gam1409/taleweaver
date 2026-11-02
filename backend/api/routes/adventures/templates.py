@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Optional
+from typing import Any, Literal, Optional, TypedDict
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 async def suggest_story_idea(
     payload: StoryIdeaSuggestionRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> StoryIdeaSuggestionResponse:
     """Generates or improves an adventure title/story idea using the configured small model."""
 
     selected_tone = payload.selected_tone or {}
@@ -113,6 +113,23 @@ async def suggest_story_idea(
     )
 
 
+class _SurpriseArchetype(TypedDict, total=False):
+    title: str
+    story_idea: str
+    tone_candidates: list[str]
+    style_candidates: list[str]
+    rule_enforcement_mode: Literal["rpg", "story", "chat", "vn"]
+    time_system: Literal["calendar", "units"]
+    day_label: str
+    initial_day: int
+    start_time: str
+    time_format: Literal["24h", "12h"]
+    pacing_minutes: int
+    unit_name: str
+    initial_units: int
+    units_per_turn: int
+
+
 def _generate_fallback_surprise_preset(
     available_tones: list[str],
     available_styles: list[str],
@@ -120,7 +137,7 @@ def _generate_fallback_surprise_preset(
 ) -> GeneratorSurprisePresetResponse:
     import random
 
-    archetypes = [
+    archetypes: list[_SurpriseArchetype] = [
         {
             "title": "Orbital Void: Protocol Omega",
             "story_idea": (
@@ -225,7 +242,7 @@ def _generate_fallback_surprise_preset(
 async def generate_surprise_preset(
     payload: Optional[GeneratorSurprisePresetRequest] = None,
     current_user: User = Depends(get_current_user),
-):
+) -> GeneratorSurprisePresetResponse:
     """
     Generates a coherent, creative, and completely randomized adventure preset
     using the world-generation LLM (model_category="generator").
@@ -280,7 +297,7 @@ async def generate_surprise_preset(
     model = gm.model
 
     try:
-        preset = await gm.aexecute_complex_task(
+        preset: GeneratorSurprisePresetResponse = await gm.aexecute_complex_task(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_model=GeneratorSurprisePresetResponse,
@@ -390,7 +407,7 @@ async def generate_template_field(
     payload: TemplateFieldGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TemplateFieldGenerationResponse:
     """Generates a template field using the configured small/simple model, given the other fields as context."""
     # 1. Fetch template and check ownership
     result = await db.execute(
@@ -533,12 +550,12 @@ async def list_templates(
     return response
 
 
-@router.post("/templates/update-all")
-@router.post("/update-all")
+@router.post("/templates/update-all", response_model=None)
+@router.post("/update-all", response_model=None)
 async def update_all_adventure_templates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Updates all adventure templates for the user that have newer versions in /adventures."""
     from backend.engine.adventure_updates import update_all_adventures
 
@@ -552,13 +569,13 @@ async def update_all_adventure_templates(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/templates/{template_id}/update")
-@router.post("/{template_id}/update")
+@router.post("/templates/{template_id}/update", response_model=None)
+@router.post("/{template_id}/update", response_model=None)
 async def update_adventure_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Updates an individual adventure template from its matching file in /adventures."""
     from backend.engine.adventure_updates import update_single_adventure
 
@@ -575,13 +592,13 @@ async def update_adventure_template(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/templates/{template_id}/migrate")
-@router.post("/{template_id}/migrate")
+@router.post("/templates/{template_id}/migrate", response_model=None)
+@router.post("/{template_id}/migrate", response_model=None)
 async def migrate_adventure_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Migrates a legacy adventure template to the current sequence-supported format."""
     from backend.engine.adventure_updates import migrate_single_adventure
 
@@ -603,7 +620,7 @@ async def get_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the details of a single adventure by its ID."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -636,13 +653,13 @@ async def get_adventure(
     return response_data
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, response_model=None)
 async def create_adventure(
     payload: CreateAdventureTemplatePayload,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Creates a new adventure template, initializes the protagonist avatar and first game session,
     and starts the background world generation task.
@@ -669,12 +686,12 @@ async def create_adventure(
     }
 
 
-@router.post("/{template_id}/reset")
+@router.post("/{template_id}/reset", response_model=None)
 async def reset_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Rebuilds the template world data from original_manifest, preserving existing image URLs."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -749,7 +766,7 @@ async def update_adventure(
     payload: AdventureTemplateUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Partially updates an adventure template's metadata, narrative fields, or configuration."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -797,12 +814,12 @@ async def update_adventure(
     return response_data
 
 
-@router.get("/{template_id}/status")
+@router.get("/{template_id}/status", response_model=None)
 async def get_adventure_status(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
 
@@ -892,12 +909,12 @@ async def get_adventure_status(
     }
 
 
-@router.get("/{template_id}/state")
+@router.get("/{template_id}/state", response_model=None)
 async def get_adventure_state(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the current runtime state for the latest session of this template for the user."""
     state = await AdventureLogic.resolve_session_state(db, template_id, user_id=current_user.id)
     if not state:
@@ -914,13 +931,13 @@ async def get_adventure_state(
     }
 
 
-@router.patch("/{template_id}/state")
+@router.patch("/{template_id}/state", response_model=None)
 async def patch_adventure_state(
     template_id: str,
     payload: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Patch mutable fields on the active session state (e.g. scene_id)."""
     state = await AdventureLogic.resolve_session_state(db, template_id, user_id=current_user.id)
     if not state:
@@ -946,12 +963,12 @@ async def patch_adventure_state(
     }
 
 
-@router.post("/{template_id}/pause")
+@router.post("/{template_id}/pause", response_model=None)
 async def pause_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Pause the most recent session for this user/template."""
     res = await db.execute(
         select(GameSession)
@@ -967,12 +984,12 @@ async def pause_adventure(
     return {"status": "paused"}
 
 
-@router.post("/{template_id}/resume")
+@router.post("/{template_id}/resume", response_model=None)
 async def resume_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Resume a paused session for this user/template."""
     res = await db.execute(
         select(GameSession)
@@ -988,12 +1005,12 @@ async def resume_adventure(
     return {"status": "active"}
 
 
-@router.post("/{template_id}/cancel")
+@router.post("/{template_id}/cancel", response_model=None)
 async def cancel_adventure_generation(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Signals a background generation task to stop by updating the template status."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -1024,12 +1041,12 @@ async def cancel_adventure_generation(
     return {"status": "Cancelled"}
 
 
-@router.delete("/{template_id}", status_code=200)
+@router.delete("/{template_id}", status_code=200, response_model=None)
 async def delete_adventure(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Delete an adventure template and all associated scenes, entities, maps, etc."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -1044,12 +1061,12 @@ async def delete_adventure(
     return {"status": "deleted", "template_id": template_id}
 
 
-@router.get("/{template_id}/export/manifest")
+@router.get("/{template_id}/export/manifest", response_model=None)
 async def export_adventure_manifest(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Exports the raw/original manifest stored in the template with minor backfills if needed."""
     result = await db.execute(
         select(AdventureTemplate).where(
@@ -1082,12 +1099,12 @@ async def export_adventure_manifest(
     return manifest
 
 
-@router.get("/{template_id}/export/adv")
+@router.get("/{template_id}/export/adv", response_model=None)
 async def export_adventure_adv(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Exports the adventure as a pure .adv JSON manifest."""
     from backend.engine.adventure_exporter import AdventureExporter
 
@@ -1101,12 +1118,12 @@ async def export_adventure_adv(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/{template_id}/export/adz")
+@router.get("/{template_id}/export/adz", response_model=None)
 async def export_adventure_adz(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Exports the adventure as a portable .adz (ZIP) bundle including assets."""
     import io
 
@@ -1127,12 +1144,12 @@ async def export_adventure_adz(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/{template_id}/export/session")
+@router.get("/{template_id}/export/session", response_model=None)
 async def export_adventure_session(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Exports a minimal session payload for the template (useful for import/preview)."""
     # Find template-level avatar if present
     av_res = await db.execute(
@@ -1160,12 +1177,12 @@ async def export_adventure_session(
     return {"avatar": avatar_payload}
 
 
-@router.get("/{template_id}/generation-logs")
+@router.get("/{template_id}/generation-logs", response_model=None)
 async def get_adventure_generation_logs(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Retrieves the live detailed generation logs (history) for an adventure template."""
     result = await db.execute(
         select(AdventureTemplate).where(

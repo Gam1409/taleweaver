@@ -1,20 +1,25 @@
 """Black Forest Labs submission and polling."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
 from backend.core.config import settings
 from backend.engine.bfl_payloads import build_bfl_payload
 
+if TYPE_CHECKING:
+    from backend.engine.media_engine import MediaEngine
+
 logger = logging.getLogger(__name__)
 
 
 async def _generate_image_black_forest_labs_direct(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str,
     api_key: str,
@@ -52,7 +57,9 @@ async def _generate_image_black_forest_labs_direct(
     return await _poll_bfl_result(engine, polling_url, api_key, target_dir, filename)
 
 
-async def _poll_bfl_result(engine, polling_url, api_key, target_dir, filename):
+async def _poll_bfl_result(
+    engine: type[MediaEngine], polling_url: str, api_key: str, target_dir: str, filename: str | None
+) -> str | None:
     poll_deadline = time.monotonic() + 600.0
     while time.monotonic() < poll_deadline:
         poll_response = await asyncio.to_thread(

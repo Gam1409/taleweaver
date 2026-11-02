@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity, WorldExit
 
 
-class SwitchInteractions:
+class SwitchInteractions(TurnContext):
     @staticmethod
     def _is_switch_entity(entity: WorldEntity | dict[str, Any] | None) -> bool:
         if not entity:
@@ -113,7 +115,8 @@ class SwitchInteractions:
 
     def _avatar_inventory_ids(self) -> set[str]:
         ids: set[str] = set()
-        for item in self.avatar.inventory or []:
+        inventory: Sequence[object] = self.avatar.inventory or []
+        for item in inventory:
             if not isinstance(item, dict):
                 continue
             raw_id = str(item.get("id") or "").strip().upper()
@@ -199,19 +202,18 @@ class SwitchInteractions:
         )
         script_messages = await self.manager._apply_script_changeset(script_context.changeset)
 
-        narration = config.get("narration") if isinstance(config.get("narration"), dict) else {}
-        state_change_notes = (
-            narration.get("on_state_change")
-            if isinstance(narration.get("on_state_change"), dict)
-            else {}
-        )
+        raw_narration = config.get("narration")
+        narration = raw_narration if isinstance(raw_narration, dict) else {}
+        raw_notes = narration.get("on_state_change")
+        state_change_notes = raw_notes if isinstance(raw_notes, dict) else {}
         state_note = str(state_change_notes.get(target_state) or "").strip()
         trans_success_msg = (
             str(transition.get("success_message") or "").strip() if transition else ""
         )
 
+        outcomes = config.get("outcomes")
         outcome_notes = await self._apply_switch_outcomes(
-            config.get("outcomes") if isinstance(config.get("outcomes"), list) else [], target_state
+            outcomes if isinstance(outcomes, list) else [], target_state
         )
         return self._switch_result_message(
             switch_entity.name,
@@ -223,7 +225,7 @@ class SwitchInteractions:
         )
 
     @staticmethod
-    def _switch_match_token(ent, hint):
+    def _switch_match_token(ent: WorldEntity, hint: str) -> str:
         id_token = str(ent.id or "").strip().lower()
         name_token = str(ent.name or "").strip().lower()
         token = ""
@@ -238,7 +240,7 @@ class SwitchInteractions:
 
         return token
 
-    async def _apply_switch_effect(self, effect):
+    async def _apply_switch_effect(self, effect: object) -> list[str]:
         messages = []
         if not isinstance(effect, dict):
             return []
@@ -276,7 +278,9 @@ class SwitchInteractions:
         return messages
 
     @staticmethod
-    def _validate_switch_states(config, target_state, switch_name):
+    def _validate_switch_states(
+        config: dict[str, Any], target_state: str, switch_name: str
+    ) -> tuple[list[str], str | None]:
         states = config.get("states")
         if not isinstance(states, list) or len(states) < 2:
             return [], f"{switch_name} has no valid switch configuration."
@@ -290,8 +294,13 @@ class SwitchInteractions:
 
     @staticmethod
     def _switch_result_message(
-        switch_name, target_state, trans_success_msg, state_note, outcome_notes, script_messages
-    ):
+        switch_name: str,
+        target_state: str,
+        trans_success_msg: str,
+        state_note: str,
+        outcome_notes: list[str],
+        script_messages: list[str],
+    ) -> str:
         message = f"{switch_name} set to {target_state}."
         if trans_success_msg:
             message = f"{message} {trans_success_msg}"

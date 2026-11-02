@@ -1,11 +1,16 @@
 """Static asset selection and procedural placeholder generation."""
 
+from __future__ import annotations
+
 import logging
 import os
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from backend.core.config import settings
+
+if TYPE_CHECKING:
+    from backend.engine.media_engine import MediaEngine
 from backend.utils.async_files import run_file_operation
 from backend.utils.image_generator import (
     ColorTheme,
@@ -17,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 async def generate_placeholder(
-    engine,
+    engine: type[MediaEngine],
     adventure_id: str,
     entity_id: str,
     target_dir: str,
@@ -103,7 +108,7 @@ async def generate_placeholder(
         )
 
 
-def _placeholder_color_theme(theme):
+def _placeholder_color_theme(theme: str | None) -> ColorTheme:
     if not theme:
         return ColorTheme.COLORFUL
     try:

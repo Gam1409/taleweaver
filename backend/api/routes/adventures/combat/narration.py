@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import backend.api.routes.adventures.gameplay_logic as gl
+from backend.api.routes.adventures.combat.context import CombatContextMixin
 from backend.core.content_language import prose_language_instruction
 from backend.core.prompts import (
     COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT,
@@ -30,7 +31,7 @@ def _parse_json_candidate(text: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-class CombatNarrationMixin:
+class CombatNarrationMixin(CombatContextMixin):
     """Aftermath narration and the occasional dramatic special event."""
 
     def _complex_llm(self) -> tuple[Any, str] | None:
@@ -143,7 +144,7 @@ class CombatNarrationMixin:
 
         data = self._parse_json_object(raw) if isinstance(raw, str) else None
         mode = str((data or {}).get("mode") or "").strip().lower()
-        if mode not in {"story", "special_attack"}:
+        if data is None or mode not in {"story", "special_attack"}:
             logger.warning("[Turn %s] Special-event LLM returned unusable payload", self.game_id)
             return None
         text = str(data.get("text") or "").strip()

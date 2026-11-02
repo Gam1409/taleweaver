@@ -1,18 +1,23 @@
 """Image prompt preparation, provider routing, and provider-specific fallback policy."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
+
+if TYPE_CHECKING:
+    from backend.engine.media_engine import MediaEngine
 from backend.engine.visual_progress import report
 
 logger = logging.getLogger(__name__)
 
 
 async def generate_image(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str | None,
     api_key: Optional[str],
@@ -34,6 +39,7 @@ async def generate_image(
     if not prompt or (not model and provider_key != "comfyui"):
         raise ValueError("Missing prompt or model for image generation.")
 
+    model = model or ""
     prompt = _prepare_prompt(engine, prompt, provider_key, provider_options, style_instruction)
 
     from backend.engine.scene_illustrations.plan_artifact import verify_media
@@ -109,8 +115,15 @@ async def generate_image(
 
 
 async def _generate_with_provider(
-    engine, prompt, model, api_key, provider_key, target_dir, filename, provider_options
-):
+    engine: type[MediaEngine],
+    prompt: str,
+    model: str,
+    api_key: str | None,
+    provider_key: str,
+    target_dir: str,
+    filename: str | None,
+    provider_options: dict[str, Any],
+) -> str | None:
     if provider_key == "comfyui":
         from backend.engine.comfyui_images import generate_comfy_image
 
@@ -127,6 +140,8 @@ async def _generate_with_provider(
         )
 
     if provider_key == "black_forest_labs":
+        if not api_key:
+            raise ValueError("Missing API key for image generation provider.")
         return await engine._generate_image_black_forest_labs_direct(
             prompt=prompt,
             model=model,
@@ -166,8 +181,15 @@ async def _generate_with_provider(
 
 
 async def _generate_with_litellm(
-    engine, prompt, model, api_key, provider_key, target_dir, filename, provider_options
-):
+    engine: type[MediaEngine],
+    prompt: str,
+    model: str,
+    api_key: str | None,
+    provider_key: str,
+    target_dir: str,
+    filename: str | None,
+    provider_options: dict[str, Any],
+) -> str | None:
     from backend.engine.media_engine import _safe_prompt_summary
 
     kwargs: dict[str, Any] = {
@@ -247,7 +269,13 @@ async def _generate_with_litellm(
         return None
 
 
-def _prepare_prompt(engine, prompt, provider_key, provider_options, style_instruction):
+def _prepare_prompt(
+    engine: type[MediaEngine],
+    prompt: str,
+    provider_key: str,
+    provider_options: dict[str, Any] | None,
+    style_instruction: str | None,
+) -> str:
     from backend.engine.media_engine import _safe_prompt_summary
 
     # Inject style instruction if provided
@@ -268,7 +296,7 @@ def _prepare_prompt(engine, prompt, provider_key, provider_options, style_instru
     return prompt
 
 
-def _validate_ollama_model(provider_key, model, prompt):
+def _validate_ollama_model(provider_key: str, model: str, prompt: str) -> None:
     from backend.engine.media_engine import _safe_prompt_summary
 
     if provider_key == "ollama":
@@ -290,7 +318,9 @@ def _validate_ollama_model(provider_key, model, prompt):
             )
 
 
-def _record_prompt_details(provider_options, provider_key, model, prompt):
+def _record_prompt_details(
+    provider_options: dict[str, Any] | None, provider_key: str, model: str, prompt: str
+) -> None:
     if provider_key != "comfyui":
         report("submitting")
     details = (provider_options or {}).get("_generation_details")

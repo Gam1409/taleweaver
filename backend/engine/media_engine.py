@@ -273,19 +273,19 @@ class MediaEngine:
         )
 
     @staticmethod
-    async def cleanup_adventure_assets(adventure_id: str):
+    async def cleanup_adventure_assets(adventure_id: str) -> None:
         from backend.engine.media_file_operations import cleanup_adventure_assets
 
         return await run_file_operation(cleanup_adventure_assets, adventure_id)
 
     @staticmethod
-    async def _generate_thumbnail(filepath: str, max_size: int = 480):
+    async def _generate_thumbnail(filepath: str, max_size: int = 480) -> str | None:
         from backend.engine.media_file_operations import _generate_thumbnail
 
         return await run_file_operation(_generate_thumbnail, filepath, max_size)
 
     @staticmethod
-    async def ensure_thumbnails(adventure_id: str):
+    async def ensure_thumbnails(adventure_id: str) -> None:
         """Scans the library for an adventure and ensures all images have thumbnails."""
         target_dir = _safe_data_path("adventures", "library", adventure_id)
         paths = await run_file_operation(list_thumbnail_sources, target_dir)

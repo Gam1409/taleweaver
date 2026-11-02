@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 from typing import Any
 
+from backend.api.routes.adventures.combat.combatants import CombatCombatantMixin
 from backend.api.routes.adventures.combat.context import system_event
 from backend.engine.combat.initiative import PLAYER_ID
 
 logger = logging.getLogger(__name__)
 
 
-class CombatSpecialScriptMixin:
+class CombatSpecialScriptMixin(CombatCombatantMixin):
     """Runs ``on_success_*`` / ``on_failure_*`` hooks after a special attack resolves."""
 
     async def _raw_special(self, actor_id: str, action_id: str) -> dict[str, Any]:
@@ -73,6 +75,8 @@ class CombatSpecialScriptMixin:
             await self._save_chat_message("system", msg)
         return messages
 
-    async def _special_script_events(self, combat: dict[str, Any], result: dict[str, Any]):
+    async def _special_script_events(
+        self, combat: dict[str, Any], result: dict[str, Any]
+    ) -> AsyncGenerator[str, None]:
         for msg in await self._run_special_scripts(combat, result):
             yield system_event(msg)

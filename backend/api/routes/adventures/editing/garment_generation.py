@@ -36,7 +36,7 @@ async def prepare_clothing(
     payload: GarmentPreparationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Garment | None:
     adventure = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     if {"category", "layer", "coverage", "opaque"}.issubset(payload.clothing):
         return Garment.model_validate(payload.clothing)

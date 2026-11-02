@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -132,7 +132,7 @@ async def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     client_ip = _client_ip(request)
     if login_throttle.is_blocked(client_ip, form_data.username):
         logger.warning("Login throttled for username %r from %s", form_data.username, client_ip)
@@ -163,7 +163,7 @@ async def reset_password_with_recovery_code(
     payload: RecoveryCodeResetRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Set a new password using one of the user's one-time recovery codes."""
     client_ip = _client_ip(request)
     if recovery_throttle.is_blocked(client_ip, payload.username):
@@ -191,7 +191,7 @@ async def reset_password_with_token(
     payload: ResetTokenRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Set a new password using an admin-issued one-time reset link."""
     client_ip = _client_ip(request)
     if recovery_throttle.is_blocked(client_ip, "reset-token"):
@@ -216,7 +216,7 @@ async def reset_password_with_token(
 async def read_users_me(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     from backend.engine.adventure_importer import AdventureTemplateImporter
 
     # Import default adventures on first login.
@@ -242,12 +242,12 @@ async def read_users_me(
     return profile
 
 
-@router.post("/auth/setup-root")
+@router.post("/auth/setup-root", response_model=None)
 async def setup_root_admin(
     http_request: Request,
     request: SetupRootRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Bootstrap the first root admin.
 
     This endpoint is **only** reachable from loopback addresses unless the
@@ -290,7 +290,7 @@ async def setup_root_admin(
 
 
 @router.get("/auth/bootstrap-status", response_model=BootstrapStatusResponse)
-async def get_bootstrap_status(db: AsyncSession = Depends(get_db)):
+async def get_bootstrap_status(db: AsyncSession = Depends(get_db)) -> BootstrapStatusResponse:
     """Public bootstrap status used by frontend to choose setup vs login."""
     admin_result = await db.execute(select(User).filter(User.role == "admin").limit(1))
     user_result = await db.execute(select(User.id).limit(1))

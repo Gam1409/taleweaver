@@ -143,13 +143,13 @@ class RegenerateVisualRequest(BaseModel):
     use_current_image: bool = False
 
 
-@router.post("/regenerate")
+@router.post("/regenerate", response_model=None)
 async def regenerate_visual(
     template_id: str,
     payload: RegenerateVisualRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Regenerate a specific owned visual, preserving the old image on failure."""
     from backend.engine.image_profiles import image_timeout
     from backend.engine.story_visual_presets import story_t2i
@@ -183,7 +183,7 @@ async def suggest_prompt(
     payload: SuggestPromptRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> SuggestPromptResponse:
     """Generate an AI prompt suggestion based on the asset's description."""
     from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
@@ -251,7 +251,7 @@ async def suggest_prompt(
     return SuggestPromptResponse(suggested_prompt=suggested)
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=None)
 async def upload_visual(
     template_id: str,
     target_type: Literal["cover", "scene", "npc", "object", "protagonist"] = Form(...),
@@ -259,7 +259,7 @@ async def upload_visual(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually upload a visual asset."""
     if sanitize_path_component(template_id) != template_id:
         raise HTTPException(status_code=400, detail="Invalid template ID format.")

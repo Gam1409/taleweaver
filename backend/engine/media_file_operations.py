@@ -51,7 +51,7 @@ def _copy_static_svg_placeholder(
     return f"/data/{rel_path}"
 
 
-def cleanup_adventure_assets(adventure_id: str):
+def cleanup_adventure_assets(adventure_id: str) -> None:
     """Removes all generated assets for an adventure from disk."""
     from backend.engine.media_engine import (
         _safe_data_path,
@@ -66,7 +66,7 @@ def cleanup_adventure_assets(adventure_id: str):
             logger.error("Failed to cleanup assets for adventure %s: %s", adventure_id, e)
 
 
-def _generate_thumbnail(filepath: str, max_size: int = 480):
+def _generate_thumbnail(filepath: str, max_size: int = 480) -> str | None:
     """Creates a thumbnail for the given image file if it doesn't exist."""
     from backend.engine.media_engine import (
         _ensure_within_data_dir,
@@ -96,7 +96,7 @@ def _generate_thumbnail(filepath: str, max_size: int = 480):
             shutil.copy2(safe_filepath, thumb_path)
             return thumb_path
 
-        def _resize():
+        def _resize() -> str:
             with Image.open(safe_filepath) as img:
                 img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
                 img_to_save = (
@@ -156,7 +156,7 @@ def decode_image_payload(payload: str) -> bytes:
     return base64.b64decode(payload)
 
 
-def persist_image_bytes(filepath: str, content: bytes, image_format: str, quality: int):
+def persist_image_bytes(filepath: str, content: bytes, image_format: str, quality: int) -> None:
     from backend.engine.media_engine import _write_binary_file
 
     if image_format.lower() != "jpeg":

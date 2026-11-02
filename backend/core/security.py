@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class EncryptionUtil:
-    def __init__(self):
+    def __init__(self) -> None:
         key = settings.ENCRYPTION_KEY
         if not key or not str(key).strip():
             raise RuntimeError(

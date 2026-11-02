@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 
+from backend.api.routes.adventures.turn_context import TurnContext
+from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
 
 
-class TurnEventInventoryHooks:
+class TurnEventInventoryHooks(TurnContext):
     """Apply inventory hooks outcomes in the turn transaction."""
 
-    async def _apply_inventory_hooks(self, event, states, system_messages):
+    async def _apply_inventory_hooks(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str]
+    ) -> bool:
         state_dirty = False
         state_dirty = await self._apply_pickup_hooks(event, states, system_messages)
 
@@ -20,7 +25,12 @@ class TurnEventInventoryHooks:
 
         return state_dirty
 
-    async def _apply_pickup_hooks(self, event, states, system_messages):
+    async def _apply_pickup_hooks(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str]
+    ) -> bool:
+        template_id = (
+            self.adventure.id if self.adventure is not None else self.state.template_id or ""
+        )
         state_dirty = False
         if not (event.new_inventory_items):
             return False
@@ -44,7 +54,7 @@ class TurnEventInventoryHooks:
                         or_(
                             WorldEntity.session_id == self.game_id,
                             and_(
-                                WorldEntity.template_id == self.adventure.id,
+                                WorldEntity.template_id == template_id,
                                 WorldEntity.session_id.is_(None),
                             ),
                         ),
@@ -56,7 +66,10 @@ class TurnEventInventoryHooks:
 
         return state_dirty
 
-    async def _apply_drop_hooks(self, event, system_messages):
+    async def _apply_drop_hooks(self, event: GameEvent, system_messages: list[str]) -> None:
+        template_id = (
+            self.adventure.id if self.adventure is not None else self.state.template_id or ""
+        )
         if not (event.removed_inventory_item_ids):
             return
         for item_id in event.removed_inventory_item_ids:
@@ -72,7 +85,7 @@ class TurnEventInventoryHooks:
                         or_(
                             WorldEntity.session_id == self.game_id,
                             and_(
-                                WorldEntity.template_id == self.adventure.id,
+                                WorldEntity.template_id == template_id,
                                 WorldEntity.session_id.is_(None),
                             ),
                         ),
@@ -82,7 +95,12 @@ class TurnEventInventoryHooks:
                 ent_obj = ent_res.scalars().first()
                 await self._fire_drop_hook(ent_obj, item_id, system_messages)
 
-    async def _fire_pickup_hook(self, ent_obj, system_messages):
+    async def _fire_pickup_hook(
+        self, ent_obj: WorldEntity | None, system_messages: list[str]
+    ) -> None:
+        template_id = (
+            self.adventure.id if self.adventure is not None else self.state.template_id or ""
+        )
         if not (ent_obj):
             return
         meta = dict(ent_obj.metadata_json or {})
@@ -98,7 +116,7 @@ class TurnEventInventoryHooks:
                         func.upper(WorldEntity.id) == ent_obj.id.upper(),
                         func.upper(WorldEntity.name) == ent_obj.name.upper(),
                     ),
-                    WorldEntity.template_id == self.adventure.id,
+                    WorldEntity.template_id == template_id,
                     WorldEntity.session_id.is_(None),
                 )
             )
@@ -116,7 +134,12 @@ class TurnEventInventoryHooks:
             await self._save_chat_message("system", meta["on_pickup_text"])
             system_messages.append(meta["on_pickup_text"])
 
-    async def _fire_drop_hook(self, ent_obj, item_id, system_messages):
+    async def _fire_drop_hook(
+        self, ent_obj: WorldEntity | None, item_id: str, system_messages: list[str]
+    ) -> None:
+        template_id = (
+            self.adventure.id if self.adventure is not None else self.state.template_id or ""
+        )
         if not (ent_obj):
             return
         meta = dict(ent_obj.metadata_json or {})
@@ -129,7 +152,7 @@ class TurnEventInventoryHooks:
             tpl_res = await self.db.execute(
                 select(WorldEntity).where(
                     func.upper(WorldEntity.id) == item_id.strip().upper(),
-                    WorldEntity.template_id == self.adventure.id,
+                    WorldEntity.template_id == template_id,
                     WorldEntity.session_id.is_(None),
                 )
             )

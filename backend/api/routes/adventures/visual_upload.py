@@ -18,7 +18,9 @@ from backend.utils.path_security import ensure_within_base_dir, ensure_within_da
 _ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
-def validate_visual_upload_content(content: bytes, content_type: str | None, target_type: str):
+def validate_visual_upload_content(
+    content: bytes, content_type: str | None, target_type: str
+) -> None:
     """Reject unsupported images before selecting a target or writing any file."""
     if content_type and content_type not in _ALLOWED_MIME_TYPES:
         raise HTTPException(

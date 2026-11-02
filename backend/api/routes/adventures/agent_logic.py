@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
 from backend.api.routes.adventures.agent_actions import (
     container_lock_hint,
     format_exits_for_agent,
@@ -242,7 +243,7 @@ _HISTORY_MAX_CHARS = 600
 
 def format_agent_history(history: list[dict[str, str]]) -> str:
     """Renders recent chat messages so the agent remembers what it already tried."""
-    lines = []
+    lines: list[str] = []
     for msg in history:
         label = _HISTORY_ROLE_LABELS.get(str(msg.get("role") or "").lower())
         content = " ".join(str(msg.get("content") or "").split())
@@ -291,9 +292,9 @@ class AgentService:
             agent_state["personality"] = "bureaucrat"
             modified = True
         if modified:
-            state.entity_states["__agent__"] = agent_state
+            state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
             flag_modified(state, "entity_states")
-        return agent_state
+        return dict(agent_state)
 
     @staticmethod
     def set_agent_active(state: SessionState, active: bool) -> None:
@@ -302,7 +303,7 @@ class AgentService:
         agent_state["active"] = active
         if active:
             agent_state["failure_count"] = 0
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
@@ -317,7 +318,7 @@ class AgentService:
         agent_state["personality"] = normalized
         if custom_text is not None:
             agent_state["custom_personality"] = custom_text
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
@@ -325,7 +326,7 @@ class AgentService:
         """Enable/disable monkey mode for the autonomous play-agent in this session."""
         agent_state = AgentService.get_agent_state(state)
         agent_state["monkey_mode"] = enabled
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
@@ -333,7 +334,7 @@ class AgentService:
         """Enable/disable sequence walkthrough access for the play-agent."""
         agent_state = AgentService.get_agent_state(state)
         agent_state["allow_walkthrough"] = allowed
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
@@ -341,18 +342,18 @@ class AgentService:
         """Enable/disable step-by-step confirmation mode for the play-agent."""
         agent_state = AgentService.get_agent_state(state)
         agent_state["step_by_step"] = enabled
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
     def increment_failure(state: SessionState) -> int:
         """Increment transient failure count. If >= 3, deactivate agent."""
         agent_state = AgentService.get_agent_state(state)
-        count = agent_state.get("failure_count", 0) + 1
+        count = int(agent_state.get("failure_count", 0)) + 1
         agent_state["failure_count"] = count
         if count >= 3:
             agent_state["active"] = False
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
         return count
 
@@ -361,7 +362,7 @@ class AgentService:
         """Reset consecutive failures to 0."""
         agent_state = AgentService.get_agent_state(state)
         agent_state["failure_count"] = 0
-        state.entity_states["__agent__"] = agent_state
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
         flag_modified(state, "entity_states")
 
     @staticmethod
@@ -404,7 +405,7 @@ class AgentService:
         user: User,
         state: SessionState,
         avatar: Avatar,
-        adventure: AdventureTemplate,
+        adventure: AdventureTemplate | AdventureSnapshot,
         manager: Any,
     ) -> AgentDecision:
         """Runs the simple LLM to determine the agent's next action using legitimate player context."""

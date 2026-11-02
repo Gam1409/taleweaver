@@ -66,3 +66,31 @@ async def test_legacy_string_summary_is_preserved_during_compression(monkeypatch
             state.compressed_history["summary"] == "The hero used the silver key to open the gate."
         )
         assert state.compressed_history["last_compressed_msg_id"]
+
+
+async def test_debug_item_generation_passes_a_boolean_visualization_flag():
+    from backend.api.routes.adventures.turn_interactions import TurnInteractionsManager
+
+    calls = []
+
+    async def cycle(message, auto_visualize, language=None, narration_only=False):
+        calls.append((message, auto_visualize))
+        yield "generated"
+
+    manager = SimpleNamespace(_run_llm_cycle=cycle)
+    interactions = TurnInteractionsManager(manager)
+    stream = interactions._handle_debug_gen_item("a silver key")
+    assert await anext(stream) == "generated"
+    await stream.aclose()
+    assert calls[0][1] is True
+    assert "a silver key" in calls[0][0]
+
+
+def test_turn_context_requires_initialized_state_and_avatar():
+    from backend.api.routes.adventures.turn_interactions import TurnInteractionsManager
+
+    interactions = TurnInteractionsManager(SimpleNamespace(state=None, avatar=None))
+    with pytest.raises(RuntimeError, match="Initialize.*state"):
+        _ = interactions.state
+    with pytest.raises(RuntimeError, match="Initialize.*avatar"):
+        _ = interactions.avatar

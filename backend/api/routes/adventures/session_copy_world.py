@@ -2,14 +2,22 @@ import logging
 from copy import deepcopy
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.npc_journal.lifecycle import remap_journal
+from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
 
 
-async def clone_saved_world(db, original_session, copied_session, asset_copy_cache, message_ids):
+async def clone_saved_world(
+    db: AsyncSession,
+    original_session: GameSession,
+    copied_session: GameSession,
+    asset_copy_cache,
+    message_ids,
+) -> None:
     from .sessions import _copy_data_asset_to_session
 
     # 7. Clone WorldScene

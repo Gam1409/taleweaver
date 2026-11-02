@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,11 +24,11 @@ from backend.models.user import User
 router = APIRouter(tags=["Play-Agent"])
 
 
-@router.post("/{game_id}/agent/turn")
+@router.post("/{game_id}/agent/turn", response_model=None)
 async def run_agent_turn(
     game_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Computes an agent decision based on walkthrough & game state, then executes the turn."""
     await ensure_agent_active(game_id, current_user)
     return StreamingResponse(
@@ -37,16 +38,16 @@ async def run_agent_turn(
     )
 
 
-@router.patch("/{game_id}/agent/settings")
+@router.patch("/{game_id}/agent/settings", response_model=None)
 async def update_agent_settings(
     game_id: str,
     payload: AgentSettingsUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Updates play-agent mode, personality and options for a session."""
     manager = GameTurnManager(db, game_id, current_user)
-    if not await manager.initialize():
+    if not await manager.initialize() or manager.state is None:
         raise HTTPException(status_code=404, detail="Game session not found.")
     try:
         apply_settings_update(manager.state, payload, current_user.llm_settings)

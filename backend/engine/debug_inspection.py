@@ -1,13 +1,27 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
 from backend.engine.map_engine import MapEngine
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.session_state import SessionState
+from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 
-async def debug_szene(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_szene(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     scene_id = state.scene_id
     res = await db.execute(
         select(WorldScene).where(
@@ -23,7 +37,14 @@ async def debug_szene(db, state, args, user=None, adventure=None, avatar=None):
     )
 
 
-async def debug_entities(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_entities(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     scene_id = state.scene_id
     res = await db.execute(
         select(WorldEntity).where(
@@ -44,22 +65,36 @@ async def debug_entities(db, state, args, user=None, adventure=None, avatar=None
         return "--- DEBUG: No entities or objects found in this scene. ---"
 
     lines = [f"--- DEBUG: ENTITIES IN {scene_id} ---"]
-    for e in processed:
-        pos = f" @ {e.get('spatial_position')}" if e.get("spatial_position") else ""
+    for entry in processed:
+        pos = f" @ {entry.get('spatial_position')}" if entry.get("spatial_position") else ""
         lines.append(
-            f"- [{e.get('entity_type')}] {e.get('name')} (ID: {e.get('id')}){pos}: {str(e.get('description', ''))[:50]}..."
+            f"- [{entry.get('entity_type')}] {entry.get('name')} (ID: {entry.get('id')}){pos}: {str(entry.get('description', ''))[:50]}..."
         )
     return "\n".join(lines)
 
 
-async def debug_plot(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_plot(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     adv_id = state.adventure_id
     res = await db.execute(select(AdventureTemplate).where(AdventureTemplate.id == adv_id))
     adv = res.scalars().first()
-    return f"--- DEBUG: PLOT CONTEXT ---\n{adv.original_prompt}"
+    return f"--- DEBUG: PLOT CONTEXT ---\n{adv.original_prompt if adv else ''}"
 
 
-async def debug_map(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_map(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     adv_id = state.adventure_id
     s_count = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
     e_count = await db.execute(
@@ -77,7 +112,14 @@ async def debug_map(db, state, args, user=None, adventure=None, avatar=None):
     )
 
 
-async def debug_session(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_session(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     scene_id = state.scene_id
     res = await db.execute(
         select(WorldScene).where(
@@ -96,7 +138,14 @@ async def debug_session(db, state, args, user=None, adventure=None, avatar=None)
     )
 
 
-async def debug_engine(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_engine(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     import platform
     import sys
 
@@ -115,7 +164,14 @@ async def debug_engine(db, state, args, user=None, adventure=None, avatar=None):
     return "\n".join(lines)
 
 
-async def debug_scenes(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_scenes(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     res = await db.execute(select(WorldScene).where(WorldScene.session_id == state.session_id))
     scenes = res.scalars().all()
     if not scenes:
@@ -126,7 +182,14 @@ async def debug_scenes(db, state, args, user=None, adventure=None, avatar=None):
     return "\n".join(lines)
 
 
-async def debug_npcs(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_npcs(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     res = await db.execute(
         select(WorldEntity).where(
             WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"
@@ -152,13 +215,20 @@ async def debug_npcs(db, state, args, user=None, adventure=None, avatar=None):
     lines = ["--- DEBUG: ALL NPCs ---"]
     for n in npcs:
         curr_scene = n.get("current_scene_id")
-        loc_label = scene_map.get(curr_scene, curr_scene)
+        loc_label = scene_map.get(curr_scene, curr_scene) if curr_scene is not None else None
         pos = f" ({n.get('spatial_position')})" if n.get("spatial_position") else ""
         lines.append(f"- {n.get('name')} (ID: {n.get('id')}) @ {loc_label}{pos}")
     return "\n".join(lines)
 
 
-async def debug_items(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_items(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     res = await db.execute(
         select(WorldEntity).where(
             WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "OBJECT"
@@ -187,14 +257,21 @@ async def debug_items(db, state, args, user=None, adventure=None, avatar=None):
             loc = "Inventory"
         else:
             curr_scene = i.get("current_scene_id")
-            loc_label = scene_map.get(curr_scene, curr_scene)
+            loc_label = scene_map.get(curr_scene, curr_scene) if curr_scene is not None else None
             pos = f" ({i.get('spatial_position')})" if i.get("spatial_position") else ""
             loc = f"Scene: {loc_label}{pos}"
         lines.append(f"- {i.get('name')} (ID: {i.get('id')}) @ {loc}")
     return "\n".join(lines)
 
 
-async def debug_exits(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_exits(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     res = await db.execute(select(WorldExit).where(WorldExit.session_id == state.session_id))
     exits = res.scalars().all()
     if not exits:
@@ -208,7 +285,14 @@ async def debug_exits(db, state, args, user=None, adventure=None, avatar=None):
     return "\n".join(lines)
 
 
-async def debug_reveal_map(db, state, args, user=None, adventure=None, avatar=None):
+async def debug_reveal_map(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: User | None = None,
+    adventure: AdventureTemplate | AdventureSnapshot | None = None,
+    avatar: Avatar | None = None,
+) -> str | None:
     scenes_res = await db.execute(
         select(WorldScene).where(WorldScene.session_id == state.session_id)
     )

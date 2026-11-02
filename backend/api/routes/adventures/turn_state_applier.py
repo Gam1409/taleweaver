@@ -51,51 +51,6 @@ class TurnStateApplier(
     def __init__(self, manager: GameTurnManager) -> None:
         self.manager = manager
 
-    @property
-    def db(self):
-        return self.manager.db
-
-    @property
-    def game_id(self):
-        return self.manager.game_id
-
-    @property
-    def user(self):
-        return self.manager.user
-
-    @property
-    def state(self):
-        return self.manager.state
-
-    @property
-    def avatar(self):
-        return self.manager.avatar
-
-    @property
-    def adventure(self):
-        return self.manager.adventure
-
-    def _queue_checkpoint(self, *args, **kwargs):
-        return self.manager._queue_checkpoint(*args, **kwargs)
-
-    async def _save_chat_message(self, *args, **kwargs):
-        return await self.manager._save_chat_message(*args, **kwargs)
-
-    def _apply_gm_notes_update(self, *args, **kwargs):
-        return self.manager._apply_gm_notes_update(*args, **kwargs)
-
-    def _award_combat_victory_xp(self, *args, **kwargs):
-        return self.manager._award_combat_victory_xp(*args, **kwargs)
-
-    def _collect_existing_item_ids(self, *args, **kwargs):
-        return self.manager._collect_existing_item_ids(*args, **kwargs)
-
-    async def _spawn_scene_item(self, *args, **kwargs):
-        return await self.manager._spawn_scene_item(*args, **kwargs)
-
-    async def _apply_adventure_generator_tools(self, *args, **kwargs):
-        return await self.manager._apply_adventure_generator_tools(*args, **kwargs)
-
     def _upsert_entity_update(self, event: GameEvent, entity_id: str, **fields: object) -> None:
         """Insert or merge a WorldEntityUpdate for ``entity_id`` into the event."""
         if not entity_id:

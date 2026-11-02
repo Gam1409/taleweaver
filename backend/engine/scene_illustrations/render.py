@@ -3,6 +3,8 @@
 import json
 from uuid import uuid4
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.visual_trace import record
@@ -17,7 +19,7 @@ from . import fidelity, nsfw_guard, source_quality
 from .visual_context import VisualContext
 
 
-async def image_request(db, state, user, snapshot: dict) -> tuple[dict, dict]:
+async def image_request(db: AsyncSession, state, user, snapshot: dict) -> tuple[dict, dict]:
     t2i, style, tone = await _settings(db, state, user, kind="scene")
     profile = "advanced" if advanced_for(t2i, "scene") else "simple"
     provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()

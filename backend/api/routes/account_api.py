@@ -1,7 +1,7 @@
 """Self-service account endpoints: credentials, recovery codes, preferences, session history."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -94,7 +94,7 @@ async def update_my_credentials(
     request: UserCredentialsUpdateRequest,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> UserCredentialsUpdateResponse:
     """
     Update the user's own username and/or password.
     Requires the current password to verify identity.
@@ -128,7 +128,7 @@ async def regenerate_my_recovery_codes(
     request: CurrentPasswordRequest,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> RecoveryCodesResponse:
     """Create a fresh set of one-time recovery codes (invalidates the previous set)."""
     await _require_current_password(current_user, request.current_password)
     codes = issue_recovery_codes(current_user)
@@ -142,7 +142,7 @@ async def update_my_preferences(
     request: PreferencesUpdateRequest,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> dict[str, Any]:
     """Players may update their own preferences (the generic user update is admin-only)."""
     current_user.default_language = (request.default_language or "").strip() or None
     await db.commit()
@@ -151,6 +151,8 @@ async def update_my_preferences(
 
 
 @router.get("/sessions", response_model=list[PlayerSessionSummary])
-async def list_my_sessions(current_user: User = USER_DEP, db: AsyncSession = DB_DEP):
+async def list_my_sessions(
+    current_user: User = USER_DEP, db: AsyncSession = DB_DEP
+) -> list[PlayerSessionSummary]:
     """Adventure history for the profile page: status, XP and sequence progress."""
     return await list_player_sessions(db, current_user)

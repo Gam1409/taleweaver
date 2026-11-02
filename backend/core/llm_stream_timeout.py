@@ -1,10 +1,15 @@
 """Bound provider silence without disguising an interrupted response as complete."""
 
 import asyncio
-from typing import Any
+from collections.abc import AsyncIterable, AsyncIterator
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
-async def with_stream_timeout(stream: Any, *, initial_timeout: float, chunk_timeout: float):
+async def with_stream_timeout(
+    stream: AsyncIterable[T], *, initial_timeout: float, chunk_timeout: float
+) -> AsyncIterator[T]:
     has_content = False
     finished = False
     iterator = aiter(stream)

@@ -179,7 +179,7 @@ async def ai_apply_fix_proposal(
     payload: AIFixApplyRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AIFixApplyResponse:
     """Apply the chosen fix proposal directly to the adventure template.
 
     The proposal's ``patches[]`` are treated as the authoritative source of

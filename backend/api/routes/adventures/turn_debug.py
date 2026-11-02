@@ -8,12 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.debug_engine import DebugEngine
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 
 
-class DebugInteractions:
+class DebugInteractions(TurnContext):
     async def _handle_debug(self, user_msg: str) -> AsyncGenerator[str, None]:
         cmd_args = user_msg[7:].strip()
         debug_info = await DebugEngine.handle_debug_command(
@@ -60,7 +61,11 @@ class DebugInteractions:
                         self.avatar, self.state, self.db
                     ),
                     "combat": AdventureLogic.get_combat_snapshot(self.state),
-                    "awards": self.adventure.awards if self.adventure else [],
+                    "awards": self.adventure.awards
+                    if self.adventure
+                    else []
+                    if self.adventure
+                    else [],
                     "game_over_reason": self.state.session.status_note
                     if self.state.session
                     else None,
@@ -110,7 +115,7 @@ class DebugInteractions:
             f"DEBUG COMMAND: The user wants you to generate an item now. Instruction: {prompt}"
         )
         # We temporarily set the prompt as if it was the user message
-        async for chunk in self._run_llm_cycle(instruction, self.avatar):
+        async for chunk in self._run_llm_cycle(instruction, auto_visualize=True):
             yield chunk
 
         map_payload = await self._build_map_payload()
@@ -121,7 +126,7 @@ class DebugInteractions:
                     self.avatar, self.state, self.db
                 ),
                 "combat": AdventureLogic.get_combat_snapshot(self.state),
-                "awards": self.adventure.awards,
+                "awards": self.adventure.awards if self.adventure else [],
                 "game_over_reason": self.state.session.status_note if self.state.session else None,
                 **self._build_prompt_suggestions_payload(),
                 **self._build_terminal_flags_payload(),
@@ -177,7 +182,7 @@ class DebugInteractions:
 
         return f"Dropped NPC items: {', '.join(dropped_items_summary)}"
 
-    async def _debug_win_fight(self, debug_info):
+    async def _debug_win_fight(self, debug_info: str) -> str:
         combat = self._read_combat_state()
         if combat and combat.get("active"):
             combat["active"] = False
@@ -238,7 +243,7 @@ class DebugInteractions:
 
         return debug_info
 
-    def _debug_lose_fight(self, debug_info):
+    def _debug_lose_fight(self, debug_info: str) -> str:
         combat = self._read_combat_state()
         if combat and combat.get("active"):
             combat["active"] = False

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy import and_, or_, select
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.map_engine import MapEngine
+from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -13,10 +16,12 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_REASON_SCENE_CHANGE = "SCENE_CHANGE"
 
 
-class TurnEventScenes:
+class TurnEventScenes(TurnContext):
     """Apply scenes outcomes in the turn transaction."""
 
-    async def _apply_scene_transition(self, event, states, system_messages):
+    async def _apply_scene_transition(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str]
+    ) -> bool:
         state_dirty = False
         if event.new_scene_id and event.new_scene_id != self.state.current_scene_id:
             # Enforce that the target scene is adjacent (connected by a WorldExit from the current scene)
@@ -61,7 +66,7 @@ class TurnEventScenes:
 
         return state_dirty
 
-    async def _leave_previous_scene(self, system_messages):
+    async def _leave_previous_scene(self, system_messages: list[str]) -> str | None:
         old_scene_id = self.state.current_scene_id
         if not (old_scene_id):
             return old_scene_id
@@ -85,9 +90,15 @@ class TurnEventScenes:
         return old_scene_id
 
     async def _register_scene_arrival(
-        self, event, states, system_messages, old_scene_id, valid_exit
-    ):
-        # Map Update
+        self,
+        event: GameEvent,
+        states: dict[str, Any],
+        system_messages: list[str],
+        old_scene_id: str | None,
+        valid_exit: WorldExit | None,
+    ) -> None:
+        if not old_scene_id or not event.new_scene_id:
+            return
         try:
             world_map = await AdventureLogic.get_or_create_map(self.db, self.state.template_id)
             # 1. Register exit between scenes
@@ -129,8 +140,14 @@ class TurnEventScenes:
         except Exception as e:
             logger.error(f"Map update failed during turn: {e}")
 
-    async def _fire_arrival_hooks(self, event, states, system_messages, valid_exit, new_scene_db):
-        # Trigger on_open_exit and on_exit_used if applicable
+    async def _fire_arrival_hooks(
+        self,
+        event: GameEvent,
+        states: dict[str, Any],
+        system_messages: list[str],
+        valid_exit: WorldExit | None,
+        new_scene_db: WorldScene | None,
+    ) -> None:
         if valid_exit:
             if valid_exit.on_open_exit_script:
                 msgs = await self.manager._execute_inline_script(
@@ -140,12 +157,12 @@ class TurnEventScenes:
             if valid_exit.on_open_exit_text:
                 await self._save_chat_message("system", valid_exit.on_open_exit_text)
                 system_messages.append(valid_exit.on_open_exit_text)
-            if getattr(valid_exit, "on_exit_used_script", None):
+            if valid_exit.on_exit_used_script:
                 msgs = await self.manager._execute_inline_script(
                     valid_exit.on_exit_used_script, "on_exit_used", valid_exit.id
                 )
                 system_messages.extend(msgs)
-            if getattr(valid_exit, "on_exit_used_text", None):
+            if valid_exit.on_exit_used_text:
                 await self._save_chat_message("system", valid_exit.on_exit_used_text)
                 system_messages.append(valid_exit.on_exit_used_text)
 
@@ -160,8 +177,9 @@ class TurnEventScenes:
 
         await self._fire_npc_arrival_hooks(event, states, system_messages)
 
-    async def _fire_npc_arrival_hooks(self, event, states, system_messages):
-        # Check for NPCs in the new scene and run their hooks
+    async def _fire_npc_arrival_hooks(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str]
+    ) -> None:
         npc_res = await self.db.execute(
             select(WorldEntity).where(
                 WorldEntity.session_id == self.game_id, WorldEntity.entity_type == "NPC"
@@ -191,8 +209,7 @@ class TurnEventScenes:
                     await self._save_chat_message("system", msg)
                     system_messages.append(msg)
 
-    async def _apply_exit_updates(self, event, system_messages):
-        # Process Explicit Map Updates (Exits)
+    async def _apply_exit_updates(self, event: GameEvent, system_messages: list[str]) -> None:
         if not (event.updated_exits):
             return
         try:

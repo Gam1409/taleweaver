@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
 from backend.engine import debug_inspection, debug_movement, debug_mutations, debug_progression
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
@@ -51,7 +52,7 @@ class DebugEngine:
         state: SessionState,
         args: str,
         user: Optional[User] = None,
-        adventure: Optional[AdventureTemplate] = None,
+        adventure: AdventureTemplate | AdventureSnapshot | None = None,
         avatar: Optional[Any] = None,
     ) -> str:
         """Dispatch each debug command to its dedicated implementation."""

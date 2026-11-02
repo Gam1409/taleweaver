@@ -158,7 +158,7 @@ async def _log_image_generation(
 
     if generation_run.get() is not None:
         await guard_generation_write(db, adventure)
-    adventure.generation_logs = logs  # type: ignore[assignment]
+    adventure.generation_logs = logs
     await db.commit()
     await db.refresh(adventure)
 
@@ -185,7 +185,7 @@ async def _log_reused_asset(
 
     if generation_run.get() is not None:
         await guard_generation_write(db, adventure)
-    adventure.generation_logs = logs  # type: ignore[assignment]
+    adventure.generation_logs = logs
     await db.commit()
     await db.refresh(adventure)
 

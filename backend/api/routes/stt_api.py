@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 import wave
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -75,18 +76,18 @@ def get_whisper_model(model_name: str, is_background_loader: bool = False):
             time.sleep(0.5)
 
 
-def load_whisper_model_sync(model_name: str):
+def load_whisper_model_sync(model_name: str) -> None:
     try:
         get_whisper_model(model_name, is_background_loader=True)
     except Exception:
         logger.exception("Background preloading of Whisper model failed: %s", model_name)
 
 
-@router.get("/status")
+@router.get("/status", response_model=None)
 async def get_stt_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Gets the load status of the configured Whisper model."""
     from backend.api.routes.config_api import (
         _normalize_game_settings,
@@ -103,12 +104,12 @@ async def get_stt_status(
     return {"model_name": model_name, "status": state}
 
 
-@router.post("/preload")
+@router.post("/preload", response_model=None)
 async def preload_stt_model(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Starts preloading the configured Whisper model in a background thread."""
     from backend.api.routes.config_api import (
         _normalize_game_settings,
@@ -165,12 +166,12 @@ def decode_wav_to_numpy(wav_bytes: bytes) -> np.ndarray:
         return audio
 
 
-@router.post("/transcribe")
+@router.post("/transcribe", response_model=None)
 async def transcribe_audio(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Transcribes an uploaded WAV file using OpenAI Whisper."""
     from backend.api.routes.config_api import (
         _normalize_game_settings,

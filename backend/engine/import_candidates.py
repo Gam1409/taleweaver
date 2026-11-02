@@ -10,7 +10,7 @@ from backend.engine.archive_safety import validate_archive
 logger = logging.getLogger(__name__)
 
 
-def _read_candidate(path):
+def _read_candidate(path: str) -> tuple[str | None, str | None]:
     if path.endswith(".adz"):
         with zipfile.ZipFile(path) as archive:
             validate_archive(archive)
@@ -30,7 +30,7 @@ def scan_import_candidates(directories: list[str]) -> list[tuple[str, str | None
     return candidates
 
 
-def _scan_directory(directory):
+def _scan_directory(directory: str) -> list[tuple[str, str | None]]:
     if not os.path.exists(directory):
         return []
     candidates = []

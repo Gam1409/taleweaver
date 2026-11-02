@@ -1,8 +1,11 @@
 import logging
+from collections.abc import AsyncIterator
 
 from anyio import CancelScope
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from backend.core.config import settings
 
@@ -20,7 +23,9 @@ engine = create_async_engine(
 if settings.DATABASE_URL.startswith("sqlite"):
 
     @event.listens_for(engine.sync_engine, "connect")
-    def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+    def _set_sqlite_pragmas(
+        dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry
+    ) -> None:
         """Reduce lock contention for concurrent background writes + status polling."""
         cursor = dbapi_connection.cursor()
         try:
@@ -36,7 +41,7 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 
 
 # Dependency to get session
-async def get_db():
+async def get_db() -> AsyncIterator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         try:
             yield session

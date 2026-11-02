@@ -171,13 +171,13 @@ async def update_exit(
     world_exit = res.scalars().first()
     if not world_exit:
         return
-    if given(payload, "name"):
+    if given(payload, "name") and payload.name is not None:
         world_exit.label = payload.name
     if given(payload, "locked"):
         world_exit.is_locked = bool(payload.locked)
     if given(payload, "description"):
         world_exit.lock_description = payload.description
-    if given(payload, "exit_type"):
+    if given(payload, "exit_type") and payload.exit_type is not None:
         world_exit.exit_type = payload.exit_type
     copy_scripts(world_exit, payload, _EXIT_SCRIPT_FIELDS)
     if any(given(payload, f) for f in _LOCK_FIELDS):

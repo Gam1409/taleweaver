@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from PIL import Image
@@ -60,7 +60,7 @@ async def _upload_directory(
     return _safe_data_path("adventures", "library", safe_adventure_id)
 
 
-@router.post("/data/image")
+@router.post("/data/image", response_model=None)
 async def upload_image(
     file: UploadFile = File(...),
     upload_type: str = Query(
@@ -73,7 +73,7 @@ async def upload_image(
     ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Uploads an image, resizes/crops it based on type, and returns the URL.
     - characters: saved to data/characters, max 256x256
@@ -126,7 +126,7 @@ async def upload_image(
 
     except HTTPException:
         raise
-    except Image.DecompressionBombWarning as exc:  # type: ignore[attr-defined]
+    except Image.DecompressionBombWarning as exc:
         raise HTTPException(
             status_code=400, detail="Image dimensions exceed safety limits."
         ) from exc

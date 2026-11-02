@@ -1,6 +1,7 @@
 """Persist generated narrative and load existing assets for cover generation."""
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.settings import preserve_clothing_settings
@@ -10,8 +11,14 @@ from backend.models.adventure_template import AdventureTemplate
 
 
 async def persist_generated_narrative(
-    db, adventure, template_id, manifest_dict, original_prompt, language, status_callback
-):
+    db: AsyncSession,
+    adventure,
+    template_id,
+    manifest_dict,
+    original_prompt,
+    language,
+    status_callback,
+) -> None:
     from backend.engine.world_generator import _publish_generation_status_with_callback
 
     # 2. Update Status + persist narrative fields
@@ -26,12 +33,12 @@ async def persist_generated_narrative(
             status=adventure.creation_status,
             phase="apply_manifest",
         )
-        adventure.teaser = manifest_dict.get("teaser") or ""  # type: ignore[assignment]
-        adventure.original_prompt = original_prompt  # type: ignore[assignment]
+        adventure.teaser = manifest_dict.get("teaser") or ""
+        adventure.original_prompt = original_prompt
         if language:
-            adventure.language = language  # type: ignore[assignment]
+            adventure.language = language
         if not adventure.origin_id:
-            adventure.origin_id = manifest_dict.get("origin_id") or template_id  # type: ignore[assignment]
+            adventure.origin_id = manifest_dict.get("origin_id") or template_id
         if not adventure.original_manifest or set(adventure.original_manifest) <= {
             "visual_presets",
             "npc_card_settings",
@@ -48,14 +55,16 @@ async def persist_generated_narrative(
                     adventure,
                 ),
                 adventure,
-            )  # type: ignore[assignment]
+            )
         from backend.engine.generation_control import guard_generation_write
 
         await guard_generation_write(db, adventure)
         await db.commit()
 
 
-async def load_cover_source_assets(db, cover_source_adventure_id, allow_reuse_source_assets):
+async def load_cover_source_assets(
+    db: AsyncSession, cover_source_adventure_id, allow_reuse_source_assets
+):
     # Load source assets for cover-mode image reuse
     cover_source_assets = None
     if allow_reuse_source_assets and cover_source_adventure_id:

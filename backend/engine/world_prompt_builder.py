@@ -42,7 +42,9 @@ def _build_scene_requirement(min_scenes: Optional[int], max_scenes: Optional[int
         return f"- Generate at least {max(1, min_scenes)} unique scenes."
     if min_scenes is None and max_scenes is not None:
         return f"- Generate no more than {max(1, max_scenes)} unique scenes."
-    return f"- Generate between {max(1, min_scenes)} and {max(1, max_scenes)} unique scenes."  # type: ignore[arg-type]
+    return (
+        f"- Generate between {max(1, min_scenes or 0)} and {max(1, max_scenes or 0)} unique scenes."
+    )
 
 
 def _build_quest_requirement(
@@ -225,7 +227,7 @@ def _build_container_requirement(
         )
     else:
         body = (
-            f"- Generate between {max(0, min_containers)} and {max(0, max_containers)} container items.\n"  # type: ignore[arg-type]
+            f"- Generate between {max(0, min_containers or 0)} and {max(0, max_containers or 0)} container items.\n"
             + _CONTAINER_LOCK_HINTS
         )
 
@@ -256,7 +258,7 @@ def _build_text_log_requirement(
             f"- You may generate READABLE objects, but never more than {max(0, max_text_logs)}.\n"
         )
     else:
-        intro = f"- Generate between {max(0, min_text_logs)} and {max(0, max_text_logs)} readable text logs.\n"  # type: ignore[arg-type]
+        intro = f"- Generate between {max(0, min_text_logs or 0)} and {max(0, max_text_logs or 0)} readable text logs.\n"
 
     return f"\n\nTEXT LOGS (READABLE OBJECTS):\n{intro}{base}"
 
@@ -268,7 +270,7 @@ def _build_item_requirement(min_items: Optional[int], max_items: Optional[int]) 
         return f"\n\nITEM COUNT LIMIT:\n- Generate at least {max(1, min_items)} total objects/items in `objects`."
     if min_items is None and max_items is not None:
         return f"\n\nITEM COUNT LIMIT:\n- Generate no more than {max(1, max_items)} total objects/items in `objects`."
-    return f"\n\nITEM COUNT LIMIT:\n- Generate between {max(1, min_items)} and {max(1, max_items)} total objects/items in `objects`."  # type: ignore[arg-type]
+    return f"\n\nITEM COUNT LIMIT:\n- Generate between {max(1, min_items or 0)} and {max(1, max_items or 0)} total objects/items in `objects`."
 
 
 _SWITCH_DETAILS_HINT = (

@@ -1,29 +1,35 @@
 """Trace background job lifecycles without serializing their inputs or outputs."""
 
+from __future__ import annotations
+
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 from uuid import uuid4
+
+from backend.core.system_diagnostics import DiagnosticService
 
 P = ParamSpec("P")
 T = TypeVar("T")
 _OPERATIONS = {"memory_maintenance", "npc_learning", "npc_portrait", "scene_background"}
 
 
-def _service():
+def _service() -> DiagnosticService:
     from backend.core.system_diagnostics import service
 
     return service
 
 
-def diagnostic_job(operation: str):
+def diagnostic_job(
+    operation: str,
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Coroutine[Any, Any, T]]]:
     """Decorate a coroutine whose first argument is its session ID."""
     if operation not in _OPERATIONS:
         raise ValueError("Unknown diagnostic job operation")
 
-    def decorate(function: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    def decorate(function: Callable[P, Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]:
         @wraps(function)
         async def run(*args: P.args, **kwargs: P.kwargs) -> T:
             service = _service()

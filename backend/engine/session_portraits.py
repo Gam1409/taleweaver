@@ -86,8 +86,8 @@ async def _settings(
         SimpleNamespace(t2i_settings=t2i, encrypted_api_keys=user.encrypted_api_keys), [kind]
     )
     meta = snapshot.get("adventure") or {}
-    styles = cast(list[Any] | None, state.selected_image_styles)
-    tone = cast(str | dict[str, Any] | None, state.selected_tone)
+    styles = state.selected_image_styles
+    tone = state.selected_tone
     return (
         t2i,
         resolve_style_instruction(

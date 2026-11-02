@@ -7,10 +7,9 @@ from typing import Any
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.core.game_modes import is_vn
-from backend.engine.rule_engine import (
-    GameEvent,
-)
+from backend.engine.rule_engine import GameEvent
 from backend.models.adventure_template import AdventureTemplate
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_REASON_AWARD_GRANTED = "AWARD_GRANTED"
 
 
-class TurnEventAwards:
+class TurnEventAwards(TurnContext):
     """Apply awards outcomes in the turn transaction."""
 
     async def _evaluate_deterministic_awards(
@@ -94,8 +93,10 @@ class TurnEventAwards:
 
         return messages
 
-    async def _apply_award_keys(self, event, system_messages, vn_mode):
-        if not (event.earned_award_keys and not vn_mode):
+    async def _apply_award_keys(
+        self, event: GameEvent, system_messages: list[str], vn_mode: bool
+    ) -> None:
+        if self.adventure is None or not (event.earned_award_keys and not vn_mode):
             return
         now = datetime.utcnow().isoformat()
         award_defs = {

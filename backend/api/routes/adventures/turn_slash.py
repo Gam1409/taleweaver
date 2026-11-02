@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from fastapi.encoders import jsonable_encoder
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_containers import ContainerInteractions
 from backend.api.routes.adventures.turn_slash_containers import (
     drop_contents,
     open_container,
@@ -21,6 +22,7 @@ from backend.api.routes.adventures.turn_slash_inventory import (
 )
 from backend.api.routes.adventures.turn_slash_pickup import take_direct
 from backend.api.routes.adventures.turn_slash_walkthrough import reveal_walkthrough
+from backend.api.routes.adventures.turn_switches import SwitchInteractions
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class SlashCommandState:
     halted: bool = False
 
 
-class SlashInteractions:
+class SlashInteractions(SwitchInteractions, ContainerInteractions):
     async def _handle_slash(self, user_msg: str, response: str) -> AsyncGenerator[str, None]:
         self.pending_pickup_trigger = None
         if user_msg.lower() == "/map":
@@ -63,7 +65,9 @@ class SlashInteractions:
         async for chunk in self._finish_slash_command(command):
             yield chunk
 
-    async def _run_slash_item_commands(self, command):
+    async def _run_slash_item_commands(
+        self, command: SlashCommandState
+    ) -> AsyncGenerator[str, None]:
         if command.response.startswith("[TRIGGER_DROP]"):
             async for chunk in drop_item(self, command):
                 yield chunk
@@ -78,7 +82,7 @@ class SlashInteractions:
             async for chunk in consume_item(self, command):
                 yield chunk
 
-    async def _run_slash_container_commands(self, command):
+    async def _run_slash_container_commands(self, command: SlashCommandState) -> None:
         if command.response.startswith("[TRIGGER_OPEN]"):
             await open_container(self, command)
         if command.response.startswith("[TRIGGER_SWITCH]"):
@@ -92,7 +96,7 @@ class SlashInteractions:
         if command.response.startswith("[TRIGGER_CONTAINER_DROP_SCENE]"):
             await drop_contents(self, command)
 
-    async def _finish_slash_command(self, command):
+    async def _finish_slash_command(self, command: SlashCommandState) -> AsyncGenerator[str, None]:
         if command.response and not command.response.startswith("[TRIGGER_"):
             await self._save_chat_message("system", command.response)
             yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': command.response})}\n\n"

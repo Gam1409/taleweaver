@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import and_, or_, select
 
-from backend.api.routes.adventures.guardrails.locks import LockSpec
+from backend.api.routes.adventures.guardrails.locks import LockEngineMixin, LockSpec
 from backend.engine.rule_engine import ExitUpdate, GameEvent
 from backend.models.world_entity import WorldExit
 
@@ -25,7 +25,7 @@ class SceneExit:
         return update.from_scene_id == self.from_scene_id and update.to_scene_id == self.to_scene_id
 
 
-class ExitGuardMixin:
+class ExitGuardMixin(LockEngineMixin):
     """Validates GM unlocks and traversals of locked exits."""
 
     async def _scene_exits(self) -> list[SceneExit]:

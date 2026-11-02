@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, TypeGuard
 
+from backend.api.routes.adventures.combat.loot import CombatLootMixin
 from backend.engine.combat.initiative import PLAYER_ID
 from backend.engine.combat.special_attacks import normalize_special_actions
 from backend.engine.rule_engine import RESOURCE_CAP
@@ -24,7 +25,7 @@ _ITEM_STAT_FIELDS = {
 }
 
 
-def _valid_dice(value: Any) -> bool:
+def _valid_dice(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and bool(DICE_RX.match(value.replace(" ", "").lower()))
 
 
@@ -39,7 +40,7 @@ def _weapon_profile(name: str, meta: dict[str, Any], fallback_dice: str) -> dict
     }
 
 
-class CombatCombatantMixin:
+class CombatCombatantMixin(CombatLootMixin):
     """Snapshots and engine views for everyone taking part in the fight."""
 
     async def _calculate_npc_total_stats(self, npc: WorldEntity) -> dict[str, Any]:

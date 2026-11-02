@@ -53,7 +53,7 @@ async def _get_import_check_items(
 async def check_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ImportCheckResponse:
     """Returns a list of default adventures and their existence status."""
     defaults_dir = os.path.join("adventures", "default")
     items = await _get_import_check_items(db, current_user.id, [defaults_dir])
@@ -64,7 +64,7 @@ async def check_defaults(
 async def check_examples(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ImportCheckResponse:
     """Returns a list of example/sample adventures and their existence status."""
     samples_dir = os.path.join("adventures", "samples")
     presets_dir = os.path.join(settings.DATA_DIR, "presets", "adventures")
@@ -72,11 +72,11 @@ async def check_examples(
     return ImportCheckResponse(available_imports=items)
 
 
-@router.post("/import-examples")
+@router.post("/import-examples", response_model=None)
 async def import_examples(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually triggers import of example adventures."""
     user_id = current_user.id
     samples_dir = os.path.join("adventures", "samples")
@@ -92,11 +92,11 @@ async def import_examples(
     return {"status": "success", "message": "Example adventures imported successfully."}
 
 
-@router.post("/import-defaults")
+@router.post("/import-defaults", response_model=None)
 async def import_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Triggers import of default adventures."""
     if current_user.has_imported_defaults:
         return {"status": "skipped", "message": "Defaults already imported."}
@@ -111,11 +111,11 @@ async def import_defaults(
     return {"status": "success", "message": "Default adventures imported successfully."}
 
 
-@router.post("/reimport-defaults")
+@router.post("/reimport-defaults", response_model=None)
 async def reimport_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually re-triggers import of default adventures (overwrites existing)."""
     defaults_dir = os.path.join("adventures", "default")
     await AdventureTemplateImporter.import_from_directory(
@@ -124,12 +124,12 @@ async def reimport_defaults(
     return {"status": "success", "message": "Default adventures re-imported successfully."}
 
 
-@router.post("/import", status_code=201)
+@router.post("/import", status_code=201, response_model=None)
 async def import_adventure(
     payload: dict[str, Any],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure from a manifest URL or local path."""
     source_url = payload.get("url")
     if source_url:
@@ -191,12 +191,12 @@ async def import_adventure(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
 
 
-@router.post("/import/session-bundle")
+@router.post("/import/session-bundle", response_model=None)
 async def import_session_bundle(
     payload: dict[str, Any],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import a SESSION_BUNDLE payload (inline JSON) and restore template + session state."""
     if not payload or payload.get("type") != "SESSION_BUNDLE":
         raise HTTPException(status_code=400, detail="Invalid session bundle payload.")
@@ -250,13 +250,13 @@ async def import_session_bundle(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
 
 
-@router.post("/import/adz")
+@router.post("/import/adz", response_model=None)
 async def import_adventure_adz(
     file: UploadFile = File(...),
     overwrite: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure as a portable .adz (ZIP) bundle."""
     try:
         content = await file.read()
@@ -288,13 +288,13 @@ async def import_adventure_adz(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
 
 
-@router.post("/import/adv")
+@router.post("/import/adv", response_model=None)
 async def import_adventure_adv(
     file: UploadFile = File(...),
     overwrite: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure as a pure .adv (JSON) manifest."""
     try:
         content = await file.read()
@@ -328,7 +328,7 @@ async def import_adventure_adv(
 @router.get("/generation-sayings", response_model=list[str])
 async def get_generation_sayings(
     current_user: User = Depends(get_current_user),
-):
+) -> list[str]:
     """Returns the list of humorous generation sayings."""
     from backend.core.generation_sayings import GenerationSayings
 

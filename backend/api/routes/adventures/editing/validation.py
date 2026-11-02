@@ -206,7 +206,7 @@ async def run_editor_validation(
     payload: ValidationRunRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ValidationRunResponse:
     """Run structural validation, and optionally an AI logic-validation pass.
 
     On save, the editor calls this with ``include_ai=False`` for fast,
@@ -226,7 +226,7 @@ async def get_latest_validation_run(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | None:
     """Return the latest persisted ValidationRun for the (template, user) pair.
 
     Returns ``null`` when no validation has been run yet for this user on
@@ -278,13 +278,14 @@ def _recount_validation_findings(run: ValidationRun) -> None:
 
 @router.post(
     "/{template_id}/editor/validation/latest/findings/delete",
+    response_model=None,
 )
 async def delete_validation_findings(
     template_id: str,
     payload: DeleteValidationFindingsRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Permanently remove findings from the latest persisted ValidationRun.
 
     Unlike dismissals (which are UI-only state), this mutation persists so the

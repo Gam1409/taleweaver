@@ -1,7 +1,7 @@
 """Generate reviewable item drafts without modifying adventure or session state."""
 
 import json
-from typing import Literal
+from typing import Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -62,7 +62,7 @@ class ItemDraft(BaseModel):
     clothing: Garment | None = None
 
     @model_validator(mode="after")
-    def normalize_type_fields(self):
+    def normalize_type_fields(self) -> "ItemDraft":
         if self.item_type == "READABLE" and len(self.description) > 200:
             raise ValueError("READABLE description must be at most 200 characters")
         if self.item_type == "READABLE" and not self.text_log_content:
@@ -103,7 +103,10 @@ This is an unsaved draft: never claim to have placed the item, given it to anyon
 """
 
 
-async def _generate(user: User, context: dict, response_model: type[BaseModel]):
+Model = TypeVar("Model", bound=BaseModel)
+
+
+async def _generate(user: User, context: dict, response_model: type[Model]) -> Model:
     try:
         gm = GameMasterLLM.for_role(user, "small")
     except ValueError as exc:
@@ -155,7 +158,7 @@ async def generate_item_description(
     payload: ItemDescriptionRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ItemDescription:
     adventure = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     result = await _generate(
         current_user,

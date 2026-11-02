@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.api.routes.adventures.combat.rounds import CombatRoundMixin
 from backend.engine.combat.initiative import PLAYER_ID
 from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity
@@ -14,7 +15,7 @@ from backend.models.world_entity import WorldEntity
 MAX_ENCOUNTER_ENEMIES = 6
 
 
-class CombatSetupMixin:
+class CombatSetupMixin(CombatRoundMixin):
     """Starts fights against one target plus every other attackable NPC in the scene."""
 
     async def _scene_npcs(self) -> list[WorldEntity]:
@@ -56,7 +57,7 @@ class CombatSetupMixin:
         )
 
     def _combat_blocked_reason(self, initiated_by_enemy: bool) -> str | None:
-        if (self.adventure.rule_enforcement_mode or "rpg") != "rpg":
+        if (getattr(self.adventure, "rule_enforcement_mode", None) or "rpg") != "rpg":
             return "Turn-based combat is only available in RPG mode."
         if initiated_by_enemy and not bool(
             getattr(self.adventure, "npcs_can_damage_protagonist", True)
@@ -159,7 +160,7 @@ class CombatSetupMixin:
     def _gm_attack_target(game_event: GameEvent) -> tuple[str, bool]:
         """Returns (target hint, enemy_initiated) from the GM's requested attacks."""
         target_hint = ""
-        for req in game_event.requested_attacks:
+        for req in game_event.requested_attacks or []:
             attacker_id = str(req.attacker_id or "").strip()
             target_id = str(req.target_id or "").strip()
             attacker_is_player = attacker_id.upper() == PLAYER_ID
@@ -175,7 +176,7 @@ class CombatSetupMixin:
         """Starts combat automatically when the mechanics pass requests combat attacks."""
         if self._has_combat_phase() or not game_event.requested_attacks:
             return False
-        if (self.adventure.rule_enforcement_mode or "rpg") != "rpg":
+        if (getattr(self.adventure, "rule_enforcement_mode", None) or "rpg") != "rpg":
             return False
         target_hint, enemy_initiated = self._gm_attack_target(game_event)
         if self._combat_blocked_reason(enemy_initiated):

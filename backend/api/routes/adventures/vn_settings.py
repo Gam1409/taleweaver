@@ -1,5 +1,7 @@
 """Owner-scoped narration preferences for Visual Novel sessions."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,23 +35,23 @@ async def owned_vn_state(db: AsyncSession, game_id: str, user: User) -> SessionS
     return state
 
 
-@router.get("/{game_id}/vn-settings")
+@router.get("/{game_id}/vn-settings", response_model=None)
 async def read(
     game_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     state = await owned_vn_state(db, game_id, user)
     return {"settings": read_settings(state).model_dump(), "mode": "vn"}
 
 
-@router.patch("/{game_id}/vn-settings")
+@router.patch("/{game_id}/vn-settings", response_model=None)
 async def update(
     game_id: str,
     payload: VnSettings,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     # Authenticate before checking busy state, without loading mutable session JSON.
     owned_id = await db.scalar(
         select(GameSession.id).where(GameSession.id == game_id, GameSession.user_id == user.id)

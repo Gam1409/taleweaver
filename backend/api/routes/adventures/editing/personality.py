@@ -1,6 +1,7 @@
 """Personality catalog and biography-based suggestions for the adventure editor."""
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,8 +25,10 @@ class ProfileRequest(BaseModel):
     character: str = Field(default="", max_length=1000)
 
 
-@router.get("/editor/personality-options")
-async def personality_options(current_user: User = Depends(get_current_user)):
+@router.get("/editor/personality-options", response_model=None)
+async def personality_options(
+    current_user: User = Depends(get_current_user),
+) -> list[dict[str, Any]]:
     return catalog_payload()
 
 

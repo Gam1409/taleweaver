@@ -3,6 +3,7 @@
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.settings import clothing_settings
@@ -81,13 +82,13 @@ def detailed_for_state(state: Any) -> bool:
     return clothing_settings(snapshot.get("original_manifest"))["detailed"]
 
 
-async def session_objects(db, session_id: str) -> list[WorldEntity]:
+async def session_objects(db: AsyncSession, session_id: str) -> list[WorldEntity]:
     return list(
         (await db.scalars(select(WorldEntity).where(WorldEntity.session_id == session_id))).all()
     )
 
 
-async def npc_visuals(db, state, npc) -> dict | None:
+async def npc_visuals(db: AsyncSession, state, npc) -> dict | None:
     from backend.engine.clothing.context import resolved_inventory
 
     override = (state.entity_states or {}).get(npc.id) or {}

@@ -70,7 +70,7 @@ async def _canonical_entities(manager, states):
     return list(result.scalars().all())
 
 
-def _filter_targets(event, field, index, rejected, attribute=None):
+def _filter_targets(event, field, index, rejected, attribute=None) -> None:
     accepted = []
     for target in getattr(event, field) or []:
         raw = getattr(target, attribute) if attribute else target

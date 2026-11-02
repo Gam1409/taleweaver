@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from backend.api.routes.adventures.guardrails.base import GuardrailBase
 from backend.core.prompts import KEY_ITEM_REFERENCE_SYSTEM_PROMPT
 from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity
@@ -62,7 +63,7 @@ def _canonicalize(item: Any, entity: WorldEntity | None, carried: dict | None) -
     item.image_url = item.image_url or carried.get("image_url")
 
 
-class ItemIntegrityMixin:
+class ItemIntegrityMixin(GuardrailBase):
     """Blocks invented items and verifies key-item usage."""
 
     async def _known_items(self) -> KnownItems:
@@ -124,7 +125,7 @@ class ItemIntegrityMixin:
             ),
             None,
         )
-        if carried:
+        if isinstance(carried, str) and carried:
             return carried
         res = await self.db.execute(
             select(WorldEntity).where(

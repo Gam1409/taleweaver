@@ -1,5 +1,6 @@
 """Resume a failed generation without creating another adventure or session."""
 
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -64,13 +65,13 @@ async def _resume_job(db: AsyncSession, adventure: AdventureTemplate) -> Generat
     )
 
 
-@router.post("/{template_id}/resume-generation")
+@router.post("/{template_id}/resume-generation", response_model=None)
 async def resume_generation(
     template_id: str,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     adventure = await db.scalar(
         select(AdventureTemplate).where(
             AdventureTemplate.id == template_id, AdventureTemplate.owner_id == current_user.id

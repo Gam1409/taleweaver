@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,7 +17,7 @@ router = APIRouter()
 @router.get("/characters", response_model=list[CharacterSchema])
 async def list_characters(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> Sequence[Character]:
     result = await db.execute(select(Character).where(Character.user_id == current_user.id))
     return result.scalars().all()
 
@@ -24,7 +27,7 @@ async def create_character(
     payload: CharacterCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Character:
     char = Character(
         user_id=current_user.id,
         name=payload.name,
@@ -60,7 +63,7 @@ async def update_character(
     payload: CharacterUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Character:
     result = await db.execute(
         select(Character).where(Character.id == char_id, Character.user_id == current_user.id)
     )
@@ -77,10 +80,10 @@ async def update_character(
     return char
 
 
-@router.delete("/characters/{char_id}")
+@router.delete("/characters/{char_id}", response_model=None)
 async def delete_character(
     char_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> dict[str, Any]:
     result = await db.execute(
         select(Character).where(Character.id == char_id, Character.user_id == current_user.id)
     )
@@ -93,10 +96,10 @@ async def delete_character(
     return {"message": "Character deleted successfully"}
 
 
-@router.get("/characters/{char_id}/export")
+@router.get("/characters/{char_id}/export", response_model=None)
 async def export_character(
     char_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> CharacterSchema:
     result = await db.execute(
         select(Character).where(Character.id == char_id, Character.user_id == current_user.id)
     )
@@ -113,7 +116,7 @@ async def import_character(
     payload: CharacterCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Character:
     # Re-use create logic but allow the payload to be the full source
     char = Character(
         user_id=current_user.id,

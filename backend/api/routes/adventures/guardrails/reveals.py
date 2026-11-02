@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 
 from pydantic import BaseModel
 
-from backend.api.routes.adventures.guardrails.base import item_id_upper
+from backend.api.routes.adventures.guardrails.base import GuardrailBase, item_id_upper
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.prompts import HIDDEN_ENTITY_DISCOVERY_SYSTEM_PROMPT
 from backend.engine.rule_engine import GameEvent
@@ -19,7 +20,7 @@ class DiscoveryCheckResponse(BaseModel):
     discovered: bool
 
 
-def _named(items, ent: WorldEntity) -> bool:
+def _named(items: Iterable[object] | None, ent: WorldEntity) -> bool:
     """True when one of the GM's items is this entity (by ID or exact name)."""
     name = (ent.name or "").strip().lower()
     for item in items or []:
@@ -49,7 +50,7 @@ def _parent_reveals(event: GameEvent, ent: WorldEntity, by_id: dict[str, WorldEn
     return False
 
 
-class RevealGuardMixin:
+class RevealGuardMixin(GuardrailBase):
     """Reveals hidden scene entities that the turn discovered."""
 
     def _is_entity_hidden_now(self, ent: WorldEntity) -> bool:

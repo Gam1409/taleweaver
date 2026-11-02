@@ -8,7 +8,7 @@ def constrain_generated_objects(
     scripts_generation_enabled,
     container_generation_enabled,
     text_log_generation_enabled,
-):
+) -> None:
     from backend.engine.world_generator import (
         _ensure_containers_have_minimum_inventory,
         _normalize_unlock_requirements,
@@ -61,7 +61,9 @@ def constrain_generated_objects(
     _constrain_readable_objects(objects, text_log_generation_enabled, clamped_max_text_logs)
 
 
-def _constrain_readable_objects(objects, text_log_generation_enabled, clamped_max_text_logs):
+def _constrain_readable_objects(
+    objects, text_log_generation_enabled, clamped_max_text_logs
+) -> None:
     from backend.engine.world_generator import _normalize_text_log_content
 
     readable_indices = [

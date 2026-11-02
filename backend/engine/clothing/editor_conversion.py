@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import inspect, literal, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.adventure_exporter import _serialize_world_entity
@@ -97,7 +98,7 @@ def _actor_input(actor: Any, objects: list, *, protagonist: bool) -> dict:
     }
 
 
-async def _template_records(db, adventure) -> tuple[list, list]:
+async def _template_records(db: AsyncSession, adventure) -> tuple[list, list]:
     avatar = await db.scalar(
         select(Avatar)
         .where(
@@ -114,7 +115,9 @@ async def _template_records(db, adventure) -> tuple[list, list]:
             )
         )
     )
-    actors = [(npc, False) for npc in entities if npc.entity_type == "NPC"]
+    actors: list[tuple[WorldEntity | Avatar, bool]] = [
+        (npc, False) for npc in entities if npc.entity_type == "NPC"
+    ]
     if avatar is not None:
         actors.insert(0, (avatar, True))
     return actors, [item for item in entities if item.entity_type == "OBJECT"]
@@ -278,7 +281,7 @@ def _sync_inline_garments(actors: list, garments: dict) -> None:
             }
 
 
-async def _check_unchanged(db, records: list) -> None:
+async def _check_unchanged(db: AsyncSession, records: list) -> None:
     """Reject edits made while awaiting the model rather than replacing newer facts."""
     for record in records:
         mapper = inspect(record)
@@ -299,7 +302,7 @@ async def _check_unchanged(db, records: list) -> None:
             )
 
 
-async def apply_editor_clothing(db, adventure, detailed: bool, *, user=None) -> dict:
+async def apply_editor_clothing(db: AsyncSession, adventure, detailed: bool, *, user=None) -> dict:
     """Prepare all plans before writes. Caller owns commit/rollback of the whole save."""
     manifest = deepcopy(adventure.original_manifest or {})
     if not detailed:

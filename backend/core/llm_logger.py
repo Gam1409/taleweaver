@@ -91,7 +91,7 @@ def log_llm_interaction(
     operation: Optional[str] = None,
     phase: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
-):
+) -> None:
     """
     Logs an LLM interaction to a local JSONL file for debugging.
 

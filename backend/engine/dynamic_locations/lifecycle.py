@@ -1,13 +1,15 @@
 """Remove session-created topology absent from a restored registry."""
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.dynamic_locations.schema import registry
+from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldExit, WorldScene
 from backend.models.world_map import WorldMap
 
 
-async def prune(db, session_id: str, removed: set[str]) -> None:
+async def prune(db: AsyncSession, session_id: str, removed: set[str]) -> None:
     if not removed:
         return
     await db.execute(
@@ -32,7 +34,7 @@ async def prune(db, session_id: str, removed: set[str]) -> None:
         ]
 
 
-async def rewind(db, state, previous: dict) -> None:
+async def rewind(db: AsyncSession, state: SessionState, previous: dict) -> None:
     removed = set(previous.get("places") or {}) - set(registry(state).get("places") or {})
     await prune(db, state.session_id, removed)
     world = await db.scalar(select(WorldMap).where(WorldMap.session_id == state.session_id))

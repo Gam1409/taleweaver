@@ -113,7 +113,7 @@ class AdventureTemplateImporter:
         delete_after: bool = False,
         allow_session: bool = False,
         overwrite: bool = False,
-    ):
+    ) -> None:
         """Scans a directory for .adv or .adz files and imports them."""
         if not await run_file_operation(os.path.exists, directory):
             logger.warning(f"Import directory {directory} does not exist.")
@@ -150,7 +150,7 @@ class AdventureTemplateImporter:
                 logger.error(f"Error during import of {file_path}: {e}")
 
     @staticmethod
-    async def delete_template_for_overwrite(db: AsyncSession, template_id: str):
+    async def delete_template_for_overwrite(db: AsyncSession, template_id: str) -> None:
         """Helper to cleanly delete a template, decoupling sessions and cleaning assets before overwrite import."""
         from backend.api.routes.adventures.logic import AdventureLogic
 

@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy import select
 
+from backend.api.routes.adventures.turn_context import TurnContext
+from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
 from backend.models.world_entity import WorldEntity, WorldScene
 
 logger = logging.getLogger(__name__)
 
 
-class TurnEventEntities:
+class TurnEventEntities(TurnContext):
     """Apply entities outcomes in the turn transaction."""
 
-    async def _apply_entity_movements(self, event, states, system_messages):
+    async def _apply_entity_movements(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str]
+    ) -> bool:
         state_dirty = False
         if not (event.moved_entities):
             return False
@@ -56,7 +61,9 @@ class TurnEventEntities:
 
         return state_dirty
 
-    async def _apply_entity_updates(self, event, states, system_messages, vn_mode):
+    async def _apply_entity_updates(
+        self, event: GameEvent, states: dict[str, Any], system_messages: list[str], vn_mode: bool
+    ) -> bool:
         state_dirty = False
         if not (event.updated_entities):
             return False
@@ -81,7 +88,9 @@ class TurnEventEntities:
 
         return state_dirty
 
-    async def _apply_entity_description(self, update, states, eid):
+    async def _apply_entity_description(
+        self, update: WorldEntityUpdate, states: dict[str, Any], eid: str
+    ) -> None:
         if update.name is not None:
             states[eid]["name"] = update.name
         if update.description is not None:
@@ -93,7 +102,9 @@ class TurnEventEntities:
         if update.is_hidden is not None:
             states[eid]["is_hidden"] = update.is_hidden
 
-    async def _apply_entity_attributes(self, update, states, eid):
+    async def _apply_entity_attributes(
+        self, update: WorldEntityUpdate, states: dict[str, Any], eid: str
+    ) -> None:
         if update.hp is not None:
             states[eid]["hp"] = update.hp
         if update.mana is not None:
@@ -113,11 +124,18 @@ class TurnEventEntities:
         if update.allowed_scenes is not None:
             states[eid]["allowed_scenes"] = update.allowed_scenes
 
-    async def _apply_entity_defeat(self, update, states, eid, system_messages, vn_mode):
+    async def _apply_entity_defeat(
+        self,
+        update: WorldEntityUpdate,
+        states: dict[str, Any],
+        eid: str,
+        system_messages: list[str],
+        vn_mode: bool,
+    ) -> WorldEntity | None:
         ent_obj = None
         if not (update.is_defeated is not None and not vn_mode):
             return None
-        was_defeated = self.state.entity_states.get(eid, {}).get("is_defeated", False)
+        was_defeated = (self.state.entity_states or {}).get(eid, {}).get("is_defeated", False)
         if not was_defeated and update.is_defeated is True:
             ent_res = await self.db.execute(
                 select(WorldEntity).where(
@@ -147,10 +165,18 @@ class TurnEventEntities:
         states[eid]["is_defeated"] = update.is_defeated
         return ent_obj
 
-    async def _apply_entity_unlock(self, update, states, eid, ent_obj, system_messages, vn_mode):
+    async def _apply_entity_unlock(
+        self,
+        update: WorldEntityUpdate,
+        states: dict[str, Any],
+        eid: str,
+        ent_obj: WorldEntity | None,
+        system_messages: list[str],
+        vn_mode: bool,
+    ) -> None:
         if not (update.locked is not None):
             return
-        was_locked = self.state.entity_states.get(eid, {}).get("locked")
+        was_locked = (self.state.entity_states or {}).get(eid, {}).get("locked")
         if was_locked is None:
             ent_res = await self.db.execute(
                 select(WorldEntity).where(
@@ -181,7 +207,9 @@ class TurnEventEntities:
 
         states[eid]["locked"] = update.locked
 
-    async def _fire_container_unlock(self, ent_obj, system_messages, vn_mode):
+    async def _fire_container_unlock(
+        self, ent_obj: WorldEntity | None, system_messages: list[str], vn_mode: bool
+    ) -> None:
         if (
             ent_obj
             and ent_obj.entity_type == "OBJECT"

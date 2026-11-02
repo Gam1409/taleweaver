@@ -6,25 +6,16 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 import backend.api.routes.adventures.gameplay_logic as gl
-from backend.api.routes.adventures.combat.combatants import CombatCombatantMixin
-from backend.api.routes.adventures.combat.consumables import CombatConsumableMixin
 from backend.api.routes.adventures.combat.context import (
-    CombatContextMixin,
     engaged_enemies,
     find_enemy,
     system_event,
 )
-from backend.api.routes.adventures.combat.enemy_ai import CombatEnemyMixin
-from backend.api.routes.adventures.combat.loot import CombatLootMixin
-from backend.api.routes.adventures.combat.narration import CombatNarrationMixin
 from backend.api.routes.adventures.combat.player_actions import (
     INVALID_ACTION_MSG,
     CombatPlayerMixin,
     parse_combat_command,
 )
-from backend.api.routes.adventures.combat.rounds import CombatRoundMixin
-from backend.api.routes.adventures.combat.setup import CombatSetupMixin
-from backend.api.routes.adventures.combat.special_scripts import CombatSpecialScriptMixin
 from backend.api.routes.adventures.combat.triggers import CombatTriggerMixin
 from backend.api.routes.adventures.combat.unlocks import CombatUnlockMixin
 
@@ -35,20 +26,7 @@ FLEE_HP_RATIO = 0.2
 FLEE_CHANCE = 0.10
 
 
-class TurnCombatManager(
-    CombatTriggerMixin,
-    CombatUnlockMixin,
-    CombatSpecialScriptMixin,
-    CombatSetupMixin,
-    CombatPlayerMixin,
-    CombatEnemyMixin,
-    CombatRoundMixin,
-    CombatCombatantMixin,
-    CombatConsumableMixin,
-    CombatLootMixin,
-    CombatNarrationMixin,
-    CombatContextMixin,
-):
+class TurnCombatManager(CombatTriggerMixin, CombatUnlockMixin, CombatPlayerMixin):
     """Manages multi-enemy encounters, initiative, special attacks and loot."""
 
     def __init__(self, manager: GameTurnManager) -> None:
@@ -118,7 +96,9 @@ class TurnCombatManager(
     ) -> AsyncGenerator[str, None]:
         verb, arg = parse_combat_command(user_msg)
         handler = self._player_action_handler(verb)
-        result = await handler(combat, arg) if handler else {"error": INVALID_ACTION_MSG}
+        result: dict[str, Any] = (
+            await handler(combat, arg) if handler else {"error": INVALID_ACTION_MSG}
+        )
         if result.get("error"):
             async for chunk in self._reply(result["error"]):
                 yield chunk

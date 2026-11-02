@@ -25,7 +25,7 @@ def _is_svg(path):
 class SafeStaticFiles(StaticFiles):
     """Serve passive media only; runtime state and executable assets remain private."""
 
-    async def _ensure_thumbnail(self, path):
+    async def _ensure_thumbnail(self, path) -> None:
         match = re.match(r"^(.*)_thumb(\.[a-zA-Z0-9]+)$", path, re.IGNORECASE)
         if not match:
             return

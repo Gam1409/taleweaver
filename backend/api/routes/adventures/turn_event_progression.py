@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from typing import Any
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_event_awards import TurnEventAwards
 from backend.engine.quest_manager import QuestManager
+from backend.engine.rule_engine import GameEvent
+from backend.engine.scripting.context import GameContext
 from backend.models.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -12,10 +16,12 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_REASON_QUEST_UPDATE = "QUEST_UPDATE"
 
 
-class TurnEventProgression:
+class TurnEventProgression(TurnEventAwards):
     """Apply progression outcomes in the turn transaction."""
 
-    async def _apply_explicit_progression(self, event, system_messages, vn_mode):
+    async def _apply_explicit_progression(
+        self, event: GameEvent, system_messages: list[str], vn_mode: bool
+    ) -> tuple[bool, list[dict[str, Any]]]:
         state_dirty = False
         # Quest Updates
         newly_completed_quests: list[dict] = []
@@ -38,8 +44,13 @@ class TurnEventProgression:
         return state_dirty, newly_completed_quests
 
     async def _apply_deterministic_quests(
-        self, event, system_messages, vn_mode, script_context, newly_completed_quests
-    ):
+        self,
+        event: GameEvent,
+        system_messages: list[str],
+        vn_mode: bool,
+        script_context: GameContext | None,
+        newly_completed_quests: list[dict[str, Any]],
+    ) -> bool:
         state_dirty = False
         # Deterministic Quest Sync (Post-LLM check)
         det_completed = (
@@ -93,7 +104,13 @@ class TurnEventProgression:
 
         return state_dirty
 
-    async def _apply_sequence_progression(self, event, system_messages, vn_mode, script_context):
+    async def _apply_sequence_progression(
+        self,
+        event: GameEvent,
+        system_messages: list[str],
+        vn_mode: bool,
+        script_context: GameContext | None,
+    ) -> bool:
         state_dirty = False
         # Sequence Completion Logic
         old_seq_id = self.state.active_sequence_id
@@ -127,7 +144,9 @@ class TurnEventProgression:
 
         return state_dirty
 
-    async def _apply_win_guard(self, event, vn_mode, script_context):
+    async def _apply_win_guard(
+        self, event: GameEvent, vn_mode: bool, script_context: GameContext | None
+    ) -> None:
         raw_win_guard = getattr(self.state, "completed_guard_expression", None) or getattr(
             self.adventure, "completed_guard_expression", None
         )
@@ -146,7 +165,9 @@ class TurnEventProgression:
             elif event.game_completed:
                 event.game_completed = False
 
-    async def _fire_sequence_hooks(self, old_seq_id, system_messages):
+    async def _fire_sequence_hooks(
+        self, old_seq_id: str | None, system_messages: list[str]
+    ) -> None:
         sequences = sorted(
             getattr(self.adventure, "sequences", None) or [], key=lambda x: x.get("order", 1)
         )
@@ -173,9 +194,7 @@ class TurnEventProgression:
                 await self._save_chat_message("system", new_seq["on_start_sequence_text"])
                 system_messages.append(new_seq["on_start_sequence_text"])
 
-    async def _progression_script_context(
-        self,
-    ):
+    async def _progression_script_context(self) -> GameContext | None:
         script_context = None
         if hasattr(self, "manager") and hasattr(self.manager, "_build_script_context"):
             try:

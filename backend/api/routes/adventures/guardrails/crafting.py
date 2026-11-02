@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from backend.api.routes.adventures.guardrails.base import item_id_upper
+from backend.api.routes.adventures.guardrails.base import GuardrailBase, item_id_upper
 from backend.engine.rule_engine import GameEvent, InventoryItem
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity
@@ -47,7 +47,7 @@ def _granted_by_gm(event: GameEvent, entity_id: str) -> bool:
     return any(item_id_upper(item) == entity_id.upper() for item in items)
 
 
-class CraftingGuardMixin:
+class CraftingGuardMixin(GuardrailBase):
     """Resolves crafting and reverts constructables the GM produced without crafting."""
 
     def _crafting_state(self, entities: list[WorldEntity], lowered: str) -> CraftingState:
@@ -217,7 +217,7 @@ class CraftingGuardMixin:
         self, event: GameEvent, cid: str, ent: WorldEntity | None, messages: list[str]
     ) -> None:
         def is_constructable(entity_id: str | None) -> bool:
-            return bool(entity_id) and entity_id.upper() == cid
+            return entity_id is not None and entity_id.upper() == cid
 
         if event.updated_entities:
             for up in event.updated_entities:

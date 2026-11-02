@@ -1,6 +1,6 @@
 """Per-story selection of administrator-configured ComfyUI presets."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -20,17 +20,17 @@ class StoryPresets(BaseModel):
     selection: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
 
 
-async def _owned(db, template_id, user):
+async def _owned(db: AsyncSession, template_id, user: User):
     adventure = await db.get(AdventureTemplate, template_id)
     if not adventure or adventure.owner_id != user.id:
         raise HTTPException(404, "Adventure template not found.")
     return adventure
 
 
-@router.get("")
+@router.get("", response_model=None)
 async def read_presets(
     template_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-):
+) -> dict[str, Any]:
     adventure = await _owned(db, template_id, user)
     t2i = normalize_comfy_presets(user.t2i_settings or {})
     return {
@@ -43,13 +43,13 @@ async def read_presets(
     }
 
 
-@router.put("")
+@router.put("", response_model=None)
 async def save_presets(
     template_id: str,
     payload: StoryPresets,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     adventure = await _owned(db, template_id, user)
     manifest = {**(adventure.original_manifest or {}), "visual_presets": payload.selection}
     from types import SimpleNamespace

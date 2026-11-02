@@ -1,18 +1,23 @@
 """Direct Ollama and Stable Diffusion image requests."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
 from backend.core.config import settings
 
+if TYPE_CHECKING:
+    from backend.engine.media_engine import MediaEngine
+
 logger = logging.getLogger(__name__)
 
 
 async def _generate_image_ollama_direct(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str,
     ollama_url: str,
@@ -77,7 +82,7 @@ async def _generate_image_ollama_direct(
 
 
 async def _generate_image_stable_diffusion_direct(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str,
     stable_diffusion_url: str,

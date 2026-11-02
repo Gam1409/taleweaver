@@ -5,7 +5,7 @@ import shutil
 logger = logging.getLogger(__name__)
 
 
-def copy_session_asset_thumbnail(source_path, target_path, ext):
+def copy_session_asset_thumbnail(source_path, target_path, ext) -> None:
     from .sessions import _is_svg_file
 
     # Ensure thumbnail exists in session visuals
@@ -35,7 +35,7 @@ def copy_session_asset_thumbnail(source_path, target_path, ext):
         try:
             from PIL import Image
 
-            def _gen_thumb():
+            def _gen_thumb() -> None:
                 with Image.open(target_path) as img:
                     img.thumbnail((480, 480), Image.Resampling.LANCZOS)
                     output_image = img.convert("RGB") if img.mode in ("RGBA", "P") else img

@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.api.routes.adventures.turn_context import TurnContext
+from backend.api.routes.adventures.turn_helpers import TurnCombatStateHelper
 from backend.models.world_entity import WorldEntity
 
 if TYPE_CHECKING:
@@ -23,63 +25,26 @@ def system_event(text: str) -> str:
     return f"event: system\ndata: {json.dumps({'role': 'system', 'content': text})}\n\n"
 
 
-class CombatContextMixin:
+class CombatContextMixin(TurnContext):
     """Proxies the turn manager state and offers combat state persistence helpers."""
 
     manager: GameTurnManager
 
     @property
-    def db(self):
-        return self.manager.db
-
-    @property
-    def game_id(self):
-        return self.manager.game_id
-
-    @property
-    def user(self):
-        return self.manager.user
-
-    @property
-    def state(self):
-        return self.manager.state
-
-    @property
-    def avatar(self):
-        return self.manager.avatar
-
-    @property
-    def adventure(self):
-        return self.manager.adventure
-
-    @property
-    def turn_language(self):
+    def turn_language(self) -> str | None:
         return self.manager.turn_language
 
     @property
-    def _combat_state_helper(self):
+    def _combat_state_helper(self) -> TurnCombatStateHelper:
         return self.manager._combat_state_helper
 
-    def _build_map_payload(self, *args, **kwargs):
-        return self.manager._build_map_payload(*args, **kwargs)
+    async def _generate_prompt_suggestions(
+        self, last_response: str, *, refresh: bool = False
+    ) -> list[str]:
+        return await self.manager._generate_prompt_suggestions(last_response, refresh=refresh)
 
-    def _build_prompt_suggestions_payload(self, *args, **kwargs):
-        return self.manager._build_prompt_suggestions_payload(*args, **kwargs)
-
-    def _build_terminal_flags_payload(self, *args, **kwargs):
-        return self.manager._build_terminal_flags_payload(*args, **kwargs)
-
-    async def _finalize_session(self, *args, **kwargs):
-        return await self.manager._finalize_session(*args, **kwargs)
-
-    async def _generate_prompt_suggestions(self, *args, **kwargs):
-        return await self.manager._generate_prompt_suggestions(*args, **kwargs)
-
-    async def _load_last_assistant_message(self, *args, **kwargs):
-        return await self.manager._load_last_assistant_message(*args, **kwargs)
-
-    async def _save_chat_message(self, *args, **kwargs):
-        return await self.manager._save_chat_message(*args, **kwargs)
+    async def _load_last_assistant_message(self) -> str:
+        return await self.manager._load_last_assistant_message()
 
     # --- Combat state -------------------------------------------------------------
 
@@ -166,7 +131,7 @@ class CombatContextMixin:
     async def _emit_combat_final(self, status_note: str | None = None) -> AsyncGenerator[str, None]:
         if not getattr(self.manager, "_atomic_post_turn_hook", False):
             await self.db.commit()
-        combat_snap = AdventureLogic.get_combat_snapshot(self.state)
+        combat_snap: dict[str, Any] | None = AdventureLogic.get_combat_snapshot(self.state)
         # Never send a zombie combat object that has no active phase.
         if combat_snap and not any(
             combat_snap.get(k) for k in ("active", "loot_pending", "outcome")
@@ -202,7 +167,8 @@ def find_enemy(combat: dict[str, Any], enemy_id: str | None) -> dict[str, Any] |
     if not enemy_id:
         return None
     low = str(enemy_id).lower()
-    for enemy in combat.get("enemies") or []:
+    enemies: list[dict[str, Any]] = combat.get("enemies") or []
+    for enemy in enemies:
         if str(enemy.get("id", "")).lower() == low or str(enemy.get("name", "")).lower() == low:
             return enemy
     return None

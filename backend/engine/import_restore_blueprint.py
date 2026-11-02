@@ -2,13 +2,15 @@
 
 import os
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.import_build_blueprint_template import build_blueprint_template
 from backend.engine.world_generator import WorldGenerator
 
 
-async def restore_blueprint(db, payload, user, owner_id, origin_id):
+async def restore_blueprint(db: AsyncSession, payload, user, owner_id, origin_id):
     manifest = payload.get("original_manifest") or payload.get("manifest") or payload
     adv_meta = payload.get("adventure") or payload
 

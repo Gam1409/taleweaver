@@ -1,5 +1,7 @@
 """Owner-only policy and image status for session-local exploration."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +18,7 @@ from backend.models.world_entity import WorldScene
 router = APIRouter(tags=["Dynamic locations"])
 
 
-async def _owned(db, game_id, user):
+async def _owned(db: AsyncSession, game_id, user: User):
     state = await db.scalar(
         select(SessionState)
         .join(GameSession)
@@ -30,10 +32,10 @@ async def _owned(db, game_id, user):
     return state
 
 
-@router.get("/{game_id}/dynamic-locations")
+@router.get("/{game_id}/dynamic-locations", response_model=None)
 async def read(
     game_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-):
+) -> dict[str, Any]:
     state = await _owned(db, game_id, user)
     data = registry(state)
     scene = await db.scalar(
@@ -58,26 +60,26 @@ async def read(
     }
 
 
-@router.patch("/{game_id}/dynamic-locations")
+@router.patch("/{game_id}/dynamic-locations", response_model=None)
 async def update(
     game_id: str,
     payload: LocationPolicy,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     state = await _owned(db, game_id, user)
     save_registry(state, {**registry(state), "policy": payload.model_dump()})
     await db.commit()
     return {"policy": payload.model_dump()}
 
 
-@router.post("/{game_id}/dynamic-locations/{scene_id}/image")
+@router.post("/{game_id}/dynamic-locations/{scene_id}/image", response_model=None)
 async def retry(
     game_id: str,
     scene_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     state = await _owned(db, game_id, user)
     if scene_id not in registry(state).get("places", {}):
         raise HTTPException(404, "Dynamic location not found.")

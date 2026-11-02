@@ -24,7 +24,7 @@ class MemorySettingsPayload(MemoryRagSettings):
     clear_api_key: bool = False
 
     @model_validator(mode="after")
-    def require_endpoint(self):
+    def require_endpoint(self) -> "MemorySettingsPayload":
         if self.enabled and (not self.base_url or not self.model):
             raise ValueError("Enabled memory search requires an embedding URL and model.")
         return self

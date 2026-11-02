@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from backend.api.routes.adventures.combat.context import CombatContextMixin
 from backend.engine.rule_engine import RESOURCE_CAP
 
 _RESOURCE_ALIASES = {
@@ -64,7 +65,7 @@ def _numeric_field(source: Any, keys: list[str], resource: str) -> int | None:
     return None
 
 
-class CombatConsumableMixin:
+class CombatConsumableMixin(CombatContextMixin):
     """Finds and applies consumables from the protagonist's inventory."""
 
     @staticmethod

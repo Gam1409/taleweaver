@@ -1,15 +1,19 @@
 """Opt-in rotating operational metadata, separate from raw LLM telemetry."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 import sys
 import threading
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from typing_extensions import override
@@ -24,7 +28,7 @@ BACKUP_COUNT = 4
 class MetadataHandler(logging.Handler):
     """Discard arbitrary log text, including preformatted SQL/provider exceptions."""
 
-    def __init__(self, owner):
+    def __init__(self, owner: DiagnosticService) -> None:
         super().__init__(logging.NOTSET)
         self.owner = owner
 
@@ -49,7 +53,7 @@ class MetadataHandler(logging.Handler):
 
 
 class DiagnosticWriter(RotatingFileHandler):
-    def __init__(self, owner):
+    def __init__(self, owner: DiagnosticService) -> None:
         self.owner = owner
         super().__init__(
             owner.directory / "system-debug.jsonl",
@@ -59,7 +63,7 @@ class DiagnosticWriter(RotatingFileHandler):
         )
 
     @override
-    def handleError(self, record):
+    def handleError(self, record: logging.LogRecord) -> None:
         # Disk failures must neither fail gameplay nor dump a logging exception.
         self.owner.write_failed = True
 
@@ -69,7 +73,7 @@ class DiagnosticService:
         self.directory = directory
         self.enabled = False
         self.write_failed = False
-        self._writer = None
+        self._writer: DiagnosticWriter | None = None
         self._capture = MetadataHandler(self)
         self._lock = threading.RLock()
 
@@ -82,7 +86,7 @@ class DiagnosticService:
         }
 
     @contextmanager
-    def context(self, **fields):
+    def context(self, **fields: object) -> Iterator[None]:
         token = _context.set({**(_context.get() or {}), **safe_fields(fields)})
         try:
             yield
@@ -140,7 +144,7 @@ class DiagnosticService:
                 self._writer.close()
                 self._writer = None
 
-    def emit(self, event: str, **fields) -> None:
+    def emit(self, event: str, **fields: object) -> None:
         if not self.enabled or not isinstance(event, str) or event not in EVENTS:
             return
         data = {**(_context.get() or {}), **safe_fields(fields)}
@@ -155,7 +159,7 @@ class DiagnosticService:
         }
         self._write(event, data)
 
-    def http_event(self, event: str, scope: dict, **fields) -> None:
+    def http_event(self, event: str, scope: Mapping[str, Any], **fields: object) -> None:
         if not self.enabled or event not in EVENTS:
             return
         data = {**(_context.get() or {}), **safe_fields(fields)}

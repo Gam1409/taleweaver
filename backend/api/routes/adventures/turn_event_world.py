@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.rule_engine import (
+    GameEvent,
     RuleEngine,
 )
 from backend.engine.visual_novel.time import apply_elapsed_time
@@ -16,10 +19,10 @@ from backend.models.world_entity import WorldEntity
 logger = logging.getLogger(__name__)
 
 
-class TurnEventWorld:
+class TurnEventWorld(TurnContext):
     """Apply world outcomes in the turn transaction."""
 
-    async def _apply_avatar_outcomes(self, event, system_messages):
+    async def _apply_avatar_outcomes(self, event: GameEvent, system_messages: list[str]) -> None:
         if event.new_status_effects:
             for effect in event.new_status_effects:
                 msg = f"You are now: {effect}"
@@ -49,7 +52,7 @@ class TurnEventWorld:
                 await self._save_chat_message("system", prot_meta["on_status_change_text"])
                 system_messages.append(prot_meta["on_status_change_text"])
 
-    async def _synchronize_npc_inventories(self, states):
+    async def _synchronize_npc_inventories(self, states: dict[str, Any]) -> bool:
         state_dirty = False
         # Auto-cleanup: remove items from NPC inventories if they are now in the scene or player inventory
         player_item_ids = {
@@ -106,7 +109,7 @@ class TurnEventWorld:
 
         return state_dirty
 
-    async def _apply_world_memories(self, event, system_messages):
+    async def _apply_world_memories(self, event: GameEvent, system_messages: list[str]) -> None:
         if not (event.new_world_memories):
             return
         import uuid
@@ -149,7 +152,7 @@ class TurnEventWorld:
         self._queue_checkpoint("world_memories_updated")
         event.new_world_memories = None
 
-    async def _apply_turn_time(self, event, vn_mode):
+    async def _apply_turn_time(self, event: GameEvent, vn_mode: bool) -> bool:
         state_dirty = False
         # Time Management
         if event.start_datetime_override:
@@ -161,7 +164,7 @@ class TurnEventWorld:
         elif event.time_override_minutes is not None:
             self.state.in_game_time = max(0, int(event.time_override_minutes))
             state_dirty = True
-        elif event.extra_time_minutes != 0:
+        elif event.extra_time_minutes != 0 and self.adventure is not None:
             base_turn = int(
                 self.adventure.time_per_turn if self.adventure.time_per_turn is not None else 5
             )

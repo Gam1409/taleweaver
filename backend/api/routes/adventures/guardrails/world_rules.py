@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.api.routes.adventures.guardrails.base import inventory_ids_upper
+from backend.api.routes.adventures.guardrails.items import ItemIntegrityMixin
 from backend.api.routes.adventures.guardrails.movement_messages import movement_message
 from backend.engine.npc_movement import allowed_scenes
 from backend.engine.rule_engine import GameEvent
@@ -30,11 +31,12 @@ def _switch_flag_keys(metadata: dict[str, Any]) -> set[str]:
 
 
 def _required_transition_item(transition: dict[str, Any]) -> str:
-    gates = transition.get("gates") if isinstance(transition.get("gates"), dict) else {}
+    raw_gates = transition.get("gates")
+    gates = raw_gates if isinstance(raw_gates, dict) else {}
     return str(gates.get("item") or transition.get("required_item") or "").strip().upper()
 
 
-class WorldRulesMixin:
+class WorldRulesMixin(ItemIntegrityMixin):
     """Switch transition gates and NPC movement limits."""
 
     async def _get_switch_story_flags(self) -> set[str]:
@@ -121,7 +123,8 @@ class WorldRulesMixin:
         await self.manager._apply_script_changeset(script_context.changeset, game_event=event)
         if failure is not None:
             return failure or f"{switch.name} cannot be flipped."
-        outcomes = config.get("outcomes") if isinstance(config.get("outcomes"), list) else []
+        raw_outcomes = config.get("outcomes")
+        outcomes = raw_outcomes if isinstance(raw_outcomes, list) else []
         await self.manager._apply_switch_outcomes(outcomes, target_state)
         return None
 

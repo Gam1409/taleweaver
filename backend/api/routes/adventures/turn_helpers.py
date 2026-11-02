@@ -417,7 +417,6 @@ class TurnCombatStateHelper:
         states = dict(self.manager.state.entity_states or {})
         states["__combat__"] = combat
         self.manager.state.entity_states = states
-        self.manager.state.combat_json = combat
         flag_modified(self.manager.state, "entity_states")
 
     def append_combat_log(

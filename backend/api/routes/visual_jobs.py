@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.auth import get_current_user
@@ -86,7 +87,7 @@ def _typed_payload(request: VisualJobRequest):
         raise HTTPException(422, "Invalid visual job parameters or workflow.") from exc
 
 
-async def _dispatch(request: VisualJobRequest, user: User, db):
+async def _dispatch(request: VisualJobRequest, user: User, db: AsyncSession):
     from backend.api.routes.adventures.assets import regenerate_visual
     from backend.api.routes.config_api import generate_catalog_image, test_vision_connection
     from backend.api.routes.users_api import UserResponse, generate_my_profile_image
@@ -186,8 +187,10 @@ def _resource(request: VisualJobRequest) -> tuple:
     )
 
 
-@router.post("")
-async def create_visual_job(payload: VisualJobRequest, user: User = Depends(get_current_user)):
+@router.post("", response_model=None)
+async def create_visual_job(
+    payload: VisualJobRequest, user: User = Depends(get_current_user)
+) -> dict[str, Any]:
     _prune()
     if (
         payload.operation == "test"
@@ -224,13 +227,15 @@ def _owned_job(job_id: UUID, user: User) -> VisualJob:
     return job
 
 
-@router.get("/{job_id}")
-async def read_visual_job(job_id: UUID, user: User = Depends(get_current_user)):
+@router.get("/{job_id}", response_model=None)
+async def read_visual_job(job_id: UUID, user: User = Depends(get_current_user)) -> dict[str, Any]:
     return _owned_job(job_id, user).public()
 
 
-@router.delete("/{job_id}")
-async def abandon_visual_job(job_id: UUID, user: User = Depends(get_current_user)):
+@router.delete("/{job_id}", response_model=None)
+async def abandon_visual_job(
+    job_id: UUID, user: User = Depends(get_current_user)
+) -> dict[str, Any]:
     job = _owned_job(job_id, user)
     if job.task and job.finished is None:
         job.task.cancel()

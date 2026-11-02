@@ -2,18 +2,22 @@ import json
 import logging
 from copy import deepcopy
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.core.config import settings
 from backend.core.game_modes import is_vn
 from backend.engine.scripting.context import GameContext
 from backend.engine.scripting.runner import ScriptRunner
+from backend.models.avatar import Avatar
 from backend.models.base import utc_now
 from backend.models.chat import ChatMessage
+from backend.models.game_session import GameSession
 
 logger = logging.getLogger(__name__)
 
 
 def run_adventure_initialization(
-    adventure, template_entities, avatar, first_scene_id, initial_entity_states
+    adventure, template_entities, avatar: Avatar, first_scene_id, initial_entity_states
 ):
     # Execute adventure initialization script and on_init triggers if configured
     manifest = getattr(adventure, "original_manifest", None) or {}
@@ -69,7 +73,9 @@ def run_adventure_initialization(
     return init_narrative_messages
 
 
-async def add_initial_session_messages(db, adventure, new_session, init_narrative_messages):
+async def add_initial_session_messages(
+    db: AsyncSession, adventure, new_session: GameSession, init_narrative_messages
+) -> None:
     # Add Creator, Copyright, License details as a dedicated license_info message
     # Pin created_at explicitly so the license_info row sorts before intro_text
     if adventure.creator or adventure.copyright or adventure.license or adventure.license_url:

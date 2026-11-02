@@ -3,9 +3,10 @@
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.editing.common import _get_owned_adventure_or_404
@@ -61,17 +62,25 @@ def _small_llm(current_user: User) -> tuple[GameMasterLLM, str]:
     return gm, gm.model
 
 
+Model = TypeVar("Model", bound=BaseModel)
+
+
 async def _run_structured(
-    current_user: User, system_prompt: str, user_prompt: str, response_model: type, label: str
-) -> Any:
+    current_user: User,
+    system_prompt: str,
+    user_prompt: str,
+    response_model: type[Model],
+    label: str,
+) -> Model:
     gm, model = _small_llm(current_user)
     try:
-        return await gm.aexecute_complex_task(
+        result = await gm.aexecute_complex_task(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_model=response_model,
             model=model,
         )
+        return response_model.model_validate(result)
     except Exception as e:
         logger.error(f"Failed to generate {label}: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -114,7 +123,7 @@ async def generate_entity_traits(
     payload: TraitGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TraitGenerationResponse:
     """Generates NPC/Protagonist goal and character traits based on description/bio."""
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     base_prompt = TRAIT_GENERATION_USER_PROMPT_TEMPLATE.format(
@@ -141,7 +150,7 @@ async def generate_quest_description(
     payload: QuestDescriptionGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> QuestDescriptionGenerationResponse:
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     user_prompt = QUEST_DESCRIPTION_GENERATION_USER_PROMPT_TEMPLATE.format(
         title=payload.title,
@@ -166,7 +175,7 @@ async def generate_new_quest(
     payload: QuestGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> QuestGenerationResponse:
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     user_prompt = QUEST_GENERATION_USER_PROMPT_TEMPLATE.format(
         quest_type="Main" if payload.is_main else "Side",
@@ -190,7 +199,7 @@ async def generate_entity_biography(
     payload: BiographyGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> BiographyGenerationResponse:
     """Generates NPC/Protagonist description/biography based on name, goal, and character traits."""
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     user_prompt = BIOGRAPHY_GENERATION_USER_PROMPT_TEMPLATE.format(
@@ -214,7 +223,7 @@ async def generate_scene_description(
     payload: SceneDescriptionGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> SceneDescriptionGenerationResponse:
     """Generates a scene description based on scene name and adventure theme context."""
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     user_prompt = SCENE_DESCRIPTION_GENERATION_USER_PROMPT_TEMPLATE.format(
@@ -264,7 +273,7 @@ async def generate_decorative_items(
     payload: DecorativeItemsGenerationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> DecorativeItemsGenerationResponse:
     """Generates a list of decorative background details fitting a scene using the Simple LLM.
 
     The result is a JSON array of short noun-phrase strings (e.g. "metal table", "flickering torch").

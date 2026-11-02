@@ -108,8 +108,7 @@ async def test_presence_override_survives_reload_and_sidebar_restores(setup_test
 @pytest.mark.asyncio
 async def test_real_movement_resets_previous_local_absence():
     applier = TurnEventEntities()
-    applier.db = SimpleNamespace(execute=AsyncMock())
-    applier.game_id = "S"
+    applier.manager = SimpleNamespace(db=SimpleNamespace(execute=AsyncMock()), game_id="S")
     applier._save_chat_message = AsyncMock()
     states = {"MIRA": {"presence": "absent"}}
     event = GameEvent(

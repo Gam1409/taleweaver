@@ -622,12 +622,12 @@ class CatalogGeneratePayload(BaseModel):
     description: Optional[str] = None
 
 
-@router.get("")
+@router.get("", response_model=None)
 async def get_settings(
     include_available_constants: bool = True,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the current settings (sanitized keys)."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -711,11 +711,11 @@ async def get_settings(
     }
 
 
-@router.get("/ollama-models")
+@router.get("/ollama-models", response_model=None)
 async def get_ollama_models(
     ollama_url: Optional[str] = None,
     _user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return installed Ollama model names for the configured Ollama endpoint.
 
     Requires authentication. ``ollama_url`` is validated against SSRF
@@ -725,11 +725,11 @@ async def get_ollama_models(
     return {"models": await _fetch_ollama_models(validated_url)}
 
 
-@router.get("/stable-diffusion-models")
+@router.get("/stable-diffusion-models", response_model=None)
 async def get_stable_diffusion_models(
     stable_diffusion_url: Optional[str] = None,
     _user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available Stable Diffusion checkpoints for the configured endpoint.
 
     Requires authentication. ``stable_diffusion_url`` is validated against SSRF.
@@ -738,13 +738,13 @@ async def get_stable_diffusion_models(
     return {"models": await _fetch_stable_diffusion_models(validated_url)}
 
 
-@router.get("/minimax-models")
+@router.get("/minimax-models", response_model=None)
 async def get_minimax_models(
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available MiniMax model names for the configured endpoint."""
     if not api_key:
         user = await _resolve_global_settings_owner(db, current_user)
@@ -778,13 +778,13 @@ async def _resolve_provider_api_key_for_models(
     return settings.get_env_api_key(provider)
 
 
-@router.get("/llm-models")
+@router.get("/llm-models", response_model=None)
 async def get_llm_models(
     provider: str,
     api_base: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available model names for any OpenAI-compatible LLM provider."""
     provider_lower = provider.lower()
     if provider_lower == "custom_openai":
@@ -818,12 +818,12 @@ async def get_llm_models(
     return {"models": models}
 
 
-@router.post("/keys")
+@router.post("/keys", response_model=None)
 async def update_api_key(
     payload: ApiKeyPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Saves an encrypted API key for the authenticated user."""
     provider_lower = payload.provider.lower()
 
@@ -859,12 +859,12 @@ async def update_api_key(
     return {"status": "success", "message": f"{payload.provider} key saved securely."}
 
 
-@router.delete("/keys/{provider}")
+@router.delete("/keys/{provider}", response_model=None)
 async def delete_api_key(
     provider: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Deletes an encrypted API key for the authenticated user."""
     provider_lower = provider.lower()
     logger.info("[Admin] Deleting API key for provider: %s (lower: %s)", provider, provider_lower)
@@ -897,12 +897,12 @@ async def delete_api_key(
     return {"status": "success", "message": f"{provider} key removed."}
 
 
-@router.post("/llm")
+@router.post("/llm", response_model=None)
 async def update_llm_settings(
     payload: SettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the LLM model preferences."""
     from backend.core.custom_openai import validate_custom_url
 
@@ -919,12 +919,12 @@ async def update_llm_settings(
     return {"status": "success", "message": "LLM settings updated."}
 
 
-@router.post("/t2i")
+@router.post("/t2i", response_model=None)
 async def update_t2i_settings(
     payload: T2ISettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the Text-to-Image model preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -938,12 +938,12 @@ async def update_t2i_settings(
     return {"status": "success", "message": "Image generation settings updated."}
 
 
-@router.post("/tts")
+@router.post("/tts", response_model=None)
 async def update_tts_settings(
     payload: TTSSettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the TTS settings."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -962,12 +962,12 @@ class TestLLMPayload(OllamaConnectionSettings):
     openrouter_provider: Optional[str] = None
 
 
-@router.post("/test-llm")
+@router.post("/test-llm", response_model=None)
 async def test_llm_connection(
     payload: TestLLMPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Tests the connection to an LLM provider with a simple prompt and measures latency."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -1099,12 +1099,12 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
     return options
 
 
-@router.post("/test-vision")
+@router.post("/test-vision", response_model=None)
 async def test_vision_connection(
     payload: TestVisionPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Tests the connection to an image provider by generating a wizard portrait."""
     user = await _resolve_global_settings_owner(db, current_user)
     provider_key = payload.provider.lower()
@@ -1143,11 +1143,11 @@ async def test_vision_connection(
         return {"status": "error", "message": diag}
 
 
-@router.post("/test-tts")
+@router.post("/test-tts", response_model=None)
 async def test_tts_connection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Generates a short test sentence to verify TTS configuration."""
     user = await _resolve_global_settings_owner(db, current_user)
     tts_settings = user.tts_settings or {}
@@ -1200,12 +1200,12 @@ async def test_tts_connection(
         return {"status": "error", "message": diag}
 
 
-@router.post("/image-styles")
+@router.post("/image-styles", response_model=None)
 async def update_image_styles_catalog(
     payload: CatalogUpdatePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the admin-managed image styles catalog for adventure generation."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -1218,12 +1218,12 @@ async def update_image_styles_catalog(
     return {"status": "success", "message": "Image styles catalog updated."}
 
 
-@router.post("/tones")
+@router.post("/tones", response_model=None)
 async def update_tone_catalog(
     payload: CatalogUpdatePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the admin-managed tone catalog for world generation."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -1234,12 +1234,12 @@ async def update_tone_catalog(
     return {"status": "success", "message": "Tone catalog updated."}
 
 
-@router.post("/catalog/generate")
+@router.post("/catalog/generate", response_model=None)
 async def generate_catalog_image(
     payload: CatalogGeneratePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Generates an image for a catalog tile (style or tone)."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -1301,14 +1301,14 @@ async def generate_catalog_image(
         )
 
 
-@router.post("/catalog/upload")
+@router.post("/catalog/upload", response_model=None)
 async def upload_catalog_image(
     catalog_type: str = Form(...),
     target_id: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Uploads a manual image for a catalog tile."""
     _ = db
     _ = current_user
@@ -1329,12 +1329,12 @@ async def upload_catalog_image(
         )
 
 
-@router.post("/game")
+@router.post("/game", response_model=None)
 async def update_game_settings(
     payload: GameSettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the general game preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -1344,8 +1344,8 @@ async def update_game_settings(
     return {"status": "success", "message": "Game settings updated."}
 
 
-@router.get("/tts/elevenlabs-models")
-async def get_elevenlabs_models():
+@router.get("/tts/elevenlabs-models", response_model=None)
+async def get_elevenlabs_models() -> list[dict[str, Any]]:
     """Returns a list of available ElevenLabs models from central config."""
     models = PREDEFINED_TTS_MODELS.get("elevenlabs", [])
     # Return in the format expected by frontend: {model_id, name}

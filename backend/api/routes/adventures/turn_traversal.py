@@ -9,11 +9,12 @@ from backend.api.routes.adventures.gameplay_logic import (
     _friendly_llm_error_message,
     _friendly_llm_unexpected_error_message,
 )
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.engine.trigger_service import TriggerService
 from backend.models.world_entity import WorldExit, WorldScene
 
 
-class TraversalInteractions:
+class TraversalInteractions(TurnContext):
     async def _resolve_traversal_exit(self, exit_ref: str) -> WorldExit | None:
         """Resolves an exit by DB id or 'FROM::TO' scene composite key."""
 
@@ -209,7 +210,7 @@ class TraversalInteractions:
             yield f"event: error\ndata: {json.dumps({'detail': user_safe_error})}\n\n"
 
     @staticmethod
-    def _traversal_destination(world_exit, current_scene_id):
+    def _traversal_destination(world_exit: WorldExit, current_scene_id: str) -> str | None:
         if world_exit.from_scene_id.lower() == current_scene_id.lower():
             return world_exit.to_scene_id
         if (

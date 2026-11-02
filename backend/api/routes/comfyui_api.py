@@ -1,6 +1,7 @@
 """ComfyUI compatibility checks and prompt tools for settings drafts."""
 
 import json
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,18 +35,20 @@ class PromptPreview(BaseModel):
     description: str = Field(min_length=1, max_length=12000)
 
 
-@router.get("/prompt-templates")
-async def prompt_templates(_user: User = Depends(get_current_admin)):
+@router.get("/prompt-templates", response_model=None)
+async def prompt_templates(_user: User = Depends(get_current_admin)) -> list[dict[str, Any]]:
     return TEMPLATES
 
 
-@router.get("/starter-workflows")
-async def starter_workflows(_user: User = Depends(get_current_admin)):
+@router.get("/starter-workflows", response_model=None)
+async def starter_workflows(_user: User = Depends(get_current_admin)) -> list[dict[str, Any]]:
     return starter_catalog()
 
 
-@router.post("/model-options")
-async def workflow_model_options(payload: CheckWorkflow, _user: User = Depends(get_current_admin)):
+@router.post("/model-options", response_model=None)
+async def workflow_model_options(
+    payload: CheckWorkflow, _user: User = Depends(get_current_admin)
+) -> list[dict[str, Any]]:
     try:
         async with ComfyClient(payload.url) as client:
             registry = await client.json("GET", "/object_info")
@@ -58,10 +61,10 @@ async def workflow_model_options(payload: CheckWorkflow, _user: User = Depends(g
         ) from exc
 
 
-@router.post("/detect-template")
+@router.post("/detect-template", response_model=None)
 async def detect_prompt_template(
     payload: DetectionRequest, _user: User = Depends(get_current_admin)
-):
+) -> dict[str, Any]:
     for graph in (payload.graph, payload.reference_graph):
         if graph is not None and (
             len(graph) > 256
@@ -77,8 +80,10 @@ async def detect_prompt_template(
     return detect_preset_template(payload.graph, payload.reference_graph)
 
 
-@router.post("/preview-prompt")
-async def preview_prompt(payload: PromptPreview, user: User = Depends(get_current_admin)):
+@router.post("/preview-prompt", response_model=None)
+async def preview_prompt(
+    payload: PromptPreview, user: User = Depends(get_current_admin)
+) -> dict[str, Any]:
     options = {
         "comfyui_presets": {"preview": payload.preset.model_dump()},
         "comfyui_assignments": {"simple": "preview"},
@@ -92,8 +97,10 @@ async def preview_prompt(payload: PromptPreview, user: User = Depends(get_curren
         ) from exc
 
 
-@router.post("/check")
-async def check_workflow(payload: CheckWorkflow, _user: User = Depends(get_current_admin)):
+@router.post("/check", response_model=None)
+async def check_workflow(
+    payload: CheckWorkflow, _user: User = Depends(get_current_admin)
+) -> dict[str, Any]:
     try:
         async with ComfyClient(payload.url) as client:
             registry = await client.json("GET", "/object_info")

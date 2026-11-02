@@ -10,7 +10,7 @@ from backend.api.routes.adventures.gameplay_logic import (
 from backend.core.awards import SPOILER_SEEKER_AWARD
 
 
-async def reveal_walkthrough(self, command):
+async def reveal_walkthrough(self, command) -> None:
     self.avatar.exp = (self.avatar.exp or 0) - WALKTHROUGH_REVEAL_COST
     self.state.is_walkthrough_revealed = True
     flag_modified(self.avatar, "exp")

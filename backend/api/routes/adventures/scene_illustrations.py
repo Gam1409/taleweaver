@@ -1,5 +1,6 @@
 """Owner-scoped lookup and queued generation of completed VN moment illustrations."""
 
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query
@@ -24,26 +25,26 @@ class QueueIllustrationRequest(SceneIllustrationRequest):
     job_id: UUID | None = None
 
 
-@router.get("/{game_id}/illustrations")
+@router.get("/{game_id}/illustrations", response_model=None)
 async def read_illustration(
     game_id: str,
     message_id: str = Query(min_length=1, max_length=128),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     state, message = await owned_context(db, game_id, message_id, current_user.id)
     status = illustration_status(state, message)
     status["plan_enabled"] = await plan_enabled(db, state)
     return status
 
 
-@router.post("/{game_id}/illustrations")
+@router.post("/{game_id}/illustrations", response_model=None)
 async def queue_illustration(
     game_id: str,
     payload: QueueIllustrationRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     state, message = await owned_context(db, game_id, payload.message_id, current_user.id)
     require_snapshot(state, message)
     await db.commit()

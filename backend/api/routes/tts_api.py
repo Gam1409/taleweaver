@@ -233,12 +233,12 @@ class TTSGeneratePayload(BaseModel):
         return cls._coerce_optional_uuid(value)
 
 
-@router.post("/generate")
+@router.post("/generate", response_model=None)
 async def generate_tts(
     payload: TTSGeneratePayload = Body(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Manually generate speech for a given text.
     """
@@ -286,11 +286,11 @@ async def generate_tts(
     return {"audio_url": audio_url}
 
 
-@router.post("/test-connection")
+@router.post("/test-connection", response_model=None)
 async def test_tts_connection_v2(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Generates a short test sentence to verify TTS configuration."""
     config = await _resolve_tts_config(db, current_user)
     test_text = "Tale Weaver connection test successful!"

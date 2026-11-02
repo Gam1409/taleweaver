@@ -1,19 +1,24 @@
 """OpenRouter image requests, compatibility retries, and chat image responses."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
 from backend.core.config import settings
 
+if TYPE_CHECKING:
+    from backend.engine.media_engine import MediaEngine
+
 logger = logging.getLogger(__name__)
 
 
 async def _generate_image_openrouter_direct(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str,
     api_key: Optional[str],
@@ -89,7 +94,7 @@ async def _generate_image_openrouter_direct(
 
 
 async def _generate_image_openrouter_chat_fallback(
-    engine,
+    engine: type[MediaEngine],
     prompt: str,
     model: str,
     api_key: Optional[str],
@@ -134,7 +139,13 @@ async def _generate_image_openrouter_chat_fallback(
     raise RuntimeError("OpenRouter generation failed to return an image.")
 
 
-async def _retry_rejected_dimensions(response, payload, headers, clean_model, prompt):
+async def _retry_rejected_dimensions(
+    response: requests.Response,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    clean_model: str,
+    prompt: str,
+) -> tuple[requests.Response, str]:
     error_msg = f"HTTP {response.status_code}"
     try:
         err_data = response.json()
@@ -184,8 +195,13 @@ async def _retry_rejected_dimensions(response, payload, headers, clean_model, pr
 
 
 async def _save_openrouter_result(
-    engine, response, target_dir, filename, image_format, image_quality
-):
+    engine: type[MediaEngine],
+    response: requests.Response,
+    target_dir: str,
+    filename: str | None,
+    image_format: str,
+    image_quality: int,
+) -> str | None:
     result = response.json()
     data_list = result.get("data", [])
     if not data_list or not isinstance(data_list, list):
@@ -213,29 +229,31 @@ async def _save_openrouter_result(
     raise RuntimeError("No valid image data or URL found in OpenRouter response.")
 
 
-def _images_field_url(images):
+def _images_field_url(images: object) -> str | None:
     if not isinstance(images, list):
         return None
     for item in images:
         if not isinstance(item, dict):
             continue
         image = item.get("image_url") or item
-        if isinstance(image, dict) and image.get("url"):
-            return image["url"]
+        if isinstance(image, dict):
+            url = image.get("url")
+            if isinstance(url, str) and url:
+                return url
     return None
 
 
-def _content_item_dict(item):
+def _content_item_dict(item: object) -> dict[str, Any]:
     if hasattr(item, "model_dump"):
-        return item.model_dump()
+        return dict(item.model_dump())
     if hasattr(item, "dict"):
-        return item.dict()
+        return dict(item.dict())
     if isinstance(item, dict):
         return item
-    return getattr(item, "__dict__", {})
+    return dict(getattr(item, "__dict__", {}))
 
 
-def _content_image_url(content):
+def _content_image_url(content: object) -> str | None:
     if not isinstance(content, list):
         return None
     for item in content:
@@ -245,12 +263,12 @@ def _content_image_url(content):
         image = item_dict.get("image_url", {})
         url = image.get("url") if isinstance(image, dict) else getattr(image, "url", None)
         url = url or item_dict.get("url")
-        if url:
+        if isinstance(url, str) and url:
             return url
     return None
 
 
-def _chat_image_payload(message):
+def _chat_image_payload(message: object) -> tuple[str | None, str | None]:
     content = getattr(message, "content", "")
     url = _images_field_url(getattr(message, "images", [])) or _content_image_url(content)
     if url:

@@ -6,10 +6,11 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.models.world_entity import WorldEntity
 
 
-class ContainerInteractions:
+class ContainerInteractions(TurnContext):
     async def _resolve_container_target(
         self, hint: str
     ) -> tuple[WorldEntity | None, dict[str, Any] | None, int | None]:
@@ -85,7 +86,7 @@ class ContainerInteractions:
             )
             ent = ent_res.scalars().first()
             if ent:
-                item_data = jsonable_encoder(
+                item_data: dict[str, Any] = jsonable_encoder(
                     {c.name: getattr(ent, c.name) for c in ent.__table__.columns}
                 )
                 metadata = dict(ent.metadata_json or {})
@@ -192,7 +193,7 @@ class ContainerInteractions:
         if not source:
             return f"No container named '{container_hint}' was found."
         container_name = (
-            scene_container.name if scene_container else inventory_container.get("name")
+            scene_container.name if scene_container else (inventory_container or {}).get("name")
         )
         if self._is_container_locked(scene_container, inventory_container):
             return f"{container_name} is locked."

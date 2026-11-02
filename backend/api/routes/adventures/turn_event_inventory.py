@@ -4,6 +4,8 @@ import logging
 import re
 from typing import Any
 
+from backend.api.routes.adventures.turn_context import TurnContext
+from backend.engine.rule_engine import GameEvent, InventoryItem
 from backend.utils.path_security import ensure_within_data_dir as _ensure_within_data_dir
 from backend.utils.path_security import sanitize_path_component as _sanitize_path_component
 
@@ -24,10 +26,10 @@ def _allocate_copied_item_id(source_id: str | None, existing_item_ids: set[str])
     return candidate
 
 
-class TurnEventInventory:
+class TurnEventInventory(TurnContext):
     """Apply inventory outcomes in the turn transaction."""
 
-    async def _prepare_inventory_items(self, event, vn_mode):
+    async def _prepare_inventory_items(self, event: GameEvent, vn_mode: bool) -> None:
         existing_item_ids = await self._collect_existing_item_ids()
 
         # If we are removing items in this event, they don't count as "existing" for duplicate checks
@@ -50,7 +52,9 @@ class TurnEventInventory:
 
         await self._prepare_spawned_items(event, vn_mode, existing_item_ids)
 
-    async def _prepare_new_inventory_items(self, event, vn_mode, existing_item_ids):
+    async def _prepare_new_inventory_items(
+        self, event: GameEvent, vn_mode: bool, existing_item_ids: set[str]
+    ) -> None:
         if not (event.new_inventory_items):
             return
         filtered_inventory_items = []
@@ -112,7 +116,9 @@ class TurnEventInventory:
                 existing_item_ids.add(item.id)
         event.new_inventory_items = filtered_inventory_items
 
-    async def _prepare_spawned_items(self, event, vn_mode, existing_item_ids):
+    async def _prepare_spawned_items(
+        self, event: GameEvent, vn_mode: bool, existing_item_ids: set[str]
+    ) -> None:
         if not (event.spawned_items):
             return
         filtered_spawned_items = []
@@ -170,8 +176,8 @@ class TurnEventInventory:
                 existing_item_ids.add(item.id)
         event.spawned_items = filtered_spawned_items
 
-    async def _ensure_inventory_item_image(self, item):
-        if not item.image_url:
+    async def _ensure_inventory_item_image(self, item: InventoryItem) -> None:
+        if not item.image_url and self.adventure is not None:
             try:
                 import os
                 import uuid

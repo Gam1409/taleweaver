@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from collections.abc import Sequence
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -166,7 +167,7 @@ def _resolve_provider_api_key(
 
 
 @router.get("/users", response_model=list[UserResponse])
-async def list_users(_admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP):
+async def list_users(_admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP) -> Sequence[User]:
     result = await db.execute(select(User))
     return result.scalars().all()
 
@@ -176,7 +177,7 @@ async def create_user(
     request: UserCreateRequest,
     _admin: User = ADMIN_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     username = _validated_username(request.username)
     await _ensure_username_available(db, username)
 
@@ -197,7 +198,7 @@ async def update_user(
     request: UserUpdateRequest,
     admin: User = ADMIN_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
     if not user:
@@ -226,8 +227,10 @@ async def update_user(
     return user
 
 
-@router.delete("/users/{user_id}")
-async def delete_user(user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP):
+@router.delete("/users/{user_id}", response_model=None)
+async def delete_user(
+    user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP
+) -> dict[str, Any]:
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
     if not user:
@@ -245,7 +248,7 @@ async def delete_user(user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = 
 @router.post("/users/{user_id}/password-reset-link", response_model=PasswordResetLinkResponse)
 async def create_password_reset_link(
     user_id: str, _admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP
-):
+) -> PasswordResetLinkResponse:
     """Issue a one-time password reset token for a user (replaces any previous one)."""
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
@@ -262,7 +265,7 @@ async def create_password_reset_link(
 @router.put("/users/me/bio", response_model=UserResponse)
 async def update_my_bio(
     request: BioUpdateRequest, current_user: User = USER_DEP, db: AsyncSession = DB_DEP
-):
+) -> User:
     current_user.bio = request.bio
     await db.commit()
     await db.refresh(current_user)
@@ -274,7 +277,7 @@ async def upload_my_profile_image(
     file: UploadFile = UPLOAD_FILE_DEP,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     safe_user_id = _sanitize_path_component(current_user.id)
     if not safe_user_id:
         raise HTTPException(status_code=400, detail="Invalid user identifier")
@@ -287,8 +290,10 @@ async def upload_my_profile_image(
     return current_user
 
 
-@router.post("/users/me/bio/generate")
-async def generate_my_bio(current_user: User = USER_DEP, db: AsyncSession = DB_DEP):
+@router.post("/users/me/bio/generate", response_model=None)
+async def generate_my_bio(
+    current_user: User = USER_DEP, db: AsyncSession = DB_DEP
+) -> dict[str, Any]:
 
     gm = GameMasterLLM.for_role(current_user, "small")
     model = gm.model
@@ -310,7 +315,7 @@ async def generate_my_profile_image(
     payload: Optional[ProfileImageGenerateRequest] = None,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     admin_res = await db.execute(select(User).where(User.role == "admin").limit(1))
     settings_owner = admin_res.scalars().first() or current_user
 

@@ -2,15 +2,23 @@ import logging
 from copy import deepcopy
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world.state import fork as fork_simulation
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
+from backend.models.user import User
 
 logger = logging.getLogger(__name__)
 
 
 async def clone_saved_session_state(
-    db, original_session, copied_session, current_user, cloned_avatar, asset_copy_cache
+    db: AsyncSession,
+    original_session: GameSession,
+    copied_session: GameSession,
+    current_user: User,
+    cloned_avatar,
+    asset_copy_cache,
 ):
     from .sessions import _rewrite_asset_snapshot_urls
 

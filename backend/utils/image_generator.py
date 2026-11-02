@@ -510,7 +510,7 @@ class BlobIconStrategy(ImageGenerationStrategy):
         return canvas
 
     @staticmethod
-    def _draw_equipment_icon(name, draw, cx, cy, r, stroke, fill, stroke_width):
+    def _draw_equipment_icon(name, draw, cx, cy, r, stroke, fill, stroke_width) -> None:
         if "sword" in name:
             # Blade
             draw.line([(cx, cy + r), (cx, cy - r * 0.7)], fill=stroke, width=stroke_width * 2)

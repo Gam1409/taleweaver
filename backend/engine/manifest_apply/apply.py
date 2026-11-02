@@ -102,7 +102,7 @@ async def _report_image_warnings(ctx: ApplyContext) -> None:
             "You can regenerate visuals later in the editor."
         )
     if warnings and ctx.adventure:
-        ctx.adventure.creation_error = " ".join(warnings)  # type: ignore[assignment]
+        ctx.adventure.creation_error = " ".join(warnings)
         await ctx.commit_and_refresh(refresh_user=False)
 
 

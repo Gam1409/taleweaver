@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.routes.adventures.session_language import resolve_content_language
+from backend.api.routes.adventures.turn_context import TurnContext
 from backend.core import prompts
 from backend.core.content_language import prose_language_instruction
 from backend.core.content_language_fallbacks import SUGGESTIONS
@@ -34,7 +35,7 @@ class SuggestionGenerationError(Exception):
     """A manual refresh failed; keep the previously saved suggestions."""
 
 
-class TurnSuggestionsManager:
+class TurnSuggestionsManager(TurnContext):
     """Manages player prompt suggestions generation, fallback, and state persistence."""
 
     def __init__(self, manager: GameTurnManager) -> None:
@@ -42,7 +43,7 @@ class TurnSuggestionsManager:
 
     def content_language(self) -> str:
         return resolve_content_language(
-            self.manager.state,
+            self.state,
             self.manager.user,
             self.manager.adventure,
             self.manager.turn_language,
@@ -112,22 +113,18 @@ class TurnSuggestionsManager:
         return [entry for entry in parsed if isinstance(entry, str)]
 
     def build_prompt_suggestions_payload(self) -> dict[str, Any]:
-        return {
-            "prompt_suggestions": self.extract_prompt_suggestions(
-                self.manager.state.exit_states or {}
-            )
-        }
+        return {"prompt_suggestions": self.extract_prompt_suggestions(self.state.exit_states or {})}
 
     def set_prompt_suggestions_state(self, suggestions: list[str]) -> None:
-        exit_states = dict(self.manager.state.exit_states or {})
+        exit_states = dict(self.state.exit_states or {})
         normalized = self.normalize_prompt_suggestions(suggestions)
         exit_states[PROMPT_SUGGESTIONS_LANGUAGE_KEY] = self.content_language()
         if normalized:
             exit_states[PROMPT_SUGGESTIONS_STATE_KEY] = normalized
         else:
             exit_states.pop(PROMPT_SUGGESTIONS_STATE_KEY, None)
-        self.manager.state.exit_states = exit_states
-        flag_modified(self.manager.state, "exit_states")
+        self.state.exit_states = exit_states
+        flag_modified(self.state, "exit_states")
 
     def fallback_prompt_suggestions(
         self,
@@ -164,29 +161,27 @@ class TurnSuggestionsManager:
 
     async def build_player_only_suggestion_context(self) -> dict[str, Any]:
         """Build a spoiler-safe suggestion context (visible NPCs/objects, unlocked exits, inventory)."""
-        session_id = self.manager.state.session_id if self.manager.state else self.manager.game_id
+        session_id = self.state.session_id if self.state else self.manager.game_id
         scene_res = await self.manager.db.execute(
             select(WorldScene).where(
-                WorldScene.id == self.manager.state.current_scene_id,
+                WorldScene.id == self.state.current_scene_id,
                 WorldScene.session_id == session_id,
             )
         )
         current_scene = scene_res.scalars().first()
         scene_label = (
-            current_scene.label
-            if current_scene
-            else self.manager.state.current_scene_id or "Current Scene"
+            current_scene.label if current_scene else self.state.current_scene_id or "Current Scene"
         )
         scene_description = current_scene.description if current_scene else ""
 
         ent_res = await self.manager.db.execute(
             select(WorldEntity).where(
                 WorldEntity.session_id == session_id,
-                WorldEntity.current_scene_id == self.manager.state.current_scene_id,
+                WorldEntity.current_scene_id == self.state.current_scene_id,
             )
         )
         entities = list(ent_res.scalars().all())
-        states = self.manager.state.entity_states or {}
+        states = self.state.entity_states or {}
         visible_npcs: list[str] = []
         visible_objects: list[str] = []
         for ent in entities:
@@ -203,14 +198,14 @@ class TurnSuggestionsManager:
         exits_res = await self.manager.db.execute(
             select(WorldExit).where(
                 WorldExit.session_id == session_id,
-                WorldExit.from_scene_id == self.manager.state.current_scene_id,
+                WorldExit.from_scene_id == self.state.current_scene_id,
             )
         )
         unlocked_exits = [ex.label for ex in exits_res.scalars().all() if not ex.is_locked]
 
         inventory_items = [
             str(item.get("name") or item.get("id") or "").strip()
-            for item in (self.manager.avatar.inventory or [])
+            for item in (self.avatar.inventory or [])
             if isinstance(item, dict) and str(item.get("name") or item.get("id") or "").strip()
         ]
 
@@ -227,7 +222,7 @@ class TurnSuggestionsManager:
         res = await self.manager.db.execute(
             select(ChatMessage.content)
             .where(
-                ChatMessage.session_id == self.manager.state.session_id,
+                ChatMessage.session_id == self.state.session_id,
                 ChatMessage.role == "assistant",
             )
             .order_by(ChatMessage.created_at.desc())
@@ -263,7 +258,7 @@ class TurnSuggestionsManager:
                 ],
             )
             if refresh:
-                previous = self.extract_prompt_suggestions(self.manager.state.exit_states)
+                previous = self.extract_prompt_suggestions(self.state.exit_states)
                 user_prompt += (
                     "\nThe player requested fresh ideas. Offer different valid actions where "
                     "possible, without inventing objects, people, exits, or puzzle solutions.\n"
@@ -274,7 +269,7 @@ class TurnSuggestionsManager:
                 + prose_language_instruction(self.content_language(), "suggestion strings"),
                 user_prompt,
                 model,
-                adventure_id=self.manager.state.template_id,
+                adventure_id=self.state.template_id,
                 game_id=self.manager.game_id,
                 operation="chat_turn",
                 phase="prompt_suggestions",
