@@ -17,6 +17,7 @@ router = APIRouter(prefix="/{template_id}/visual-presets", tags=["Assets"])
 
 
 class StoryPresets(BaseModel):
+    source: Literal["saved", "current"] = "saved"
     selection: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
 
 
@@ -34,6 +35,7 @@ async def read_presets(
     adventure = await _owned(db, template_id, user)
     t2i = normalize_comfy_presets(user.t2i_settings or {})
     return {
+        "source": (adventure.original_manifest or {}).get("visual_preset_source", "saved"),
         "selection": story_selection(adventure),
         "presets": [
             {"id": key, "name": preset["name"]}
@@ -51,7 +53,11 @@ async def save_presets(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     adventure = await _owned(db, template_id, user)
-    manifest = {**(adventure.original_manifest or {}), "visual_presets": payload.selection}
+    manifest = {
+        **(adventure.original_manifest or {}),
+        "visual_presets": payload.selection,
+        "visual_preset_source": payload.source,
+    }
     from types import SimpleNamespace
 
     try:
@@ -63,4 +69,4 @@ async def save_presets(
         raise HTTPException(400, str(exc)) from exc
     adventure.original_manifest = manifest
     await db.commit()
-    return {"selection": payload.selection}
+    return payload.model_dump()

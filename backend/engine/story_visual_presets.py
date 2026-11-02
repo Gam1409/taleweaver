@@ -12,9 +12,11 @@ def preserve_story_presets(
     manifest: dict, adventure: AdventureTemplate | SimpleNamespace | None
 ) -> dict:
     original = getattr(adventure, "original_manifest", None) or {}
-    if "visual_presets" not in original:
-        return dict(manifest)
-    return {**manifest, "visual_presets": dict(story_selection(adventure))}
+    result = dict(manifest)
+    for key in ("visual_presets", "visual_preset_source"):
+        if key in original:
+            result[key] = original[key]
+    return result
 
 
 def story_selection(adventure: AdventureTemplate | SimpleNamespace | None) -> dict[str, str]:
@@ -32,6 +34,9 @@ def story_t2i(t2i: dict | None, adventure: AdventureTemplate | SimpleNamespace |
     nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
     result["_nsfw_enabled"] = nsfw["enabled"]
     result["_nsfw_level"] = nsfw["level"]
+    manifest = getattr(adventure, "original_manifest", None) or {}
+    if manifest.get("visual_preset_source") == "current":
+        return result
     selection = story_selection(adventure)
     if not selection:
         return result

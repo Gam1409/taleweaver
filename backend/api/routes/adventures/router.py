@@ -32,6 +32,9 @@ from backend.api.routes.adventures.session_language import router as language_ro
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.session_npcs import router as session_npcs_router
 from backend.api.routes.adventures.session_playtime import router as session_playtime_router
+from backend.api.routes.adventures.session_visual_presets import (
+    router as session_visual_presets_router,
+)
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
@@ -49,6 +52,7 @@ router.include_router(imports_router)
 # 2. Assets (specific paths like /{template_id}/visuals/...)
 router.include_router(assets_router)
 router.include_router(visual_presets_router)
+router.include_router(session_visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
 router.include_router(sessions_router, dependencies=[Depends(session_mutation_lease)])
