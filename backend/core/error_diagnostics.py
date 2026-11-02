@@ -7,7 +7,9 @@ into actionable, human-friendly error messages for the UI.
 
 import logging
 
+from backend.core.comfyui_errors import ComfyRequestError
 from backend.core.inference.diagnostics import admission_diagnostic
+from backend.core.prompt_preparation_error import PromptPreparationError
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,24 @@ def diagnose_provider_error(
     context: str = "llm",
 ) -> str:
     """Analyze an exception from an AI provider and return a clear, user-friendly diagnostic message."""
+    if isinstance(exc, ComfyRequestError):
+        return exc.diagnostic()
+    if isinstance(exc, PromptPreparationError):
+        cause = exc.__cause__
+        detail = (
+            diagnose_provider_error(cause, provider=exc.provider, model=exc.model)
+            if isinstance(cause, Exception)
+            else "Check the text-model server and backend logs."
+        )
+        return (
+            "Image-prompt preparation failed in the Small/Utility LLM. "
+            "No ComfyUI image job was submitted. "
+            "Check Administration > Intelligence (LLM) and test the Small/Utility role. " + detail
+        )
+    return _diagnose_provider_error(exc, provider, model)
+
+
+def _diagnose_provider_error(exc: Exception, provider: str, model: str) -> str:
     queue_message = admission_diagnostic(exc)
     if queue_message:
         return queue_message
@@ -159,6 +179,7 @@ def _diagnose_request_limits(lower_text: str, prov_display: str) -> str | None:
             "connection refused",
             "connecterror",
             "connectionerror",
+            "connection error",
             "failed to connect",
             "cannot connect to host",
             "name resolution failure",

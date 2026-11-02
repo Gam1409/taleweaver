@@ -10,6 +10,7 @@ from backend.core.comfyui_config import prompt_rules, select_profile, select_wor
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.prompt_preparation_error import PromptPreparationError
 from backend.core.visual_trace import record
 from backend.engine.image_profiles import advanced_for
 from backend.engine.visual_progress import report
@@ -98,6 +99,8 @@ async def adapt_body(
             f"Small/Utility LLM image-prompt preparation timed out (limit: {timeout:g}s). "
             "No ComfyUI image job was submitted."
         ) from exc
+    except Exception as exc:
+        raise PromptPreparationError(llm.provider, llm.model) from exc
     if not isinstance(body, str) or not body.strip() or len(body) > 12000:
         raise ValueError("The prompt adapter returned an empty or invalid description.")
     # The word budget guides the LLM; slicing can remove a final action or negation.

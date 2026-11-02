@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from backend.core.comfyui_errors import ComfyRequestError
 from backend.engine.visual_progress import report
 from backend.utils.path_security import validate_provider_url
 
@@ -69,9 +70,7 @@ class ComfyClient:
         with _request_errors(stage):
             response = await self.http.request(method, self.url + path, **kwargs)
         if response.is_error:
-            raise ValueError(
-                f"ComfyUI {path} returned HTTP {response.status_code}. Rejected nodes: {_error_summary(response) or 'see server logs'}."
-            )
+            raise ComfyRequestError(response.status_code, _error_summary(response))
         try:
             return response.json()
         except ValueError as exc:
