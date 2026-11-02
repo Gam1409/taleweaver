@@ -22,6 +22,7 @@ from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
 from backend.engine.living_world.conversation import prepare_choice
+from backend.engine.living_world.dialogue_context import NARRATION_INITIATIVE
 from backend.engine.living_world.narration import private_context
 from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
@@ -330,6 +331,7 @@ class TurnLlmContextBuilder:
         narration_state_block += availability
         if is_vn(adventure):
             narration_state_block += narration_block(state, world.all_entities, self.manager.avatar)
+            narration_state_block += NARRATION_INITIATIVE
         return (
             mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
             narration_state_block
@@ -361,7 +363,9 @@ class TurnLlmContextBuilder:
         mechanics_state_block, narration_state_block = self._build_state_blocks(
             world, visible, hidden, global_unlock_rules_prompt_block
         )
-        narration_state_block += await prepare_choice(self.manager, user_msg, visible)
+        narration_state_block += await prepare_choice(
+            self.manager, user_msg, visible, history=history
+        )
         narration_static_prompt = static_prompt
         if language:
             logger.info(

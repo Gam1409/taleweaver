@@ -30,6 +30,7 @@ from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
+from backend.engine.living_world.dialogue_memory import remember_completed
 from backend.engine.scene_staging.runtime import reconcile_narration
 from backend.engine.visual_novel.config import read_settings as read_vn_settings
 from backend.engine.visual_novel.story_director import (
@@ -2320,6 +2321,7 @@ class GameTurnManager:
                 completed=narration_completed,
             )
             await capture_completed_moment(self, assistant_chat)
+            remember_completed(self, assistant_chat, completed=narration_completed)
         from backend.engine.memory_rag.worker import mark_dirty
 
         await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)

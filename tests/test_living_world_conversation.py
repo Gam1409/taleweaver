@@ -64,6 +64,10 @@ async def test_choice_is_turn_local_and_failure_does_not_abort(ready, monkeypatc
         async def generate(self, *args, **kwargs):
             assert not db.in_transaction()
             assert kwargs["operation"] == "living_world_dialogue_choice"
+            supplied = json.loads(args[1])
+            assert (
+                supplied["recent_dialogue_untrusted"][0]["content"] == "Help me find the library."
+            )
             return conversation.Choice(
                 action="NEGOTIATE",
                 motive="Needs reassurance.",
@@ -71,7 +75,12 @@ async def test_choice_is_turn_local_and_failure_does_not_abort(ready, monkeypatc
             ).model_dump_json()
 
         monkeypatch.setattr(GameMasterLLM, "aexecute_simple_task", generate)
-        block = await conversation.prepare_choice(manager, "Will you help me?", [actor])
+        block = await conversation.prepare_choice(
+            manager,
+            "Will you help me?",
+            [actor],
+            history=[{"role": "user", "content": "Help me find the library."}],
+        )
         assert "NEGOTIATE" in block
         assert "completed action" in block
         assert json.dumps(state.entity_states, sort_keys=True) == before
@@ -80,7 +89,15 @@ async def test_choice_is_turn_local_and_failure_does_not_abort(ready, monkeypatc
         monkeypatch.setattr(
             GameMasterLLM, "aexecute_simple_task", AsyncMock(return_value="invalid JSON")
         )
-        assert await conversation.prepare_choice(manager, "Will you help me?", [actor]) == ""
+        assert (
+            await conversation.prepare_choice(
+                manager,
+                "Will you help me?",
+                [actor],
+                history=[{"role": "user", "content": "Help me find the library."}],
+            )
+            == ""
+        )
         assert load(state).deliberation_attempts == 2
         assert load(state).events == events
 
@@ -109,3 +126,46 @@ async def test_concordia_runs_structured_conversation_choice():
 
     result = await concordia_adapter.decide({"actor": {"id": "NPC"}}, choose)
     assert result.action == "REFUSE" and calls == [1]
+
+
+def test_initiative_only_selects_an_unambiguous_present_actor():
+    state = SimpleNamespace(entity_states={"absent": {"presence": "absent"}})
+    actor = SimpleNamespace(id="lina", name="Lina", entity_type="NPC")
+    other = SimpleNamespace(id="other", name="Other", entity_type="NPC")
+    absent = SimpleNamespace(id="absent", name="Absent", entity_type="NPC")
+    for message in ("Жду", "Продолжай.", "What next?", "I wait"):
+        assert conversation.select_actor(state, message, [actor, absent]) is actor
+        assert conversation.select_actor(state, message, [actor, other]) is None
+    assert conversation.select_actor(state, "  [continue]", [actor]) is None
+
+
+def test_dialogue_context_is_bounded_and_excludes_system_messages():
+    from backend.engine.living_world.dialogue_context import recent_context
+
+    history = [{"role": "assistant", "content": str(i) * 2000} for i in range(10)]
+    history.append({"role": "system", "content": "private instruction"})
+    result = recent_context(history)
+    assert len(result) == 3
+    assert sum(len(item["content"]) for item in result) == 4800
+    assert [item["content"][0] for item in result] == ["7", "8", "9"]
+    assert recent_context(None) == []
+
+
+async def test_initiative_uses_real_concordia_without_committing_actions():
+    import pytest
+
+    from backend.engine.living_world import concordia_adapter
+
+    if not concordia_adapter.available():
+        pytest.skip("Optional Concordia package is not installed")
+    proposal = conversation.Choice(
+        action="INITIATE",
+        motive="Wants to help.",
+        intention="Offer directions.",
+        next_action="Point toward the library and offer to guide the player.",
+        reconsider_if="The player declines.",
+    )
+    callback = AsyncMock(return_value=proposal)
+    result = await concordia_adapter.decide({"actor": {"id": "NPC"}}, callback)
+    assert result == proposal
+    callback.assert_awaited_once()

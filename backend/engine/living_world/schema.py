@@ -6,6 +6,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.engine.living_world.decisions import PrivateNotes
+from backend.engine.living_world.dialogue_memory import IntentionMemory
 
 
 class Settings(BaseModel):
@@ -70,6 +71,7 @@ class Simulation(BaseModel):
     last_run_events: int = Field(default=0, ge=0)
     deliberation_attempts: int = Field(default=0, ge=0)
     schedule_next_due: int = Field(default=0, ge=0)
+    dialogue_intentions: dict[str, IntentionMemory] = Field(default_factory=dict, max_length=128)
     private_notes: dict[str, PrivateNotes] = Field(default_factory=dict, max_length=128)
 
     @model_validator(mode="after")

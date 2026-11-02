@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_attribute
 
+from backend.engine.living_world.dialogue_memory import retract as retract_intentions
 from backend.engine.memory_rag.worker import mark_dirty
 from backend.engine.npc_journal.retraction import retract_reply
 from backend.engine.scene_illustrations.snapshots import (
@@ -68,6 +69,7 @@ async def refresh_evidence(db: AsyncSession, session: GameSession, message: Chat
     )
     if state is not None:
         retract(state, message.id)
+        retract_intentions(state, message.id)
         props.retract(state, message.id)
         direction = (state.entity_states or {}).get("__vn_story_direction__") or {}
         if (direction.get("focus") or {}).get("message_id") == message.id:

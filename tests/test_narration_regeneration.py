@@ -437,3 +437,39 @@ async def test_rewrite_retracts_pose_and_copy_keeps_versions(auth_client, narrat
         copied = await db.get(ChatMessage, ids[message_id])
         assert copied.versions == source.versions
         assert copied.revision_id == source.revision_id
+
+
+async def test_regeneration_retracts_private_intention_source(auth_client, narration):
+    from types import SimpleNamespace
+
+    from backend.engine.living_world.dialogue_memory import Choice, remember_completed
+    from backend.engine.living_world.state import load
+
+    message_id, _ = narration
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        message = await db.get(ChatMessage, message_id)
+        manager = SimpleNamespace(
+            state=state,
+            _dialogue_intention=(
+                "NPC",
+                message.scene_id,
+                Choice(
+                    action="INITIATE",
+                    motive="Leave the courtyard.",
+                    intention="Try the gate.",
+                ),
+            ),
+        )
+        remember_completed(manager, message, completed=True)
+        await db.commit()
+        assert "NPC" in load(state).dialogue_intentions
+    response = await auth_client.post(PATH, json={"message_id": message_id})
+    assert response.status_code == 200, response.text
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        assert load(state).dialogue_intentions == {}
