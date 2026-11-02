@@ -82,11 +82,77 @@ def test_participant_cjk_name_survives_inside_cjk_run():
     )
 
 
-def test_non_latin_names_checked_verbatim():
+def test_cyrillic_name_accepts_verbatim_and_romanization():
+    """The English surface keeps the name or uses one consistent romanization."""
     solo = [{"id": "ANNA", "name": "Анна"}]
     assert differences("Анна is masturbating.", [_atom("masturbation", ["ANNA"])], solo) == []
-    missing = differences("Anna is masturbating.", [_atom("masturbation", ["ANNA"])], solo)
+    assert differences("Anna is masturbating.", [_atom("masturbation", ["ANNA"])], solo) == []
+    # A different name is not a romanization of Анна.
+    missing = differences("Anya is masturbating.", [_atom("masturbation", ["ANNA"])], solo)
     assert missing == ["Preserve Анна as an explicit act participant."]
+
+
+def test_cyrillic_participant_romanization_passes():
+    solo = [{"id": "MIKI", "name": "Мики"}]
+    assert differences("Miki is masturbating.", [_atom("masturbation", ["MIKI"])], solo) == []
+    assert differences("Мики is masturbating.", [_atom("masturbation", ["MIKI"])], solo) == []
+    missing = differences("Mikiko is masturbating.", [_atom("masturbation", ["MIKI"])], solo)
+    assert missing == ["Preserve Мики as an explicit act participant."]
+
+
+def test_multiword_cyrillic_label_accepts_translated_title():
+    """'Доктор Рин' -> 'Doctor Rin': title translated, given name romanized."""
+    solo = [{"id": "RIN", "name": "Доктор Рин"}]
+    atoms = [_atom("vaginal", ["RIN"])]
+    base = "Vaginal sex from behind: {name} gripping the window sill."
+    for label in ("Doctor Rin", "Doktor Rin", "Доктор Рин", "Doctor Рин"):
+        assert differences(base.format(name=label), atoms, solo) == []
+    missing = differences("Vaginal sex from behind the doctor at the window.", atoms, solo)
+    assert missing == ["Preserve Доктор Рин as an explicit act participant."]
+
+
+def test_romanized_variant_respects_name_boundaries():
+    """A shorter or longer Latin name must not satisfy a Cyrillic label."""
+    solo = [{"id": "RINA", "name": "Рина"}]
+    missing = differences("Rin is masturbating.", [_atom("masturbation", ["RINA"])], solo)
+    assert missing == ["Preserve Рина as an explicit act participant."]
+
+
+def test_latin_label_keeps_whole_name_semantics():
+    solo = [{"id": "MARY", "name": "Mary Ann"}]
+    missing = differences("Ann is masturbating.", [_atom("masturbation", ["MARY"])], solo)
+    assert missing == ["Preserve Mary Ann as an explicit act participant."]
+
+
+def test_cjk_participant_still_requires_verbatim_name():
+    solo = [{"id": "REI", "name": "玲"}]
+    missing = differences("Rei is masturbating.", [_atom("masturbation", ["REI"])], solo)
+    assert missing == ["Preserve 玲 as an explicit act participant."]
+
+
+def test_other_scripts_accept_their_romanizations():
+    """Any story language: Greek, kana, Hangul and diacritic Latin names pass."""
+    for name, latin in (
+        ("Ελένη", "Eleni"),
+        ("みき", "Miki"),
+        ("ミキ", "Miki"),
+        ("민지", "Minji"),
+        ("Émile", "Emile"),
+        ("Łukasz", "Lukasz"),
+    ):
+        solo = [{"id": "NPC", "name": name}]
+        atoms = [_atom("masturbation", ["NPC"])]
+        assert differences(f"{name} is masturbating.", atoms, solo) == [], name
+        assert differences(f"{latin} is masturbating.", atoms, solo) == [], name
+
+
+def test_scripts_without_romanization_table_stay_verbatim_only():
+    """Abjad scripts (no vowel table) keep the verbatim name as the only form."""
+    solo = [{"id": "NPC", "name": "مريم"}]
+    atoms = [_atom("masturbation", ["NPC"])]
+    assert differences("مريم is masturbating.", atoms, solo) == []
+    missing = differences("Mariam is masturbating.", atoms, solo)
+    assert missing == ["Preserve مريم as an explicit act participant."]
 
 
 def test_unknown_category_reports_unresolvable():
