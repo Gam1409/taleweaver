@@ -57,6 +57,31 @@ def test_all_participants_present_passes():
     assert differences(body, [_atom("oral", ["ANNA", "BORIS"])], CAST) == []
 
 
+def test_participant_name_requires_word_boundaries():
+    """F-52: a substring hit ('ann' inside 'anna') must not cover a participant."""
+    solo = [{"id": "ANNA", "name": "Ann"}]
+    missing = differences("Anna is masturbating.", [_atom("masturbation", ["ANNA"])], solo)
+    assert missing == ["Preserve Ann as an explicit act participant."]
+    assert differences("Ann is masturbating.", [_atom("masturbation", ["ANNA"])], solo) == []
+    assert differences("Masturbating; Ann alone.", [_atom("masturbation", ["ANNA"])], solo) == []
+
+
+def test_participant_name_boundaries_are_unicode_aware():
+    solo = [{"id": "ANNA", "name": "Май"}]
+    missing = differences("Майка is masturbating.", [_atom("masturbation", ["ANNA"])], solo)
+    assert missing == ["Preserve Май as an explicit act participant."]
+    assert differences("Май is masturbating.", [_atom("masturbation", ["ANNA"])], solo) == []
+
+
+def test_participant_cjk_name_survives_inside_cjk_run():
+    """CJK runs have no alphabetic boundaries: the name must stay findable there."""
+    solo = [{"id": "ANNA", "name": "玲"}]
+    assert (
+        differences("拾取玲之后 she is masturbating.", [_atom("masturbation", ["ANNA"])], solo)
+        == []
+    )
+
+
 def test_non_latin_names_checked_verbatim():
     solo = [{"id": "ANNA", "name": "Анна"}]
     assert differences("Анна is masturbating.", [_atom("masturbation", ["ANNA"])], solo) == []
@@ -150,7 +175,11 @@ def test_reconcile_allows_solo_masturbation_only():
     extraction = _extraction(
         {
             "explicit": [
-                {"category": "masturbation", "participants": ["ANNA"], "evidence": "touches herself"},
+                {
+                    "category": "masturbation",
+                    "participants": ["ANNA"],
+                    "evidence": "touches herself",
+                },
                 {"category": "oral", "participants": ["ANNA"], "evidence": "touches herself"},
             ]
         }
@@ -172,12 +201,8 @@ def test_reconcile_keeps_postures_when_explicit_atoms_fail():
     narration = "Anna sits down slowly."
     extraction = _extraction(
         {
-            "changes": [
-                {"entity_id": "ANNA", "evidence": "sits down", "posture": "sitting"}
-            ],
-            "explicit": [
-                {"category": "oral", "participants": ["ANNA"], "evidence": "nowhere"}
-            ],
+            "changes": [{"entity_id": "ANNA", "evidence": "sits down", "posture": "sitting"}],
+            "explicit": [{"category": "oral", "participants": ["ANNA"], "evidence": "nowhere"}],
         }
     )
     result = reconcile(state, SOLO, narration, extraction)

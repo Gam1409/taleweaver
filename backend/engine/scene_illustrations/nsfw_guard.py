@@ -16,7 +16,14 @@ from typing import Any
 
 from backend.core.visual_trace import record
 
-VERSION = 1
+VERSION = 2
+
+# CJK runs carry no alphabetic word-continuation (see also the quest guardrails):
+# a name embedded inside such a run keeps substring semantics there, while
+# alphabetic scripts require whole-name boundaries below.
+_CJK_RE = re.compile(
+    "[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]"
+)
 
 # Safe prefixes (leading word boundary only): innocent English words do not
 # start with these strings (penetrat-, kiss-, undress-, masturbat-, ...).
@@ -46,6 +53,33 @@ _EXACT_WORDS: dict[str, tuple[str, ...]] = {
 
 def _folded(body: str) -> str:
     return " ".join(body.casefold().split())
+
+
+def _is_cjk(char: str) -> bool:
+    return bool(char and _CJK_RE.match(char))
+
+
+def _blocks_name(char: str, name_is_cjk: bool) -> bool:
+    """True when the neighbour continues the name into a longer word."""
+    if not char:
+        return False
+    if char.isalnum() or char == "_":
+        return not (name_is_cjk and _is_cjk(char))
+    return False
+
+
+def _mentions(name: str, folded: str) -> bool:
+    """Whole-name boundary match: 'ann' must not be satisfied by 'anna'."""
+    if not name:
+        return False
+    name_is_cjk = _is_cjk(name[0])
+    for match in re.finditer(re.escape(name), folded):
+        start, end = match.span()
+        before = folded[start - 1] if start else ""
+        after = folded[end] if end < len(folded) else ""
+        if not _blocks_name(before, name_is_cjk) and not _blocks_name(after, name_is_cjk):
+            return True
+    return False
 
 
 def _covered(folded: str, category: str) -> bool:
@@ -112,7 +146,7 @@ def differences(body: str, atoms: list[dict], characters: Any = ()) -> list[str]
         for participant in atom.get("participants") or []:
             label = names.get(str(participant), str(participant))
             name = " ".join(label.casefold().split())
-            if name and name not in folded:
+            if not _mentions(name, folded):
                 missing.append(f"Preserve {label} as an explicit act participant.")
     record("nsfw_guard.differences", missing=missing, version=VERSION)
     return missing
