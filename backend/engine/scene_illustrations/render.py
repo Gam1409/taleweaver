@@ -148,7 +148,17 @@ async def prepare_moment_prompt(request: dict) -> None:
     """Validate the prepared prompt, with one bounded feedback retry."""
     options = request["provider_options"]
     rules = prompt_rules(options) if request["provider"] == "comfyui" else None
+    facts = request.get("_scene_facts")
+    guard_mode, atoms = _guard_atoms(options, facts)
     instructions = source_quality.INSTRUCTIONS
+    if atoms:
+        # The explicit-atom contract below governs mature scenes; carrying the
+        # neutral "non-graphic" framing into it would instruct the adapter to
+        # soften the very acts the guard verifies.
+        instructions = instructions.replace(
+            "Create a non-graphic illustration",
+            "Create an explicit mature-content illustration",
+        )
     policy = ImagePromptRules(
         format="description",
         language="English",
@@ -161,8 +171,6 @@ async def prepare_moment_prompt(request: dict) -> None:
         kwargs["mature_themes"] = getattr(select_profile(options), "mature_themes", False)
         kwargs["nsfw_enabled"] = bool(options.get("_nsfw_enabled", False))
         kwargs["nsfw_level"] = str(options.get("_nsfw_level") or "hard")
-    facts = request.get("_scene_facts")
-    guard_mode, atoms = _guard_atoms(options, facts)
     if facts is not None:
         extra = fidelity.requirements(facts, prompt_format=policy.format)
         if atoms:

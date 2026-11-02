@@ -94,6 +94,16 @@ def test_unknown_category_reports_unresolvable():
     assert missing == ["Unknown explicit act category: teleport."]
 
 
+def test_exposure_display_category_is_covered_by_display_words():
+    """Display-only scenes get their own category; posing needs no fake act keyword."""
+    solo = [{"id": "MIKI", "name": "Miki"}]
+    body = "Miki poses with legs spread, hands spreading her labia, clitoris exposed."
+    assert differences(body, [_atom("exposure", ["MIKI"])], solo) == []
+    assert category_covered("exposed erect penis", "exposure")
+    assert category_covered("uncovered breasts under the open gown", "exposure")
+    assert not category_covered("Miki sits fully clothed on the bench.", "exposure")
+
+
 def test_no_atoms_no_issues():
     assert differences("Anything.", [], CAST) == []
     assert requirements([], CAST) == ""
@@ -114,6 +124,12 @@ def test_requirements_names_participants_and_demands_verbatim():
     assert "oral between Anna, Boris" in text
     assert "verbatim" in text
     assert "never translated" in text
+
+
+def test_requirements_demand_anatomical_state_and_reject_residue_acts():
+    text = requirements([_atom("exposure", ["ANNA"])], SOLO)
+    assert "anatomical state" in text
+    assert "never as a new active act" in text
 
 
 def test_status_reports_not_run_without_atoms():
@@ -186,6 +202,26 @@ def test_reconcile_allows_solo_masturbation_only():
     )
     result = reconcile(state, SOLO, narration, extraction)
     assert [atom["category"] for atom in result["explicit"]] == ["masturbation"]
+    assert result["explicit_rejected"] == 1
+
+
+def test_reconcile_allows_solo_exposure_and_rejects_partner_category_solo():
+    state = SimpleNamespace(entity_states={}, current_scene_id="s1")
+    narration = "Miki spreads her labia."
+    extraction = _extraction(
+        {
+            "explicit": [
+                {
+                    "category": "exposure",
+                    "participants": ["ANNA"],
+                    "evidence": "spreads her labia",
+                },
+                {"category": "manual", "participants": ["ANNA"], "evidence": "spreads her labia"},
+            ]
+        }
+    )
+    result = reconcile(state, SOLO, narration, extraction)
+    assert [atom["category"] for atom in result["explicit"]] == ["exposure"]
     assert result["explicit_rejected"] == 1
 
 
@@ -346,7 +382,22 @@ async def test_no_atoms_reports_not_run(monkeypatch):
     adapt.assert_awaited_once()
     _, policy, _ = adapt.call_args.args
     assert "Explicit content fidelity contract" not in policy.instructions
+    # Neutral scenes keep the non-graphic framing.
+    assert "non-graphic illustration" in policy.instructions
     assert details["nsfw_guard"]["status"] == "not_run"
+
+
+@pytest.mark.asyncio
+async def test_explicit_scene_replaces_non_graphic_framing(monkeypatch):
+    """The mature contract must not fight a non-graphic instruction in the same prompt."""
+    request, adapt, details = await _build(
+        monkeypatch, mode="block", body="Anna is masturbating on the bed.", explicit=ACT
+    )
+    await render.prepare_moment_prompt(request)
+    _, policy, _ = adapt.call_args.args
+    assert "explicit mature-content illustration" in policy.instructions
+    assert "non-graphic illustration" not in policy.instructions
+    assert details["nsfw_guard"]["status"] == "passed"
 
 
 @pytest.mark.asyncio

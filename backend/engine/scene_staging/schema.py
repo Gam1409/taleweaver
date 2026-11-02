@@ -11,6 +11,7 @@ Relation = Literal["in_front_of", "behind", "beside", "near", "on", "under", "un
 ActCategory = Literal[
     "kissing",
     "undressing",
+    "exposure",
     "manual",
     "oral",
     "vaginal",
@@ -37,7 +38,11 @@ class SceneDelta(BaseModel):
 
 
 class ExplicitDelta(BaseModel):
-    """An explicit act that is ongoing or completed at the final instant."""
+    """An explicit act that is ongoing or completed at the final instant.
+
+    'exposure' is a deliberate visible display of uncovered intimate anatomy
+    without an ongoing partner-contact act; solo display is valid.
+    """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     category: ActCategory
@@ -77,12 +82,18 @@ phrase in that quote. Taking off an item never implies placing it on the floor.
 Use provisional for an explicitly observed but unlocated item, confirmed only for
 explicit placement, and clear for a picked-up item. Never change ownership.
 Explicit acts are present-tense states, not changes: report every explicit act
-between present characters that is ongoing or completed at the final instant,
+involving present characters that is ongoing or completed at the final instant,
 including acts from previous_staging that continue in current_narration; for a
 continuing act use the continuation quote as evidence and keep the category.
-One entry per distinct act category. category is kissing, undressing, manual,
-oral, vaginal, anal, masturbation or grinding; choose the most explicit
-completed category and never downgrade an act to a milder one. participants
+One entry per distinct act category. category is kissing, undressing, exposure,
+manual, oral, vaginal, anal, masturbation or grinding; choose the most explicit
+completed category and never downgrade an act to a milder one. 'exposure' is a
+deliberate visible display of uncovered intimate anatomy at the final instant
+— posing, presenting or spreading to expose it — with no ongoing
+partner-contact act; solo display is valid and its participants are the
+displayed people. Physical residue of a past act (fluids already on the body,
+clothing already removed) is depicted state, never a reportable act: report an
+act only when the quote itself describes the act being performed. participants
 are supplied present character IDs only. Every entry requires an exact
 contiguous quote from current_narration identifying the act and its
 participants. Requests, negotiations, negations, hypotheticals, memories and

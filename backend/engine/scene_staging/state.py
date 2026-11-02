@@ -59,7 +59,7 @@ def _validate_explicit(
     rejected = 0
     for delta in extraction.explicit:
         participants = list(dict.fromkeys(delta.participants))
-        minimum = 1 if delta.category == "masturbation" else 2
+        minimum = 1 if delta.category in ("masturbation", "exposure") else 2
         if (
             any(participant not in known for participant in participants)
             or len(participants) < minimum

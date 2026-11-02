@@ -16,7 +16,7 @@ from typing import Any
 
 from backend.core.visual_trace import record
 
-VERSION = 2
+VERSION = 3
 
 # CJK runs carry no alphabetic word-continuation (see also the quest guardrails):
 # a name embedded inside such a run keeps substring semantics there, while
@@ -30,6 +30,7 @@ _CJK_RE = re.compile(
 _PREFIX_STEMS: dict[str, tuple[str, ...]] = {
     "kissing": ("kiss",),
     "undressing": ("undress", "strip"),
+    "exposure": ("expos",),
     "manual": ("handjob", "fingering", "hand job"),
     "oral": ("blowjob", "fellatio", "cunnilingus", "deepthroat", "suck"),
     "vaginal": ("penetrat", "intercourse"),
@@ -48,6 +49,16 @@ _EXACT_WORDS: dict[str, tuple[str, ...]] = {
     "undressing": ("naked", "nude", "topless", "bottomless"),
     "kissing": (),
     "masturbation": (),
+    "exposure": (
+        "spread",
+        "spreads",
+        "spreading",
+        "labia",
+        "vulva",
+        "uncovered",
+        "displaying",
+        "presenting",
+    ),
 }
 
 
@@ -122,7 +133,10 @@ def requirements(atoms: list[dict], characters: Any = ()) -> str:
         "acts at the final instant: "
         + "; ".join(acts)
         + ". Depict every one of them explicitly and directly; do not soften, fade out, "
-        "imply, or replace any act with milder contact or a metaphor. Use the participants' "
+        "imply, or replace any act with milder contact or a metaphor. Include each act's "
+        "stated visible anatomical state (exposed or spread anatomy, arousal, fluids, worn "
+        "or removed clothing) in explicit English terms; residue of a past act is depicted "
+        "as body state, never as a new active act. Use the participants' "
         "names verbatim as written; names are proper nouns and are never translated. "
         "These describe the image, never lettering or captions."
     )
