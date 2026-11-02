@@ -8,6 +8,16 @@ from backend.engine.scene_staging.props import PropDelta
 
 Posture = Literal["standing", "sitting", "lying", "kneeling", "crouching", "unknown"]
 Relation = Literal["in_front_of", "behind", "beside", "near", "on", "under", "unknown"]
+ActCategory = Literal[
+    "kissing",
+    "undressing",
+    "manual",
+    "oral",
+    "vaginal",
+    "anal",
+    "masturbation",
+    "grinding",
+]
 
 
 class Placement(BaseModel):
@@ -26,10 +36,20 @@ class SceneDelta(BaseModel):
     clear: bool = False
 
 
+class ExplicitDelta(BaseModel):
+    """An explicit act that is ongoing or completed at the final instant."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    category: ActCategory
+    participants: list[str] = Field(min_length=1, max_length=6)
+    evidence: str = Field(min_length=3, max_length=800)
+
+
 class SceneExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     changes: list[SceneDelta] = Field(default_factory=list, max_length=13)
     props: list[PropDelta] = Field(default_factory=list, max_length=24)
+    explicit: list[ExplicitDelta] = Field(default_factory=list, max_length=8)
 
 
 INSTRUCTIONS = """Extract only final, explicitly completed visual changes from current_narration.
@@ -56,5 +76,16 @@ with an exact quote of a completed action. spatial_position must be a literal
 phrase in that quote. Taking off an item never implies placing it on the floor.
 Use provisional for an explicitly observed but unlocated item, confirmed only for
 explicit placement, and clear for a picked-up item. Never change ownership.
+Explicit acts are present-tense states, not changes: report every explicit act
+between present characters that is ongoing or completed at the final instant,
+including acts from previous_staging that continue in current_narration; for a
+continuing act use the continuation quote as evidence and keep the category.
+One entry per distinct act category. category is kissing, undressing, manual,
+oral, vaginal, anal, masturbation or grinding; choose the most explicit
+completed category and never downgrade an act to a milder one. participants
+are supplied present character IDs only. Every entry requires an exact
+contiguous quote from current_narration identifying the act and its
+participants. Requests, negotiations, negations, hypotheticals, memories and
+dreams are never reported. Omission reports nothing.
 Return empty changes and props lists when no supported visual change occurred.
 """

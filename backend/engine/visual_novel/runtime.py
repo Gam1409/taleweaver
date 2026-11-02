@@ -1,5 +1,6 @@
 """Small integration helpers for completed VN turns."""
 
+from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import select
@@ -121,6 +122,10 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
         facts["staging_status"] = saved.get("status", "unconfirmed") if matches else "unconfirmed"
         for person in facts["characters"]:
             person.update(staging.get(person["id"], {}))
+        if matches:
+            # Frozen explicit atoms are checked at render time only; narration
+            # prompts never receive them.
+            facts["explicit"] = deepcopy(saved.get("explicit") or [])
     facts["props"] = props.project(
         manager.state,
         props.candidates(

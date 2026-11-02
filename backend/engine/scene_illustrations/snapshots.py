@@ -52,6 +52,20 @@ def _visible_facts(value: dict | None) -> dict:
         for item in (facts.get("props") or [])[:24]
         if isinstance(item, dict)
     ]
+    result["explicit"] = [
+        {
+            "category": str(atom["category"])[:40],
+            "participants": [
+                str(pid)[:100] for pid in atom["participants"][:6] if str(pid).strip()
+            ],
+            "evidence": str(atom.get("evidence") or "")[:800],
+        }
+        for atom in (facts.get("explicit") or [])[:8]
+        if isinstance(atom, dict)
+        and atom.get("category")
+        and isinstance(atom.get("participants"), list)
+        and atom["participants"]
+    ]
     people = facts.get("characters") or []
     result["characters"] = [
         {

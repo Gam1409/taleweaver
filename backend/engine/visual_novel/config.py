@@ -15,6 +15,7 @@ class VnSettings(BaseModel):
     visual_preparation: Literal["legacy", "plan"] = "plan"
     visual_audit: bool = True
     visual_audit_failure: Literal["block", "warn"] = "block"
+    nsfw_guard: Literal["off", "warn", "block"] = "warn"
     scene_staging: bool = False
     pace: Literal["leisurely", "balanced", "brisk"] = "balanced"
 

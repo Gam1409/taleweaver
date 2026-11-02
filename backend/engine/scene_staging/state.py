@@ -51,6 +51,33 @@ def retained(state: Any, cast: list[dict]) -> dict:
     return actors
 
 
+def _validate_explicit(
+    extraction: SceneExtraction, known: dict, narration: str, source: str
+) -> tuple[list[dict], int]:
+    """Drop invalid explicit atoms individually; they never veto posture facts."""
+    atoms: list[dict] = []
+    rejected = 0
+    for delta in extraction.explicit:
+        participants = list(dict.fromkeys(delta.participants))
+        minimum = 1 if delta.category == "masturbation" else 2
+        if (
+            any(participant not in known for participant in participants)
+            or len(participants) < minimum
+            or delta.evidence not in narration
+        ):
+            rejected += 1
+            continue
+        atoms.append(
+            {
+                "category": delta.category,
+                "participants": participants,
+                "evidence": delta.evidence,
+                "source_hash": source,
+            }
+        )
+    return atoms, rejected
+
+
 def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExtraction) -> dict:
     """Quotes ground proposals; semantic accuracy still depends on the extractor."""
     known = {person["id"]: person for person in cast}
@@ -105,12 +132,15 @@ def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExt
             and placement_data.get("target") in moved
         ):
             row.pop("placement", None)
+    explicit, explicit_rejected = _validate_explicit(extraction, known, narration, source)
     return {
         "scene_id": state.current_scene_id,
         "status": "unconfirmed" if rejected else "ready",
         "source_hash": source,
         "rejected": rejected,
         "actors": actors if not rejected else {},
+        "explicit": explicit,
+        "explicit_rejected": explicit_rejected,
     }
 
 
