@@ -35,7 +35,7 @@ async function mount(t, source, props, request, editor = false) {
         /const emit = defineEmits<[^\n]+\(\)/,
         `const emit = (...args) => globalThis['${key}'].emitted.push(args)`
       )
-    source = `export function setup() { ${source}; return {loadWorkflow, importing}; }`
+    source = `export function setup() { ${source}; return {loadWorkflow, importing, checkNodes, nodeReport}; }`
   }
   source = `import {computed, ref, watch, nextTick} from '${import.meta.resolve('vue')}';
 const onBeforeUnmount = cb => globalThis['${key}'].cleanup.push(cb);
@@ -143,3 +143,17 @@ for (const action of ['replace', 'unmount', 'new import']) {
     }
   })
 }
+
+
+test('node check works without bindings and clears results when workflow changes', async t => {
+  const calls = []
+  const f = await mount(t, editorSource, {url: 'https://server', modelValue: workflow('MissingLoader')}, async (...args) => {
+    calls.push(args)
+    return {node_types: 1, missing_node_types: ['MissingLoader']}
+  }, true)
+  await f.result.checkNodes()
+  assert.deepEqual(calls[0], ['check-nodes', {url:'https://server', classes:['MissingLoader']}])
+  assert.deepEqual([...f.result.nodeReport.value], ['Missing node type: MissingLoader'])
+  f.ctx.props.modelValue = workflow('InstalledLoader')
+  assert.equal(f.result.nodeReport.value.length, 0)
+})

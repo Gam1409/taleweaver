@@ -32,7 +32,7 @@ class DetectionRequest(BaseModel):
 
 class NodeSchemaRequest(BaseModel):
     url: str
-    classes: list[str] = Field(min_length=1, max_length=128)
+    classes: list[str] = Field(min_length=1, max_length=256)
 
 
 class PromptPreview(BaseModel):
@@ -66,6 +66,19 @@ async def workflow_model_options(
         ) from exc
 
 
+async def _node_registry(url: str) -> dict[str, Any]:
+    try:
+        async with ComfyClient(url) as client:
+            registry = await client.json("GET", "/object_info")
+        if not isinstance(registry, dict):
+            raise ValueError("Invalid node registry.")
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            400, "Could not load node definitions. Check the ComfyUI URL and connectivity."
+        ) from exc
+    return registry
+
+
 @router.post("/node-schemas", response_model=None)
 async def node_input_schemas(
     payload: NodeSchemaRequest, _user: User = Depends(get_current_admin)
@@ -76,17 +89,20 @@ async def node_input_schemas(
     of editor exports — including custom node packs this repo never heard of —
     instead of relying on a hardcoded table of core nodes.
     """
-    try:
-        async with ComfyClient(payload.url) as client:
-            registry = await client.json("GET", "/object_info")
-        if not isinstance(registry, dict):
-            raise ValueError("Invalid node registry.")
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(
-            400, "Could not load node definitions. Check the ComfyUI URL and connectivity."
-        ) from exc
+    registry = await _node_registry(payload.url)
     classes = list(dict.fromkeys(payload.classes))
     return {name: node_input_schema(registry.get(name)) for name in classes}
+
+
+@router.post("/check-nodes", response_model=None)
+async def check_node_types(
+    payload: NodeSchemaRequest, _user: User = Depends(get_current_admin)
+) -> dict[str, Any]:
+    """Check installed node types without requiring a fully configured workflow."""
+    registry = await _node_registry(payload.url)
+    classes = sorted(set(payload.classes))
+    missing = [name for name in classes if name not in registry]
+    return {"node_types": len(classes), "missing_node_types": missing}
 
 
 @router.post("/detect-template", response_model=None)

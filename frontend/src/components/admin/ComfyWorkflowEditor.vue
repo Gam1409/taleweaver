@@ -15,10 +15,13 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyWorkflow | null)
 const error = ref('')
 const report = ref<string[]>([])
 const checking = ref(false)
+const checkingNodes = ref(false)
+const nodeReport = ref<string[]>([])
+let nodeCheckVersion = 0
 const importing = ref(false)
 const loadingModels = ref(false)
 const canvasBusy = ref(false)
-watch([checking, importing, loadingModels, canvasBusy], ([checkingServer, importingFile, loadingFiles, canvas]) => emit('busy', checkingServer || importingFile || loadingFiles || canvas))
+watch([checking, checkingNodes, importing, loadingModels, canvasBusy], values => emit('busy', values.some(Boolean)))
 const parameters = ref<InstanceType<typeof ComfyWorkflowParameters>>()
 async function chooseStarter(value: ComfyWorkflow): Promise<void> {
   update(value)
@@ -62,9 +65,12 @@ let importVersion = 0
 let disposed = false
 watch(() => [props.url, props.modelValue], () => {
   importVersion++
+  nodeCheckVersion++
+  checkingNodes.value = false
+  nodeReport.value = []
   importing.value = false
 }, { flush: 'sync' })
-onBeforeUnmount(() => { disposed = true; importVersion++ })
+onBeforeUnmount(() => { disposed = true; importVersion++; nodeCheckVersion++ })
 
 async function loadWorkflow(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
@@ -101,6 +107,27 @@ async function loadWorkflow(event: Event): Promise<void> {
     if (active()) { importing.value = false; input.value = '' }
   }
 }
+async function checkNodes(): Promise<void> {
+  if (!props.modelValue || !props.url.trim() || checkingNodes.value) return
+  const version = ++nodeCheckVersion
+  const active = () => !disposed && version === nodeCheckVersion
+  checkingNodes.value = true
+  nodeReport.value = []
+  try {
+    const classes = [...new Set(Object.values(props.modelValue.graph).map(node => node.class_type))]
+    const data = await comfyRequest<{ node_types: number; missing_node_types: string[] }>(
+      'check-nodes', { url: props.url, classes }
+    )
+    if (!active()) return
+    nodeReport.value = data.missing_node_types.length
+      ? data.missing_node_types.map(name => `Missing node type: ${name}`)
+      : [`All ${data.node_types} node types are installed on this server.`]
+  } catch (err) {
+    if (active()) nodeReport.value = [err instanceof Error ? err.message : 'Could not check server nodes.']
+  } finally {
+    if (active()) checkingNodes.value = false
+  }
+}
 async function checkWorkflow(): Promise<void> {
   checking.value = true
   error.value = ''
@@ -127,7 +154,15 @@ async function checkWorkflow(): Promise<void> {
 
 <template>
   <div class="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-3">
-    <p class="text-sm font-semibold text-slate-200">{{ reference ? 'Image workflow (optional)' : 'Base workflow (required)' }}</p>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm font-semibold text-slate-200">{{ reference ? 'Image workflow (optional)' : 'Base workflow (required)' }}</p>
+      <button type="button" :disabled="!modelValue || !url.trim() || checkingNodes || importing" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs text-white disabled:opacity-50" @click="checkNodes">
+        {{ checkingNodes ? 'Checking nodes…' : 'Check nodes' }}
+      </button>
+    </div>
+    <ul v-if="nodeReport.length" aria-live="polite" class="list-disc space-y-1 pl-4 text-xs text-slate-300">
+      <li v-for="line in nodeReport" :key="line">{{ line }}</li>
+    </ul>
     <p class="text-xs text-slate-400">{{ reference ? 'Your graph decides whether the image is a reference or an img2img source.' : 'Used when creating a new image without a reference.' }}</p>
     <ComfyWorkflowStarter :reference="reference" :empty="!modelValue" :suggested-family="suggestedFamily" :source-workflow="sourceWorkflow" @choose="chooseStarter" />
     <label class="block text-xs text-slate-300">Import workflow JSON (ComfyUI editor or API export)

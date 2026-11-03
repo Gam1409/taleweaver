@@ -309,3 +309,25 @@ async def test_node_schemas_report_server_errors(auth_client, monkeypatch):
         json={"url": "http://127.0.0.1:8188", "classes": ["KSampler"]},
     )
     assert response.status_code == 400
+
+
+async def test_check_nodes_without_workflow_bindings(auth_client, monkeypatch):
+    calls = []
+
+    async def installed(self, method, path, **kwargs):
+        calls.append((method, path))
+        return {"KSampler": {}, "SaveImage": {}}
+
+    monkeypatch.setattr(ComfyClient, "json", installed)
+    response = await auth_client.post(
+        "/api/settings/comfyui/check-nodes",
+        json={"url": "http://127.0.0.1:8188", "classes": ["KSampler", "MissingPack", "KSampler"]},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"node_types": 2, "missing_node_types": ["MissingPack"]}
+    response = await auth_client.post(
+        "/api/settings/comfyui/check-nodes",
+        json={"url": "http://127.0.0.1:8188", "classes": ["KSampler", "SaveImage"]},
+    )
+    assert response.json() == {"node_types": 2, "missing_node_types": []}
+    assert calls == [("GET", "/object_info"), ("GET", "/object_info")]
