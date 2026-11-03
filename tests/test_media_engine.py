@@ -8,6 +8,9 @@ from backend.core import prompts
 from backend.engine import bfl_payloads
 from backend.engine import media_engine as media_engine_module
 from backend.engine.media_engine import MediaEngine
+from tests.test_comfyui import workflow
+
+__all__ = ["workflow"]
 
 pytestmark = pytest.mark.asyncio
 
@@ -515,3 +518,61 @@ async def test_image_decode_and_save_runs_off_event_loop(tmp_path, monkeypatch, 
     assert worker_threads and all(thread != loop_thread for thread in worker_threads)
     with original_open(image_path) as saved:
         assert saved.size == (24, 16)
+
+
+def _comfy_options(workflow, rules, prepared=True):
+    return {
+        "comfyui_profile": "advanced",
+        "comfyui_presets": {
+            "story-art": {
+                "name": "Story",
+                "generate": workflow,
+                "prompt_rules": rules,
+            }
+        },
+        "comfyui_assignments": {"advanced": "story-art"},
+        "_prompt_prepared": prepared,
+    }
+
+
+def test_prepare_prompt_appends_style_to_manual_tags_body(workflow):
+    """A distilled NSFW frame must still carry the selected style for ComfyUI tags."""
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    result = _prepare_prompt(
+        MediaEngine, "1 people, Лина, red coat", "comfyui", options, "soft watercolor style"
+    )
+    assert result == "1 people, Лина, red coat, soft watercolor style"
+
+
+def test_prepare_prompt_appends_style_to_manual_description_body(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "description", "language": "English"})
+    result = _prepare_prompt(
+        MediaEngine,
+        "Anna rests on the bed.",
+        "comfyui",
+        options,
+        "soft watercolor style",
+    )
+    assert result == "Anna rests on the bed. Style: soft watercolor style."
+
+
+def test_prepare_prompt_does_not_duplicate_existing_style(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    body = "1 people, Лина, red coat, Soft Watercolor Style"
+    assert (
+        _prepare_prompt(MediaEngine, body, "comfyui", options, "soft watercolor style") == body
+    )
+
+
+def test_prepare_prompt_without_style_stays_unchanged(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    body = "1 people, Лина, red coat"
+    assert _prepare_prompt(MediaEngine, body, "comfyui", options, "") == body

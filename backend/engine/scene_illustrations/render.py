@@ -159,6 +159,14 @@ async def prepare_moment_prompt(request: dict) -> None:
             "Create a non-graphic illustration",
             "Create an explicit mature-content illustration",
         )
+        # Poses are the part explicit scenes lose first: without a concrete
+        # configuration, an act name alone renders as a generic embrace.
+        instructions += (
+            " For each explicit act, also state its physical configuration in "
+            "concrete spatial terms — which participant is above, below or beside "
+            "the other, the direction each faces, supporting limbs, and how their "
+            "bodies connect — so the act's pose is unambiguous."
+        )
     policy = ImagePromptRules(
         format="description",
         language="English",

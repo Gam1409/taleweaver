@@ -198,6 +198,14 @@ def test_requirements_demand_anatomical_state_and_reject_residue_acts():
     assert "never as a new active act" in text
 
 
+def test_requirements_demand_physical_position_configuration():
+    """An act name alone renders as a generic pose; positions must be demanded."""
+    text = requirements([_atom("vaginal", ["ANNA", "BORIS"])], CAST)
+    assert "physical position or configuration" in text
+    assert "never just the act's name" in text
+    assert "straddling" in text
+
+
 def test_status_reports_not_run_without_atoms():
     assert status("warn", [], [])["status"] == "not_run"
     passed = status("block", [_atom("oral", ["ANNA"])], [])
@@ -462,6 +470,7 @@ async def test_explicit_scene_replaces_non_graphic_framing(monkeypatch):
     await render.prepare_moment_prompt(request)
     _, policy, _ = adapt.call_args.args
     assert "explicit mature-content illustration" in policy.instructions
+    assert "physical configuration in concrete spatial terms" in policy.instructions
     assert "non-graphic illustration" not in policy.instructions
     assert details["nsfw_guard"]["status"] == "passed"
 

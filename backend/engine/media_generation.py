@@ -281,13 +281,31 @@ def _prepare_prompt(
     # Inject style instruction if provided
     adapted = provider_key == "comfyui" and prompt_rules(provider_options or {})
     manual_adapted = adapted and (provider_options or {}).get("_prompt_prepared")
-    if style_instruction and style_instruction not in prompt and not manual_adapted:
+    if style_instruction and not manual_adapted and style_instruction not in prompt:
         # Ensure we don't have multiple dots
         prompt = prompt.strip()
         while prompt.endswith("."):
             prompt = prompt[:-1].strip()
         prompt += f". Style: {style_instruction}."
         logger.info("Style instruction injected")
+    elif (
+        style_instruction
+        and manual_adapted
+        and style_instruction.casefold() not in prompt.casefold()
+    ):
+        # The already-distilled final frame must still carry the selected style;
+        # the adapter LLM can drop it under a heavy explicit-content payload.
+        # Deterministic append keeps the style in every rendered prompt and is
+        # idempotent for the visual-plan artifact hash (same input, same output).
+        rules = prompt_rules(provider_options or {})
+        prompt = prompt.strip()
+        if rules and rules.format in {"tags", "hybrid"}:
+            prompt = prompt.rstrip(",") + f", {style_instruction}"
+        else:
+            while prompt.endswith("."):
+                prompt = prompt[:-1].strip()
+            prompt += f". Style: {style_instruction}."
+        logger.info("Style instruction appended to the prepared prompt")
 
     if not adapted:
         prompt = engine._apply_no_text_instruction(prompt)

@@ -17,7 +17,7 @@ from typing import Any
 
 from backend.core.visual_trace import record
 
-VERSION = 4
+VERSION = 5
 
 # Latin romanization tolerance for participant names. The verbatim name stays
 # the primary contract; one consistent Latin form must also satisfy the check,
@@ -551,7 +551,11 @@ def requirements(atoms: list[dict], characters: Any = ()) -> str:
         "acts at the final instant: "
         + "; ".join(acts)
         + ". Depict every one of them explicitly and directly; do not soften, fade out, "
-        "imply, or replace any act with milder contact or a metaphor. Include each act's "
+        "imply, or replace any act with milder contact or a metaphor. State each act's "
+        "physical position or configuration in explicit spatial terms — for example lying "
+        "on the back with legs raised, kneeling between the partner's legs, bent over a "
+        "surface, or seated straddling on top — never just the act's name. "
+        "Include each act's "
         "stated visible anatomical state (exposed or spread anatomy, arousal, fluids, worn "
         "or removed clothing) in explicit English terms; residue of a past act is depicted "
         "as body state, never as a new active act. Use the participants' "

@@ -341,15 +341,26 @@ async def test_comfy_story_preset_is_used(
     assert "final visible instant" in adaptations[0].instructions
     assert "only characters visible at the final instant" in adaptations[0].instructions
 
-    from backend.engine import image_prompt_adapter
+    from backend.engine import image_prompt_adapter, media_generation
 
     async def unexpected_adaptation(*args, **kwargs):
         raise AssertionError("The image provider must not reinterpret the final frame")
 
     monkeypatch.setattr(image_prompt_adapter, "adapt_body", unexpected_adaptation)
-    prepared = await image_prompt_adapter.prepare_prompt(illustration_world[0]["prompt"], options)
+    # Mirror the real submission seam: the prepared frame passes through
+    # _prepare_prompt before ComfyUI assembles the workflow bindings.
+    submitted = media_generation._prepare_prompt(
+        MediaEngine,
+        illustration_world[0]["prompt"],
+        "comfyui",
+        options,
+        illustration_world[0]["style_instruction"],
+    )
+    assert "Soft watercolor with ink outlines" in submitted
+    prepared = await image_prompt_adapter.prepare_prompt(submitted, options)
     assert prepared["positive"] == (
-        "model-quality-token, 1 people, Лина, red coat, standing beside window, model-style-token"
+        "model-quality-token, 1 people, Лина, red coat, standing beside window, "
+        "Soft watercolor with ink outlines, model-style-token"
     )
 
 
