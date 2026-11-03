@@ -236,3 +236,76 @@ async def test_job_dispatch_for_each_image_entry_point(auth_client, monkeypatch,
     result = (await auth_client.get(f"/api/settings/visual-jobs/{body['id']}")).json()
     assert result["state"] == "succeeded", result
     assert result["result"].get("image_url") or result["result"].get("profile_image_url")
+
+
+async def test_node_schemas_return_widget_layouts(auth_client, monkeypatch):
+    extended_registry = {
+        "DualCLIPLoader": {
+            "input": {
+                "required": {
+                    "clip_name1": [["clip_g.safetensors"]],
+                    "clip_name2": [["clip_l.safetensors"]],
+                    "type": [["sdxl", "sd3"]],
+                }
+            },
+            "input_order": {"required": ["clip_name1", "clip_name2", "type"]},
+        },
+        "KSampler": {
+            "input": {
+                "required": {
+                    "seed": ["INT", {"default": 0}],
+                    "steps": ["INT", {"default": 20}],
+                    "cfg": ["FLOAT", {"default": 8.0}],
+                    "sampler_name": [["euler"]],
+                    "scheduler": [["normal"]],
+                    "denoise": ["FLOAT", {"default": 1.0}],
+                    "model": ["MODEL"],
+                    "positive": ["CONDITIONING"],
+                },
+                "hidden": {"unique_id": "UNIQUE_ID"},
+            }
+        },
+        "SaveImage": {"input": {"required": {"images": ["IMAGE"]}}, "output_node": True},
+    }
+
+    async def get_registry(self, method, path, **kwargs):
+        return extended_registry
+
+    monkeypatch.setattr(ComfyClient, "json", get_registry)
+    response = await auth_client.post(
+        "/api/settings/comfyui/node-schemas",
+        json={
+            "url": "http://127.0.0.1:8188",
+            "classes": ["DualCLIPLoader", "KSampler", "MissingPack"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    schemas = response.json()
+    assert schemas["DualCLIPLoader"] == [
+        {"name": "clip_name1", "kind": "combo"},
+        {"name": "clip_name2", "kind": "combo"},
+        {"name": "type", "kind": "combo"},
+    ]
+    assert schemas["KSampler"] == [
+        {"name": "seed", "kind": "int"},
+        {"name": "steps", "kind": "int"},
+        {"name": "cfg", "kind": "float"},
+        {"name": "sampler_name", "kind": "combo"},
+        {"name": "scheduler", "kind": "combo"},
+        {"name": "denoise", "kind": "float"},
+        {"name": "model", "kind": "socket"},
+        {"name": "positive", "kind": "socket"},
+    ]
+    assert schemas["MissingPack"] == []
+
+
+async def test_node_schemas_report_server_errors(auth_client, monkeypatch):
+    async def broken_registry(self, method, path, **kwargs):
+        raise ValueError("ComfyUI is not reachable.")
+
+    monkeypatch.setattr(ComfyClient, "json", broken_registry)
+    response = await auth_client.post(
+        "/api/settings/comfyui/node-schemas",
+        json={"url": "http://127.0.0.1:8188", "classes": ["KSampler"]},
+    )
+    assert response.status_code == 400

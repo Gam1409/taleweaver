@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
-import { importWorkflowGraph } from '@/services/comfyEditorImport'
+import { importWorkflowGraphWithServer, type NodeSchemas } from '@/services/comfyEditorImport'
+import { comfyRequest } from '@/services/comfyPresetService'
 import { autoLayout, existingPositions, suggestBindings, withPositions } from '@/services/comfyWorkflowGraph'
 import ComfyWorkflowCanvas from './ComfyWorkflowCanvas.vue'
 import ComfyWorkflowJson from './ComfyWorkflowJson.vue'
@@ -14,9 +15,10 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyWorkflow | null)
 const error = ref('')
 const report = ref<string[]>([])
 const checking = ref(false)
+const importing = ref(false)
 const loadingModels = ref(false)
 const canvasBusy = ref(false)
-watch([checking, loadingModels, canvasBusy], ([checkingServer, loadingFiles, canvas]) => emit('busy', checkingServer || loadingFiles || canvas))
+watch([checking, importing, loadingModels, canvasBusy], ([checkingServer, importingFile, loadingFiles, canvas]) => emit('busy', checkingServer || importingFile || loadingFiles || canvas))
 const parameters = ref<InstanceType<typeof ComfyWorkflowParameters>>()
 async function chooseStarter(value: ComfyWorkflow): Promise<void> {
   update(value)
@@ -61,9 +63,14 @@ async function loadWorkflow(event: Event): Promise<void> {
   const file = input.files?.[0]
   if (!file) return
   error.value = ''
+  importing.value = true
   try {
     if (file.size > 262144) throw new Error('Maximum workflow size is 256 KiB.')
-    const result = importWorkflowGraph(await file.text())
+    const url = props.url
+    const fetchSchemas = url.trim()
+      ? (classes: string[]) => comfyRequest<NodeSchemas>('node-schemas', { url, classes })
+      : undefined
+    const result = await importWorkflowGraphWithServer(await file.text(), fetchSchemas)
     const suggestion = suggestBindings(result.graph)
     const graph = existingPositions(result.graph)
       ? result.graph
@@ -80,6 +87,7 @@ async function loadWorkflow(event: Event): Promise<void> {
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not load workflow.'
   } finally {
+    importing.value = false
     input.value = ''
   }
 }

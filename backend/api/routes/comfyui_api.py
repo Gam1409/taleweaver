@@ -13,7 +13,7 @@ from backend.core.comfyui_starters import model_choices, starter_catalog
 from backend.core.image_model_detection import detect_preset_template
 from backend.core.image_prompt_templates import TEMPLATES
 from backend.engine.comfyui_client import ComfyClient
-from backend.engine.comfyui_validation import inspect_workflow
+from backend.engine.comfyui_validation import inspect_workflow, node_input_schema
 from backend.engine.image_prompt_adapter import prepare_prompt
 from backend.models.user import User
 
@@ -28,6 +28,11 @@ class CheckWorkflow(BaseModel):
 class DetectionRequest(BaseModel):
     graph: dict
     reference_graph: dict | None = None
+
+
+class NodeSchemaRequest(BaseModel):
+    url: str
+    classes: list[str] = Field(min_length=1, max_length=128)
 
 
 class PromptPreview(BaseModel):
@@ -59,6 +64,29 @@ async def workflow_model_options(
         raise HTTPException(
             400, "Could not load model filenames. Check the ComfyUI URL and connectivity."
         ) from exc
+
+
+@router.post("/node-schemas", response_model=None)
+async def node_input_schemas(
+    payload: NodeSchemaRequest, _user: User = Depends(get_current_admin)
+) -> dict[str, Any]:
+    """Live widget/socket layouts for the workflow's node classes.
+
+    The frontend importer uses this to name legacy positional ``widgets_values``
+    of editor exports — including custom node packs this repo never heard of —
+    instead of relying on a hardcoded table of core nodes.
+    """
+    try:
+        async with ComfyClient(payload.url) as client:
+            registry = await client.json("GET", "/object_info")
+        if not isinstance(registry, dict):
+            raise ValueError("Invalid node registry.")
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            400, "Could not load node definitions. Check the ComfyUI URL and connectivity."
+        ) from exc
+    classes = list(dict.fromkeys(payload.classes))
+    return {name: node_input_schema(registry.get(name)) for name in classes}
 
 
 @router.post("/detect-template", response_model=None)

@@ -443,3 +443,242 @@ test('socket colours follow the ComfyUI palette for core inputs', () => {
   assert.equal(graphService.socketColor('vae'), '#7ee787')
   assert.equal(graphService.socketColor('anything_else'), '#94a3b8')
 })
+
+test('server schemas name legacy positional widgets for any node class', () => {
+  const schemas = {
+    DualCLIPLoader: [
+      { name: 'clip_name1', kind: 'combo' },
+      { name: 'clip_name2', kind: 'combo' },
+      { name: 'type', kind: 'combo' }
+    ],
+    EmptySD3LatentImage: [
+      { name: 'width', kind: 'int' },
+      { name: 'height', kind: 'int' },
+      { name: 'batch_size', kind: 'int' }
+    ],
+    MyCustomGadget: [
+      { name: 'gadget_name', kind: 'combo' },
+      { name: 'model', kind: 'socket' },
+      { name: 'strength', kind: 'float' }
+    ]
+  }
+  const result = editor.editorToApiGraph(
+    {
+      nodes: [
+        {
+          id: 1,
+          type: 'DualCLIPLoader',
+          inputs: [],
+          outputs: [{ name: 'CLIP', type: 'CLIP' }],
+          widgets_values: ['clip_g.safetensors', 'clip_l.safetensors', 'sdxl']
+        },
+        {
+          id: 2,
+          type: 'EmptySD3LatentImage',
+          inputs: [],
+          outputs: [{ name: 'LATENT', type: 'LATENT' }],
+          widgets_values: [1024, 1536, 1]
+        },
+        { id: 3, type: 'MyCustomGadget', inputs: [], outputs: [], widgets_values: ['fancy.safetensors', 0.5] }
+      ],
+      links: []
+    },
+    schemas
+  )
+  assert.deepEqual(result.graph['1'].inputs, {
+    clip_name1: 'clip_g.safetensors',
+    clip_name2: 'clip_l.safetensors',
+    type: 'sdxl'
+  })
+  assert.deepEqual(result.graph['2'].inputs, { width: 1024, height: 1536, batch_size: 1 })
+  assert.deepEqual(result.graph['3'].inputs, { gadget_name: 'fancy.safetensors', strength: 0.5 })
+})
+
+test('schema-driven legacy KSampler aligns like the editor, control widget stays UI-only', () => {
+  const result = editor.editorToApiGraph(
+    {
+      nodes: [
+        {
+          id: 5,
+          type: 'KSampler',
+          inputs: [],
+          outputs: [],
+          widgets_values: [123, 'randomize', 15, 1.2, 'euler_ancestral', 'karras', 1]
+        }
+      ],
+      links: []
+    },
+    {
+      KSampler: [
+        { name: 'seed', kind: 'int' },
+        { name: 'steps', kind: 'int' },
+        { name: 'cfg', kind: 'float' },
+        { name: 'sampler_name', kind: 'combo' },
+        { name: 'scheduler', kind: 'combo' },
+        { name: 'denoise', kind: 'float' }
+      ]
+    }
+  )
+  assert.deepEqual(result.graph['5'].inputs, {
+    seed: 123,
+    steps: 15,
+    cfg: 1.2,
+    sampler_name: 'euler_ancestral',
+    scheduler: 'karras',
+    denoise: 1
+  })
+})
+
+test('value-count mismatch against the server schema never guesses', () => {
+  const result = editor.editorToApiGraph(
+    {
+      nodes: [{ id: 9, type: 'OldCustomNode', inputs: [], outputs: [], widgets_values: ['a', 'b'] }],
+      links: []
+    },
+    { OldCustomNode: [{ name: 'only_one', kind: 'combo' }] }
+  )
+  assert.deepEqual(result.graph['9'].inputs, {})
+  assert.ok(result.notes.some(line => line.includes('9') && line.includes('skipped instead of guessing')))
+})
+
+test('reroutes pass links through and editor-only nodes never reach the graph', () => {
+  const result = editor.editorToApiGraph({
+    nodes: [
+      {
+        id: 1,
+        type: 'CheckpointLoaderSimple',
+        inputs: [],
+        outputs: [{ name: 'MODEL', type: 'MODEL', links: [1] }],
+        widgets_values_named: { ckpt_name: 'a.safetensors' }
+      },
+      {
+        id: 2,
+        type: 'Reroute',
+        inputs: [{ name: '', type: 'MODEL', link: 1 }],
+        outputs: [{ name: '', type: 'MODEL', links: [2] }]
+      },
+      {
+        id: 3,
+        type: 'Reroute',
+        inputs: [{ name: '', type: 'MODEL', link: 2 }],
+        outputs: [{ name: '', type: 'MODEL', links: [3] }]
+      },
+      {
+        id: 4,
+        type: 'KSampler',
+        inputs: [{ name: 'model', type: 'MODEL', link: 3 }],
+        outputs: [],
+        widgets_values_named: { seed: 1 }
+      },
+      { id: 5, type: 'Note', inputs: [], outputs: [], widgets_values: ['reminder'] }
+    ],
+    links: [
+      [1, 1, 0, 2, 0, 'MODEL'],
+      [2, 2, 0, 3, 0, 'MODEL'],
+      [3, 3, 0, 4, 0, 'MODEL']
+    ]
+  })
+  assert.deepEqual(result.graph['4'].inputs.model, ['1', 0], 'two reroutes resolve to the checkpoint')
+  assert.equal(result.graph['2'], undefined)
+  assert.equal(result.graph['3'], undefined)
+  assert.equal(result.graph['5'], undefined)
+  assert.ok(result.notes.some(line => line.includes('editor-only') && line.includes('Reroute#2')))
+})
+
+test('PrimitiveNode inlines its literal into converted widget inputs', () => {
+  const result = editor.editorToApiGraph({
+    nodes: [
+      {
+        id: 1,
+        type: 'PrimitiveNode',
+        inputs: [],
+        outputs: [{ name: 'STRING', type: 'STRING', links: [1] }],
+        widgets_values: ['masterpiece', 'fixed']
+      },
+      {
+        id: 2,
+        type: 'CLIPTextEncode',
+        inputs: [{ name: 'text', type: 'STRING', link: 1 }],
+        outputs: [{ name: 'CONDITIONING', type: 'CONDITIONING' }],
+        widgets_values: []
+      }
+    ],
+    links: [[1, 1, 0, 2, 0, 'STRING']]
+  })
+  assert.equal(result.graph['2'].inputs.text, 'masterpiece')
+  assert.equal(result.graph['1'], undefined)
+})
+
+test('unlinked converted widgets keep their value from the input descriptor', () => {
+  const result = editor.editorToApiGraph({
+    nodes: [
+      {
+        id: 1,
+        type: 'CLIPTextEncode',
+        inputs: [{ name: 'text', type: 'STRING', link: null, widget: { name: 'text', value: 'kept text' } }],
+        outputs: [],
+        widgets_values: []
+      }
+    ],
+    links: []
+  })
+  assert.equal(result.graph['1'].inputs.text, 'kept text')
+})
+
+test('importWorkflowGraphWithServer enriches from the server and falls back offline', async () => {
+  const workflowJson = JSON.stringify({
+    nodes: [
+      {
+        id: 1,
+        type: 'DualCLIPLoader',
+        inputs: [],
+        outputs: [],
+        widgets_values: ['g.safetensors', 'l.safetensors', 'sdxl']
+      }
+    ],
+    links: []
+  })
+  const fetched = []
+  const smart = await editor.importWorkflowGraphWithServer(workflowJson, async classes => {
+    fetched.push(classes)
+    return {
+      DualCLIPLoader: [
+        { name: 'clip_name1', kind: 'combo' },
+        { name: 'clip_name2', kind: 'combo' },
+        { name: 'type', kind: 'combo' }
+      ]
+    }
+  })
+  assert.deepEqual(fetched, [['DualCLIPLoader']])
+  assert.deepEqual(smart.graph['1'].inputs, {
+    clip_name1: 'g.safetensors',
+    clip_name2: 'l.safetensors',
+    type: 'sdxl'
+  })
+
+  const offline = await editor.importWorkflowGraphWithServer(workflowJson, async () => {
+    throw new Error('server down')
+  })
+  assert.deepEqual(offline.graph['1'].inputs, {
+    clip_name1: 'g.safetensors',
+    clip_name2: 'l.safetensors',
+    type: 'sdxl'
+  })
+  assert.ok(offline.notes.some(line => line.includes('not fetched')))
+
+  let apiCalls = 0
+  const api = await editor.importWorkflowGraphWithServer(
+    JSON.stringify({
+      3: {
+        class_type: 'KSampler',
+        inputs: { seed: 1, steps: 4, cfg: 7, sampler_name: 'euler', scheduler: 'normal', denoise: 1 }
+      }
+    }),
+    async () => {
+      apiCalls += 1
+      return {}
+    }
+  )
+  assert.equal(apiCalls, 0, 'API-format files never touch the schema endpoint')
+  assert.equal(Object.keys(api.graph).length, 1)
+})

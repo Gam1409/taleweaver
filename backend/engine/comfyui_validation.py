@@ -17,6 +17,46 @@ def _input_errors(node_id: str, inputs: dict, schema: dict) -> list[str]:
     return errors
 
 
+def _input_kind(spec: Any) -> str:
+    """Classify one INPUT_TYPES entry the way the ComfyUI editor renders it."""
+    if isinstance(spec, (list, tuple)) and spec:
+        first = spec[0]
+        if isinstance(first, (list, tuple)):
+            return "combo"
+        if first in {"STRING", "INT", "FLOAT", "BOOLEAN"}:
+            return str(first).lower()
+    return "socket"
+
+
+def node_input_schema(info: Any) -> list[dict[str, str]]:
+    """Ordered inputs of one ``/object_info`` entry, marked widget vs socket.
+
+    The editor renders combo/STRING/INT/FLOAT/BOOLEAN entries as widgets and
+    everything else (MODEL, CLIP, VAE, custom types) as connectable sockets,
+    following INPUT_TYPES order (``input_order`` when the server provides it).
+    Hidden and deprecated entries live in their own sections and never render,
+    so they are not listed either. Works for core and custom node packs alike.
+    """
+    if not isinstance(info, dict):
+        return []
+    sections = info.get("input")
+    if not isinstance(sections, dict):
+        return []
+    order = info.get("input_order")
+    schema: list[dict[str, str]] = []
+    for section in ("required", "optional"):
+        definitions = sections.get(section)
+        if not isinstance(definitions, dict):
+            continue
+        names = order.get(section) if isinstance(order, dict) else None
+        if not isinstance(names, list) or not names:
+            names = list(definitions)
+        for name in names:
+            if name in definitions:
+                schema.append({"name": name, "kind": _input_kind(definitions[name])})
+    return schema
+
+
 def inspect_workflow(workflow: ComfyWorkflow, registry: dict[str, Any]) -> dict:
     required = {node["class_type"] for node in workflow.graph.values()}
     missing = sorted(required - registry.keys())
