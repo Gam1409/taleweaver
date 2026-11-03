@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 import { importWorkflowGraphWithServer, type NodeSchemas } from '@/services/comfyEditorImport'
 import { comfyRequest } from '@/services/comfyPresetService'
@@ -58,10 +58,20 @@ function bindingValue(field: BindingName): string {
 function setOutput(event: Event): void {
   if (props.modelValue) update({ ...props.modelValue, output_node: (event.target as HTMLSelectElement).value })
 }
+let importVersion = 0
+let disposed = false
+watch(() => [props.url, props.modelValue], () => {
+  importVersion++
+  importing.value = false
+}, { flush: 'sync' })
+onBeforeUnmount(() => { disposed = true; importVersion++ })
+
 async function loadWorkflow(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  const version = ++importVersion
+  const active = () => !disposed && version === importVersion
   error.value = ''
   importing.value = true
   try {
@@ -71,6 +81,7 @@ async function loadWorkflow(event: Event): Promise<void> {
       ? (classes: string[]) => comfyRequest<NodeSchemas>('node-schemas', { url, classes })
       : undefined
     const result = await importWorkflowGraphWithServer(await file.text(), fetchSchemas)
+    if (!active()) return
     const suggestion = suggestBindings(result.graph)
     const graph = existingPositions(result.graph)
       ? result.graph
@@ -85,10 +96,9 @@ async function loadWorkflow(event: Event): Promise<void> {
       .concat(result.notes)
       .concat(suggestion.notes)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not load workflow.'
+    if (active()) error.value = err instanceof Error ? err.message : 'Could not load workflow.'
   } finally {
-    importing.value = false
-    input.value = ''
+    if (active()) { importing.value = false; input.value = '' }
   }
 }
 async function checkWorkflow(): Promise<void> {

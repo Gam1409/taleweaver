@@ -682,3 +682,20 @@ test('importWorkflowGraphWithServer enriches from the server and falls back offl
   assert.equal(apiCalls, 0, 'API-format files never touch the schema endpoint')
   assert.equal(Object.keys(api.graph).length, 1)
 })
+
+test('live schemas keep image-loader filenames and omit upload controls', async () => {
+  for (const type of ['LoadImage', 'LoadImageMask']) {
+    const mask = type === 'LoadImageMask'
+    const schema = [{ name: 'image', kind: 'combo' }]
+    if (mask) schema.push({ name: 'channel', kind: 'combo' })
+    const values = mask ? ['reference.png', 'alpha', 'image'] : ['reference.png', 'image']
+    const text = JSON.stringify({ nodes: [{ id: 1, type, widgets_values: values }] })
+    const result = await editor.importWorkflowGraphWithServer(text, async () => ({ [type]: schema }))
+    const expected = mask ? { image: 'reference.png', channel: 'alpha' } : { image: 'reference.png' }
+    assert.deepEqual(result.graph['1'].inputs, expected)
+    assert.deepEqual(editor.importWorkflowGraph(text).graph['1'].inputs, expected)
+    assert.equal(result.notes.length, 0)
+    const withoutButton = JSON.stringify({ nodes: [{ id: 1, type, widgets_values: values.slice(0, -1) }] })
+    assert.deepEqual((await editor.importWorkflowGraphWithServer(withoutButton, async () => ({ [type]: schema }))).graph['1'].inputs, expected)
+  }
+})

@@ -71,7 +71,7 @@ const MUTED = 2
 const MAX_RESOLUTION_DEPTH = 32
 
 /** Widget names ComfyUI renders as UI controls only; they never reach the API. */
-const UI_ONLY_WIDGETS = new Set(['control_after_generate'])
+const UI_ONLY_WIDGETS = new Set(['control_after_generate', '__image_upload__'])
 
 /** Node types defined by the editor itself; they never execute on the server.
  * Reroutes pass their links through, PrimitiveNode feeds a literal value,
@@ -128,8 +128,8 @@ const POSITIONAL_WIDGETS: Record<string, string[]> = {
   VAEEncode: [],
   SaveImage: ['filename_prefix'],
   PreviewImage: ['filename_prefix'],
-  LoadImage: ['image', 'upload'],
-  LoadImageMask: ['image', 'channel', 'upload']
+  LoadImage: ['image', '__image_upload__'],
+  LoadImageMask: ['image', 'channel', '__image_upload__']
 }
 
 export function looksLikeEditorWorkflow(value: unknown): boolean {
@@ -196,6 +196,12 @@ function widgetLayoutFromSchema(
     layout.push(entry.name)
     if (entry.kind === 'int' && /seed/i.test(entry.name)) layout.push('control_after_generate')
   }
+  // Core image loaders serialize the upload button alongside input widgets.
+  // It is not an API input and is absent from /object_info.
+  if (
+    (node.type === 'LoadImage' || node.type === 'LoadImageMask') &&
+    layout.includes('image') && node.widgets_values?.length === layout.length + 1
+  ) layout.push('__image_upload__')
   return layout
 }
 

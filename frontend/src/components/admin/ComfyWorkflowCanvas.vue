@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { LayoutGrid, Maximize2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-vue-next'
-import { comfyRequest } from '@/services/comfyPresetService'
+import { useComfyModelOptions } from '@/composables/useComfyModelOptions'
 import ComfyModelField from './ComfyModelField.vue'
 import {
   ENUM_LABELS,
@@ -30,7 +30,6 @@ import type { BindingName, ComfyWorkflow } from '@/types/comfyui'
 const props = defineProps<{ modelValue: ComfyWorkflow; url: string; reference?: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyWorkflow): void; (e: 'busy', value: boolean): void }>()
 
-type ModelOption = { node_id: string; input_name: string; choices: string[] }
 interface InputRow {
   name: string
   literal: boolean
@@ -60,10 +59,8 @@ const view = ref({ x: 40, y: 40, k: 1 })
 const selected = ref('')
 const assignRole = ref<BindingName | 'output' | null>(null)
 const note = ref('')
-const options = ref<ModelOption[]>([])
-const loadingModels = ref(false)
 const fittedOnce = ref(false)
-watch(loadingModels, value => emit('busy', value))
+const { choicesFor } = useComfyModelOptions(props, value => emit('busy', value))
 
 const graph = computed(() => props.modelValue.graph)
 const roles = computed<BindingName[]>(() =>
@@ -71,11 +68,6 @@ const roles = computed<BindingName[]>(() =>
     ? ['prompt', 'negative_prompt', 'seed', 'width', 'height', 'image']
     : ['prompt', 'negative_prompt', 'seed', 'width', 'height']
 )
-
-const structure = computed(() => {
-  const ids = Object.keys(graph.value).sort()
-  return JSON.stringify({ ids, edges: graphEdges(graph.value).map(e => `${e.from}>${e.to}.${e.toInput}`) })
-})
 
 const isCollapsed = (id: string): boolean => graph.value[id]?._meta?.collapsed === true
 
@@ -395,10 +387,6 @@ function onKey(event: KeyboardEvent): void {
 
 /* Inspector editing ------------------------------------------------------------ */
 
-function choicesFor(nodeId: string, field: string): string[] | undefined {
-  return options.value.find(item => item.node_id === nodeId && item.input_name === field)?.choices
-}
-
 function updateNodeInput(nodeId: string, field: string, value: unknown): void {
   const clone = JSON.parse(JSON.stringify(props.modelValue.graph)) as ComfyWorkflow['graph']
   clone[nodeId].inputs[field] = value
@@ -419,22 +407,6 @@ function toggleCollapsed(nodeId: string): void {
   emit('update:modelValue', { ...props.modelValue, graph: clone })
 }
 
-async function refreshOptions(): Promise<void> {
-  if (!props.url || !props.modelValue) return
-  loadingModels.value = true
-  const url = props.url
-  const snapshot = structure.value
-  try {
-    const result = await comfyRequest<ModelOption[]>('model-options', { url, workflow: props.modelValue })
-    if (url !== props.url || snapshot !== structure.value) return
-    options.value = result
-  } catch {
-    options.value = []
-  } finally {
-    loadingModels.value = false
-  }
-}
-
 /* Lifecycle ---------------------------------------------------------------------- */
 
 watch(
@@ -451,14 +423,10 @@ watch(
     }
   }
 )
-watch(structure, () => {
-  void refreshOptions()
-})
 
 onMounted(() => {
   positions.value = existingPositions(graph.value) || autoLayout(graph.value)
   nextTick(ensureFitted)
-  void refreshOptions()
   window.addEventListener('pointermove', onWindowPointerMove)
   window.addEventListener('pointerup', onWindowPointerUp)
 })
