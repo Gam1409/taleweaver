@@ -20,7 +20,7 @@
     "csp:test:prod-mode": "vite build --mode production && vite preview --mode production --host 127.0.0.1 --port 4173",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix --ignore-path .gitignore",
     "format": "prettier --write src/",
-    "test:presets": "node tests/comfyPresetDraft.test.mjs && node tests/comfyPresetWorkspace.test.mjs"
+    "test:presets": "node tests/comfyPresetDraft.test.mjs && node tests/comfyPresetWorkspace.test.mjs && node tests/comfyWorkflowGraph.test.mjs"
   },
   "dependencies": {
     "@fontsource/acme": "^5.2.7",

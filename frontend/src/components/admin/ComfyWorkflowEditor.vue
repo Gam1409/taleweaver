@@ -2,6 +2,8 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 import { parseApiGraph } from '@/services/comfyWorkflowService'
+import { autoLayout, suggestBindings, withPositions } from '@/services/comfyWorkflowGraph'
+import ComfyWorkflowCanvas from './ComfyWorkflowCanvas.vue'
 import ComfyWorkflowJson from './ComfyWorkflowJson.vue'
 import ComfyWorkflowStarter from './ComfyWorkflowStarter.vue'
 import ComfyWorkflowParameters from './ComfyWorkflowParameters.vue'
@@ -13,7 +15,8 @@ const error = ref('')
 const report = ref<string[]>([])
 const checking = ref(false)
 const loadingModels = ref(false)
-watch([checking, loadingModels], ([checkingServer, loadingFiles]) => emit('busy', checkingServer || loadingFiles))
+const canvasBusy = ref(false)
+watch([checking, loadingModels, canvasBusy], ([checkingServer, loadingFiles, canvas]) => emit('busy', checkingServer || loadingFiles || canvas))
 const parameters = ref<InstanceType<typeof ComfyWorkflowParameters>>()
 async function chooseStarter(value: ComfyWorkflow): Promise<void> {
   update(value)
@@ -60,10 +63,16 @@ async function loadWorkflow(event: Event): Promise<void> {
   error.value = ''
   try {
     if (file.size > 262144) throw new Error('Maximum workflow size is 256 KiB.')
-    const graph = parseApiGraph(await file.text())
-    const nodes = Object.entries(graph)
-    const outputs = nodes.filter(([, n]) => n.class_type === 'SaveImage')
-    update({ name: file.name, graph, bindings: {}, output_node: outputs.length === 1 ? outputs[0]![0] : '' })
+    const parsed = parseApiGraph(await file.text())
+    const suggestion = suggestBindings(parsed)
+    const graph = withPositions(parsed, autoLayout(parsed))
+    const bindings: ComfyWorkflow['bindings'] = {}
+    for (const role of Object.keys(suggestion.bindings) as BindingName[]) {
+      const target = suggestion.bindings[role]
+      if (target) bindings[role] = target
+    }
+    update({ name: file.name, graph, bindings, output_node: suggestion.output_node })
+    report.value = [`Imported ${Object.keys(graph).length} nodes; drag them into a comfortable arrangement.`].concat(suggestion.notes)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not load workflow.'
   } finally {
@@ -104,10 +113,11 @@ async function checkWorkflow(): Promise<void> {
     </label>
     <template v-if="modelValue">
       <p class="text-xs text-cyan-300 break-all">{{ modelValue.name }} · {{ Object.keys(modelValue.graph).length }} nodes</p>
-      <ComfyWorkflowParameters ref="parameters" :model-value="modelValue" :url="url" @busy="loadingModels = $event" @update:model-value="update" />
-      <details :open="!modelValue.bindings.prompt || !modelValue.output_node || (reference && !modelValue.bindings.image)" class="space-y-3">
-        <summary class="cursor-pointer text-xs text-slate-300">Advanced: workflow inputs and output</summary>
+      <ComfyWorkflowCanvas :model-value="modelValue" :url="url" :reference="reference" @update:model-value="update" @busy="canvasBusy = $event" />
+      <details class="space-y-3">
+        <summary class="cursor-pointer text-xs text-slate-300">List view: models, parameters and bindings</summary>
         <p class="text-xs text-slate-500">Only mapped inputs are replaced. Other model, sampler and denoise values stay as defined in your workflow.</p>
+        <ComfyWorkflowParameters ref="parameters" :model-value="modelValue" :url="url" @busy="loadingModels = $event" @update:model-value="update" />
         <label v-for="field in fields" :key="field" class="block text-xs text-slate-300">
           {{ field }} {{ field === 'prompt' || field === 'image' ? '(required)' : '(optional)' }}
           <select :value="bindingValue(field)" class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2" @change="setBinding(field, $event)">
@@ -122,7 +132,7 @@ async function checkWorkflow(): Promise<void> {
           </select>
         </label>
         <label class="block text-xs text-slate-300">Dimension alignment
-          <select :value="modelValue.dimension_multiple || 8" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-2" @change="update({ ...modelValue, dimension_multiple: Number(($event.target as HTMLSelectElement).value) as 8 | 16 | 32 | 64 })">
+          <select :value="modelValue.dimension_multiple || 8" class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2" @change="update({ ...modelValue, dimension_multiple: Number(($event.target as HTMLSelectElement).value) as 8 | 16 | 32 | 64 })">
             <option v-for="size in [8, 16, 32, 64]" :key="size" :value="size">Multiples of {{ size }} pixels</option>
           </select>
           <span class="mt-1 block text-slate-400">Starter workflows set this automatically. Change only if your custom architecture requires it.</span>

@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { comfyRequest } from '@/services/comfyPresetService'
+import {
+  ENUM_LABELS as enumLabels,
+  MODEL_FIELD_FOLDERS as folders,
+  MODEL_FIELD_LABELS as labels,
+  NUMERIC_CONTROLS as controls
+} from '@/services/comfyWorkflowGraph'
 import ComfyModelField from './ComfyModelField.vue'
 import type { ComfyWorkflow } from '@/types/comfyui'
 
@@ -11,16 +17,8 @@ const options = ref<ModelOption[]>([])
 const loading = ref(false)
 watch(loading, value => emit('busy', value))
 const message = ref('')
-const enumLabels: Record<string, string> = { sampler_name: 'Sampler', scheduler: 'Scheduler' }
 const loaders = computed(() => JSON.stringify(Object.entries(props.modelValue.graph).map(([id, node]) => [id, node.class_type, Object.keys(node.inputs)])))
 watch([() => props.url, loaders], () => { options.value = []; message.value = '' })
-const labels: Record<string, string> = { ckpt_name: 'Checkpoint', unet_name: 'Diffusion model', clip_name: 'Text encoder', clip_name1: 'Text encoder 1', clip_name2: 'Text encoder 2', clip_name3: 'Text encoder 3', vae_name: 'VAE', lora_name: 'LoRA' }
-const folders: Record<string, string> = { ckpt_name: 'models/checkpoints', unet_name: 'models/diffusion_models', clip_name: 'models/text_encoders', clip_name1: 'models/text_encoders', clip_name2: 'models/text_encoders', clip_name3: 'models/text_encoders', vae_name: 'models/vae', lora_name: 'models/loras' }
-const controls: Record<string, { label: string; min: number; max: number; step: number }> = {
-  steps: { label: 'Steps', min: 1, max: 10000, step: 1 }, cfg: { label: 'CFG', min: 0, max: 100, step: 0.1 },
-  guidance: { label: 'Guidance', min: 0, max: 100, step: 0.1 }, denoise: { label: 'Denoise', min: 0, max: 1, step: 0.05 },
-  strength_model: { label: 'LoRA model strength', min: -100, max: 100, step: 0.05 }, strength_clip: { label: 'LoRA encoder strength', min: -100, max: 100, step: 0.05 },
-}
 const entries = computed(() => Object.entries(props.modelValue.graph).flatMap(([id, node]) => Object.entries(node.inputs).map(([field, value]) => ({ id, field, value, kind: node.class_type }))))
 const models = computed(() => entries.value.filter(item => labels[item.field] && typeof item.value === 'string'))
 const checkpointVaeSources = computed(() => [...new Set(entries.value.flatMap(item => {

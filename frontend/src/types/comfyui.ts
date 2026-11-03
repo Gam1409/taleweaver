@@ -2,7 +2,7 @@ export type BindingName = 'prompt' | 'negative_prompt' | 'seed' | 'width' | 'hei
 export interface ComfyNode {
   class_type: string
   inputs: Record<string, unknown>
-  _meta?: { title?: string }
+  _meta?: { title?: string; pos?: [number, number] }
 }
 export interface ComfyWorkflow {
   name: string
