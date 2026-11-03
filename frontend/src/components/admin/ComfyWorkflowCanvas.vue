@@ -273,7 +273,14 @@ function nodeClick(nodeId: string): void {
 /* Pan, zoom and node dragging -------------------------------------------------- */
 
 let panState: { startX: number; startY: number; viewX: number; viewY: number } | null = null
-let dragState: { id: string; offsetX: number; offsetY: number; moved: boolean } | null = null
+let dragState: {
+  id: string
+  originX: number
+  originY: number
+  pointerX: number
+  pointerY: number
+  moved: boolean
+} | null = null
 
 function onCanvasPointerDown(event: PointerEvent): void {
   ensureFitted()
@@ -285,19 +292,25 @@ function onCanvasPointerDown(event: PointerEvent): void {
 function startNodeDrag(event: PointerEvent, id: string): void {
   if (event.button !== 0) return
   const position = positions.value[id]
-  const rect = container.value?.getBoundingClientRect()
-  if (!position || !rect) return
-  const originX = rect.left + view.value.x + position.x * view.value.k
-  const originY = rect.top + view.value.y + position.y * view.value.k
-  dragState = { id, offsetX: event.clientX - originX, offsetY: event.clientY - originY, moved: false }
+  if (!position) return
+  dragState = {
+    id,
+    originX: position.x,
+    originY: position.y,
+    pointerX: event.clientX,
+    pointerY: event.clientY,
+    moved: false
+  }
 }
 
 function onWindowPointerMove(event: PointerEvent): void {
   if (dragState) {
     const position = positions.value[dragState.id]
     if (position) {
-      position.x = (event.clientX - dragState.offsetX) / view.value.k
-      position.y = (event.clientY - dragState.offsetY) / view.value.k
+      // Delta-based: container offsets and panning are already inside the
+      // captured origin, so 1 px of mouse moves the node by exactly 1/k px.
+      position.x = dragState.originX + (event.clientX - dragState.pointerX) / view.value.k
+      position.y = dragState.originY + (event.clientY - dragState.pointerY) / view.value.k
       dragState.moved = true
     }
     return
@@ -424,14 +437,21 @@ async function refreshOptions(): Promise<void> {
 
 /* Lifecycle ---------------------------------------------------------------------- */
 
-watch(structure, () => {
-  const existing = existingPositions(graph.value)
-  positions.value = existing || autoLayout(graph.value)
-  if (selected.value && !graph.value[selected.value]) selected.value = ''
-  if (!existing) {
-    fittedOnce.value = false
-    nextTick(ensureFitted)
+watch(
+  () => props.modelValue,
+  value => {
+    // Fires on every preset switch and saved edit, so node classes, positions
+    // and model lists can never lag behind the workflow on display.
+    const existing = existingPositions(value.graph)
+    positions.value = existing || autoLayout(value.graph)
+    if (selected.value && !value.graph[selected.value]) selected.value = ''
+    if (!existing) {
+      fittedOnce.value = false
+      nextTick(ensureFitted)
+    }
   }
+)
+watch(structure, () => {
   void refreshOptions()
 })
 
