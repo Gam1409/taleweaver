@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.core.comfyui_presets import normalize_comfy_presets
+from backend.core.image_purposes import PURPOSES
+from backend.engine.image_profiles import advanced_for
 from backend.engine.nsfw.settings import nsfw_settings
 from backend.models.adventure_template import AdventureTemplate
 
@@ -24,7 +26,10 @@ def story_selection(adventure: AdventureTemplate | SimpleNamespace | None) -> di
     selection = manifest.get("visual_presets", {})
     if not isinstance(selection, dict):
         raise ValueError("Invalid story visual preset selection.")
-    if any(k not in ("simple", "advanced") or not isinstance(v, str) for k, v in selection.items()):
+    if any(
+        k not in PURPOSES | {"simple", "advanced"} or not isinstance(v, str)
+        for k, v in selection.items()
+    ):
         raise ValueError("Invalid story visual preset selection.")
     return selection
 
@@ -46,8 +51,20 @@ def story_t2i(t2i: dict | None, adventure: AdventureTemplate | SimpleNamespace |
             raise ValueError(
                 "A story image preset is unavailable. Re-select it in the story's Visuals settings."
             )
-        result[f"{profile}_model_provider"] = "comfyui"
+        if profile in {"simple", "advanced"}:
+            result[f"{profile}_model_provider"] = "comfyui"
     result["comfyui_assignments"] = {**result.get("comfyui_assignments", {}), **selection}
+    # Preserve explicit legacy story choices when new global task assignments exist.
+    for purpose in PURPOSES:
+        profile = "advanced" if advanced_for(result, purpose) else "simple"
+        if purpose not in selection and profile in selection:
+            result["comfyui_assignments"][purpose] = selection[profile]
     for profile in selection:
-        select_workflow({**result, "comfyui_profile": profile})
+        select_workflow(
+            {
+                **result,
+                "comfyui_profile": profile if profile in {"simple", "advanced"} else "simple",
+                "image_purpose": profile if profile in PURPOSES else None,
+            }
+        )
     return result

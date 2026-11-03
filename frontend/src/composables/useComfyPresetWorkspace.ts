@@ -1,3 +1,4 @@
+import type { ImagePurpose } from '@/services/imagePurposes'
 import { computed, ref, watch } from 'vue'
 import type { ComfyOptions, ImagePromptRules, PromptTemplate } from '@/types/comfyui'
 import { comfyRequest, loadPromptTemplates } from '@/services/comfyPresetService'
@@ -15,8 +16,9 @@ export function useComfyPresetWorkspace(props: {
   open: boolean
   modelValue: ComfyOptions
   profile: 'simple' | 'advanced'
+  purpose?: ImagePurpose
 }) {
-  const workspace = ref(presetWorkspace(props.modelValue, props.profile))
+  const workspace = ref(presetWorkspace(props.modelValue, props.purpose ?? props.profile, props.profile))
   const draft = computed(() => workspace.value.presets[workspace.value.selectedId]!)
   const templates = ref<PromptTemplate[]>([])
   const error = ref('')
@@ -69,7 +71,7 @@ export function useComfyPresetWorkspace(props: {
       detecting.value = false
       previewing.value = false
       if (!open) return
-      workspace.value = presetWorkspace(props.modelValue, props.profile)
+      workspace.value = presetWorkspace(props.modelValue, props.purpose ?? props.profile, props.profile)
       error.value = ''
       preview.value = null
       detection.value = null
@@ -170,7 +172,7 @@ export function useComfyPresetWorkspace(props: {
     removeUnsavedPreset(workspace.value)
   }
   function result(): ComfyOptions {
-    return applyPresetWorkspace(props.modelValue, workspace.value, props.profile)
+    return { ...applyPresetWorkspace(props.modelValue, workspace.value, props.purpose ?? props.profile), image_purpose: props.purpose }
   }
   return {
     workspace,

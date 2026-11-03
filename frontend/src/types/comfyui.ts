@@ -1,3 +1,4 @@
+import type { ImagePurpose, PresetAssignment } from '@/services/imagePurposes'
 export type BindingName = 'prompt' | 'negative_prompt' | 'seed' | 'width' | 'height' | 'image'
 export interface ComfyNode {
   class_type: string
@@ -38,12 +39,15 @@ export interface ComfyPreset extends ComfyProfile {
   prompt_rules: ImagePromptRules | null
   auto_prompt_template: boolean
   mature_themes?: boolean
+  purpose_tags?: ImagePurpose[]
+  style_tags?: string[]
 }
 export interface ComfyOptions {
   comfyui_url: string
   comfyui_timeout: number
   comfyui_profiles: Partial<Record<'simple' | 'advanced', ComfyProfile>>
+  image_purpose?: ImagePurpose
   comfyui_profile?: 'simple' | 'advanced'
   comfyui_presets?: Record<string, ComfyPreset>
-  comfyui_assignments?: Partial<Record<'simple' | 'advanced', string>>
+  comfyui_assignments?: Partial<Record<PresetAssignment, string>>
 }

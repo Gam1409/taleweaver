@@ -15,6 +15,7 @@ from sqlalchemy.orm.attributes import set_attribute, set_committed_value
 
 from backend.core import database, prompts
 from backend.core.comfyui_config import select_workflow
+from backend.core.image_purposes import image_provider
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.core.visual_trace import traced
 from backend.engine.clothing.frames import compose_frame, extract_frame
@@ -104,9 +105,10 @@ def _image_request(
     session_id: str, npc: dict, t2i: dict, user: User, style: str, tone: str
 ) -> dict:
     profile = "advanced" if advanced_for(t2i, "npc") else "simple"
-    provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
+    provider = image_provider(t2i, profile, "npc")
     options = {
         **t2i,
+        "image_purpose": "npc",
         "visual_target_type": "npc",
         "_prompt_user": user,
         "comfyui_profile": profile,

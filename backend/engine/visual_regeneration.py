@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.comfyui_config import prompt_rules
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.media_engine import MediaEngine
@@ -66,9 +67,10 @@ def _reference_options(
     field: str,
     template_id: str,
     advanced: bool,
+    purpose: str = "",
 ) -> dict:
     profile = "advanced" if advanced else "simple"
-    if t2i.get(f"{profile}_model_provider") != "comfyui":
+    if image_provider(t2i, profile, purpose) != "comfyui":
         raise ValueError("Using the current image requires a ComfyUI image workflow.")
     url = getattr(target, field, None)
     path = data_url_to_local_path(url) if url else None
@@ -88,7 +90,9 @@ async def regenerate_owned_visual(
     t2i["_prompt_prepared"] = bool(payload.prompt and payload.prompt.strip())
     advanced = advanced_for(t2i, payload.target_type, payload.use_advanced_model)
     if payload.use_current_image:
-        t2i = _reference_options(t2i, target, field, adventure.id, advanced)
+        t2i = _reference_options(
+            t2i, target, field, adventure.id, advanced, purpose_for(payload.target_type)
+        )
     style = resolve_style_instruction(adventure.selected_image_styles, user.image_styles_catalog)
     common: dict[str, Any] = {
         "adventure_id": adventure.id,

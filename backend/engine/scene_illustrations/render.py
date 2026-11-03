@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.image_purposes import image_provider
 from backend.core.visual_trace import record
 from backend.engine.clothing.frames import extract_frame
 from backend.engine.image_profiles import advanced_for
@@ -25,11 +26,12 @@ from .visual_context import VisualContext
 async def image_request(
     db: AsyncSession, state: SessionState, user: User, snapshot: dict
 ) -> tuple[dict, dict]:
-    t2i, style, tone = await _settings(db, state, user, kind="scene")
+    t2i, style, tone = await _settings(db, state, user, kind="illustration")
     profile = "advanced" if advanced_for(t2i, "scene") else "simple"
-    provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
+    provider = image_provider(t2i, profile, "illustration")
     options = {
         **t2i,
+        "image_purpose": "illustration",
         "visual_target_type": "scene",
         "comfyui_profile": profile,
         "_prompt_user": user,

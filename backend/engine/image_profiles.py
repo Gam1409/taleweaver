@@ -4,10 +4,15 @@ from types import SimpleNamespace
 
 from backend.core.comfyui_config import select_workflow
 from backend.core.config import settings
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.models.user import User
 
 LOCAL_IMAGE_PROVIDERS = ("ollama", "stable_diffusion", "comfyui")
 PROFILE_SETTINGS = {
+    "avatar": ("avatar_model_quality", "simple"),
+    "catalog": ("catalog_model_quality", "simple"),
+    "illustration": ("scene_model_quality", "advanced"),
+    "background": ("scene_model_quality", "advanced"),
     "scene": ("scene_model_quality", "advanced"),
     "npc": ("profile_model_quality", "advanced"),
     "protagonist": ("protagonist_model_quality", "advanced"),
@@ -25,7 +30,9 @@ def advanced_for(t2i: dict, kind: str, override: bool | None = None) -> bool:
 
 def image_timeout(t2i: dict | None) -> float:
     data = t2i or {}
-    uses_comfy = any(data.get(f"{p}_model_provider") == "comfyui" for p in ("simple", "advanced"))
+    uses_comfy = bool(data.get("comfyui_assignments")) or any(
+        data.get(f"{p}_model_provider") == "comfyui" for p in ("simple", "advanced")
+    )
     return (
         float(data.get("comfyui_timeout") or 600) + 135
         if uses_comfy
@@ -37,15 +44,15 @@ def validate_image_profiles(user: User | SimpleNamespace | None, kinds: list[str
     if not user:
         return
     t2i = user.t2i_settings or {}
-    profiles = {"advanced" if advanced_for(t2i, kind) else "simple" for kind in kinds}
-    for profile in profiles:
-        _validate_profile(t2i, user.encrypted_api_keys or {}, profile)
+    for kind in kinds:
+        profile = "advanced" if advanced_for(t2i, kind) else "simple"
+        _validate_profile(t2i, user.encrypted_api_keys or {}, profile, purpose_for(kind))
 
 
-def _validate_profile(t2i: dict, keys: dict, profile: str) -> None:
-    provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
+def _validate_profile(t2i: dict, keys: dict, profile: str, purpose: str = "") -> None:
+    provider = image_provider(t2i, profile, purpose)
     if provider == "comfyui":
-        select_workflow({**t2i, "comfyui_profile": profile})
+        select_workflow({**t2i, "comfyui_profile": profile, "image_purpose": purpose})
         return
     if not t2i.get(f"{profile}_model"):
         raise ValueError(f"Configure the {profile} image model in Visual Preferences.")

@@ -16,6 +16,7 @@ import requests
 
 from backend.core import prompts
 from backend.core.config import settings
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.llm_diagnostics import async_operation
 from backend.core.security import encryption_util
 from backend.engine.bfl_payloads import resolve_bfl_model_alias
@@ -629,6 +630,8 @@ class MediaEngine:
             provider = (t2i.get("simple_model_provider") or t2i.get("provider", "openai")).lower()
             model = t2i.get("simple_model")
 
+        provider = image_provider(t2i, "advanced" if use_advanced_model else "simple", "background")
+
         logger.info("Resolving scene generation: provider=%s, model=%s", provider, model)
 
         if not model and provider != "comfyui":
@@ -652,6 +655,7 @@ class MediaEngine:
 
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
+        options["image_purpose"] = "background"
         options["visual_target_type"] = "scene"
         options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
@@ -709,6 +713,10 @@ class MediaEngine:
             provider = (t2i.get("simple_model_provider") or t2i.get("provider", "openai")).lower()
             model = t2i.get("simple_model")
 
+        provider = image_provider(
+            t2i, "advanced" if use_advanced_model else "simple", purpose_for(entity_type)
+        )
+
         logger.info("Resolving entity generation: provider=%s, model=%s", provider, model)
 
         if not model and provider != "comfyui":
@@ -733,6 +741,7 @@ class MediaEngine:
 
         # Resolve steps and cfg_scale for simple or advanced model
         options = dict(t2i)
+        options["image_purpose"] = purpose_for(entity_type)
         options["visual_target_type"] = entity_type.lower()
         options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = "advanced" if use_advanced_model else "simple"
@@ -786,6 +795,8 @@ class MediaEngine:
         provider = (t2i.get(f"{profile}_model_provider") or t2i.get("provider", "openai")).lower()
         model = t2i.get(f"{profile}_model")
 
+        provider = image_provider(t2i, "advanced" if use_advanced_model else "simple", "cover")
+
         logger.info("Resolving adventure cover generation: provider=%s, model=%s", provider, model)
 
         if not model and provider != "comfyui":
@@ -811,10 +822,16 @@ class MediaEngine:
         safe_id = safe_adventure_id
         filename = f"{safe_id}_cover_{uuid.uuid4().hex[:8]}.{ext}"
 
-        prompt = cover_source(title, original_prompt, provider, {**t2i, "comfyui_profile": profile})
+        prompt = cover_source(
+            title,
+            original_prompt,
+            provider,
+            {**t2i, "comfyui_profile": profile, "image_purpose": "cover"},
+        )
 
         # Resolve steps and cfg_scale for advanced model
         options = dict(t2i)
+        options["image_purpose"] = "cover"
         options["visual_target_type"] = "cover"
         options["_prompt_user"] = user_config.get("prompt_user")
         options["comfyui_profile"] = profile

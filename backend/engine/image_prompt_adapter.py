@@ -8,6 +8,7 @@ from typing import Any
 from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompt_preparation_error import PromptPreparationError
@@ -38,9 +39,9 @@ def cover_source(title: str, original_prompt: str, provider: str, options: dict)
 
 def asset_source(t2i: dict, kind: str, legacy: str, **facts: Any) -> str:
     profile = "advanced" if advanced_for(t2i, kind) else "simple"
-    if t2i.get(f"{profile}_model_provider") != "comfyui":
+    if image_provider(t2i, profile, purpose_for(kind)) != "comfyui":
         return legacy
-    rules = prompt_rules({**t2i, "comfyui_profile": profile})
+    rules = prompt_rules({**t2i, "comfyui_profile": profile, "image_purpose": purpose_for(kind)})
     if not rules:
         return legacy
     if not rules.adapt_with_llm:

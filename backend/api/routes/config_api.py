@@ -37,6 +37,7 @@ from backend.core.config import settings
 from backend.core.custom_openai_diagnostics import connection_test_diagnostic
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
+from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
 from backend.core.llm_router import GameMasterLLM
 from backend.core.models_config import (
     IMAGE_PROVIDERS,
@@ -1027,6 +1028,7 @@ async def test_llm_connection(
 
 
 class TestVisionPayload(ComfySettings):
+    image_purpose: ImagePurpose | None = None
     comfyui_profile: str = "simple"
     model: str
     provider: str
@@ -1064,7 +1066,10 @@ def _resolve_vision_api_key(
 
 
 def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: str) -> dict:
-    options: dict[str, Any] = {"visual_target_type": "npc"}
+    options: dict[str, Any] = {
+        "visual_target_type": purpose_target(payload.image_purpose or "npc"),
+        "image_purpose": payload.image_purpose,
+    }
     if provider_key == "comfyui":
         options.update(
             payload.model_dump(
@@ -1085,10 +1090,12 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
         if getattr(payload, key) is not None:
             options[key] = getattr(payload, key)
 
-    # Test vision generates a wizard portrait (CHARACTER/4:5 aspect ratio)
+    # Match the test canvas to the selected image task.
     if provider_key in _LOCAL_IMAGE_PROVIDERS and not payload.width and not payload.height:
         min_long_edge = payload.min_long_edge or 1024
-        width, height = MediaEngine._resolve_sd_dimensions("CHARACTER", min_long_edge)
+        width, height = MediaEngine._resolve_sd_dimensions(
+            purpose_target(payload.image_purpose or "npc"), min_long_edge
+        )
         options["width"] = width
         options["height"] = height
         return options
@@ -1118,7 +1125,13 @@ async def test_vision_connection(
         test_dir = _safe_data_path("scratch", "test_connection")
         await run_file_operation(os.makedirs, test_dir, exist_ok=True)
         img_url = await MediaEngine.generate_image(
-            prompt="A Wizard portrait",
+            prompt={
+                "object": "A brass lantern, isolated on a simple background",
+                "background": "An empty stone courtyard at dawn",
+                "illustration": "A traveler hands a lantern to a guard in a courtyard",
+                "cover": "A cinematic view of a castle above the clouds",
+                "catalog": "A small woodland cottage in soft watercolor",
+            }.get(payload.image_purpose or "npc", "A Wizard portrait"),
             model=payload.model,
             api_key=api_key,
             provider=payload.provider,
@@ -1244,7 +1257,7 @@ async def generate_catalog_image(
     user = await _resolve_global_settings_owner(db, current_user)
 
     t2i = user.t2i_settings or {}
-    provider = (t2i.get("simple_model_provider") or t2i.get("provider", "openai")).lower()
+    provider = image_provider(t2i, "simple", "catalog")
     model = t2i.get("simple_model")
 
     if not model and provider != "comfyui":
@@ -1282,7 +1295,12 @@ async def generate_catalog_image(
             provider=provider,
             target_dir=catalog_dir,
             filename=f"{safe_target_id}_{uuid.uuid4().hex[:8]}",
-            provider_options={**t2i, "visual_target_type": "object", "_prompt_user": user},
+            provider_options={
+                **t2i,
+                "visual_target_type": "object",
+                "image_purpose": "catalog",
+                "_prompt_user": user,
+            },
         )
 
         logger.info("Catalog generate result for '%s': img_url=%r", payload.target_id, img_url)

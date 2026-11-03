@@ -28,6 +28,7 @@ from backend.core.auth import (
 )
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.image_purposes import image_provider
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
     USER_BIO_GENERATION_SYSTEM_PROMPT,
@@ -327,7 +328,7 @@ async def generate_my_profile_image(
             status_code=400, detail="Visual preferences are not configured by admin."
         )
 
-    provider = (t2i.get("simple_model_provider") or "openai").lower()
+    provider = image_provider(t2i, "simple", "avatar")
     model = t2i.get("simple_model")
 
     if not model and provider != "comfyui":
@@ -361,6 +362,7 @@ async def generate_my_profile_image(
             provider_options={
                 **t2i,
                 "visual_target_type": "protagonist",
+                "image_purpose": "avatar",
                 "_prompt_user": settings_owner,
             },
         )

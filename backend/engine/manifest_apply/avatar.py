@@ -155,7 +155,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
             prompt,
             ctx.template_id,
             "PROTAGONIST",
-            "NPC",
+            "PROTAGONIST",
             user_config,
             api_keys,
             style_instruction=ctx.style_instruction,

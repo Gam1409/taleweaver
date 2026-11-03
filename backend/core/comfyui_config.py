@@ -2,11 +2,12 @@
 
 import copy
 import json
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.image_purposes import ImagePurpose, PresetAssignment
 from backend.utils.path_security import validate_provider_url
 
 BindingName = Literal["prompt", "negative_prompt", "seed", "width", "height", "image"]
@@ -85,6 +86,10 @@ class ComfyPreset(ComfyProfile):
     prompt_rules: ImagePromptRules | None = None
     auto_prompt_template: bool = False
     mature_themes: bool = False
+    purpose_tags: list[ImagePurpose] = Field(default_factory=list, max_length=8)
+    style_tags: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(
+        default_factory=list, max_length=16
+    )
 
     @model_validator(mode="after")
     def choose_template(self) -> "ComfyPreset":
@@ -109,7 +114,7 @@ class ComfySettings(BaseModel):
         default_factory=dict
     )
     comfyui_presets: dict[str, ComfyPreset] = Field(default_factory=dict, max_length=32)
-    comfyui_assignments: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
+    comfyui_assignments: dict[PresetAssignment, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_presets(self) -> "ComfySettings":
@@ -128,7 +133,12 @@ def validate_comfy_settings(data: dict) -> None:
     active = [
         key for key in ("simple", "advanced") if data.get(f"{key}_model_provider") == "comfyui"
     ]
-    if not active:
+    for purpose in settings.comfyui_assignments:
+        if purpose not in {"simple", "advanced"}:
+            select_workflow({**data, "image_purpose": purpose})
+    if not active and not any(
+        key not in {"simple", "advanced"} for key in settings.comfyui_assignments
+    ):
         return
     validate_provider_url(settings.comfyui_url)
     for key in active:
@@ -148,7 +158,10 @@ def validate_comfy_settings(data: dict) -> None:
 def select_profile(options: dict) -> ComfyProfile | ComfyPreset | None:
     settings = ComfySettings.model_validate(options)
     profile_name = options.get("comfyui_profile", "simple")
-    selected = settings.comfyui_assignments.get(profile_name)
+    assignments: dict[str, str] = {
+        key: value for key, value in settings.comfyui_assignments.items()
+    }
+    selected = assignments.get(options.get("image_purpose", "")) or assignments.get(profile_name)
     if selected:
         preset = settings.comfyui_presets[selected]
         if preset.auto_prompt_template and not preset.prompt_rules:

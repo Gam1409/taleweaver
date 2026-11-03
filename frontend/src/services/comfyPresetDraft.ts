@@ -1,3 +1,4 @@
+import type { PresetAssignment } from './imagePurposes'
 import type { ComfyOptions, ComfyPreset } from '@/types/comfyui'
 
 export interface PresetWorkspace {
@@ -33,10 +34,12 @@ export function newPreset(workspace: PresetWorkspace, copy = false): string {
 }
 export function presetWorkspace(
   options: ComfyOptions,
-  profile: 'simple' | 'advanced'
+  profile: PresetAssignment,
+  fallbackProfile?: 'simple' | 'advanced'
 ): PresetWorkspace {
   const presets = clonePresetData(options.comfyui_presets ?? {})
-  const assigned = options.comfyui_assignments?.[profile] ?? ''
+  const assigned = options.comfyui_assignments?.[profile]
+    ?? (fallbackProfile ? options.comfyui_assignments?.[fallbackProfile] : undefined) ?? ''
   const workspace: PresetWorkspace = {
     presets,
     selectedId: presets[assigned] ? assigned : (Object.keys(presets)[0] ?? ''),
@@ -72,7 +75,7 @@ export function presetProblem(preset: ComfyPreset): string {
 export function applyPresetWorkspace(
   current: ComfyOptions,
   workspace: PresetWorkspace,
-  profile: 'simple' | 'advanced'
+  profile: PresetAssignment
 ): ComfyOptions {
   const edited = Object.fromEntries(
     changedPresets(workspace).map(id => [id, clonePresetData(workspace.presets[id]!)])

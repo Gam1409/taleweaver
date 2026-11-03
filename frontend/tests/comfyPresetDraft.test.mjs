@@ -110,3 +110,20 @@ test('an empty library starts with one editable draft and the 32-preset limit is
   while (Object.keys(workspace.presets).length < 32) newPreset(workspace)
   assert.throws(() => newPreset(workspace), /at most 32/)
 })
+
+test('task assignment preserves other tasks and shared quality profiles', () => {
+  const original = options()
+  original.comfyui_assignments.illustration = 'a'
+  const workspace = presetWorkspace(original, 'background')
+  workspace.selectedId = 'b'
+  const applied = applyPresetWorkspace(original, workspace, 'background')
+  assert.deepEqual(applied.comfyui_assignments, {
+    simple: 'a', advanced: 'b', illustration: 'a', background: 'b'
+  })
+  assert.equal(original.comfyui_assignments.background, undefined)
+})
+
+test('unassigned task editor opens its inherited preset', () => {
+  const workspace = presetWorkspace(options(), 'background', 'advanced')
+  assert.equal(workspace.selectedId, 'b')
+})

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import ComfyPresetSelector from './ComfyPresetSelector.vue'
+import ComfyPurposeAssignments from './ComfyPurposeAssignments.vue'
 import ComfySettingsEditor from './ComfySettingsEditor.vue'
 import type { ComfyOptions } from '@/types/comfyui'
 
@@ -207,7 +208,7 @@ const testSimple = (options: ComfyOptions = comfyOptions.value) => {
     ...options,
     comfyui_profile: 'simple',
     model: localForm.value.simple_model, 
-    provider: localForm.value.simple_model_provider,
+    provider: options.image_purpose ? 'comfyui' : localForm.value.simple_model_provider,
     ollama_url: localForm.value.ollama_url,
     stable_diffusion_url: localForm.value.stable_diffusion_url,
     steps: localForm.value.simple_steps,
@@ -224,7 +225,7 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
     ...options,
     comfyui_profile: 'advanced',
     model: localForm.value.advanced_model, 
-    provider: localForm.value.advanced_model_provider,
+    provider: options.image_purpose ? 'comfyui' : localForm.value.advanced_model_provider,
     ollama_url: localForm.value.ollama_url,
     stable_diffusion_url: localForm.value.stable_diffusion_url,
     steps: localForm.value.advanced_steps,
@@ -263,9 +264,12 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
     </div>
 
     <ComfySettingsEditor
-      v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui'"
+      v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui' || Object.keys(comfyOptions.comfyui_assignments ?? {}).length > 0"
       v-model="comfyOptions"
     />
+
+    <ComfyPurposeAssignments v-model="comfyOptions" :settings="localForm" :test-results="testResults"
+      @test="({ options, profile }) => profile === 'simple' ? testSimple(options) : testAdvanced(options)" />
 
     <!-- API KEY WARNING -->
     <div v-if="missingProviders.length > 0" class="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3">

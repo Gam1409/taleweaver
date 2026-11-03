@@ -15,6 +15,7 @@ import ComfyWorkflowEditor from './ComfyWorkflowEditor.vue'
 import ComfyPresetLibrary from './ComfyPresetLibrary.vue'
 import ComfyPresetPrompt from './ComfyPresetPrompt.vue'
 import ComfyPresetTest from './ComfyPresetTest.vue'
+import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import { useComfyPresetWorkspace } from '@/composables/useComfyPresetWorkspace'
 import type { ComfyOptions } from '@/types/comfyui'
 
@@ -22,6 +23,7 @@ const props = defineProps<{
   open: boolean
   modelValue: ComfyOptions
   profile: 'simple' | 'advanced'
+  purpose?: ImagePurpose
   testResult?: { status: string; message: string; image_url?: string }
 }>()
 const emit = defineEmits<{
@@ -167,7 +169,7 @@ function create(copy = false): void {
                   Image generation settings
                 </h2>
                 <p class="mt-1 text-xs text-slate-400">
-                  ComfyUI · {{ profile === 'simple' ? 'Simple profile' : 'Advanced profile' }}
+                  ComfyUI · {{ purpose ? imagePurposes.find(item => item.id === purpose)?.label : profile === 'simple' ? 'Default simple profile' : 'Default advanced profile' }}
                 </p>
               </div>
             </div>

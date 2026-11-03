@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database, prompts
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.image_purposes import image_provider
 from backend.engine.dynamic_locations.schema import policy, registry
 from backend.engine.image_profiles import advanced_for, image_timeout
 from backend.engine.image_prompt_adapter import asset_source
@@ -68,9 +69,10 @@ async def _generate(session_id: str, scene_id: str, user_id: str) -> bool:
             return True
         t2i, style, tone = await _settings(db, state, user, "scene")
         role = "advanced" if advanced_for(t2i, "scene") else "simple"
-        provider = (t2i.get(f"{role}_model_provider") or t2i.get("provider", "openai")).lower()
+        provider = image_provider(t2i, role, "background")
         options = {
             **t2i,
+            "image_purpose": "background",
             "visual_target_type": "scene",
             "comfyui_profile": role,
             "_prompt_user": user,

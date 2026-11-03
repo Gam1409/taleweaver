@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.auth import get_current_user
 from backend.core.comfyui_presets import normalize_comfy_presets
 from backend.core.database import get_db
+from backend.core.image_purposes import PresetAssignment
 from backend.engine.story_visual_presets import story_selection, story_t2i
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/{template_id}/visual-presets", tags=["Assets"])
 
 class StoryPresets(BaseModel):
     source: Literal["saved", "current"] = "saved"
-    selection: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
+    selection: dict[PresetAssignment, str] = Field(default_factory=dict)
 
 
 async def _owned(db: AsyncSession, template_id: str, user: User) -> AdventureTemplate:

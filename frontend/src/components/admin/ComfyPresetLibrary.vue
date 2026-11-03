@@ -1,6 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import type { PresetWorkspace } from '@/services/comfyPresetDraft'
-defineProps<{ workspace: PresetWorkspace }>()
+const props = defineProps<{ workspace: PresetWorkspace }>()
+const selected = computed(() => props.workspace.presets[props.workspace.selectedId]!)
+function togglePurpose(purpose: ImagePurpose, checked: boolean): void {
+  const values = new Set(selected.value.purpose_tags ?? [])
+  if (checked) values.add(purpose)
+  else values.delete(purpose)
+  selected.value.purpose_tags = [...values]
+}
+function setTags(event: Event): void {
+  selected.value.style_tags = [...new Set((event.target as HTMLInputElement).value.split(',').map(tag => tag.trim().slice(0,40)).filter(Boolean))].slice(0,16)
+}
 const emit = defineEmits<{
   (event: 'select', id: string): void
   (event: 'rename', value: string): void
@@ -44,6 +56,18 @@ const emit = defineEmits<{
           maxlength="120"
           class="mt-2 block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-white"
       /></label>
+      <details class="text-xs text-slate-400">
+        <summary class="cursor-pointer">Library tags (optional)</summary>
+        <p class="mt-2">Tags organize presets. Set actual style instructions in the Prompt tab.</p>
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          <label v-for="purpose in imagePurposes" :key="purpose.id" class="flex gap-2">
+            <input type="checkbox" :checked="selected.purpose_tags?.includes(purpose.id)" @change="togglePurpose(purpose.id, ($event.target as HTMLInputElement).checked)" />{{ purpose.label }}
+          </label>
+        </div>
+        <label class="mt-3 block">Style tags, separated by commas
+          <input :value="selected.style_tags?.join(', ') ?? ''" placeholder="gothic, watercolor, pastel" class="mt-1 w-full rounded border border-slate-600 bg-slate-900 p-2" @change="setTags" />
+        </label>
+      </details>
       <button
         v-if="
           !workspace.baseline.comfyui_presets?.[workspace.selectedId] &&
