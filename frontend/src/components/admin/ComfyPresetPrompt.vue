@@ -59,8 +59,7 @@ const emit = defineEmits<{
       </p>
     </div>
     <p v-if="preset.reference" class="text-xs text-slate-400">
-      These rules apply to both workflows. Use separate presets when your reference model needs
-      different instructions.
+      These are the default rules for both workflows. The Reference tab can override them when its model needs different instructions.
     </p>
   </div>
 </template>

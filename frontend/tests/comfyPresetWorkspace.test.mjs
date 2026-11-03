@@ -9,8 +9,9 @@ const compile = source =>
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
   }).outputText
 const uri = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
+const libraryUri = uri(compile(readFileSync(new URL('../src/services/comfyLibrary.ts', import.meta.url), 'utf8')))
 const draftModule = uri(
-  compile(readFileSync(new URL('../src/services/comfyPresetDraft.ts', import.meta.url), 'utf8'))
+  compile(readFileSync(new URL('../src/services/comfyPresetDraft.ts', import.meta.url), 'utf8')).replaceAll("'./comfyLibrary'", JSON.stringify(libraryUri))
 )
 const tick = async () => {
   await nextTick()
@@ -134,4 +135,18 @@ test('a failed old preview cannot show an error in a reopened editor', async t =
   assert.equal(editor.error.value, '')
   assert.equal(editor.previewing.value, false)
   assert.equal(editor.preview.value, null)
+})
+
+test('changing reference policy invalidates detection from the previous model pairing', async t => {
+  const pending = []
+  const { editor } = await fixture(t, () => new Promise(resolve => pending.push(resolve)))
+  editor.draft.value.reference_prompt_rules = rules('b')
+  await tick()
+  pending[0]({ template_id:'b', models:['old pair'], message:'Old pair' })
+  await tick()
+  assert.equal(editor.draft.value.prompt_rules, null)
+  pending[1]({ template_id:'a', models:['base'], message:'Base only' })
+  await tick()
+  assert.equal(editor.draft.value.prompt_rules.template_id, 'a')
+  assert.equal(editor.draft.value.reference_prompt_rules.template_id, 'b')
 })

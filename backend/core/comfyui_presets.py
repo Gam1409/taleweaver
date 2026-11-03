@@ -24,6 +24,15 @@ def normalize_comfy_presets(data: dict) -> dict:
             "auto_prompt_template": False,
         }
         assignments[role] = key
+    if "comfyui_test_preset" not in result:
+        result["comfyui_test_preset"] = next(
+            (
+                assignments[role]
+                for role in ("simple", "advanced")
+                if data.get(f"{role}_model_provider") == "comfyui" and role in assignments
+            ),
+            None,
+        )
     result["comfyui_presets"] = presets
     result["comfyui_assignments"] = assignments
     return result

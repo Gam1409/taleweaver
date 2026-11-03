@@ -12,6 +12,10 @@ export interface ComfyWorkflow {
   output_node: string
   dimension_multiple?: 8 | 16 | 32 | 64
 }
+export interface ComfyWorkflowVersion {
+  revision: number
+  workflow: ComfyWorkflow
+}
 export interface ComfyProfile {
   generate: ComfyWorkflow | null
   reference: ComfyWorkflow | null
@@ -37,6 +41,7 @@ export interface PromptTemplate {
 export interface ComfyPreset extends ComfyProfile {
   name: string
   prompt_rules: ImagePromptRules | null
+  reference_prompt_rules?: ImagePromptRules | null
   auto_prompt_template: boolean
   mature_themes?: boolean
   purpose_tags?: ImagePurpose[]
@@ -48,6 +53,8 @@ export interface ComfyOptions {
   comfyui_profiles: Partial<Record<'simple' | 'advanced', ComfyProfile>>
   image_purpose?: ImagePurpose
   comfyui_profile?: 'simple' | 'advanced'
+  comfyui_workflows?: Record<string, ComfyWorkflowVersion>
+  comfyui_test_preset?: string | null
   comfyui_presets?: Record<string, ComfyPreset>
   comfyui_assignments?: Partial<Record<PresetAssignment, string>>
 }

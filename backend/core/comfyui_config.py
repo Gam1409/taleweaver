@@ -84,6 +84,7 @@ class ComfyProfile(BaseModel):
 class ComfyPreset(ComfyProfile):
     name: str = Field(min_length=1, max_length=120)
     prompt_rules: ImagePromptRules | None = None
+    reference_prompt_rules: ImagePromptRules | None = None
     auto_prompt_template: bool = False
     mature_themes: bool = False
     purpose_tags: list[ImagePurpose] = Field(default_factory=list, max_length=8)
@@ -99,12 +100,22 @@ class ComfyPreset(ComfyProfile):
         if self.auto_prompt_template:
             detected = detect_preset_template(
                 self.generate.graph if self.generate else {},
-                self.reference.graph if self.reference else None,
+                self.reference.graph
+                if self.reference and not self.reference_prompt_rules
+                else None,
             )
             self.prompt_rules = (
                 template_rules(detected["template_id"]) if detected["template_id"] else None
             )
         return self
+
+
+class ComfyWorkflowVersion(BaseModel):
+    """A reusable snapshot; presets retain their own pinned workflow copies."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(default=1, ge=1)
+    workflow: ComfyWorkflow
 
 
 class ComfySettings(BaseModel):
@@ -115,6 +126,8 @@ class ComfySettings(BaseModel):
     )
     comfyui_presets: dict[str, ComfyPreset] = Field(default_factory=dict, max_length=32)
     comfyui_assignments: dict[PresetAssignment, str] = Field(default_factory=dict)
+    comfyui_workflows: dict[str, ComfyWorkflowVersion] = Field(default_factory=dict, max_length=128)
+    comfyui_test_preset: str | None = None
 
     @model_validator(mode="after")
     def validate_presets(self) -> "ComfySettings":
@@ -122,6 +135,15 @@ class ComfySettings(BaseModel):
             raise ValueError("Preset identifiers must contain 1 to 120 characters.")
         if any(key not in self.comfyui_presets for key in self.comfyui_assignments.values()):
             raise ValueError("A selected ComfyUI preset is missing. Select an available preset.")
+        if self.comfyui_test_preset and self.comfyui_test_preset not in self.comfyui_presets:
+            raise ValueError("The test preset is missing. Select an available preset.")
+        if any(not key or len(key) > 120 for key in self.comfyui_workflows):
+            raise ValueError("Workflow identifiers must contain 1 to 120 characters.")
+        library_size = sum(
+            len(p.model_dump_json().encode()) for p in self.comfyui_workflows.values()
+        )
+        if library_size > 4 * 1024 * 1024:
+            raise ValueError("The ComfyUI workflow library exceeds 4 MiB.")
         size = sum(len(p.model_dump_json().encode()) for p in self.comfyui_presets.values())
         if size > 2 * 1024 * 1024:
             raise ValueError("The ComfyUI preset library exceeds 2 MiB.")
@@ -184,4 +206,9 @@ def select_workflow(options: dict, *, reference: bool = False) -> ComfyWorkflow:
 
 
 def prompt_rules(options: dict) -> ImagePromptRules | None:
-    return getattr(select_profile(options), "prompt_rules", None)
+    profile = select_profile(options)
+    if not isinstance(profile, ComfyPreset):
+        return None
+    if options.get("reference_image_url") and profile.reference_prompt_rules is not None:
+        return profile.reference_prompt_rules
+    return profile.prompt_rules

@@ -1,3 +1,4 @@
+import { rememberWorkflows } from './comfyLibrary'
 import type { PresetAssignment } from './imagePurposes'
 import type { ComfyOptions, ComfyPreset } from '@/types/comfyui'
 
@@ -6,6 +7,7 @@ export interface PresetWorkspace {
   selectedId: string
   url: string
   timeout: number
+  workflows: NonNullable<ComfyOptions['comfyui_workflows']>
   baseline: ComfyOptions
 }
 export const clonePresetData = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -38,13 +40,16 @@ export function presetWorkspace(
   fallbackProfile?: 'simple' | 'advanced'
 ): PresetWorkspace {
   const presets = clonePresetData(options.comfyui_presets ?? {})
-  const assigned = options.comfyui_assignments?.[profile]
-    ?? (fallbackProfile ? options.comfyui_assignments?.[fallbackProfile] : undefined) ?? ''
+  const assigned =
+    options.comfyui_assignments?.[profile] ??
+    (fallbackProfile ? options.comfyui_assignments?.[fallbackProfile] : undefined) ??
+    ''
   const workspace: PresetWorkspace = {
     presets,
     selectedId: presets[assigned] ? assigned : (Object.keys(presets)[0] ?? ''),
     url: options.comfyui_url,
     timeout: options.comfyui_timeout,
+    workflows: rememberWorkflows(options.comfyui_workflows ?? {}, presets, false),
     baseline: clonePresetData(options)
   }
   if (!workspace.selectedId) newPreset(workspace)
@@ -59,6 +64,7 @@ export function changedPresets(workspace: PresetWorkspace): string[] {
 }
 export function presetProblem(preset: ComfyPreset): string {
   if (!preset.name.trim()) return 'Enter a preset name.'
+  if (preset.generate?.bindings.image) return 'Move the image-input workflow to the Reference variant.'
   if (!preset.generate?.bindings.prompt || !preset.generate.output_node)
     return 'Configure the base workflow and its required inputs.'
   if (
@@ -77,6 +83,10 @@ export function applyPresetWorkspace(
   workspace: PresetWorkspace,
   profile: PresetAssignment
 ): ComfyOptions {
+  const workflows = { ...current.comfyui_workflows, ...workspace.workflows }
+  for (const id of Object.keys(workspace.baseline.comfyui_workflows ?? {})) {
+    if (!workspace.workflows[id]) delete workflows[id]
+  }
   const edited = Object.fromEntries(
     changedPresets(workspace).map(id => [id, clonePresetData(workspace.presets[id]!)])
   )
@@ -88,6 +98,7 @@ export function applyPresetWorkspace(
       workspace.timeout !== workspace.baseline.comfyui_timeout
         ? workspace.timeout
         : current.comfyui_timeout,
+    comfyui_workflows: rememberWorkflows(workflows, edited),
     comfyui_presets: { ...current.comfyui_presets, ...edited },
     comfyui_assignments: { ...current.comfyui_assignments, [profile]: workspace.selectedId }
   }

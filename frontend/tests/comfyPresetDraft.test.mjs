@@ -4,9 +4,11 @@ import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 
 const source = readFileSync(new URL('../src/services/comfyPresetDraft.ts', import.meta.url), 'utf8')
+const library = ts.transpileModule(readFileSync(new URL('../src/services/comfyLibrary.ts', import.meta.url), 'utf8'), {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
+const libraryUri = `data:text/javascript;base64,${Buffer.from(library).toString('base64')}`
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
-}).outputText
+}).outputText.replaceAll("'./comfyLibrary'", JSON.stringify(libraryUri))
 const { presetWorkspace, newPreset, applyPresetWorkspace, presetProblem, removeUnsavedPreset } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const preset = name => ({
@@ -126,4 +128,40 @@ test('task assignment preserves other tasks and shared quality profiles', () => 
 test('unassigned task editor opens its inherited preset', () => {
   const workspace = presetWorkspace(options(), 'background', 'advanced')
   assert.equal(workspace.selectedId, 'b')
+})
+
+const { filterPresets, workflowDependencies, rememberWorkflows } = await import(libraryUri)
+test('library filters combine name/style/model search, task and reference capability', () => {
+  const presets = { a: {...preset('Gothic scenes'), purpose_tags: ['background'], style_tags: ['monochrome']}, b: {...preset('Portrait'), purpose_tags: ['npc'], reference: {bindings: {image: {}}}} }
+  assert.deepEqual(filterPresets(presets, {query:'MONO', task:'background', reference:'no'}).map(([id])=>id), ['a'])
+  assert.deepEqual(filterPresets(presets, {query:'', task:'npc', reference:'yes'}).map(([id])=>id), ['b'])
+  assert.equal(filterPresets(presets, {query:'', task:'npc', reference:'no'}).length, 0)
+})
+test('editing a workflow creates an independent version without changing other presets', () => {
+  const first = preset('A')
+  first.generate.graph = { model: {class_type:'CheckpointLoaderSimple', inputs:{ckpt_name:'model.safetensors'}} }
+  const v1 = rememberWorkflows({}, {a:first})
+  const original = JSON.stringify(v1)
+  const edited = structuredClone(first)
+  edited.generate.graph.model.inputs.ckpt_name = 'new.safetensors'
+  const v2 = rememberWorkflows(v1, {a:edited})
+  assert.equal(Object.keys(v2).length, 2)
+  assert.equal(JSON.stringify(v1), original)
+  assert.equal(first.generate.graph.model.inputs.ckpt_name, 'model.safetensors')
+  assert.deepEqual(Object.values(v2).map(v=>v.revision), [1,2])
+  assert.equal(Object.keys(rememberWorkflows(v2, {a:edited})).length, 2)
+  assert.deepEqual(workflowDependencies(edited.generate), ['CheckpointLoaderSimple · ckpt_name: new.safetensors'])
+})
+test('removing a library version preserves pinned workflow and concurrent library additions', () => {
+  const initial = options()
+  initial.comfyui_workflows = rememberWorkflows({}, initial.comfyui_presets)
+  const workspace = presetWorkspace(initial,'simple')
+  const removed = Object.keys(workspace.workflows)[0]
+  delete workspace.workflows[removed]
+  const current = structuredClone(initial)
+  current.comfyui_workflows.remote = {revision:1,workflow: {...preset('Remote').generate,name:'Remote'}}
+  const applied = applyPresetWorkspace(current,workspace,'simple')
+  assert.equal(applied.comfyui_workflows[removed], undefined)
+  assert.ok(applied.comfyui_workflows.remote)
+  assert.deepEqual(applied.comfyui_presets.a.generate, initial.comfyui_presets.a.generate)
 })

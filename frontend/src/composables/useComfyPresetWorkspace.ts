@@ -84,7 +84,8 @@ export function useComfyPresetWorkspace(props: {
         props.open,
         workspace.value.selectedId,
         draft.value.generate?.graph,
-        draft.value.reference?.graph
+        draft.value.reference?.graph,
+        Boolean(draft.value.reference_prompt_rules)
       ]),
     () => {
       if (props.open) void detect()
@@ -105,12 +106,12 @@ export function useComfyPresetWorkspace(props: {
     const selected = draft.value
     const sourceWorkspace = workspace.value
     const sourceId = workspace.value.selectedId
-    const graphSignature = JSON.stringify([selected.generate?.graph, selected.reference?.graph])
+    const graphSignature = JSON.stringify([selected.generate?.graph, selected.reference?.graph, Boolean(selected.reference_prompt_rules)])
     const relevant = () =>
       props.open &&
       workspace.value === sourceWorkspace &&
       sourceWorkspace.presets[sourceId] === selected &&
-      JSON.stringify([selected.generate?.graph, selected.reference?.graph]) === graphSignature
+      JSON.stringify([selected.generate?.graph, selected.reference?.graph, Boolean(selected.reference_prompt_rules)]) === graphSignature
     detection.value = null
     detecting.value = true
     if (selected.auto_prompt_template) selected.prompt_rules = null
@@ -120,7 +121,7 @@ export function useComfyPresetWorkspace(props: {
       if (!selected.generate) return
       const result = await comfyRequest<Detection>('detect-template', {
         graph: selected.generate.graph,
-        reference_graph: selected.reference?.graph ?? null
+        reference_graph: selected.reference_prompt_rules ? null : selected.reference?.graph ?? null
       })
       if (!relevant()) return
       if (version === generation) detection.value = result

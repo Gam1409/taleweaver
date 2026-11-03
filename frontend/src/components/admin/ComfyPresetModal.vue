@@ -11,7 +11,8 @@ import {
   Copy,
   SlidersHorizontal
 } from 'lucide-vue-next'
-import ComfyWorkflowEditor from './ComfyWorkflowEditor.vue'
+import ComfyWorkflowSlot from './ComfyWorkflowSlot.vue'
+import PromptRulesEditor from './PromptRulesEditor.vue'
 import ComfyPresetLibrary from './ComfyPresetLibrary.vue'
 import ComfyPresetPrompt from './ComfyPresetPrompt.vue'
 import ComfyPresetTest from './ComfyPresetTest.vue'
@@ -67,7 +68,7 @@ const tabs = [
     id: 'reference',
     label: 'Reference',
     icon: Image,
-    hint: 'Configure an optional reference-image workflow.'
+    hint: 'Configure an optional reference-image workflow and its prompt rules.'
   },
   {
     id: 'prompt',
@@ -139,7 +140,8 @@ function testImage(): void {
   emit('test', result())
 }
 function apply(): void {
-  if (ready.value) emit('apply', result())
+  if (!ready.value) return
+  try { emit('apply', result()) } catch (cause) { error.value = String(cause) }
 }
 function create(copy = false): void {
   add(copy)
@@ -258,17 +260,18 @@ function create(copy = false): void {
             />
           </section>
           <section
-            v-show="tab === 'workflow'"
+            v-if="tab === 'workflow'"
             :id="`${id}-panel-workflow`"
             role="tabpanel"
             :aria-labelledby="`${id}-tab-workflow`"
             class="space-y-4"
           >
-            <ComfyWorkflowEditor
+            <ComfyWorkflowSlot
               :key="workspace.selectedId"
               v-model="draft.generate"
               :url="workspace.url"
-              @busy="baseBusy = $event"
+              :library="workspace.workflows"
+              @forget="delete workspace.workflows[$event]"
             />
             <p class="text-xs text-slate-400">
               Put model trigger words in the Prompt tab's prefix or suffix. Keep LoRA strengths in
@@ -276,20 +279,26 @@ function create(copy = false): void {
             </p>
           </section>
           <section
-            v-show="tab === 'reference'"
+            v-if="tab === 'reference'"
             :id="`${id}-panel-reference`"
             role="tabpanel"
             :aria-labelledby="`${id}-tab-reference`"
           >
-            <ComfyWorkflowEditor
+            <ComfyWorkflowSlot
               :key="workspace.selectedId"
               v-model="draft.reference"
               :url="workspace.url"
+              :library="workspace.workflows"
+              @forget="delete workspace.workflows[$event]"
               reference
               :suggested-family="detection?.template_id || undefined"
               :source-workflow="draft.generate"
-              @busy="referenceBusy = $event"
             />
+            <div v-if="draft.reference" class="mt-5 space-y-4 rounded-xl border border-slate-700 p-4">
+              <label class="flex gap-2 text-sm"><input type="checkbox" :checked="Boolean(draft.reference_prompt_rules)" @change="draft.reference_prompt_rules = ($event.target as HTMLInputElement).checked ? { ...(draft.prompt_rules ?? templates[0]!.rules) } : null" :disabled="!draft.prompt_rules && !templates.length" />Use different prompt rules for the reference workflow</label>
+              <p class="text-xs text-slate-400">By default both variants use the Prompt tab. Override only when the reference model requires a different format or instructions. The preset's content settings still apply.</p>
+              <PromptRulesEditor v-if="draft.reference_prompt_rules" :model-value="draft.reference_prompt_rules" :templates="templates" @update:model-value="draft.reference_prompt_rules = $event" />
+            </div>
           </section>
           <section
             v-show="tab === 'prompt'"

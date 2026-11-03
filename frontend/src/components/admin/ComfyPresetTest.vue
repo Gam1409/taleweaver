@@ -17,6 +17,7 @@ const emit = defineEmits<{
   <div class="grid items-start gap-5 lg:grid-cols-2">
     <div class="space-y-4 rounded-xl border border-slate-700 bg-slate-950/40 p-5">
       <h4 class="text-sm font-semibold">Prompt preview</h4>
+      <p class="text-xs text-slate-400">Preview and test generation use the base workflow without a reference image. Reference rules apply when an image is supplied by the task.</p>
       <label class="block text-xs text-slate-400"
         >Example description<textarea
           :value="example"

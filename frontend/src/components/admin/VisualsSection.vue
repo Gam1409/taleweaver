@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import ComfyPresetSelector from './ComfyPresetSelector.vue'
 import ComfyPurposeAssignments from './ComfyPurposeAssignments.vue'
 import ComfySettingsEditor from './ComfySettingsEditor.vue'
 import type { ComfyOptions } from '@/types/comfyui'
@@ -45,10 +44,24 @@ const comfyOptions = computed<ComfyOptions>({
     comfyui_timeout: localForm.value.comfyui_timeout ?? 600,
     comfyui_profiles: localForm.value.comfyui_profiles ?? {},
     comfyui_presets: localForm.value.comfyui_presets ?? {},
+    comfyui_workflows: localForm.value.comfyui_workflows ?? {},
+    comfyui_test_preset: localForm.value.comfyui_test_preset ?? null,
     comfyui_assignments: localForm.value.comfyui_assignments ?? {},
   }),
   set: value => { localForm.value = { ...localForm.value, ...value } },
 })
+
+const usesComfy = computed(() => localForm.value.simple_model_provider === 'comfyui' ||
+  localForm.value.advanced_model_provider === 'comfyui' ||
+  Object.entries(comfyOptions.value.comfyui_assignments ?? {}).some(([key, value]) => key !== 'simple' && key !== 'advanced' && Boolean(value)))
+const testPresetName = computed(() => comfyOptions.value.comfyui_presets?.[localForm.value.comfyui_test_preset]?.name ?? 'Not selected')
+function testOptions(profile: 'simple' | 'advanced'): ComfyOptions {
+  const options = comfyOptions.value
+  const id = localForm.value.comfyui_test_preset
+  return id && localForm.value[`${profile}_model_provider`] === 'comfyui'
+    ? { ...options, comfyui_assignments: { ...options.comfyui_assignments, [profile]: id } }
+    : options
+}
 
 // Advanced tuning accordion state
 const showSimpleAdvanced = ref(false)
@@ -202,13 +215,15 @@ const handleSave = () => {
   emit('save', localForm.value)
 }
 
-const testSimple = (options: ComfyOptions = comfyOptions.value) => {
+const testSimple = (options?: ComfyOptions) => {
+  const presetTest = Boolean(options)
+  options ??= testOptions('simple')
   emit('test', { 
     key: 'simple_v',
     ...options,
     comfyui_profile: 'simple',
     model: localForm.value.simple_model, 
-    provider: options.image_purpose ? 'comfyui' : localForm.value.simple_model_provider,
+    provider: presetTest ? 'comfyui' : localForm.value.simple_model_provider,
     ollama_url: localForm.value.ollama_url,
     stable_diffusion_url: localForm.value.stable_diffusion_url,
     steps: localForm.value.simple_steps,
@@ -219,13 +234,15 @@ const testSimple = (options: ComfyOptions = comfyOptions.value) => {
   })
 }
 
-const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
+const testAdvanced = (options?: ComfyOptions) => {
+  const presetTest = Boolean(options)
+  options ??= testOptions('advanced')
   emit('test', { 
     key: 'advanced_v',
     ...options,
     comfyui_profile: 'advanced',
     model: localForm.value.advanced_model, 
-    provider: options.image_purpose ? 'comfyui' : localForm.value.advanced_model_provider,
+    provider: presetTest ? 'comfyui' : localForm.value.advanced_model_provider,
     ollama_url: localForm.value.ollama_url,
     stable_diffusion_url: localForm.value.stable_diffusion_url,
     steps: localForm.value.advanced_steps,
@@ -262,14 +279,6 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         <span>{{ isSubmitting ? 'Painting...' : 'Save Visuals Settings' }}</span>
       </button>
     </div>
-
-    <ComfySettingsEditor
-      v-if="localForm.simple_model_provider === 'comfyui' || localForm.advanced_model_provider === 'comfyui' || Object.keys(comfyOptions.comfyui_assignments ?? {}).length > 0"
-      v-model="comfyOptions"
-    />
-
-    <ComfyPurposeAssignments v-model="comfyOptions" :settings="localForm" :test-results="testResults"
-      @test="({ options, profile }) => profile === 'simple' ? testSimple(options) : testAdvanced(options)" />
 
     <!-- API KEY WARNING -->
     <div v-if="missingProviders.length > 0" class="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3">
@@ -435,7 +444,7 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         <button 
           type="button"
           @click="testSimple()"
-          :disabled="testResults.simple_v?.status === 'loading' || (localForm.simple_model_provider !== 'comfyui' && !localForm.simple_model)"
+          :disabled="testResults.simple_v?.status === 'loading' || (localForm.simple_model_provider === 'comfyui' ? !localForm.comfyui_test_preset : !localForm.simple_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
           <i v-if="testResults.simple_v?.status === 'loading'" class="ra ra-cycle animate-spin text-cyan-400"></i>
@@ -443,6 +452,8 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
           <span>Test Generation</span>
         </button>
       </div>
+
+      <p v-if="localForm.simple_model_provider === 'comfyui'" class="text-xs text-slate-400">Test preset: {{ testPresetName }}. Choose it under Image tasks &amp; presets → Test generation.</p>
 
       <!-- Provider & Model Selection -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -458,7 +469,6 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
           </select>
         </div>
 
-        <ComfyPresetSelector v-if="localForm.simple_model_provider === 'comfyui'" v-model="comfyOptions" profile="simple" :test-result="testResults.simple_v" @test="testSimple($event)" />
         <div v-if="localForm.simple_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -604,7 +614,7 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         <button 
           type="button"
           @click="testAdvanced()"
-          :disabled="testResults.advanced_v?.status === 'loading' || (localForm.advanced_model_provider !== 'comfyui' && !localForm.advanced_model)"
+          :disabled="testResults.advanced_v?.status === 'loading' || (localForm.advanced_model_provider === 'comfyui' ? !localForm.comfyui_test_preset : !localForm.advanced_model)"
           class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto cursor-pointer"
         >
           <i v-if="testResults.advanced_v?.status === 'loading'" class="ra ra-cycle animate-spin text-violet-400"></i>
@@ -612,6 +622,8 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
           <span>Test Generation</span>
         </button>
       </div>
+
+      <p v-if="localForm.advanced_model_provider === 'comfyui'" class="text-xs text-slate-400">Test preset: {{ testPresetName }}. Choose it under Image tasks &amp; presets → Test generation.</p>
 
       <!-- Provider & Model Selection -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -627,7 +639,6 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
           </select>
         </div>
 
-        <ComfyPresetSelector v-if="localForm.advanced_model_provider === 'comfyui'" v-model="comfyOptions" profile="advanced" :test-result="testResults.advanced_v" @test="testAdvanced($event)" />
         <div v-if="localForm.advanced_model_provider !== 'comfyui'">
           <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Model</label>
           <select 
@@ -752,6 +763,9 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
       </div>
     </div>
 
+    <ComfyPurposeAssignments v-model="comfyOptions" :settings="localForm" :test-results="testResults"
+      @test="({ options, profile }) => profile === 'simple' ? testSimple(options) : testAdvanced(options)" />
+
     <label class="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm text-slate-200">
       <input v-model="localForm.show_generation_progress" type="checkbox" class="mt-1" />
       <span>Show generation progress<span class="mt-1 block text-xs text-slate-400">Show image preparation, provider queue and saving stages. No prompts or technical details are displayed.</span></span>
@@ -805,6 +819,8 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         </div>
       </div>
 
+      <ComfySettingsEditor v-if="usesComfy" v-model="comfyOptions" />
+
       <!-- Stable Diffusion Endpoint -->
       <div 
         v-if="localForm.simple_model_provider === 'stable_diffusion' || localForm.advanced_model_provider === 'stable_diffusion'"
@@ -813,7 +829,7 @@ const testAdvanced = (options: ComfyOptions = comfyOptions.value) => {
         <div class="flex items-center justify-between">
           <label class="text-xs font-bold text-white flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-            Stable Diffusion WebUI API URL
+            Automatic1111 / Forge API URL
           </label>
           <button 
             type="button"
