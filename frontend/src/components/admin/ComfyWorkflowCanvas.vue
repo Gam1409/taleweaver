@@ -5,6 +5,7 @@ import { comfyRequest } from '@/services/comfyPresetService'
 import ComfyModelField from './ComfyModelField.vue'
 import {
   ENUM_LABELS,
+  HEADER_H,
   MODEL_FIELD_FOLDERS,
   MODEL_FIELD_LABELS,
   ROLE_LABELS,
@@ -18,6 +19,7 @@ import {
   nodeSize,
   outputCounts,
   setBinding,
+  socketColor,
   suggestBindings,
   withPositions,
   type BindingTarget,
@@ -45,6 +47,7 @@ interface NodeView {
   y: number
   width: number
   height: number
+  collapsed: boolean
   inputs: InputRow[]
   roles: BindingName[]
   isOutput: boolean
@@ -74,15 +77,20 @@ const structure = computed(() => {
   return JSON.stringify({ ids, edges: graphEdges(graph.value).map(e => `${e.from}>${e.to}.${e.toInput}`) })
 })
 
+const isCollapsed = (id: string): boolean => graph.value[id]?._meta?.collapsed === true
+
 const geometries = computed(() => {
   const counts = outputCounts(graph.value)
   const result: Record<string, { width: number; height: number }> = {}
-  for (const [id, node] of Object.entries(graph.value)) result[id] = nodeSize(node, counts[id])
+  for (const [id, node] of Object.entries(graph.value)) {
+    const size = nodeSize(node, counts[id])
+    result[id] = isCollapsed(id) ? { width: size.width, height: HEADER_H } : size
+  }
   return result
 })
 
 const edgeViews = computed(() => {
-  const views: { d: string }[] = []
+  const views: { d: string; color: string }[] = []
   for (const edge of graphEdges(graph.value)) {
     const target = graph.value[edge.to]
     const from = positions.value[edge.from]
@@ -91,11 +99,14 @@ const edgeViews = computed(() => {
     if (!from || !to || !size || !target) continue
     const inputIndex = Object.keys(target.inputs).indexOf(edge.toInput)
     const x1 = from.x + size.width
-    const y1 = from.y + inputPinY(edge.fromSlot)
+    const y1 = from.y + (isCollapsed(edge.from) ? HEADER_H / 2 : inputPinY(edge.fromSlot))
     const x2 = to.x
-    const y2 = to.y + inputPinY(Math.max(0, inputIndex))
+    const y2 = to.y + (isCollapsed(edge.to) ? HEADER_H / 2 : inputPinY(Math.max(0, inputIndex)))
     const bend = Math.max(40, Math.abs(x2 - x1) / 2)
-    views.push({ d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}` })
+    views.push({
+      d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
+      color: socketColor(edge.toInput)
+    })
   }
   return views
 })
@@ -132,6 +143,7 @@ const nodeViews = computed<NodeView[]>(() => {
       y: position.y,
       width: size.width,
       height: size.height,
+      collapsed: isCollapsed(id),
       inputs,
       roles: (Object.keys(props.modelValue.bindings) as BindingName[]).filter(
         role => props.modelValue.bindings[role]?.node_id === id
@@ -157,11 +169,11 @@ function familyOf(classType: string): string {
 }
 
 const familyClasses: Record<string, string> = {
-  image: 'bg-emerald-700',
-  sampler: 'bg-cyan-800',
-  encoder: 'bg-fuchsia-800',
-  loader: 'bg-slate-600',
-  latent: 'bg-orange-800',
+  image: 'bg-[#3e8c7b]',
+  sampler: 'bg-[#b3543f]',
+  encoder: 'bg-[#a68b2f]',
+  loader: 'bg-[#7c6bb0]',
+  latent: 'bg-[#a85846]',
   plain: 'bg-slate-700'
 }
 const roleChipClasses: Record<string, string> = {
@@ -171,6 +183,14 @@ const roleChipClasses: Record<string, string> = {
   width: 'bg-amber-400 text-slate-950',
   height: 'bg-amber-600 text-slate-950',
   image: 'bg-sky-400 text-slate-950'
+}
+const roleBadgeClasses: Record<string, string> = {
+  prompt: 'border-emerald-400/70 text-emerald-300',
+  negative_prompt: 'border-rose-400/70 text-rose-300',
+  seed: 'border-violet-400/70 text-violet-300',
+  width: 'border-amber-400/70 text-amber-200',
+  height: 'border-amber-500/70 text-amber-200',
+  image: 'border-sky-400/70 text-sky-300'
 }
 
 function shortTarget(role: BindingName): string {
@@ -378,6 +398,14 @@ function updateTitle(nodeId: string, title: string): void {
   emit('update:modelValue', { ...props.modelValue, graph: clone })
 }
 
+function toggleCollapsed(nodeId: string): void {
+  const clone = JSON.parse(JSON.stringify(props.modelValue.graph)) as ComfyWorkflow['graph']
+  const node = clone[nodeId]
+  if (!node) return
+  node._meta = { ...(node._meta || {}), collapsed: !node._meta?.collapsed }
+  emit('update:modelValue', { ...props.modelValue, graph: clone })
+}
+
 async function refreshOptions(): Promise<void> {
   if (!props.url || !props.modelValue) return
   loadingModels.value = true
@@ -508,8 +536,12 @@ onBeforeUnmount(() => {
 
     <div
       ref="container"
-      class="relative h-[420px] select-none overflow-hidden rounded-xl border border-slate-700 bg-slate-950"
+      class="relative h-[480px] select-none overflow-hidden rounded-xl border border-slate-700 bg-slate-950"
       :class="assignRole ? 'cursor-crosshair' : 'cursor-grab'"
+      :style="{
+        backgroundImage: 'radial-gradient(circle, rgba(148,163,184,0.14) 1px, transparent 1px)',
+        backgroundSize: '22px 22px'
+      }"
       tabindex="0"
       :aria-label="'Workflow graph editor' + (reference ? ' for reference images' : '')"
       @wheel="onWheel"
@@ -521,7 +553,15 @@ onBeforeUnmount(() => {
         :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, transformOrigin: '0 0' }"
       >
         <svg class="pointer-events-none absolute left-0 top-0 h-full w-full overflow-visible" aria-hidden="true">
-          <path v-for="(edge, index) in edgeViews" :key="index" :d="edge.d" class="fill-none stroke-slate-600" stroke-width="1.6" />
+          <path
+            v-for="(edge, index) in edgeViews"
+            :key="index"
+            :d="edge.d"
+            :stroke="edge.color"
+            class="fill-none"
+            stroke-width="2"
+            stroke-opacity="0.85"
+          />
         </svg>
         <div
           v-for="node in nodeViews"
@@ -529,32 +569,50 @@ onBeforeUnmount(() => {
           data-node
           class="absolute rounded-lg border bg-slate-900 shadow-md"
           :class="[
-            selected === node.id ? 'border-cyan-400' : assignRole === 'output' && node.outputHint ? 'border-teal-400' : 'border-slate-700',
+            selected === node.id ? 'border-cyan-400 ring-1 ring-cyan-400/40' : assignRole === 'output' && node.outputHint ? 'border-teal-400' : 'border-slate-700',
             assignRole === 'output' && !node.outputHint ? 'opacity-40' : ''
           ]"
           :style="{ left: node.x + 'px', top: node.y + 'px', width: node.width + 'px', minHeight: node.height + 'px' }"
           @click="nodeClick(node.id)"
         >
           <div
-            data-node-header
-            class="flex cursor-grab items-center justify-between gap-2 rounded-t-lg px-2 py-1"
-            :class="familyClasses[node.family]"
-            @pointerdown="startNodeDrag($event, node.id)"
+            v-if="node.roles.length || node.isOutput"
+            class="absolute -top-2.5 left-1.5 z-20 flex max-w-[calc(100%-12px)] flex-wrap gap-1"
           >
-            <span class="truncate text-xs font-semibold text-white">{{ node.title }}</span>
-            <span class="shrink-0 text-[10px] text-slate-200">{{ node.id }}</span>
-          </div>
-          <div v-if="node.roles.length || node.isOutput" class="flex flex-wrap gap-1 px-2 py-0.5">
             <span
               v-for="role in node.roles"
               :key="role"
-              class="rounded px-1 text-[9px] font-bold uppercase"
-              :class="roleChipClasses[role]"
+              class="rounded-full border bg-slate-950/95 px-1.5 text-[9px] font-bold uppercase leading-4 shadow"
+              :class="roleBadgeClasses[role]"
               >{{ ROLE_LABELS[role] }}</span
             >
-            <span v-if="node.isOutput" class="rounded bg-teal-500 px-1 text-[9px] font-bold uppercase text-slate-950">Output</span>
+            <span
+              v-if="node.isOutput"
+              class="rounded-full border border-teal-400/70 bg-slate-950/95 px-1.5 text-[9px] font-bold uppercase leading-4 text-teal-300 shadow"
+              >Output</span
+            >
           </div>
-          <ul class="px-1 pb-1">
+          <div
+            data-node-header
+            class="flex cursor-grab items-center justify-between gap-2 rounded-t-lg px-2 py-1"
+            :class="[familyClasses[node.family], node.collapsed ? 'rounded-b-lg' : '']"
+            @pointerdown="startNodeDrag($event, node.id)"
+          >
+            <span class="truncate text-xs font-semibold text-white">{{ node.title }}</span>
+            <span class="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                :aria-label="node.collapsed ? 'Expand node' : 'Collapse node'"
+                :aria-expanded="!node.collapsed"
+                class="rounded px-0.5 text-[10px] leading-none text-slate-100/80 hover:bg-black/30"
+                @pointerdown.stop
+                @click.stop="toggleCollapsed(node.id)"
+                >{{ node.collapsed ? '▸' : '▾' }}</button
+              >
+              <span class="text-[10px] text-slate-200">{{ node.id }}</span>
+            </span>
+          </div>
+          <ul v-if="!node.collapsed" class="px-1 pb-1">
             <li
               v-for="row in node.inputs"
               :key="row.name"
@@ -567,7 +625,7 @@ onBeforeUnmount(() => {
             >
               <span
                 class="h-2 w-2 shrink-0 rounded-full border"
-                :class="row.connectedFrom ? 'border-slate-400 bg-slate-400' : 'border-slate-500'"
+                :style="{ backgroundColor: row.connectedFrom ? socketColor(row.name) : 'transparent', borderColor: socketColor(row.name) }"
               ></span>
               <span class="shrink-0">{{ row.name }}</span>
               <span v-if="row.preview" class="truncate text-slate-500">{{ row.preview }}</span>

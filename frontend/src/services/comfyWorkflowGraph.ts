@@ -77,6 +77,44 @@ export const NUMERIC_CONTROLS: Record<string, { label: string; min: number; max:
 
 export const ENUM_LABELS: Record<string, string> = { sampler_name: 'Sampler', scheduler: 'Scheduler' }
 
+/** ComfyUI-style socket palette, keyed by the wire type. */
+export const SOCKET_TYPE_COLORS: Record<string, string> = {
+  MODEL: '#b39bdb',
+  CLIP: '#ffd54f',
+  VAE: '#7ee787',
+  CONDITIONING: '#ff8a3c',
+  LATENT: '#ff9e9e',
+  IMAGE: '#64b5f6',
+  MASK: '#81c784',
+  CONTROL_NET: '#6ee7b7'
+}
+
+const SOCKET_TYPES_BY_INPUT: Record<string, string> = {
+  model: 'MODEL',
+  unet: 'MODEL',
+  clip: 'CLIP',
+  clip_vision: 'CLIP',
+  vae: 'VAE',
+  positive: 'CONDITIONING',
+  negative: 'CONDITIONING',
+  conditioning: 'CONDITIONING',
+  latent_image: 'LATENT',
+  samples: 'LATENT',
+  latents: 'LATENT',
+  noise: 'LATENT',
+  image: 'IMAGE',
+  images: 'IMAGE',
+  mask: 'MASK',
+  masks: 'MASK',
+  control_net: 'CONTROL_NET',
+  controlnet: 'CONTROL_NET'
+}
+
+/** Wire colour for an input name; core sockets match ComfyUI, others stay neutral. */
+export function socketColor(inputName: string): string {
+  return SOCKET_TYPE_COLORS[SOCKET_TYPES_BY_INPUT[inputName] ?? ''] ?? '#94a3b8'
+}
+
 export function isLiteral(value: unknown): boolean {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
 }

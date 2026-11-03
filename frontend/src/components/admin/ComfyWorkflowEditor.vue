@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
-import { parseApiGraph } from '@/services/comfyWorkflowService'
-import { autoLayout, suggestBindings, withPositions } from '@/services/comfyWorkflowGraph'
+import { importWorkflowGraph } from '@/services/comfyEditorImport'
+import { autoLayout, existingPositions, suggestBindings, withPositions } from '@/services/comfyWorkflowGraph'
 import ComfyWorkflowCanvas from './ComfyWorkflowCanvas.vue'
 import ComfyWorkflowJson from './ComfyWorkflowJson.vue'
 import ComfyWorkflowStarter from './ComfyWorkflowStarter.vue'
@@ -63,16 +63,20 @@ async function loadWorkflow(event: Event): Promise<void> {
   error.value = ''
   try {
     if (file.size > 262144) throw new Error('Maximum workflow size is 256 KiB.')
-    const parsed = parseApiGraph(await file.text())
-    const suggestion = suggestBindings(parsed)
-    const graph = withPositions(parsed, autoLayout(parsed))
+    const result = importWorkflowGraph(await file.text())
+    const suggestion = suggestBindings(result.graph)
+    const graph = existingPositions(result.graph)
+      ? result.graph
+      : withPositions(result.graph, autoLayout(result.graph))
     const bindings: ComfyWorkflow['bindings'] = {}
     for (const role of Object.keys(suggestion.bindings) as BindingName[]) {
       const target = suggestion.bindings[role]
       if (target) bindings[role] = target
     }
     update({ name: file.name, graph, bindings, output_node: suggestion.output_node })
-    report.value = [`Imported ${Object.keys(graph).length} nodes; drag them into a comfortable arrangement.`].concat(suggestion.notes)
+    report.value = [`Imported ${Object.keys(graph).length} nodes; drag them into a comfortable arrangement.`]
+      .concat(result.notes)
+      .concat(suggestion.notes)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not load workflow.'
   } finally {
@@ -108,8 +112,9 @@ async function checkWorkflow(): Promise<void> {
     <p class="text-sm font-semibold text-slate-200">{{ reference ? 'Image workflow (optional)' : 'Base workflow (required)' }}</p>
     <p class="text-xs text-slate-400">{{ reference ? 'Your graph decides whether the image is a reference or an img2img source.' : 'Used when creating a new image without a reference.' }}</p>
     <ComfyWorkflowStarter :reference="reference" :empty="!modelValue" :suggested-family="suggestedFamily" :source-workflow="sourceWorkflow" @choose="chooseStarter" />
-    <label class="block text-xs text-slate-300">Import API workflow JSON
+    <label class="block text-xs text-slate-300">Import workflow JSON (ComfyUI editor or API export)
       <input type="file" accept=".json,application/json" class="block mt-2 w-full text-xs" @change="loadWorkflow" />
+      <span class="mt-1 block text-slate-400">Editor exports keep your node arrangement; bypassed nodes are skipped like ComfyUI's API export.</span>
     </label>
     <template v-if="modelValue">
       <p class="text-xs text-cyan-300 break-all">{{ modelValue.name }} · {{ Object.keys(modelValue.graph).length }} nodes</p>
