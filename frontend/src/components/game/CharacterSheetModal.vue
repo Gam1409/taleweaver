@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import StatBar from './StatBar.vue'
 import SheetSpecialsPanel from './SheetSpecialsPanel.vue'
 import AppearanceAndClothing from './AppearanceAndClothing.vue'
 import type { CharacterSheet, InventoryItem } from '@/types'
-import { getItemIcon, getTypeColor, getImageUrl } from '@/utils/game_icons'
+import { getImageUrl } from '@/utils/game_icons'
 
 const props = defineProps<{
   open: boolean
@@ -443,11 +444,8 @@ const onClose = () => {
                         @error="handleImageError(inventoryList[idx-1].image_url)" 
                       />
                     </div>
-                    <!-- Fallback RPG-Awesome Icon -->
-                    <i 
-                      v-else 
-                      :class="['ra text-2xl sm:text-3xl transition-transform group-hover:scale-110', getItemIcon(inventoryList[idx-1].item_type), getTypeColor(inventoryList[idx-1].item_type)]"
-                    ></i>
+                    <!-- Missing or failed item artwork -->
+                    <ItemImagePlaceholder v-else />
 
                     <!-- Debug ID -->
                     <div v-if="isDebug" class="absolute bottom-1 right-1 px-1 bg-black/75 rounded text-[7px] font-mono text-amber-300 opacity-70">
@@ -535,7 +533,7 @@ const onClose = () => {
                             @error="handleImageError(equipment[slot]!.image_url)" 
                           />
                         </div>
-                        <i v-else :class="['ra text-base sm:text-xl', getItemIcon(equipment[slot]!.item_type), getTypeColor(equipment[slot]!.item_type)]"></i>
+                        <ItemImagePlaceholder v-else />
                       </template>
 
                       <!-- Empty Slot Placeholder -->

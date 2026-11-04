@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 import { computed } from 'vue'
 import StatBar from '@/components/game/StatBar.vue'
 import { getImageUrl, getItemIcon, hasRenderableImagePath } from '@/utils/game_icons'
@@ -153,13 +154,8 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
               <DoorClosedLocked v-if="isEntityLocked" class="w-10 h-10 overflow-visible drop-shadow-[0_2px_8px_rgba(244,63,94,0.35)]" style="stroke: url(#exit-tooltip-locked-gradient); stroke-width: 2.25;" />
               <DoorClosed v-else class="w-10 h-10 overflow-visible drop-shadow-[0_2px_8px_rgba(6,182,212,0.35)]" style="stroke: url(#exit-tooltip-unlocked-gradient); stroke-width: 2.25;" />
             </template>
-            <i
-              v-else
-              :class="[
-                isNpc ? 'ra text-4xl ra-player text-cyan-400/80' :
-                'ra text-4xl ra-vest text-amber-400/80'
-              ]"
-            ></i>
+            <i v-else-if="isNpc" class="ra text-4xl ra-player text-cyan-400/80"></i>
+            <ItemImagePlaceholder v-else />
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_65%)]"></div>
           </div>
 

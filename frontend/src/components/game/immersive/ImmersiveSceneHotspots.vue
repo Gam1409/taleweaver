@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 /**
  * ImmersiveSceneHotspots — Interactive scene hotspots
  *
@@ -6,7 +7,7 @@
  * alongside tactical switches, eliminating badge clutter from the story view.
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { getItemIcon, getTypeColor, getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
 import { Compass, DoorOpen, Lock, Hand, Sparkles, X, ArrowRight, Terminal } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -446,7 +447,7 @@ function handleExitMouseMove(event: MouseEvent) {
                     class="w-full h-full object-cover"
                     @error="onImageLoadError($event, item.image_url)"
                   />
-                  <i v-else :class="['ra text-3xl sm:text-4xl', getItemIcon(item.item_type), getTypeColor(item.item_type)]"></i>
+                  <ItemImagePlaceholder v-else />
                 </div>
 
                 <!-- Item Name (Centered, clean) -->

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 import { computed, ref } from 'vue'
-import { getImageUrl, getItemIcon, getTypeColor, hasRenderableImagePath } from '@/utils/game_icons'
+import { getImageUrl, hasRenderableImagePath } from '@/utils/game_icons'
 
 type LootItem = {
   image_url?: string | null
@@ -86,7 +87,7 @@ const title = computed(() => {
                     :alt="item.name || 'loot item'"
                     @error="onItemImageError(item)"
                   >
-                  <i v-else :class="['ra text-3xl', getItemIcon(item.item_type), getTypeColor(item.item_type)]"></i>
+                  <ItemImagePlaceholder v-else />
                 </div>
                 <div class="min-w-0">
                   <div class="text-sm font-bold text-slate-100 truncate">{{ item.name || 'Unknown Item' }}</div>
