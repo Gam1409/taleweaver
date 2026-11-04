@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import DebugWardrobePreferences, { type WardrobePreferences } from './DebugWardrobePreferences.vue'
 import DebugWardrobeRecovery, { type WardrobeRecoveryPreview } from './DebugWardrobeRecovery.vue'
 
 interface Clothing {
@@ -24,6 +25,7 @@ const props = defineProps<{
     name?: string
     wardrobe?: {
       items: WardrobeItem[]
+      preferences?: WardrobePreferences
       profile_known: boolean
       recovery?: WardrobeRecoveryPreview | null
     }
@@ -117,6 +119,13 @@ function save() {
         Inventory items are listed separately by status; they are not worn.
       </p>
       <div class="space-y-4">
+        <DebugWardrobePreferences
+          v-if="npc.wardrobe?.preferences"
+          :npc-id="npc.id"
+          :preferences="npc.wardrobe.preferences"
+          :busy="busy"
+          @command="emit('command', $event)"
+        />
         <DebugWardrobeRecovery
           :npc-id="npc.id"
           :preview="npc.wardrobe?.recovery"

@@ -1,7 +1,6 @@
 """User-reviewed recovery of missing garments; previews never mutate possessions."""
 
 import asyncio
-import json
 import logging
 import shlex
 from copy import deepcopy
@@ -17,16 +16,15 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.recovery_context import KEY, recovery_context
 from backend.engine.clothing.recovery_contract import (
-    existing_garments,
     resolve_garment,
     response_schema,
 )
 from backend.engine.clothing.recovery_evidence import evidence_issues, rejected_entry
 from backend.engine.clothing.recovery_mentions import (
-    explicit_mentions,
     mention_checks,
     unreviewed_feedback,
 )
+from backend.engine.clothing.recovery_payload import build_payload
 from backend.engine.clothing.recovery_policy import classify_action, partition_rejections
 from backend.engine.clothing.recovery_prompt import PROMPT
 from backend.engine.clothing.recovery_request import ProposalReview, request_proposal
@@ -99,7 +97,9 @@ def evaluate(
             message_id=f"{entry.source_message_id}:wardrobe:{index}",
         )
         actors = changed
-        blocking, omitted = partition_rejections(rejected)
+        blocking, omitted = partition_rejections(
+            rejected, detailed=detailed, age=actor.get("age_years")
+        )
         errors.extend(blocking)
         if blocking:
             rejected_details.append(rejected_entry(index, entry, label, blocking, garment))
@@ -112,7 +112,7 @@ def evaluate(
             snapshot.owners[identifier] = actor["id"]
             snapshot.catalog[identifier] = addition["item"]
             accepted.append(addition)
-    return actors, accepted, errors, skipped
+    return actors, accepted, errors, list(dict.fromkeys(skipped))
 
 
 def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry) -> None:
@@ -169,25 +169,15 @@ async def debug_wardrobe_preview(
     npc_id = arguments[0]
     role = arguments[1] if len(arguments) == 2 else "complex"
     deadline = role_timeout(user, role)
+    context = None
+    model_step_started = False
     try:
         context = await recovery_context(db, state, avatar, npc_id)
         detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
         llm = GameMasterLLM.for_role(user, role)
-        payload = json.dumps(
-            {
-                "target_actor": context["actor"],
-                "history": context["messages"],
-                "canonical_items": context["snapshot"].items,
-                "owners": context["snapshot"].owners,
-                "existing_garments": existing_garments(context),
-                "detailed_clothing": detailed,
-                "explicit_garment_mentions": explicit_mentions(context),
-            },
-            ensure_ascii=False,
-        )
-        if len(payload) > 64000:
-            raise ValueError("Recovery context is too large; no changes were made.")
+        context, payload = build_payload(context, detailed)
         await db.commit()
+        model_step_started = True
         result = await asyncio.wait_for(
             request_proposal(
                 llm,
@@ -224,6 +214,8 @@ async def debug_wardrobe_preview(
             "notes": proposal.notes,
             "messages_scanned": len(context["messages"]),
             "limited": context["limited"],
+            "context_messages": len(context["messages"]),
+            "model_step_started": True,
         }
         await db.refresh(state)
         state.entity_states = {**(state.entity_states or {}), KEY: preview}
@@ -242,7 +234,8 @@ async def debug_wardrobe_preview(
     except InferenceQueueError:
         message = "No recovery request was sent: the inference queue is unavailable. Try again when it is free. No clothing was changed."
     except ValueError as exc:
-        message = f"Invalid recovery result: {str(exc).strip()[:500] or type(exc).__name__}. No clothing was changed."
+        detail = str(exc).strip()[:500].rstrip(".") or type(exc).__name__
+        message = f"Invalid recovery result: {detail}. No clothing was changed."
     except Exception as exc:
         logger.exception("Wardrobe recovery preview failed for %s", state.session_id)
         message = f"Wardrobe preview failed ({type(exc).__name__}). No clothing was changed. Check the model server and logs."
@@ -255,7 +248,9 @@ async def debug_wardrobe_preview(
             "errors": [message],
             "notes": "Preview failed; no proposal is available to apply.",
             "messages_scanned": 0,
-            "limited": False,
+            "context_messages": len(context["messages"]) if context else 0,
+            "model_step_started": model_step_started,
+            "limited": context["limited"] if context else False,
         },
     }
     return f"DEBUG ERROR: {message}"

@@ -17,6 +17,7 @@ from backend.engine.clothing.profiles import (
     validate_profile,
 )
 from backend.engine.clothing.schema import Garment, VisualProfile, WornItem
+from backend.engine.clothing.wardrobe_preferences import read_preferences
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
 
@@ -78,9 +79,16 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 "rejected_entries",
                 "rejected_sources",
                 "mention_checks",
+                "context_messages",
+                "model_step_started",
             )
         }
-    return {"items": clothes, "profile_known": profile is not None, "recovery": recovery}
+    return {
+        "items": clothes,
+        "profile_known": profile is not None,
+        "recovery": recovery,
+        "preferences": read_preferences(entity, states),
+    }
 
 
 async def _npc(db: AsyncSession, state: SessionState, identifier: str) -> WorldEntity | None:

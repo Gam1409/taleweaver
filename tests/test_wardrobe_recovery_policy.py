@@ -7,7 +7,11 @@ import pytest
 
 from backend.engine.clothing.recovery import evaluate
 from backend.engine.clothing.recovery_context import KEY
-from backend.engine.clothing.recovery_policy import classify_action
+from backend.engine.clothing.recovery_policy import (
+    POLICY_REJECTIONS,
+    classify_action,
+    partition_rejections,
+)
 from backend.engine.clothing.recovery_prompt import PROMPT
 from backend.engine.clothing.recovery_schema import RecoveryProposal
 from backend.engine.debug_engine import DebugEngine
@@ -109,3 +113,38 @@ def test_prompt_is_history_specific_and_disambiguates_missing_records():
     assert "never restate the task" in PROMPT
     assert "completed_narration" not in PROMPT
     assert "authoritative_resolution" not in PROMPT
+
+
+@pytest.mark.parametrize(
+    "detailed,age,reasons",
+    [
+        (False, 30, ["tracking is disabled"]),
+        (True, None, ["age is not recorded"]),
+        (False, None, ["tracking is disabled", "age is not recorded"]),
+        (True, 17, ["age is 17"]),
+    ],
+)
+def test_policy_skip_names_actual_unmet_requirements(detailed, age, reasons):
+    errors, skipped = partition_rejections(
+        ["Named garment: " + POLICY_REJECTIONS[0], "bad source"], detailed=detailed, age=age
+    )
+    assert errors == ["bad source"]
+    assert len(skipped) == 1 and skipped[0].startswith("Named garment: ")
+    assert all(reason in skipped[0] for reason in reasons)
+    assert ("tracking is disabled" in skipped[0]) == (not detailed)
+    assert ("age is not recorded" in skipped[0]) == (age is None)
+
+
+def test_duplicate_policy_skips_are_displayed_once():
+    actors, snapshot = fixtures()
+    context = {
+        "actor": actors["NPC"],
+        "snapshot": snapshot,
+        "messages": [{"id": "source", "role": "assistant", "content": TEXT}],
+    }
+    candidate = entry("source", "NPC", "Panties")
+    _, accepted, errors, skipped = evaluate(
+        context, RecoveryProposal(entries=[candidate, candidate]), False, "session"
+    )
+    assert not accepted and not errors
+    assert len(skipped) == 1 and "tracking is disabled" in skipped[0]

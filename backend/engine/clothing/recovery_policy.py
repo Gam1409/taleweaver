@@ -27,7 +27,22 @@ def classify_action(action: ItemAction) -> ItemAction:
     return action.model_copy(update={"new_item": corrected})
 
 
-def partition_rejections(rejected: list[str]) -> tuple[list[str], list[str]]:
-    skipped = [error for error in rejected if error.endswith(POLICY_REJECTIONS)]
-    errors = [error for error in rejected if not error.endswith(POLICY_REJECTIONS)]
+def partition_rejections(
+    rejected: list[str], *, detailed: bool, age: object
+) -> tuple[list[str], list[str]]:
+    reasons = []
+    if not detailed:
+        reasons.append("Clothing layer tracking is disabled in this session")
+    if type(age) is not int:
+        reasons.append("NPC age is not recorded as an integer")
+    elif age < 18:
+        reasons.append(f"NPC age is {age}; inner clothing requires an adult owner")
+    skipped = []
+    errors = []
+    for error in rejected:
+        suffix = next((text for text in POLICY_REJECTIONS if error.endswith(text)), None)
+        if suffix:
+            skipped.append(error[: -len(suffix)] + "; ".join(reasons) + "." if reasons else error)
+        else:
+            errors.append(error)
     return errors, skipped

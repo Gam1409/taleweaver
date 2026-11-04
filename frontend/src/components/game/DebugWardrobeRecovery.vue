@@ -6,6 +6,8 @@ export interface WardrobeRecoveryPreview {
   token: string
   notes: string
   messages_scanned: number
+  context_messages?: number
+  model_step_started?: boolean
   limited: boolean
   errors: string[]
   mention_checks?: WardrobeMention[] | null
@@ -69,8 +71,23 @@ const emit = defineEmits<{ command: [value: string] }>()
       Check later removals and transfers before accepting.
     </p>
     <div v-if="preview" class="space-y-2">
-      <p>
-        Messages reviewed: {{ preview.messages_scanned
+      <p
+        v-if="
+          preview.context_messages !== undefined &&
+          preview.errors.length &&
+          !preview.accepted.length &&
+          !preview.messages_scanned
+        "
+      >
+        Context prepared: {{ preview.context_messages }} messages.
+        {{
+          preview.model_step_started
+            ? 'The model step did not produce a usable preview.'
+            : 'No model request was started.'
+        }}
+      </p>
+      <p v-else>
+        Messages supplied to the model: {{ preview.messages_scanned
         }}{{ preview.limited ? ' (older history excluded)' : '' }}.
       </p>
       <p v-if="preview.model_role" class="text-slate-400">
