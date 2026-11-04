@@ -284,6 +284,8 @@ async def complete_character(
         ) from exc
     actor.visual_profile = validated.model_dump()
     _sync_manifest(adventure, actor, affected)
+    for item in affected:
+        _sync_wearable(adventure, item, [actor])
 
 
 def _apply_outfit(

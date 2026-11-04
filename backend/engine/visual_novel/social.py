@@ -170,8 +170,7 @@ def apply_plan(
             apply_event(social, character, proposal, source_message_id)
             # A witnessed emotion need not earn points or pass the positive-event
             # cooldown. It remains separate from scores, promotion and memories.
-            _set_direction(character, proposal)
-            character.emotion_source_message_id = source_message_id
+            _set_direction(character, proposal, source_message_id)
         social.reviewed_scene_message_ids = (
             social.reviewed_scene_message_ids + [source_message_id]
         )[-MAX_PROCESSED:]
@@ -185,10 +184,17 @@ def apply_plan(
     return directed
 
 
-def _set_direction(character: CharacterState, proposal: SocialProposal) -> None:
-    character.emotion = proposal.emotion
-    character.emotion_cause = proposal.evidence
-    character.next_intention = proposal.intention
+def _set_direction(
+    character: CharacterState, proposal: SocialProposal, source_message_id: str = ""
+) -> None:
+    # A relationship observation need not establish a new emotion or intention.
+    # Schema defaults are not evidence that an earlier feeling has ended.
+    if "emotion" in proposal.model_fields_set:
+        character.emotion = proposal.emotion
+        character.emotion_cause = proposal.evidence
+        character.emotion_source_message_id = source_message_id
+    if "intention" in proposal.model_fields_set:
+        character.next_intention = proposal.intention
 
 
 async def plan_interaction(

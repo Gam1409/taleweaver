@@ -9,6 +9,7 @@ from backend.core.world_validation.context import (
     finding,
 )
 from backend.engine.authoring_clothing_policy import allows_inner_layers
+from backend.engine.clothing.profiles import owned_items
 from backend.engine.clothing.schema import Garment, VisualProfile
 from backend.engine.personality.profile import CATALOG, read_profile
 from backend.schemas.validation import ValidationFinding
@@ -128,8 +129,9 @@ def _needs_inner_layer_review(ctx: ValidationContext, actor: dict) -> bool:
     worn = profile.get("worn") or []
     if not isinstance(worn, list):
         return False
+    items = _wardrobe_items(ctx, actor)
     return not any(
-        _is_inner(ctx.entities_by_id.get(str(entry.get("item_id") or ""), {}))
+        _is_inner(items.get(str(entry.get("item_id") or ""), {}))
         for entry in worn
         if isinstance(entry, dict)
     )
@@ -146,10 +148,16 @@ def _missing_equipment_slots(ctx: ValidationContext, actor: dict) -> bool:
     if not isinstance(worn, list):
         return False
     worn_ids = {str(row.get("item_id")) for row in worn if isinstance(row, dict)}
-    items = [item for key, item in ctx.entities_by_id.items() if key in worn_ids]
+    items = [item for key, item in _wardrobe_items(ctx, actor).items() if key in worn_ids]
     return any(not equipment.get(slot) for item in items for slot in _wearable_slots(item))
 
 
 def _wearable_slots(item: dict) -> list[str]:
     raw = item.get("wearable_slots")
     return [value for value in raw if isinstance(value, str)] if isinstance(raw, list) else []
+
+
+def _wardrobe_items(ctx: ValidationContext, actor: dict) -> dict[str, dict]:
+    """Resolve worn references from inline items and canonical object records."""
+    owned = owned_items(actor.get("inventory"), equipment=actor.get("equipment"))
+    return {**owned, **ctx.entities_by_id}
