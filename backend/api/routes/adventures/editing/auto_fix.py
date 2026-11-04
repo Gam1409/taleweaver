@@ -86,7 +86,12 @@ async def _auto_fix_finding(
         return False
 
     normalize_vn_template(adventure)
-    await _commit_fix(db, template_id, user.id, response.finding_signature)
+    snapshot = await _commit_fix(db, template_id, user.id, response.finding_signature)
+    if isinstance(snapshot, dict):
+        return not any(
+            entry.get("code") == finding.code and entry.get("location") == finding.location
+            for entry in snapshot.get("structural_findings", [])
+        )
     return True
 
 

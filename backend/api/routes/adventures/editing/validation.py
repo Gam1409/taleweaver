@@ -21,6 +21,8 @@ from backend.core.validators_prompts import (
     AI_VALIDATION_USER_PROMPT_TEMPLATE,
 )
 from backend.core.world_validator import validate_adventure
+from backend.engine.clothing.settings import clothing_settings
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.vn_world_generation import vn_editor_guidance
 from backend.models.user import User
 from backend.models.validation_run import ValidationRun
@@ -82,6 +84,13 @@ def _build_ai_validation_prompt(debug_payload: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
 
     return vn_editor_guidance(adventure) + AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
+        protagonist_json=_dump(summary.get("protagonist") or {}),
+        authoring_preferences_json=_dump(
+            {
+                "clothing": clothing_settings(adventure.get("original_manifest")),
+                "mature": nsfw_settings(adventure.get("original_manifest")),
+            }
+        ),
         title=adventure.get("title", ""),
         language=adventure.get("language", ""),
         rule_enforcement_mode=adventure.get("rule_enforcement_mode", "rpg"),

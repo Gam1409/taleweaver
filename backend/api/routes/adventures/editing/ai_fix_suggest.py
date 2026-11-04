@@ -25,6 +25,7 @@ from backend.api.routes.adventures.editing.common import _get_owned_adventure_or
 from backend.api.routes.adventures.editing.payload import _build_adventure_editor_assets
 from backend.api.routes.adventures.schemas import AISuggestFixWrapperResponse
 from backend.core.auth import get_current_user
+from backend.core.authoring_completion_prompts import completion_contract
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.validators_prompts import AI_FIX_SUGGESTIONS_SYSTEM_PROMPT
@@ -122,6 +123,7 @@ def _suggestion_prompt(payload: AIFixSuggestionsRequest, summary: dict[str, Any]
         f"- Message: {payload.finding_message}\n"
         f"{_format_finding_context_block(payload)}\n\n"
         f"{world_block}\n"
+        f"{completion_contract()}\n"
         f"Produce up to 3 distinct, immediately applicable fix proposals for the finding above.\n"
         f"Return ONLY the JSON object with a top-level 'proposals' key."
     )

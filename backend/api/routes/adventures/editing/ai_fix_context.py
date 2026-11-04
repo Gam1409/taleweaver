@@ -4,12 +4,18 @@ import json
 import logging
 from typing import Any, Optional
 
+from backend.engine.clothing.settings import clothing_settings
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.schemas.validation import (
     AIFixSuggestionsRequest,
     FixProposal,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _payload_field(payload: Any, key: str) -> Any:
+    return payload.get(key) if isinstance(payload, dict) else getattr(payload, key, None)
 
 
 def _short_state(value: Any, *, limit: int = 400) -> str:
@@ -24,7 +30,7 @@ def _scene_summary(scene: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": scene.get("id"),
         "label": scene.get("label"),
-        "description": _short_state(scene.get("description")),
+        "description": _short_state(scene.get("description"), limit=4000),
         "decorative_objects": scene.get("decorative_objects") or [],
     }
 
@@ -48,11 +54,21 @@ def _npc_summary(entity: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": entity.get("id"),
         "name": entity.get("name"),
-        "description": _short_state(entity.get("description")),
+        "description": _short_state(entity.get("description"), limit=1000),
         "current_scene_id": entity.get("current_scene_id"),
         "goal": _short_state(entity.get("goal")),
         "character": _short_state(entity.get("character")),
         "is_killable": entity.get("is_killable"),
+        "gender": entity.get("gender"),
+        "age_years": entity.get("age_years"),
+        "npc_type": entity.get("npc_type"),
+        "outfit_exemption": (entity.get("metadata_json") or entity.get("stats") or {}).get(
+            "outfit_exemption"
+        ),
+        "visual_profile": entity.get("visual_profile"),
+        "inventory": entity.get("inventory") or [],
+        "equipment": entity.get("equipment") or {},
+        "personality_profile": (entity.get("metadata_json") or {}).get("personality_profile", {}),
         "stats": entity.get("stats") or {},
     }
 
@@ -61,9 +77,11 @@ def _object_summary(entity: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": entity.get("id"),
         "name": entity.get("name"),
-        "description": _short_state(entity.get("description")),
+        "description": _short_state(entity.get("description"), limit=1000),
         "current_scene_id": entity.get("current_scene_id"),
         "item_type": entity.get("item_type"),
+        "wearable_slots": entity.get("wearable_slots"),
+        "clothing": entity.get("clothing") or (entity.get("metadata_json") or {}).get("clothing"),
         "is_portable": entity.get("is_portable"),
         "locked": entity.get("locked"),
         "code_to_unlock": entity.get("code_to_unlock"),
@@ -79,7 +97,7 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
     """Build a trimmed JSON-friendly snapshot of the world for the fix prompts."""
 
     def _adventure_dict() -> dict[str, Any]:
-        adventure_raw = getattr(payload, "adventure", None) or {}
+        adventure_raw = _payload_field(payload, "adventure") or {}
         if isinstance(adventure_raw, dict):
             return adventure_raw
         return {}
@@ -109,10 +127,10 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
         else:
             adventure_payload[key] = value
 
-    scenes = [s for s in (getattr(payload, "scenes", None) or []) if isinstance(s, dict)]
-    exits = [e for e in (getattr(payload, "exits", None) or []) if isinstance(e, dict)]
-    npcs = [n for n in (getattr(payload, "npcs", None) or []) if isinstance(n, dict)]
-    objects = [o for o in (getattr(payload, "objects", None) or []) if isinstance(o, dict)]
+    scenes = [s for s in (_payload_field(payload, "scenes") or []) if isinstance(s, dict)]
+    exits = [e for e in (_payload_field(payload, "exits") or []) if isinstance(e, dict)]
+    npcs = [n for n in (_payload_field(payload, "npcs") or []) if isinstance(n, dict)]
+    objects = [o for o in (_payload_field(payload, "objects") or []) if isinstance(o, dict)]
 
     raw_quests = adventure.get("quests") or []
     if not isinstance(raw_quests, list):
@@ -129,8 +147,11 @@ def _summarize_world_for_fix(payload: Any) -> dict[str, Any]:
             }
         )
 
+    adventure_payload["clothing_settings"] = clothing_settings(adventure.get("original_manifest"))
+    adventure_payload["nsfw_settings"] = nsfw_settings(adventure.get("original_manifest"))
     return {
         "adventure": adventure_payload,
+        "protagonist": _npc_summary(_payload_field(payload, "protagonist") or {}),
         "scenes": [_scene_summary(s) for s in scenes],
         "exits": [_exit_summary(e) for e in exits],
         "npcs": [_npc_summary(n) for n in npcs],
@@ -185,7 +206,9 @@ def _format_world_context_block(summary: dict[str, Any]) -> str:
     return (
         f"Adventure Title: {adventure.get('title', '')}\n"
         f"Language: {adventure.get('language', '')}\n"
-        f"Rule Mode: {adventure.get('rule_enforcement_mode', 'rpg')}\n\n"
+        f"Rule Mode: {adventure.get('rule_enforcement_mode', 'rpg')}\n"
+        f"Clothing preferences: {json.dumps(adventure.get('clothing_settings') or {})}\n"
+        f"Mature preferences: {json.dumps(adventure.get('nsfw_settings') or {})}\n\n"
         f"=== STORY METADATA ===\n"
         f"Teaser: {adventure.get('teaser', '') or ''}\n"
         f"Plot: {adventure.get('plot', '') or ''}\n"
@@ -217,7 +240,7 @@ def _parse_finding_location(
         return None, None
     ttype = parts[0].strip().lower()
     tid = parts[1].strip()
-    if ttype not in {"scene", "object", "npc", "exit", "entity"} or not tid:
+    if ttype not in {"scene", "object", "npc", "exit", "entity", "protagonist"} or not tid:
         return None, None
     return ttype, tid
 
@@ -282,7 +305,14 @@ def _focus_entity(
         (s for s in summary.get("scenes") or [] if scene_id and _upper_id(s, "id") == scene_id),
         None,
     )
-    return _target_block(target_type.upper(), entity), [("scene", scene)] if scene else []
+    owned = entity.get("inventory") or []
+    identifiers = {str(item.get("id")) if isinstance(item, dict) else str(item) for item in owned}
+    items = [
+        ("object", item)
+        for item in summary.get("objects") or []
+        if str(item.get("id")) in identifiers
+    ]
+    return _target_block(target_type.upper(), entity), items + ([("scene", scene)] if scene else [])
 
 
 def _focus_exit(summary: dict[str, Any], target_id: str) -> tuple[str, _Neighbors]:
@@ -297,6 +327,17 @@ def _focus_exit(summary: dict[str, Any], target_id: str) -> tuple[str, _Neighbor
 def _focus_target(
     summary: dict[str, Any], target_type: Optional[str], target_id: Optional[str]
 ) -> tuple[str, _Neighbors]:
+    if target_type == "protagonist":
+        actor = summary.get("protagonist") or {}
+        owned = actor.get("inventory") or []
+        identifiers = {
+            str(item.get("id")) if isinstance(item, dict) else str(item) for item in owned
+        }
+        return _target_block("PROTAGONIST", actor), [
+            ("object", item)
+            for item in summary.get("objects") or []
+            if str(item.get("id")) in identifiers
+        ]
     if target_type == "scene":
         return _focus_scene(summary, target_id or "")
     if target_type in ("object", "npc"):
@@ -335,7 +376,9 @@ def _format_focused_world_block(
     return (
         f"Adventure Title: {adventure.get('title', '')}\n"
         f"Language: {adventure.get('language', '')}\n"
-        f"Rule Mode: {adventure.get('rule_enforcement_mode', 'rpg')}\n\n"
+        f"Rule Mode: {adventure.get('rule_enforcement_mode', 'rpg')}\n"
+        f"Clothing preferences: {json.dumps(adventure.get('clothing_settings') or {})}\n"
+        f"Mature preferences: {json.dumps(adventure.get('nsfw_settings') or {})}\n\n"
         f"=== STORY METADATA ===\n"
         f"Plot: {_short_state(adventure.get('plot') or '', limit=600)}\n"
         f"Rules: {_short_state(adventure.get('rules') or '', limit=400)}\n"

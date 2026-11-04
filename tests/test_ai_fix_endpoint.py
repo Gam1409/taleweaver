@@ -1683,4 +1683,6 @@ async def test_apply_fix_removes_finding_from_persisted_validation_run(client, s
         assert persisted_run is not None
         assert len(persisted_run.ai_findings) == 1
         assert persisted_run.ai_findings[0]["code"] == "plot_hole"
-        assert persisted_run.warning_count == 1
+        assert persisted_run.warning_count == 1 + sum(
+            finding["severity"] == "warn" for finding in persisted_run.structural_findings
+        )

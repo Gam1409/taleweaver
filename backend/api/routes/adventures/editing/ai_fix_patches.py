@@ -21,6 +21,11 @@ from backend.api.routes.adventures.editing.common import (
     _normalize_lock_fields,
     _restore_missing_template_avatar,
 )
+from backend.engine.authoring_completion import (
+    CHARACTER_FIELDS,
+    complete_character,
+    complete_owned_wearable,
+)
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.world_entity import WorldEntity, WorldExit
 from backend.schemas.validation import FixProposalEntityPatch
@@ -79,11 +84,14 @@ async def _patch_protagonist(
     if not avatar:
         raise HTTPException(status_code=400, detail="Protagonist not found for AI fix")
     for field, value in updates.items():
+        if field in CHARACTER_FIELDS:
+            continue
         if field in _VITALS:
             setattr(avatar, field, int(value))
             setattr(avatar, _VITALS[field], int(value))
             continue
         setattr(avatar, field, _normalize_field_value(value))
+    await complete_character(db, adv, avatar, updates)
 
 
 def _decorative_objects(values: Any) -> Optional[list[str]]:
@@ -212,6 +220,16 @@ def _patch_description(ent: WorldEntity, value: Any) -> None:
     ent.description = text
 
 
+async def _complete_npc(
+    db: AsyncSession, template_id: str, actor: WorldEntity, updates: dict
+) -> None:
+    if not CHARACTER_FIELDS.intersection(updates):
+        return
+    adventure = await db.get(AdventureTemplate, template_id)
+    if adventure is not None:
+        await complete_character(db, adventure, actor, updates)
+
+
 async def _patch_entity(
     db: AsyncSession,
     template_id: str,
@@ -239,7 +257,9 @@ async def _patch_entity(
 
     if ent.entity_type == "NPC":
         _patch_npc_fields(ent, updates)
+        await _complete_npc(db, template_id, ent, updates)
     elif ent.entity_type == "OBJECT":
+        await complete_owned_wearable(db, template_id, ent, updates)
         _patch_object_fields(ent, updates)
     return f"{target_type}:{ent.id}"
 

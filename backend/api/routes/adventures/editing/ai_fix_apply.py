@@ -14,12 +14,14 @@ from backend.api.routes.adventures.editing.ai_fix_patches import (
     _clean_updates,
 )
 from backend.api.routes.adventures.editing.common import _get_owned_adventure_or_404
+from backend.api.routes.adventures.editing.payload import _build_adventure_editor_assets
 from backend.api.routes.adventures.editing.validation import (
     _finding_signature,
     _recount_validation_findings,
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.core.world_validator import validate_adventure
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.validation_run import ValidationRun
@@ -150,6 +152,10 @@ async def _commit_fix(
     run = await _latest_run(db, template_id, user_id)
     if run is not None:
         _prune_fixed_finding(run, signature)
+        await db.flush()
+        editor = await _build_adventure_editor_assets(template_id, db)
+        run.structural_findings = [finding.model_dump() for finding in validate_adventure(editor)]
+        _recount_validation_findings(run)
     await db.commit()
     await _evict_cached_suggestions(
         db=db, template_id=template_id, user_id=user_id, signature=signature

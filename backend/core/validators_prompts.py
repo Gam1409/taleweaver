@@ -58,6 +58,18 @@ CHECK FOR (only emit `warn`-level findings, never invent errors):
     conditions and narrative hints align with how the player solves them in the
     walkthrough.
 
+11. **Authoring completeness and usable scenes**: Inspect NPC personality_profile,
+    stable appearance, owned clothing and the protagonist as well as prose. For a
+    vague or incomplete scene explain exactly which layout, landmarks, atmosphere,
+    sensory details or interaction affordances are missing. Prefer playable detail
+    over word count. Preserve existing exits, clues, actors and tone; do not invent
+    new puzzle solutions. Missing optional age/gender may be intentional. Non-human
+    characters need no human outfit. For established adults, mature + detailed clothing
+    enables review of ordinary inner layers as well as outer garments. Never infer adulthood.
+    Empty equipment slots are not automatically
+    defects. Identify clothing contradictions or described clothing absent from state.
+    Do not duplicate deterministic character_details_incomplete or wearable findings.
+
 OUTPUT FORMAT:
 Return a SINGLE JSON object (not a bare array) with the following shape:
 {
@@ -91,6 +103,10 @@ CONSTRAINTS:
 AI_VALIDATION_USER_PROMPT_TEMPLATE = """Adventure Title: {title}
 Language: {language}
 Rule Mode: {rule_enforcement_mode}
+
+=== PROTAGONIST ===
+{protagonist_json}
+Authoring preferences: {authoring_preferences_json}
 
 === STORY METADATA ===
 Teaser: {teaser}
@@ -176,20 +192,24 @@ RULES
     - object (CONTAINER): description, code_to_unlock, item_to_unlock, rule_to_unlock, locked,
       text_log_content, text_log_format
     - object (READABLE/CONSUMABLE/OTHER): description, is_portable
-    - npc: name, description, goal, character, is_killable, current_scene_id
+    - object (WEARABLE): description, wearable_slots, clothing
+    - npc: name, description, goal, character, is_killable, current_scene_id,
+      gender, age_years, personality_profile, appearance, outfit, outfit_exemption
     - exit: label, lock_description, exit_type, locked, code_to_unlock, item_to_unlock,
       rule_to_unlock
     - protagonist: name, description, goal, character, hp, mana, stamina, strength, intelligence,
-      wisdom, dexterity, charisma, armor_class, exp
+      wisdom, dexterity, charisma, armor_class, exp, gender, age_years, appearance, outfit, outfit_exemption
     - adventure: title, teaser, plot, rules, intro_text, walkthrough, tts_director_notes,
       completed_condition, gameover_condition
-- Do NOT add fields outside this allowlist. If the fix requires something else,
-  pick the closest narrative field and put a short, in-fiction note inside it.
+- Do NOT hide structural facts in prose. Use the typed completion fields described
+  in the user prompt for personality, appearance and clothing. If unsupported, decline.
 - Do NOT emit fields unrelated to the finding.
 - NEVER invent new ids. `target_id` must reference an existing entity you can see in
   the provided world context.
-- Each value in `field_updates` must be a primitive (string, number, boolean) or a
-  plain list of strings (for decorative_objects). No nested objects.
+- Values can be primitives or typed structured completion fields. Nested objects
+  are permitted ONLY for personality_profile, appearance, outfit and clothing.
+- For a scene-description quality finding, expand description with coherent concrete
+  detail rather than applying the minimal-text rule. Do not change existing facts.
 - Reply with ONLY the JSON object (no markdown fence, no commentary, no preamble).
 """
 

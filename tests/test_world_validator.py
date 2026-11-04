@@ -23,7 +23,14 @@ def _empty_adventure(**overrides):
             "tts_director_notes": "Notes",
             "quests": [],
         },
-        "scenes": [{"id": "START", "label": "Start", "decorative_objects": []}],
+        "scenes": [
+            {
+                "id": "START",
+                "label": "Start",
+                "description": "An entrance hall with a visible door.",
+                "decorative_objects": [],
+            }
+        ],
         "npcs": [],
         "objects": [],
         "exits": [],
@@ -64,12 +71,14 @@ def test_unreachable_scene_emits_error():
 def test_unreachable_scene_ignores_one_way_exits():
     payload = _empty_adventure()
     payload["scenes"].append({"id": "FAR", "label": "Far away"})
-    payload["exits"].append({
-        "id": "ex1",
-        "from_scene_id": "FAR",
-        "to_scene_id": "START",
-        "exit_type": "one_way",
-    })
+    payload["exits"].append(
+        {
+            "id": "ex1",
+            "from_scene_id": "FAR",
+            "to_scene_id": "START",
+            "exit_type": "one_way",
+        }
+    )
     findings = validate_adventure(payload)
     unreachable = _codes(findings, "unreachable_scene")
     assert any(f.location == "scene:FAR" for f in unreachable) is True
@@ -77,12 +86,14 @@ def test_unreachable_scene_ignores_one_way_exits():
 
 def test_exit_to_missing_scene_emits_error():
     payload = _empty_adventure()
-    payload["exits"].append({
-        "id": "ex1",
-        "from_scene_id": "START",
-        "to_scene_id": "NOWHERE",
-        "exit_type": "bidirectional",
-    })
+    payload["exits"].append(
+        {
+            "id": "ex1",
+            "from_scene_id": "START",
+            "to_scene_id": "NOWHERE",
+            "exit_type": "bidirectional",
+        }
+    )
     findings = validate_adventure(payload)
     miss = _codes(findings, "exit_to_missing_scene")
     assert len(miss) == 1
@@ -99,12 +110,14 @@ def test_duplicate_scene_id_emits_error():
 
 def test_missing_item_ref_emits_error():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "chest_01",
-        "entity_type": "OBJECT",
-        "item_type": "CONTAINER",
-        "item_to_unlock": "GOLDEN_KEY",
-    })
+    payload["objects"].append(
+        {
+            "id": "chest_01",
+            "entity_type": "OBJECT",
+            "item_type": "CONTAINER",
+            "item_to_unlock": "GOLDEN_KEY",
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "missing_item_ref")
@@ -115,12 +128,14 @@ def test_missing_item_ref_emits_error():
 
 def test_container_inventory_orphan_emits_error():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "chest_01",
-        "entity_type": "OBJECT",
-        "item_type": "CONTAINER",
-        "inventory": ["PHANTOM_GOLD", {"item_id": "PHANTOM_SILVER"}],
-    })
+    payload["objects"].append(
+        {
+            "id": "chest_01",
+            "entity_type": "OBJECT",
+            "item_type": "CONTAINER",
+            "inventory": ["PHANTOM_GOLD", {"item_id": "PHANTOM_SILVER"}],
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "container_inventory_orphan")
@@ -129,12 +144,14 @@ def test_container_inventory_orphan_emits_error():
 
 def test_locked_but_no_unlock_key_emits_warn():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "chest_01",
-        "entity_type": "OBJECT",
-        "item_type": "CONTAINER",
-        "metadata_json": {"locked": True},
-    })
+    payload["objects"].append(
+        {
+            "id": "chest_01",
+            "entity_type": "OBJECT",
+            "item_type": "CONTAINER",
+            "metadata_json": {"locked": True},
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "locked_but_no_unlock_key")
@@ -144,14 +161,16 @@ def test_locked_but_no_unlock_key_emits_warn():
 
 def test_npc_zero_stats_emits_warn():
     payload = _empty_adventure()
-    payload["npcs"].append({
-        "id": "rat_1",
-        "entity_type": "NPC",
-        "npc_type": "ANIMAL",
-        "hp": 0,
-        "stamina": 0,
-        "mana": 0,
-    })
+    payload["npcs"].append(
+        {
+            "id": "rat_1",
+            "entity_type": "NPC",
+            "npc_type": "ANIMAL",
+            "hp": 0,
+            "stamina": 0,
+            "mana": 0,
+        }
+    )
     payload["entities_all"] = payload["npcs"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "npc_zero_stats")
@@ -160,16 +179,18 @@ def test_npc_zero_stats_emits_warn():
 
 def test_npc_overpowered_emits_warn():
     payload = _empty_adventure()
-    payload["npcs"].append({
-        "id": "dragon",
-        "entity_type": "NPC",
-        "npc_type": "MONSTER",
-        "hp": 80,
-        "stamina": 200,
-        "mana": 200,
-        "stat_modifier_strength": 25,
-        "stat_modifier_armor_class": 2,
-    })
+    payload["npcs"].append(
+        {
+            "id": "dragon",
+            "entity_type": "NPC",
+            "npc_type": "MONSTER",
+            "hp": 80,
+            "stamina": 200,
+            "mana": 200,
+            "stat_modifier_strength": 25,
+            "stat_modifier_armor_class": 2,
+        }
+    )
     payload["entities_all"] = payload["npcs"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "npc_overpowered")
@@ -192,15 +213,17 @@ def test_rpg_mode_with_combatants_emits_warn_in_chat_mode():
     payload = _empty_adventure(
         adventure_overrides={"rule_enforcement_mode": "chat"},
     )
-    payload["npcs"].append({
-        "id": "guard_1",
-        "entity_type": "NPC",
-        "npc_type": "HUMANOID",
-        "hp": 50,
-        "stamina": 50,
-        "mana": 0,
-        "metadata_json": {"attack_mode": "ATTACK_ON_SIGHT"},
-    })
+    payload["npcs"].append(
+        {
+            "id": "guard_1",
+            "entity_type": "NPC",
+            "npc_type": "HUMANOID",
+            "hp": 50,
+            "stamina": 50,
+            "mana": 0,
+            "metadata_json": {"attack_mode": "ATTACK_ON_SIGHT"},
+        }
+    )
     payload["entities_all"] = payload["npcs"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "rpg_mode_required_for_combat")
@@ -228,13 +251,15 @@ def test_decorative_objects_overflow_emits_warn():
 
 def test_switch_missing_states_emits_warn():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "switch_01",
-        "entity_type": "OBJECT",
-        "item_type": "SWITCH",
-        "switch_states": ["on"],
-        "switch_initial_state": "on",
-    })
+    payload["objects"].append(
+        {
+            "id": "switch_01",
+            "entity_type": "OBJECT",
+            "item_type": "SWITCH",
+            "switch_states": ["on"],
+            "switch_initial_state": "on",
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "switch_missing_states")
@@ -243,13 +268,15 @@ def test_switch_missing_states_emits_warn():
 
 def test_switch_unreachable_state_emits_warn():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "switch_01",
-        "entity_type": "OBJECT",
-        "item_type": "SWITCH",
-        "switch_states": ["on", "off"],
-        "switch_initial_state": "BROKEN",
-    })
+    payload["objects"].append(
+        {
+            "id": "switch_01",
+            "entity_type": "OBJECT",
+            "item_type": "SWITCH",
+            "switch_states": ["on", "off"],
+            "switch_initial_state": "BROKEN",
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "switch_unreachable_state")
@@ -258,12 +285,14 @@ def test_switch_unreachable_state_emits_warn():
 
 def test_exit_without_label_emits_warn():
     payload = _empty_adventure()
-    payload["exits"].append({
-        "id": "ex1",
-        "from_scene_id": "START",
-        "to_scene_id": "START",
-        "label": "",
-    })
+    payload["exits"].append(
+        {
+            "id": "ex1",
+            "from_scene_id": "START",
+            "to_scene_id": "START",
+            "label": "",
+        }
+    )
     findings = validate_adventure(payload)
     miss = _codes(findings, "exit_without_label")
     assert len(miss) == 1
@@ -284,8 +313,7 @@ def test_empty_story_fields_emit_warnings():
     )
     findings = validate_adventure(payload)
     fields = {f.context.get("field") for f in _codes(findings, "empty_story_field")}
-    expected = {"teaser", "plot", "intro_text",
-                "completed_condition", "gameover_condition"}
+    expected = {"teaser", "plot", "intro_text", "completed_condition", "gameover_condition"}
     assert expected.issubset(fields)
 
 
@@ -300,12 +328,14 @@ def test_rules_too_short_emits_warn():
 
 def test_findings_sorted_errors_first_then_by_code():
     payload = _empty_adventure()
-    payload["exits"].append({
-        "id": "ex1",
-        "from_scene_id": "START",
-        "to_scene_id": "NOWHERE",
-        "label": "",
-    })
+    payload["exits"].append(
+        {
+            "id": "ex1",
+            "from_scene_id": "START",
+            "to_scene_id": "NOWHERE",
+            "label": "",
+        }
+    )
     findings = validate_adventure(payload)
     severities = [f.severity for f in findings]
     # All errors must precede all warns.
@@ -328,12 +358,14 @@ def test_quest_references_missing_item_emits_error():
 
 def test_container_inventory_too_large_emits_warn():
     payload = _empty_adventure()
-    payload["objects"].append({
-        "id": "chest_01",
-        "entity_type": "OBJECT",
-        "item_type": "CONTAINER",
-        "inventory": [{"item_id": f"x_{i}"} for i in range(15)],
-    })
+    payload["objects"].append(
+        {
+            "id": "chest_01",
+            "entity_type": "OBJECT",
+            "item_type": "CONTAINER",
+            "inventory": [{"item_id": f"x_{i}"} for i in range(15)],
+        }
+    )
     payload["entities_all"] = payload["objects"]
     findings = validate_adventure(payload)
     miss = _codes(findings, "container_inventory_too_large")

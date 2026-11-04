@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import FixPatchDetails from './FixPatchDetails.vue'
 import {
   AlertTriangle,
   ArrowRight,
@@ -191,6 +192,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
                       <span class="leading-relaxed">
                         <span class="font-bold text-violet-200">{{ describeTarget(patch.target_type, patch.target_id) }}</span>
                         <span v-if="patch.description"> &mdash; {{ patch.description }}</span>
+                        <FixPatchDetails :updates="patch.field_updates" />
                       </span>
                     </li>
                   </ul>
