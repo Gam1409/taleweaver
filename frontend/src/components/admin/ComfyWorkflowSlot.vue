@@ -213,23 +213,27 @@ async function check(): Promise<void> {
     </p>
     <ComfyDialog
       v-if="editing"
+      :maximizable="!!draft"
       :title="reference ? 'Reference workflow editor' : 'Base workflow editor'"
       @close="editing = false"
     >
-      <label v-if="draft" class="mb-4 block text-sm"
-        >Workflow name<input
-          v-model="draft.name"
-          maxlength="120"
-          class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2"
-      /></label>
-      <Editor
-        v-model="draft"
-        :url="url"
-        :reference="reference"
-        :suggested-family="suggestedFamily"
-        :source-workflow="sourceWorkflow"
-        @busy="busy = $event"
-      />
+      <template #default="{ maximized }">
+        <label v-if="draft && !maximized" class="mb-4 block text-sm"
+          >Workflow name<input
+            v-model="draft.name"
+            maxlength="120"
+            class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2"
+        /></label>
+        <Editor
+          v-model="draft"
+          :expanded="maximized"
+          :url="url"
+          :reference="reference"
+          :suggested-family="suggestedFamily"
+          :source-workflow="sourceWorkflow"
+          @busy="busy = $event"
+        />
+      </template>
       <template #footer
         ><button type="button" class="px-4 py-2 text-sm" @click="editing = false">
           Discard changes</button

@@ -10,7 +10,7 @@ import ComfyWorkflowStarter from './ComfyWorkflowStarter.vue'
 import ComfyWorkflowParameters from './ComfyWorkflowParameters.vue'
 import type { BindingName, ComfyWorkflow } from '@/types/comfyui'
 
-const props = defineProps<{ modelValue: ComfyWorkflow | null; url: string; reference?: boolean; suggestedFamily?: string; sourceWorkflow?: ComfyWorkflow | null }>()
+const props = defineProps<{ modelValue: ComfyWorkflow | null; url: string; reference?: boolean; suggestedFamily?: string; sourceWorkflow?: ComfyWorkflow | null; expanded?: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyWorkflow | null): void; (e: 'busy', value: boolean): void }>()
 const error = ref('')
 const report = ref<string[]>([])
@@ -153,56 +153,159 @@ async function checkWorkflow(): Promise<void> {
 </script>
 
 <template>
-  <div class="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-3">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm font-semibold text-slate-200">{{ reference ? 'Image workflow (optional)' : 'Base workflow (required)' }}</p>
-      <button type="button" :disabled="!modelValue || !url.trim() || checkingNodes || importing" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs text-white disabled:opacity-50" @click="checkNodes">
-        {{ checkingNodes ? 'Checking nodes…' : 'Check nodes' }}
-      </button>
-    </div>
-    <ul v-if="nodeReport.length" aria-live="polite" class="list-disc space-y-1 pl-4 text-xs text-slate-300">
-      <li v-for="line in nodeReport" :key="line">{{ line }}</li>
-    </ul>
-    <p class="text-xs text-slate-400">{{ reference ? 'Your graph decides whether the image is a reference or an img2img source.' : 'Used when creating a new image without a reference.' }}</p>
-    <ComfyWorkflowStarter :reference="reference" :empty="!modelValue" :suggested-family="suggestedFamily" :source-workflow="sourceWorkflow" @choose="chooseStarter" />
-    <label class="block text-xs text-slate-300">Import workflow JSON (ComfyUI editor or API export)
-      <input type="file" accept=".json,application/json" class="block mt-2 w-full text-xs" @change="loadWorkflow" />
-      <span class="mt-1 block text-slate-400">Editor exports keep your node arrangement; bypassed nodes are skipped like ComfyUI's API export.</span>
-    </label>
-    <template v-if="modelValue">
-      <p class="text-xs text-cyan-300 break-all">{{ modelValue.name }} · {{ Object.keys(modelValue.graph).length }} nodes</p>
-      <ComfyWorkflowCanvas :model-value="modelValue" :url="url" :reference="reference" @update:model-value="update" @busy="canvasBusy = $event" />
-      <details class="space-y-3">
-        <summary class="cursor-pointer text-xs text-slate-300">List view: models, parameters and bindings</summary>
-        <p class="text-xs text-slate-500">Only mapped inputs are replaced. Other model, sampler and denoise values stay as defined in your workflow.</p>
-        <ComfyWorkflowParameters ref="parameters" :model-value="modelValue" :url="url" @busy="loadingModels = $event" @update:model-value="update" />
-        <label v-for="field in fields" :key="field" class="block text-xs text-slate-300">
-          {{ field }} {{ field === 'prompt' || field === 'image' ? '(required)' : '(optional)' }}
-          <select :value="bindingValue(field)" class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2" @change="setBinding(field, $event)">
-            <option value="">Choose input</option>
-            <option v-for="input in inputs" :key="input.value" :value="input.value">{{ input.label }}</option>
-          </select>
-        </label>
-        <label class="block text-xs text-slate-300">Image output node (required)
-          <select :value="modelValue.output_node" class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2" @change="setOutput">
-            <option value="">Choose output</option>
-            <option v-for="(node, id) in modelValue.graph" :key="id" :value="id">{{ id }}: {{ node._meta?.title || node.class_type }}</option>
-          </select>
-        </label>
-        <label class="block text-xs text-slate-300">Dimension alignment
-          <select :value="modelValue.dimension_multiple || 8" class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2" @change="update({ ...modelValue, dimension_multiple: Number(($event.target as HTMLSelectElement).value) as 8 | 16 | 32 | 64 })">
-            <option v-for="size in [8, 16, 32, 64]" :key="size" :value="size">Multiples of {{ size }} pixels</option>
-          </select>
-          <span class="mt-1 block text-slate-400">Starter workflows set this automatically. Change only if your custom architecture requires it.</span>
-        </label>
-      </details>
-      <ComfyWorkflowJson :model-value="modelValue" @update:model-value="update" />
-      <div class="flex flex-wrap gap-3 text-xs">
-        <button type="button" :disabled="checking" class="rounded-lg bg-cyan-700 p-2 text-white disabled:opacity-50" @click="checkWorkflow">{{ checking ? 'Checking…' : 'Check server compatibility' }}</button>
-        <button type="button" class="text-slate-400" @click="emit('update:modelValue', null)">Remove workflow</button>
+  <div
+    class="rounded-xl border border-slate-700 bg-slate-950 p-4"
+    :class="expanded ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'"
+  >
+    <template v-if="!expanded">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm font-semibold text-slate-200">
+          {{ reference ? 'Image workflow (optional)' : 'Base workflow (required)' }}
+        </p>
+        <button
+          type="button"
+          :disabled="!modelValue || !url.trim() || checkingNodes || importing"
+          class="rounded-lg bg-cyan-700 px-3 py-2 text-xs text-white disabled:opacity-50"
+          @click="checkNodes"
+        >
+          {{ checkingNodes ? 'Checking nodes…' : 'Check nodes' }}
+        </button>
       </div>
+      <ul
+        v-if="nodeReport.length"
+        aria-live="polite"
+        class="list-disc space-y-1 pl-4 text-xs text-slate-300"
+      >
+        <li v-for="line in nodeReport" :key="line">{{ line }}</li>
+      </ul>
+      <p class="text-xs text-slate-400">
+        {{
+          reference
+            ? 'Your graph decides whether the image is a reference or an img2img source.'
+            : 'Used when creating a new image without a reference.'
+        }}
+      </p>
+      <ComfyWorkflowStarter
+        :reference="reference"
+        :empty="!modelValue"
+        :suggested-family="suggestedFamily"
+        :source-workflow="sourceWorkflow"
+        @choose="chooseStarter"
+      />
+      <label class="block text-xs text-slate-300"
+        >Import workflow JSON (ComfyUI editor or API export)
+        <input
+          type="file"
+          accept=".json,application/json"
+          class="block mt-2 w-full text-xs"
+          @change="loadWorkflow"
+        />
+        <span class="mt-1 block text-slate-400"
+          >Editor exports keep your node arrangement; bypassed nodes are skipped like ComfyUI's API
+          export.</span
+        >
+      </label>
+    </template>
+    <template v-if="modelValue">
+      <p class="text-xs text-cyan-300 break-all">
+        {{ modelValue.name }} · {{ Object.keys(modelValue.graph).length }} nodes
+      </p>
+      <ComfyWorkflowCanvas
+        :expanded="expanded"
+        :model-value="modelValue"
+        :url="url"
+        :reference="reference"
+        @update:model-value="update"
+        @busy="canvasBusy = $event"
+      />
+      <template v-if="!expanded">
+        <details class="space-y-3">
+          <summary class="cursor-pointer text-xs text-slate-300">
+            List view: models, parameters and bindings
+          </summary>
+          <p class="text-xs text-slate-500">
+            Only mapped inputs are replaced. Other model, sampler and denoise values stay as defined
+            in your workflow.
+          </p>
+          <ComfyWorkflowParameters
+            ref="parameters"
+            :model-value="modelValue"
+            :url="url"
+            @busy="loadingModels = $event"
+            @update:model-value="update"
+          />
+          <label v-for="field in fields" :key="field" class="block text-xs text-slate-300">
+            {{ field }} {{ field === 'prompt' || field === 'image' ? '(required)' : '(optional)' }}
+            <select
+              :value="bindingValue(field)"
+              class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2"
+              @change="setBinding(field, $event)"
+            >
+              <option value="">Choose input</option>
+              <option v-for="input in inputs" :key="input.value" :value="input.value">
+                {{ input.label }}
+              </option>
+            </select>
+          </label>
+          <label class="block text-xs text-slate-300"
+            >Image output node (required)
+            <select
+              :value="modelValue.output_node"
+              class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2"
+              @change="setOutput"
+            >
+              <option value="">Choose output</option>
+              <option v-for="(node, id) in modelValue.graph" :key="id" :value="id">
+                {{ id }}: {{ node._meta?.title || node.class_type }}
+              </option>
+            </select>
+          </label>
+          <label class="block text-xs text-slate-300"
+            >Dimension alignment
+            <select
+              :value="modelValue.dimension_multiple || 8"
+              class="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 p-2"
+              @change="
+                update({
+                  ...modelValue,
+                  dimension_multiple: Number(($event.target as HTMLSelectElement).value) as
+                    8 | 16 | 32 | 64
+                })
+              "
+            >
+              <option v-for="size in [8, 16, 32, 64]" :key="size" :value="size">
+                Multiples of {{ size }} pixels
+              </option>
+            </select>
+            <span class="mt-1 block text-slate-400"
+              >Starter workflows set this automatically. Change only if your custom architecture
+              requires it.</span
+            >
+          </label>
+        </details>
+        <ComfyWorkflowJson :model-value="modelValue" @update:model-value="update" />
+        <div class="flex flex-wrap gap-3 text-xs">
+          <button
+            type="button"
+            :disabled="checking"
+            class="rounded-lg bg-cyan-700 p-2 text-white disabled:opacity-50"
+            @click="checkWorkflow"
+          >
+            {{ checking ? 'Checking…' : 'Check server compatibility' }}
+          </button>
+          <button type="button" class="text-slate-400" @click="emit('update:modelValue', null)">
+            Remove workflow
+          </button>
+        </div>
+      </template>
     </template>
     <p v-if="error" role="alert" class="text-xs text-rose-300">{{ error }}</p>
-    <ul v-if="report.length" aria-live="polite" class="text-xs text-slate-300 list-disc pl-4 space-y-1"><li v-for="line in report" :key="line">{{ line }}</li></ul>
+    <ul
+      v-if="report.length"
+      aria-live="polite"
+      class="text-xs text-slate-300 list-disc pl-4 space-y-1"
+    >
+      <li v-for="line in report" :key="line">{{ line }}</li>
+    </ul>
   </div>
 </template>

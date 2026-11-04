@@ -27,7 +27,7 @@ import {
 } from '@/services/comfyWorkflowGraph'
 import type { BindingName, ComfyWorkflow } from '@/types/comfyui'
 
-const props = defineProps<{ modelValue: ComfyWorkflow; url: string; reference?: boolean }>()
+const props = defineProps<{ modelValue: ComfyWorkflow; url: string; reference?: boolean; expanded?: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: ComfyWorkflow): void; (e: 'busy', value: boolean): void }>()
 
 interface InputRow {
@@ -275,9 +275,9 @@ let dragState: {
 } | null = null
 
 function onCanvasPointerDown(event: PointerEvent): void {
-  ensureFitted()
   const target = event.target as HTMLElement
   if (target.closest('[data-node]') || target.closest('aside')) return
+  ensureFitted()
   panState = { startX: event.clientX, startY: event.clientY, viewX: view.value.x, viewY: view.value.y }
 }
 
@@ -424,7 +424,14 @@ watch(
   }
 )
 
+let resizeObserver: ResizeObserver | undefined
+watch(() => props.expanded, () => nextTick(fitView))
+
 onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => ensureFitted())
+    if (container.value) resizeObserver.observe(container.value)
+  }
   positions.value = existingPositions(graph.value) || autoLayout(graph.value)
   nextTick(ensureFitted)
   window.addEventListener('pointermove', onWindowPointerMove)
@@ -432,13 +439,14 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
   window.removeEventListener('pointermove', onWindowPointerMove)
   window.removeEventListener('pointerup', onWindowPointerUp)
 })
 </script>
 
 <template>
-  <div class="space-y-2">
+  <div :class="expanded ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
     <div class="flex flex-wrap items-center gap-1.5 text-xs">
       <button
         v-for="role in roles"
@@ -456,7 +464,9 @@ onBeforeUnmount(() => {
         @click="startAssign(role)"
       >
         <span class="rounded px-1" :class="roleChipClasses[role]">{{ ROLE_LABELS[role] }}</span>
-        <span v-if="modelValue.bindings[role]" class="max-w-[110px] truncate">{{ shortTarget(role) }}</span>
+        <span v-if="modelValue.bindings[role]" class="max-w-[110px] truncate">{{
+          shortTarget(role)
+        }}</span>
         <span
           v-if="modelValue.bindings[role]"
           role="button"
@@ -465,7 +475,8 @@ onBeforeUnmount(() => {
           class="px-0.5 text-rose-300 hover:text-rose-200"
           @click.stop="clearRole(role)"
           @keydown.enter.stop.prevent="clearRole(role)"
-          >×</span>
+          >×</span
+        >
       </button>
       <button
         type="button"
@@ -481,7 +492,9 @@ onBeforeUnmount(() => {
         @click="startAssign('output')"
       >
         <span class="rounded bg-teal-500 px-1 text-slate-950">Output</span>
-        <span v-if="modelValue.output_node" class="max-w-[110px] truncate">{{ modelValue.output_node }}</span>
+        <span v-if="modelValue.output_node" class="max-w-[110px] truncate">{{
+          modelValue.output_node
+        }}</span>
         <span
           v-if="modelValue.output_node"
           role="button"
@@ -490,7 +503,8 @@ onBeforeUnmount(() => {
           class="px-0.5 text-rose-300 hover:text-rose-200"
           @click.stop="clearRole('output')"
           @keydown.enter.stop.prevent="clearRole('output')"
-          >×</span>
+          >×</span
+        >
       </button>
       <span class="mx-1 h-4 w-px bg-slate-700" aria-hidden="true"></span>
       <button
@@ -500,10 +514,20 @@ onBeforeUnmount(() => {
       >
         <Wand2 class="h-3 w-3" aria-hidden="true" /> Auto-detect
       </button>
-      <button type="button" class="rounded-full border border-slate-600 px-2 py-0.5 text-slate-300 hover:border-cyan-400" aria-label="Zoom out" @click="zoomBy(1 / 1.2)">
+      <button
+        type="button"
+        class="rounded-full border border-slate-600 px-2 py-0.5 text-slate-300 hover:border-cyan-400"
+        aria-label="Zoom out"
+        @click="zoomBy(1 / 1.2)"
+      >
         <ZoomOut class="h-3 w-3" aria-hidden="true" />
       </button>
-      <button type="button" class="rounded-full border border-slate-600 px-2 py-0.5 text-slate-300 hover:border-cyan-400" aria-label="Zoom in" @click="zoomBy(1.2)">
+      <button
+        type="button"
+        class="rounded-full border border-slate-600 px-2 py-0.5 text-slate-300 hover:border-cyan-400"
+        aria-label="Zoom in"
+        @click="zoomBy(1.2)"
+      >
         <ZoomIn class="h-3 w-3" aria-hidden="true" />
       </button>
       <button
@@ -524,8 +548,11 @@ onBeforeUnmount(() => {
 
     <div
       ref="container"
-      class="relative h-[480px] select-none overflow-hidden rounded-xl border border-slate-700 bg-slate-950"
-      :class="assignRole ? 'cursor-crosshair' : 'cursor-grab'"
+      class="relative select-none overflow-hidden rounded-xl border border-slate-700 bg-slate-950"
+      :class="[
+        assignRole ? 'cursor-crosshair' : 'cursor-grab',
+        expanded ? 'min-h-0 flex-1' : 'h-[480px]'
+      ]"
       :style="{
         backgroundImage: 'radial-gradient(circle, rgba(148,163,184,0.14) 1px, transparent 1px)',
         backgroundSize: '22px 22px'
@@ -538,9 +565,15 @@ onBeforeUnmount(() => {
     >
       <div
         class="absolute inset-0"
-        :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, transformOrigin: '0 0' }"
+        :style="{
+          transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`,
+          transformOrigin: '0 0'
+        }"
       >
-        <svg class="pointer-events-none absolute left-0 top-0 h-full w-full overflow-visible" aria-hidden="true">
+        <svg
+          class="pointer-events-none absolute left-0 top-0 h-full w-full overflow-visible"
+          aria-hidden="true"
+        >
           <path
             v-for="(edge, index) in edgeViews"
             :key="index"
@@ -557,10 +590,19 @@ onBeforeUnmount(() => {
           data-node
           class="absolute rounded-lg border bg-slate-900 shadow-md"
           :class="[
-            selected === node.id ? 'border-cyan-400 ring-1 ring-cyan-400/40' : assignRole === 'output' && node.outputHint ? 'border-teal-400' : 'border-slate-700',
+            selected === node.id
+              ? 'border-cyan-400 ring-1 ring-cyan-400/40'
+              : assignRole === 'output' && node.outputHint
+                ? 'border-teal-400'
+                : 'border-slate-700',
             assignRole === 'output' && !node.outputHint ? 'opacity-40' : ''
           ]"
-          :style="{ left: node.x + 'px', top: node.y + 'px', width: node.width + 'px', minHeight: node.height + 'px' }"
+          :style="{
+            left: node.x + 'px',
+            top: node.y + 'px',
+            width: node.width + 'px',
+            minHeight: node.height + 'px'
+          }"
           @click="nodeClick(node.id)"
         >
           <div
@@ -595,8 +637,9 @@ onBeforeUnmount(() => {
                 class="rounded px-0.5 text-[10px] leading-none text-slate-100/80 hover:bg-black/30"
                 @pointerdown.stop
                 @click.stop="toggleCollapsed(node.id)"
-                >{{ node.collapsed ? '▸' : '▾' }}</button
               >
+                {{ node.collapsed ? '▸' : '▾' }}
+              </button>
               <span class="text-[10px] text-slate-200">{{ node.id }}</span>
             </span>
           </div>
@@ -606,18 +649,25 @@ onBeforeUnmount(() => {
               :key="row.name"
               class="flex items-center gap-1 truncate py-0.5 text-[10px]"
               :class="[
-                row.eligible ? 'cursor-pointer rounded bg-cyan-900/70 ring-1 ring-cyan-400' : 'cursor-default',
+                row.eligible
+                  ? 'cursor-pointer rounded bg-cyan-900/70 ring-1 ring-cyan-400'
+                  : 'cursor-default',
                 row.connectedFrom ? 'text-slate-400' : 'text-slate-300'
               ]"
               @click.stop="inputClick(node.id, row)"
             >
               <span
                 class="h-2 w-2 shrink-0 rounded-full border"
-                :style="{ backgroundColor: row.connectedFrom ? socketColor(row.name) : 'transparent', borderColor: socketColor(row.name) }"
+                :style="{
+                  backgroundColor: row.connectedFrom ? socketColor(row.name) : 'transparent',
+                  borderColor: socketColor(row.name)
+                }"
               ></span>
               <span class="shrink-0">{{ row.name }}</span>
               <span v-if="row.preview" class="truncate text-slate-500">{{ row.preview }}</span>
-              <span v-else-if="row.connectedFrom" class="truncate text-slate-500">← {{ row.connectedFrom }}</span>
+              <span v-else-if="row.connectedFrom" class="truncate text-slate-500"
+                >← {{ row.connectedFrom }}</span
+              >
             </li>
           </ul>
         </div>
@@ -625,7 +675,9 @@ onBeforeUnmount(() => {
 
       <aside
         v-if="selectedNode"
-        class="absolute inset-y-0 right-0 w-72 overflow-y-auto border-l border-slate-700 bg-slate-900/95 p-3 text-xs"
+        class="absolute inset-y-0 right-0 w-72 max-w-full overflow-y-auto overscroll-contain border-l border-slate-700 bg-slate-900/95 p-3 text-xs"
+        @wheel.stop
+        @pointerdown.stop
       >
         <div class="mb-2 flex items-start justify-between gap-2">
           <label class="block min-w-0 flex-1 text-slate-300">
@@ -637,7 +689,12 @@ onBeforeUnmount(() => {
               @change="updateTitle(selectedNode.id, ($event.target as HTMLInputElement).value)"
             />
           </label>
-          <button type="button" class="mt-4 text-rose-300" aria-label="Close node settings" @click="selected = ''">
+          <button
+            type="button"
+            class="mt-4 text-rose-300"
+            aria-label="Close node settings"
+            @click="selected = ''"
+          >
             <X class="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -657,44 +714,81 @@ onBeforeUnmount(() => {
               />
             </div>
             <label
-              v-else-if="ENUM_LABELS[row.name] !== undefined && typeof selectedValues[row.name] === 'string'"
+              v-else-if="
+                ENUM_LABELS[row.name] !== undefined && typeof selectedValues[row.name] === 'string'
+              "
               class="block text-slate-300"
             >
               {{ ENUM_LABELS[row.name] }}
               <select
                 :value="String(selectedValues[row.name])"
                 class="mt-1 w-full rounded border border-slate-700 bg-slate-800 p-1.5"
-                @change="updateNodeInput(selectedNode.id, row.name, ($event.target as HTMLSelectElement).value)"
+                @change="
+                  updateNodeInput(
+                    selectedNode.id,
+                    row.name,
+                    ($event.target as HTMLSelectElement).value
+                  )
+                "
               >
                 <option
-                  v-if="!choicesFor(selectedNode.id, row.name)?.includes(String(selectedValues[row.name]))"
+                  v-if="
+                    !choicesFor(selectedNode.id, row.name)?.includes(
+                      String(selectedValues[row.name])
+                    )
+                  "
                   :value="String(selectedValues[row.name])"
                   disabled
                 >
                   Unavailable: {{ selectedValues[row.name] }}
                 </option>
-                <option v-if="!choicesFor(selectedNode.id, row.name)?.length" :value="String(selectedValues[row.name])">
+                <option
+                  v-if="!choicesFor(selectedNode.id, row.name)?.length"
+                  :value="String(selectedValues[row.name])"
+                >
                   {{ selectedValues[row.name] }}
                 </option>
-                <option v-for="choice in choicesFor(selectedNode.id, row.name)" :key="choice" :value="choice">
+                <option
+                  v-for="choice in choicesFor(selectedNode.id, row.name)"
+                  :key="choice"
+                  :value="choice"
+                >
                   {{ choice }}
                 </option>
               </select>
             </label>
-            <label v-else-if="typeof selectedValues[row.name] === 'number'" class="block text-slate-300">
+            <label
+              v-else-if="typeof selectedValues[row.name] === 'number'"
+              class="block text-slate-300"
+            >
               {{ row.name }}
               <input
                 :value="selectedValues[row.name]"
                 type="number"
                 class="mt-1 w-full rounded border border-slate-700 bg-slate-800 p-1.5"
-                @change="updateNodeInput(selectedNode.id, row.name, Number(($event.target as HTMLInputElement).value))"
+                @change="
+                  updateNodeInput(
+                    selectedNode.id,
+                    row.name,
+                    Number(($event.target as HTMLInputElement).value)
+                  )
+                "
               />
             </label>
-            <label v-else-if="typeof selectedValues[row.name] === 'boolean'" class="flex items-center gap-2 text-slate-300">
+            <label
+              v-else-if="typeof selectedValues[row.name] === 'boolean'"
+              class="flex items-center gap-2 text-slate-300"
+            >
               <input
                 type="checkbox"
                 :checked="Boolean(selectedValues[row.name])"
-                @change="updateNodeInput(selectedNode.id, row.name, ($event.target as HTMLInputElement).checked)"
+                @change="
+                  updateNodeInput(
+                    selectedNode.id,
+                    row.name,
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
               />
               {{ row.name }}
             </label>
@@ -703,7 +797,13 @@ onBeforeUnmount(() => {
               <input
                 :value="String(selectedValues[row.name])"
                 class="mt-1 w-full rounded border border-slate-700 bg-slate-800 p-1.5"
-                @change="updateNodeInput(selectedNode.id, row.name, ($event.target as HTMLInputElement).value)"
+                @change="
+                  updateNodeInput(
+                    selectedNode.id,
+                    row.name,
+                    ($event.target as HTMLInputElement).value
+                  )
+                "
               />
             </label>
           </template>
@@ -713,7 +813,7 @@ onBeforeUnmount(() => {
     <p class="text-xs text-slate-400" role="status">
       {{
         note ||
-          'Drag nodes · wheel to zoom · click a node to edit its inputs · role chips mark what TaleWeaver replaces at generation time.'
+        'Drag nodes · wheel to zoom · click a node to edit its inputs · role chips mark what TaleWeaver replaces at generation time.'
       }}
     </p>
   </div>
