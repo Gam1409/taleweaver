@@ -3,11 +3,10 @@
 import asyncio
 import json
 import logging
+import shlex
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
@@ -15,57 +14,23 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.recovery_context import KEY, recovery_context
+from backend.engine.clothing.recovery_policy import classify_action, partition_rejections
+from backend.engine.clothing.recovery_prompt import PROMPT
 from backend.engine.clothing.recovery_request import request_proposal
+from backend.engine.clothing.recovery_schema import RecoveryProposal
 from backend.engine.clothing.runtime import _store_actor
-from backend.engine.clothing.schema import Region
 from backend.engine.narrated_items.apply import apply_actions
-from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemAction, ItemExtraction
+from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 
 logger = logging.getLogger(__name__)
 
 
-class RecoveryEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    source_message_id: str
-    action: ItemAction
-    uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
-    placement_evidence: str = Field(default="", max_length=800)
-
-
-class RecoveryProposal(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    entries: list[RecoveryEntry] = Field(default_factory=list, max_length=16)
-    notes: str = Field(default="", max_length=1200)
-
-
-PROMPT = (
-    INSTRUCTIONS
-    + """
-Return RecoveryProposal with entries and notes, not the live actions wrapper.
-This is an explicit preview to recover missing clothing for target_actor from chronological history.
-Read all messages in order. Only assistant narration establishes completed events; player text
-provides context, not confirmation. Later removal, transfer, loss or destruction wins over earlier
-wear descriptions. Return only garments still owned by target_actor at the end of the history.
-A removed garment still owned by the NPC is carried, not worn. Never return transferred or lost
-items. Recover all explicitly established layers, not just the outermost or visible garment.
-Clothes described as under another garment are still worn: a coat over a suit does not exclude
-the suit. Include skirts, stockings and accessories separately when the history establishes them.
-Partial displacement/manipulation is not removal: keep a garment worn if it remains on the actor.
-For confirmed partial exposure, set uncovered_regions only to explicitly exposed covered regions
-and placement_evidence to an exact quote in the source message. Otherwise leave them empty;
-do not invent partial exposure. Fully removed garments still owned by the actor are carried.
-For each distinct garment mentioned, reconcile its latest established ownership/wear state.
-Do not discard lower layers just because the last response emphasizes an outer layer. Omission
-of a garment in a later message alone is not evidence of removal or transfer. Notes must explain
-actual conflicts, missing evidence or transferred/lost garments, not excuse ignoring lower layers.
-Respect detailed_clothing and the target actor's known age when recovering underwear.
-If current ownership or wear is genuinely unresolved, omit it and explain in notes. No implied underwear.
-Each entry cites the exact source_message_id and contiguous evidence from that assistant message.
-Use source_owner=destination_owner=target_actor.id. Only clothing, never ordinary items or rewards.
-Existing canonical possessions override old prose. Reuse IDs; no translated or reworded duplicates.
-This is additive recovery: preserve unspecified recorded clothes. Do not rewrite the existing outfit.
-"""
-)
+def _source_error(source: dict, source_id: str, action: ItemAction, actor_id: str) -> str:
+    if not source:
+        return f"Source {source_id}: no matching assistant narration."
+    if action.source_owner != actor_id or action.destination_owner != actor_id:
+        return "Wrong owner: recovery only accepts the target NPC's own garments."
+    return ""
 
 
 def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_id: str) -> tuple:
@@ -74,16 +39,14 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
     snapshot = context["snapshot"]
     accepted: list[dict] = []
     errors = []
+    skipped = []
     sources = {row["id"]: row for row in context["messages"] if row["role"] == "assistant"}
     for entry in proposal.entries:
-        action = entry.action
-        source = sources.get(entry.source_message_id)
-        if (
-            not source
-            or action.source_owner != actor["id"]
-            or action.destination_owner != actor["id"]
-        ):
-            errors.append("Recovery requires the target NPC and an existing narration source.")
+        action = classify_action(entry.action)
+        source = sources.get(entry.source_message_id, {})
+        source_error = _source_error(source, entry.source_message_id, action, actor["id"])
+        if source_error:
+            errors.append(source_error)
             continue
         garment = (
             action.new_item.clothing
@@ -113,7 +76,9 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
             message_id=f"{entry.source_message_id}:wardrobe:{len(accepted)}",
         )
         actors = changed
-        errors.extend(rejected)
+        blocking, omitted = partition_rejections(rejected)
+        errors.extend(blocking)
+        skipped.extend(omitted)
         for addition in additions:
             addition["source_message_id"] = entry.source_message_id
             addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
@@ -136,7 +101,7 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
             snapshot.owners[identifier] = actor["id"]
             snapshot.catalog[identifier] = addition["item"]
             accepted.append(addition)
-    return actors, accepted, errors
+    return actors, accepted, errors, skipped
 
 
 def _set_partial_wear(actor: dict, addition: dict) -> None:
@@ -150,12 +115,21 @@ async def debug_wardrobe_preview(
 ) -> str:
     if not state.is_debug_enabled or avatar is None:
         return "DEBUG ERROR: Wardrobe recovery requires debug mode and a session avatar."
-    npc_id = args.partition(" ")[2].strip()
-    deadline = role_timeout(user, "small")
+    try:
+        arguments = shlex.split(args)[1:]
+    except ValueError:
+        return "DEBUG ERROR: Expected wardrobe_preview NPC_ID [complex|small]."
+    if not 1 <= len(arguments) <= 2 or (
+        len(arguments) == 2 and arguments[1] not in {"small", "complex"}
+    ):
+        return "DEBUG ERROR: Expected wardrobe_preview NPC_ID [complex|small]."
+    npc_id = arguments[0]
+    role = arguments[1] if len(arguments) == 2 else "complex"
+    deadline = role_timeout(user, role)
     try:
         context = await recovery_context(db, state, avatar, npc_id)
         detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
-        llm = GameMasterLLM.for_role(user, "small")
+        llm = GameMasterLLM.for_role(user, role)
         payload = json.dumps(
             {
                 "target_actor": context["actor"],
@@ -174,7 +148,7 @@ async def debug_wardrobe_preview(
             timeout=deadline,
         )
         proposal = RecoveryProposal.model_validate(result)
-        _, accepted, errors = evaluate(context, proposal, detailed, state.session_id)
+        _, accepted, errors, skipped = evaluate(context, proposal, detailed, state.session_id)
         preview = {
             "npc_id": npc_id,
             "token": str(uuid4()),
@@ -182,6 +156,8 @@ async def debug_wardrobe_preview(
             "proposal": proposal.model_dump(),
             "accepted": accepted,
             "errors": errors,
+            "skipped": skipped,
+            "model_role": role,
             "notes": proposal.notes,
             "messages_scanned": len(context["messages"]),
             "limited": context["limited"],
@@ -191,8 +167,8 @@ async def debug_wardrobe_preview(
         return f"DEBUG: Wardrobe preview ready: {len(accepted)} proposed changes. Review and apply in Debug > NPCs > Clothing. Nothing has been added yet."
     except TimeoutError:
         message = (
-            f"Small-model request timed out (configured deadline: {deadline:g}s). "
-            "No clothing was changed. Check the Small model server and its timeout in Intelligence settings."
+            f"{role.capitalize()}-model request timed out (configured deadline: {deadline:g}s). "
+            "No clothing was changed. Check the selected model server and its timeout in Intelligence settings."
         )
     except InferenceUncertainError:
         message = (
@@ -236,10 +212,15 @@ async def debug_wardrobe_apply(
     if context["fingerprint"] != preview.get("fingerprint"):
         return "DEBUG ERROR: Story or state changed after preview. Generate a new preview."
     detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
-    actors, accepted, errors = evaluate(
+    actors, accepted, errors, skipped = evaluate(
         context, RecoveryProposal.model_validate(preview["proposal"]), detailed, state.session_id
     )
-    if errors or not accepted or accepted != preview["accepted"]:
+    if (
+        errors
+        or not accepted
+        or accepted != preview["accepted"]
+        or skipped != preview.get("skipped", [])
+    ):
         return "DEBUG ERROR: Preview has rejected or empty changes; nothing was applied."
     states = dict(state.entity_states or {})
     _store_actor(SimpleNamespace(state=state, avatar=avatar), states, actors[preview["npc_id"]])

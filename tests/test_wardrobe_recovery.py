@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import select
 
-from backend.engine.clothing.recovery import RecoveryEntry, RecoveryProposal, evaluate
+from backend.engine.clothing.recovery import evaluate
 from backend.engine.clothing.recovery_context import KEY
+from backend.engine.clothing.recovery_schema import RecoveryEntry, RecoveryProposal
 from backend.engine.debug_engine import DebugEngine
 from backend.engine.narrated_items.schema import ItemAction
 from backend.models.chat import ChatMessage
@@ -116,7 +117,7 @@ def test_invalid_history_source_and_other_owner_are_rejected():
                 {"id": "assistant", "role": "assistant", "content": TEXT},
             ],
         }
-        _, accepted, errors = evaluate(
+        _, accepted, errors, _ = evaluate(
             context, RecoveryProposal(entries=[proposal]), True, "session"
         )
         assert errors and not accepted
@@ -129,7 +130,7 @@ def test_two_garments_from_one_message_have_distinct_ids_and_real_provenance():
         "snapshot": snapshot,
         "messages": [{"id": "source", "role": "assistant", "content": TEXT}],
     }
-    changed, accepted, errors = evaluate(
+    changed, accepted, errors, _ = evaluate(
         context,
         RecoveryProposal(entries=[entry("source", "NPC"), entry("source", "NPC", "Scarf")]),
         True,
@@ -218,7 +219,7 @@ def test_recovery_keeps_all_confirmed_layers_and_partial_placement():
         "snapshot": snapshot,
         "messages": [{"id": "source", "role": "assistant", "content": text}],
     }
-    changed, accepted, errors = evaluate(context, RecoveryProposal(entries=entries), True, "s")
+    changed, accepted, errors, _ = evaluate(context, RecoveryProposal(entries=entries), True, "s")
     assert len(accepted) == 7 and not errors
     skirt = next(row for row in accepted if row["item"]["name"] == "Skirt")
     assert skirt["uncovered_regions"] == ["legs"]
@@ -239,7 +240,9 @@ def test_partial_placement_rejects_wrong_coverage_or_missing_evidence(regions, e
         "snapshot": snapshot,
         "messages": [{"id": "source", "role": "assistant", "content": TEXT}],
     }
-    changed, accepted, errors = evaluate(context, RecoveryProposal(entries=[candidate]), True, "s")
+    changed, accepted, errors, _ = evaluate(
+        context, RecoveryProposal(entries=[candidate]), True, "s"
+    )
     assert not accepted and errors and changed["NPC"] == actors["NPC"]
 
 

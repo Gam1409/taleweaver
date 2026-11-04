@@ -66,7 +66,16 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
     if preview.get("npc_id") == entity.id:
         recovery = {
             key: preview.get(key)
-            for key in ("token", "notes", "messages_scanned", "limited", "accepted", "errors")
+            for key in (
+                "token",
+                "notes",
+                "messages_scanned",
+                "limited",
+                "accepted",
+                "errors",
+                "skipped",
+                "model_role",
+            )
         }
     return {"items": clothes, "profile_known": profile is not None, "recovery": recovery}
 

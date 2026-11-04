@@ -3,10 +3,24 @@
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
+from pydantic_core import ErrorDetails
 
 from backend.core.llm_router import GameMasterLLM
 
 T = TypeVar("T", bound=BaseModel)
+
+# Only fixed application messages may appear in feedback; arbitrary validator text stays private.
+_VALIDATOR_HINTS = {
+    "Use an existing ID or a new item, never both.": "supply exactly one of item_id and new_item",
+    "Clothing requires garment metadata and slots.": "new clothing requires metadata and wearable_slots",
+    "Ordinary items cannot carry clothing metadata.": "ordinary items cannot include clothing metadata",
+    "Coverage regions must be unique.": "coverage contains duplicate regions",
+}
+
+
+def _issue_reason(issue: ErrorDetails) -> str:
+    hint = _VALIDATOR_HINTS.get(str((issue.get("ctx") or {}).get("error", "")))
+    return f"{issue['type']} ({hint})" if hint else issue["type"]
 
 
 def validation_failure(error: ValueError) -> ValidationError | None:
@@ -18,8 +32,8 @@ def validation_failure(error: ValueError) -> ValidationError | None:
 def schema_issues(error: ValidationError) -> str:
     # Do not include model output, Pydantic input values or arbitrary validator messages.
     return "; ".join(
-        f"{'.'.join(str(part)[:80] for part in issue['loc']) or 'root'}: {issue['type']}"
-        for issue in error.errors(include_input=False, include_context=False, include_url=False)[:8]
+        f"{'.'.join(str(part)[:80] for part in issue['loc']) or 'root'}: {_issue_reason(issue)}"
+        for issue in error.errors(include_input=False, include_context=True, include_url=False)[:8]
     )
 
 
