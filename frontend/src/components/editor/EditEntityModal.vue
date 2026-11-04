@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CharacterIdentityFields from './CharacterIdentityFields.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import ClothingItemFields from '@/components/editor/ClothingItemFields.vue'
 import type { ClothingDraft } from '@/services/clothingAuthoring'
@@ -24,6 +25,8 @@ const props = defineProps<{
     mana: number
     goal: string
     character: string
+    gender?: string | null
+    age_years?: number | null
     personality_profile?: Record<string, string>
     is_killable: boolean
     item_type: string
@@ -130,6 +133,8 @@ function hasActiveScripts(t: any): boolean {
 
 function makeLocalForm(form: typeof props.initialForm) {
   return {
+    gender: null as string | null,
+    age_years: null as number | null,
     personality_profile: {} as Record<string, string>,
     moveable: false,
     allowed_scenes_input: [] as string[],
@@ -2028,6 +2033,8 @@ const textLogPreviewClass = computed(() => {
                 </div>
               </div>
 
+              <CharacterIdentityFields v-if="['npc', 'protagonist'].includes(context.type)"
+                v-model:gender="localForm.gender" v-model:age-years="localForm.age_years" />
               <div class="space-y-3">
                 <div class="flex justify-between items-center">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Description / Biography <span class="text-red-400">*</span></label>

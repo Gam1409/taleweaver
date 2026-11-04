@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.character_identity import describe_character
 from backend.engine.clothing.context import resolved_inventory
 from backend.engine.clothing.visuals import (
     character_visuals,
@@ -59,7 +60,7 @@ def _npc_facts(entity: dict, rows: dict, state: Any, detailed: bool) -> dict:
     return {
         "id": entity.get("id"),
         "name": entity.get("name"),
-        "appearance": entity.get("description"),
+        "appearance": describe_character(npc, entity.get("description")),
         "position": entity.get("spatial_position"),
     }
 
@@ -95,7 +96,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     player = player or {
         "id": manager.avatar.id,
         "name": manager.avatar.name,
-        "appearance": manager.avatar.description,
+        "appearance": describe_character(manager.avatar),
         "clothing": equipped_appearance(manager.avatar),
     }
     facts: dict[str, Any] = {

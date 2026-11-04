@@ -45,6 +45,9 @@ class Avatar(Base, TimestampMixin):
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     inventory: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
 
+    gender: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    age_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     visual_profile: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Default equipment slots setup

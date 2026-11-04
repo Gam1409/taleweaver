@@ -24,6 +24,7 @@ from backend.api.routes.adventures.schemas import (
 from backend.api.routes.adventures.sessions import _backfill_avatar_items_from_template_entities
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.character_identity import identity_facts
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -182,6 +183,8 @@ def _serialize_model(obj: Base | None) -> dict[str, Any] | None:
     if not obj:
         return None
     data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+    if isinstance(obj, (Avatar, WorldEntity)):
+        data.update(identity_facts(obj))
     for model_type, extras in _EXTRAS_BY_TYPE:
         if isinstance(obj, model_type):
             data.update(extras(obj, data))

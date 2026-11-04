@@ -140,6 +140,8 @@ async def clone_template_world(
             notes=ent.notes,
             goal=ent.goal,
             character=ent.character,
+            gender=ent.gender,
+            age_years=ent.age_years,
             visual_profile=deepcopy(ent.visual_profile),
             hp=ent.hp,
             max_hp=ent.max_hp,

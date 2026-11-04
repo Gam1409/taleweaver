@@ -11,6 +11,7 @@ Two detail levels exist:
 from collections.abc import Sequence
 from typing import Any, Optional
 
+from backend.engine.character_identity import describe_character, identity_text
 from backend.engine.npc_journal.records import memory_context
 from backend.engine.personality.profile import personality_context
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -74,8 +75,9 @@ def _describe_npc(e: Any, detail: str) -> str:
     desc_str = f" - Description: {e.description}" if (e.description and detail != "concise") else ""
     notes_str = f' [Status/Notes: "{e.notes}"]' if getattr(e, "notes", None) else ""
     move_str = f" [{_movement_label(e, '').strip()}]"
+    identity = f" [{identity_text(e)}]" if identity_text(e) else ""
     return (
-        f"{e.name} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
+        f"{e.name}{identity} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
         f"{defeated_str}{notes_str}{move_str}{inv_str}{desc_str}{memory_context(e)}"
     )
 
@@ -295,7 +297,7 @@ def build_world_npcs_context(
         )
         pos_str = f", Position: {npc.spatial_position}" if npc.spatial_position else ""
         hidden_str = " [HIDDEN]" if getattr(npc, "is_hidden", False) else ""
-        desc = (npc.description or "").strip()
+        desc = describe_character(npc).strip()
         if desc.endswith("."):
             desc = desc[:-1]
         goal_str = f", Goal: {npc.goal}" if npc.goal else ""

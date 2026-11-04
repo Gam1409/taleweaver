@@ -36,6 +36,8 @@ export interface EntityEditData extends ExitBehaviorData {
   mana?: number
   goal?: string
   character?: string
+  gender?: string | null
+  age_years?: number | null
   personality_profile?: Record<string, string>
   is_killable?: boolean
   moveable?: boolean
@@ -125,6 +127,8 @@ export interface EntityCreateData {
   is_portable?: boolean
   goal?: string
   character?: string
+  gender?: string | null
+  age_years?: number | null
   personality_profile?: Record<string, string>
   hp?: number
   stamina?: number

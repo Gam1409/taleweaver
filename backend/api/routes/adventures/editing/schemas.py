@@ -8,11 +8,12 @@ from pydantic import BaseModel
 from backend.api.routes.adventures.editing.exit_fields import ExitBehaviorFields
 from backend.engine.clothing.schema import Garment
 from backend.engine.personality.profile import PersonalityProfile
+from backend.schemas.character_identity import CharacterIdentityFields
 
 logger = logging.getLogger(__name__)
 
 
-class EntityUpdateRequest(BaseModel):
+class EntityUpdateRequest(CharacterIdentityFields):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist", "exit"]
     target_id: str
     new_id: Optional[str] = None
@@ -128,7 +129,7 @@ class ExitCreateRequest(ExitBehaviorFields):
     rule_to_unlock: Optional[str] = None
 
 
-class EntityCreateRequest(BaseModel):
+class EntityCreateRequest(CharacterIdentityFields):
     entity_id: str
     entity_type: Literal["NPC", "OBJECT"]
     scene_id: str

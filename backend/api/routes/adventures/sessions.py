@@ -921,6 +921,8 @@ async def copy_session(
         description=original_avatar.description,
         goal=original_avatar.goal,
         character=original_avatar.character,
+        gender=original_avatar.gender,
+        age_years=original_avatar.age_years,
         visual_profile=deepcopy(original_avatar.visual_profile),
         profile_image=original_avatar.profile_image,
         hp=original_avatar.hp,

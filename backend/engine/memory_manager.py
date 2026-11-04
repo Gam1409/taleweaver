@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from backend.core import prompts
 from backend.engine import location_context
+from backend.engine.character_identity import identity_facts
 from backend.engine.stat_aggregator import calculate_total_stats
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -212,6 +213,7 @@ class MemoryManager:
             "name": avatar.name,
             "role": getattr(avatar, "role", None),
             "description": getattr(avatar, "description", None),
+            **identity_facts(avatar),
             "hp": avatar.hp,
             "stamina": avatar.stamina,
             "mana": avatar.mana,

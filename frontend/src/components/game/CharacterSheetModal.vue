@@ -677,6 +677,10 @@ const onClose = () => {
                   <div>
                     <h5 class="text-lg font-black text-white uppercase font-display">{{ sheet.name }}</h5>
                     <div class="text-xs font-bold text-amber-400 uppercase tracking-widest mt-0.5">{{ sheet.role || 'Adventurer' }}</div>
+                    <p v-if="sheet.gender || sheet.age_years != null" class="text-xs text-slate-400">
+                      <span v-if="sheet.gender">Gender: {{ sheet.gender }}. </span>
+                      <span v-if="sheet.age_years != null">Age: {{ sheet.age_years }} years.</span>
+                    </p>
                     <div v-if="sheet.adventure_title" class="text-xxs text-slate-400 mt-1">Adventure: <span class="text-slate-200">{{ sheet.adventure_title }}</span></div>
                   </div>
                 </div>

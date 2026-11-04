@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.character_identity import identity_facts
 from backend.engine.npc_cards.presentation import (
     HistoryKind,
     character_insights,
@@ -67,6 +68,7 @@ def _card(npc: WorldEntity, state: SessionState) -> dict:
         "id": npc.id,
         "name": override.get("name", npc.name),
         "description": override.get("description", npc.description),
+        **identity_facts(npc),
         "image_url": override.get("image_url", npc.image_url),
         "scene_id": state.current_scene_id
         if override.get("current_scene_id", npc.current_scene_id) == state.current_scene_id

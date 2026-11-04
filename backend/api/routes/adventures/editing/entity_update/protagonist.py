@@ -20,6 +20,7 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
 from backend.api.routes.adventures.logic import AdventureLogic
+from backend.engine.character_identity import update_identity
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -154,6 +155,15 @@ async def update_protagonist(
     if not avatar:
         return
     copy_given(avatar, payload, _PROFILE_FIELDS)
+    update_identity(avatar, payload)
+    manifest = _protagonist_manifest(adv)
+    if manifest is not None:
+        for key in ("gender", "age_years"):
+            if key in payload.model_fields_set:
+                manifest["protagonist"][key] = getattr(avatar, key)
+        if "age_years" in payload.model_fields_set:
+            manifest["protagonist"]["visual_profile"] = deepcopy(avatar.visual_profile)
+        _store_manifest(adv, manifest)
     apply_vitals(avatar, payload)
     if given(payload, "inventory") or given(payload, "equipment"):
         await _update_items(db, template_id, adv, avatar, payload)

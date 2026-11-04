@@ -2,13 +2,14 @@
 
 from typing import Any
 
+from backend.engine.character_identity import identity_facts, identity_profile
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.settings import clothing_settings
 
 
 def player_clothing(avatar: Any, manifest: Any) -> dict | None:
-    raw = getattr(avatar, "visual_profile", None)
+    raw = identity_profile(avatar, getattr(avatar, "visual_profile", None))
     profile = load_profile(raw)
     if profile is None:
         return None
@@ -45,7 +46,7 @@ def player_clothing(avatar: Any, manifest: Any) -> dict | None:
             }
         )
     return {
-        "appearance": profile.appearance.model_dump(),
+        "appearance": {**profile.appearance.model_dump(), **identity_facts(avatar)},
         "worn": sorted(rows, key=lambda row: -row["layer"]),
         "detail_limited": visible["clothing_detail_limited"],
     }

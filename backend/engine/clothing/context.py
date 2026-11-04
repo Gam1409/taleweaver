@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Any
 
+from backend.engine.character_identity import identity_profile
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.visuals import canonical_inventory, detailed_for_state
 from backend.engine.npc_presence import physically_present
@@ -45,7 +46,7 @@ def actor_records(manager: Any, entities: list[Any], states: dict | None = None)
             "description": str(getattr(avatar, "description", "") or "")[:1800],
             "inventory": deepcopy(getattr(avatar, "inventory", None) or []),
             "equipment": deepcopy(getattr(avatar, "equipment", None) or {}),
-            "visual_profile": deepcopy(getattr(avatar, "visual_profile", None)),
+            "visual_profile": identity_profile(avatar, getattr(avatar, "visual_profile", None)),
         }
     }
     for entity in entities:
@@ -74,8 +75,8 @@ def actor_records(manager: Any, entities: list[Any], states: dict | None = None)
                 override.get("inventory", entity.inventory or metadata.get("inventory") or [])
             ),
             "equipment": {},
-            "visual_profile": deepcopy(
-                override.get("visual_profile", getattr(entity, "visual_profile", None))
+            "visual_profile": identity_profile(
+                entity, override.get("visual_profile", getattr(entity, "visual_profile", None))
             ),
             "private_character": str(getattr(entity, "character", "") or "")[:700],
             "private_goal": str(getattr(entity, "goal", "") or "")[:400],

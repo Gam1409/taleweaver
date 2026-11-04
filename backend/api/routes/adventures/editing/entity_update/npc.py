@@ -13,6 +13,7 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     validated_scene_ref,
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.engine.character_identity import update_identity
 from backend.models.world_entity import WorldEntity
 
 _NPC_SCRIPT_FIELDS = (
@@ -52,6 +53,7 @@ async def update_npc(
     db: AsyncSession, template_id: str, npc: WorldEntity, payload: EntityUpdateRequest
 ) -> None:
     copy_given(npc, payload, ("goal", "character", "is_killable"))
+    update_identity(npc, payload)
     if given(payload, "inventory"):
         await _update_inventory(db, template_id, npc, payload)
     _update_movement(npc, payload)

@@ -8,6 +8,7 @@ from sqlalchemy import Select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import InstanceState
 
+from backend.engine.character_identity import identity_text
 from backend.models.user import User
 
 if TYPE_CHECKING:
@@ -129,6 +130,8 @@ async def regenerate_owned_visual(
             tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
             if tone:
                 prompt += f" Mood: {tone}"
+        if payload.target_type in {"npc", "protagonist"} and identity_text(target):
+            prompt += f"\nCharacter facts: {identity_text(target)}"
         image_url = await _generate_target(payload, target, prompt, common)
     if not image_url:
         raise ValueError("The image provider returned no image. The previous image was kept.")

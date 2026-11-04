@@ -35,6 +35,10 @@ const categories: Record<string, string> = { appearance: 'Appearance', backgroun
     <p v-if="loading && !details" role="status" class="text-slate-400">Loading character history…</p>
     <template v-if="details">
       <span v-if="details.narrative_role === 'major'" class="inline-block rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-1 text-xs text-rose-200">Major character</span>
+      <p v-if="details.gender || details.age_years != null" class="text-xs text-slate-400">
+        <span v-if="details.gender">Gender: {{ details.gender }}. </span>
+        <span v-if="details.age_years != null">Age: {{ details.age_years }} years.</span>
+      </p>
       <NpcRelationship :relationship="details.relationship" />
       <NpcNarrativeInsights v-if="settings.showState.value && details.state_visible" :insights="details.insights" />
       <p v-if="['pending', 'running'].includes(details.portrait_status || '')" role="status" class="text-amber-200">The first portrait is being prepared. You can continue playing.</p>

@@ -1168,6 +1168,8 @@ async def export_adventure_session(
         "name": avatar.name,
         "role": avatar.role,
         "description": avatar.description,
+        "gender": avatar.gender,
+        "age_years": avatar.age_years,
         "profile_image": avatar.profile_image,
         "hp": avatar.hp,
         "stamina": avatar.stamina,

@@ -8,6 +8,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 
 from backend.core import prompts
+from backend.engine.character_identity import describe_character
 from backend.engine.image_profiles import image_timeout
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import needs_image
@@ -31,6 +32,8 @@ AVATAR_FIELDS: tuple[tuple[str, str, Any], ...] = (
     ("description", "description", ""),
     ("goal", "goal", ""),
     ("character", "character", ""),
+    ("gender", "gender", None),
+    ("age_years", "age_years", None),
     ("visual_profile", "visual_profile", None),
     ("hp", "hp", 200),
     ("max_hp", "hp", 200),
@@ -129,7 +132,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
         ctx.manifest.get("objects") or [],
         detailed=clothing_settings(ctx.manifest)["detailed"],
     )
-    description = portrait_description(visual) if visual is not None else avatar.description
+    description = portrait_description(visual) if visual is not None else describe_character(avatar)
     role = "" if visual is not None else avatar.role
     prompt = prompts.PROTAGONIST_IMAGE_PROMPT_TEMPLATE.format(
         name=avatar.name, role=role, description=description

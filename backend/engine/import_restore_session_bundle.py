@@ -63,6 +63,8 @@ async def restore_session_bundle(
             exp=old_avatar.get("exp", 0),
             goal=old_avatar.get("goal", ""),
             character=old_avatar.get("character", ""),
+            gender=old_avatar.get("gender"),
+            age_years=old_avatar.get("age_years"),
             visual_profile=deepcopy(old_avatar.get("visual_profile")),
             stats=old_avatar["stats"],
             inventory=old_avatar["inventory"],

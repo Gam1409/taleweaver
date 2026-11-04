@@ -36,6 +36,8 @@ export interface NpcInsights {
 export type NpcHistoryKind = 'all' | 'general' | 'shared'
 
 export interface NpcCard {
+  gender?: string | null
+  age_years?: number | null
   narrative_role?: 'supporting' | 'major'
   id: string
   name: string

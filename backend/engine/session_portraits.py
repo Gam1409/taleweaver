@@ -18,6 +18,7 @@ from backend.core.comfyui_config import select_workflow
 from backend.core.image_purposes import image_provider
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.core.visual_trace import traced
+from backend.engine.character_identity import describe_character
 from backend.engine.clothing.frames import compose_frame, extract_frame
 from backend.engine.clothing.visuals import npc_visuals, portrait_description
 from backend.engine.image_profiles import advanced_for, image_timeout, validate_image_profiles
@@ -187,7 +188,9 @@ async def _portrait_facts(
     if visible is not None:
         return {"name": visible["name"], "description": portrait_description(visible)}, visible
     facts = {key: override.get(key, getattr(npc, key)) for key in ("name", "description")}
-    facts["description"] = (facts.get("description") or "") + memory_context(npc, visual_only=True)
+    facts["description"] = describe_character(npc, facts.get("description")) + memory_context(
+        npc, visual_only=True
+    )
     return facts, None
 
 

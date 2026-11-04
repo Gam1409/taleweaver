@@ -176,6 +176,9 @@ class WorldEntity(Base, TimestampMixin):
 
     # Optional state, e.g. NPC inventory: [{"name": "Key", "id": "BRONZE_KEY"}]
     inventory: Mapped[list[Any] | None] = mapped_column(JSON, default=list, nullable=False)
+    gender: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    age_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     visual_profile: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, default=dict, nullable=False

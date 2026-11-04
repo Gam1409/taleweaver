@@ -64,6 +64,8 @@ async def _seed(db) -> User:
                 user_id=user.id,
                 template_id=SOURCE_ID,
                 name="Mage",
+                gender="female",
+                age_years=28,
                 hp=80,
                 max_hp=80,
                 stats={"special_actions": [FIREBALL], "unlocked_actions": []},
@@ -74,6 +76,8 @@ async def _seed(db) -> User:
                 template_id=SOURCE_ID,
                 entity_type="NPC",
                 name="Troll",
+                gender="male",
+                age_years=135,
                 description="Big.",
                 current_scene_id="CAVE",
                 hp=40,
@@ -129,6 +133,8 @@ async def test_combat_data_survives_export_and_import(auth_client, setup_test_db
             .first()
         )
 
+        assert (avatar.gender, avatar.age_years) == ("female", 28)
+        assert (troll.gender, troll.age_years) == ("male", 135)
         fireball = avatar.stats["special_actions"][0]
         assert fireball["unlock_required_item_id"] == "TOME"
         assert fireball["unlock_guard_expression"] == "tw.vars.get('studied') == True"

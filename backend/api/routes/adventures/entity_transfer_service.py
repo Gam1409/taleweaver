@@ -55,6 +55,8 @@ _AVATAR_FIELDS = (
     "name",
     "role",
     "description",
+    "gender",
+    "age_years",
     "goal",
     "character",
     "hp",

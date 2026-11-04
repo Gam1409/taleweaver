@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.character_identity import identity_facts, identity_profile
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.settings import clothing_settings
 from backend.models.session_state import SessionState
@@ -46,9 +47,12 @@ def character_visuals(
     if raw is None:
         return None
     projected = visible_character(
-        raw, inventory, detailed=detailed, equipment=value(actor, "equipment")
+        identity_profile(actor, raw),
+        inventory,
+        detailed=detailed,
+        equipment=value(actor, "equipment"),
     ) or {"appearance": {}, "clothing": [], "clothing_detail_limited": True}
-    appearance = projected["appearance"]
+    appearance = {**projected["appearance"], **identity_facts(actor)}
     appearance_text = "; ".join(
         f"{key}: {field}" for key, field in appearance.items() if field not in (None, "", [])
     )

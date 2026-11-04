@@ -51,6 +51,8 @@ async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSes
         "name": avatar.name,
         "role": avatar.role,
         "description": avatar.description,
+        "gender": avatar.gender,
+        "age_years": avatar.age_years,
         "profile_image": profile_image,
         "hp": avatar.hp,
         "max_hp": avatar.max_hp,

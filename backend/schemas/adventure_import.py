@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from backend.core.adventure_format import CURRENT_VERSION, FORMAT_NAME
+from backend.schemas.character_identity import CharacterIdentityFields
 
 
 class Pacing(BaseModel):
@@ -17,7 +18,7 @@ class Pacing(BaseModel):
     notes: Optional[str] = None
 
 
-class Protagonist(BaseModel):
+class Protagonist(CharacterIdentityFields):
     name: Optional[str] = None
     role: Optional[str] = None
     description: Optional[str] = None
@@ -27,7 +28,7 @@ class Protagonist(BaseModel):
     stamina: Optional[int] = None
 
 
-class CharacterSpec(BaseModel):
+class CharacterSpec(CharacterIdentityFields):
     id: Optional[str] = None
     name: Optional[str] = None
     role: Optional[str] = None

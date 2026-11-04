@@ -111,6 +111,8 @@ class SessionCheckpointService:
                 "stats": deepcopy(avatar.stats or {}),
                 "inventory": deepcopy(avatar.inventory or []),
                 "equipment": deepcopy(avatar.equipment or {}),
+                "gender": avatar.gender,
+                "age_years": avatar.age_years,
                 "visual_profile": deepcopy(avatar.visual_profile),
                 "status_effects": deepcopy(avatar.status_effects or []),
             },
@@ -235,7 +237,11 @@ class SessionCheckpointService:
         avatar.stats = deepcopy(avatar_snapshot.get("stats") or {})
         avatar.inventory = deepcopy(avatar_snapshot.get("inventory") or [])
         avatar.equipment = deepcopy(avatar_snapshot.get("equipment") or {})
-        avatar.visual_profile = deepcopy(avatar_snapshot.get("visual_profile"))
+        avatar.gender, avatar.age_years, avatar.visual_profile = (
+            avatar_snapshot.get("gender"),
+            avatar_snapshot.get("age_years"),
+            deepcopy(avatar_snapshot.get("visual_profile")),
+        )
         avatar.status_effects = deepcopy(avatar_snapshot.get("status_effects") or [])
 
         state.current_scene_id = str(

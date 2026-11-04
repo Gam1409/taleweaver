@@ -52,6 +52,8 @@ export interface CharacterSheet {
   license?: string | null
   license_url?: string | null
   adventure_id?: string | null
+  gender?: string | null
+  age_years?: number | null
   role?: string | null
   description?: string | null
   profile_image?: string | null

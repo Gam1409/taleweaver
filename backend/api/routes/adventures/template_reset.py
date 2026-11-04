@@ -113,6 +113,8 @@ async def _restore_protagonist(
     avatar.name = prot_def.get("name") or avatar.name
     avatar.role = prot_def.get("role") or avatar.role
     avatar.description = prot_def.get("description") or avatar.description
+    avatar.gender = prot_def.get("gender")
+    avatar.age_years = prot_def.get("age_years")
 
 
 def _with_ids(definitions: list[Any]) -> list[dict[str, Any]]:
