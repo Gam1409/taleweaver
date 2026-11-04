@@ -17,7 +17,8 @@ from tests.test_vn_turn_integration import TurnRoles, install_roles, seed_vn
 
 
 @pytest.mark.asyncio
-async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch):
+@pytest.mark.parametrize("pending_candidate", [False, True])
+async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch, pending_candidate):
     narration = "Лина передала герою шарф, и он убрал его в сумку."
     monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", narration)
 
@@ -43,7 +44,14 @@ async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch):
                         )
                     ]
                 )
-            return await super().structured(*args, **kwargs)
+            result = await super().structured(*args, **kwargs)
+            if pending_candidate and schema.__name__.startswith("VNProgressionIntent"):
+                payload = result.model_dump()
+                payload["new_inventory_items"] = [
+                    {"id": "MODEL_SCARF", "name": "Шарф", "item_type": "WEARABLE"}
+                ]
+                return schema.model_validate(payload)
+            return result
 
     roles = GiftRoles()
     install_roles(monkeypatch, roles)

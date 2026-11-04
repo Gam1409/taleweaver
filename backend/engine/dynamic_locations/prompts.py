@@ -77,5 +77,11 @@ CONFIRM = (
     "If approved, write a short label/description in CONTENT LANGUAGE. Describe only the "
     "location and fixed scenery, no newly named NPCs, usable loot, secrets or scripts. "
     "Do not invent history inconsistent with known facts. No image is needed to enter. "
-    "action_quote must be an exact substring of PLAYER ACTION. Ambiguity means no arrival."
+    "action_quote must be an exact substring of PLAYER ACTION. Ambiguity means no arrival. "
+    "If present NPCs actually accompany the player on this arrival, list their existing "
+    "npc_id and an exact PLAYER ACTION evidence quote in companions. Resolve group pronouns "
+    "only with clear supplied context. Invitations, requests to follow, plans and assertions "
+    "about an absent NPC are not completed accompaniment. Do not move everyone by default. "
+    "NPC choices and movement restrictions still apply. The server will bind companions to "
+    "the real destination ID; do not invent an ID for the new place."
 )

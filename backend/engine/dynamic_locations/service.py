@@ -20,6 +20,12 @@ from uuid import uuid4
 from sqlalchemy import or_, select
 
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.dynamic_locations.companions import (
+    bind_companions,
+    finish_arrival,
+    present_companions,
+    record_arrival,
+)
 from backend.engine.dynamic_locations.prompts import CONFIRM
 from backend.engine.dynamic_locations.schema import (
     MAX_CHILDREN,
@@ -81,6 +87,7 @@ async def _context(
     context = {
         "content_language": language or "English",
         "player_action": user_msg,
+        "present_npcs": await present_companions(manager),
         "proposal": proposal.model_dump(),
         "current_scene_id": manager.state.current_scene_id,
         "in_game_time": manager.state.in_game_time,
@@ -298,6 +305,8 @@ async def resolve_proposal(
             manager, proposal, decision, user_msg, recent, scenes, exits
         )
         cast(_SceneIntent, intent).new_scene_id = destination
+        bind_companions(intent, decision, destination, context, user_msg)
+        record_arrival(manager, decision, destination, context, user_msg)
 
 
 async def discard_unentered(manager: GameTurnManager) -> None:
@@ -305,6 +314,7 @@ async def discard_unentered(manager: GameTurnManager) -> None:
 
     if manager.state is None:
         raise RuntimeError("Turn state must be initialized")
+    finish_arrival(manager)
     ids = set(getattr(manager, "_dynamic_scene_images", []))
     removed = ids - {manager.state.current_scene_id}
     if not removed:

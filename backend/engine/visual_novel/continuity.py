@@ -9,6 +9,7 @@ from pydantic import ConfigDict
 from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
+from backend.engine.visual_novel.pending_items import defer_unregistered_items, pending_item_context
 
 PLAYER = "__player__"
 SCENE = "__scene__"
@@ -100,6 +101,16 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
             if entity.entity_type == "OBJECT"
         }
     )
+    # Keep unavailable inline possessions in the identity catalog, never in the
+    # transferable items. Missing access must not become a new-item registration.
+    inline_items = (
+        entry
+        for entity in entities
+        for entry in _inventory(entity, _override(manager.state, entity.id))
+        if isinstance(entry, dict) and entry.get("id") and entry.get("name")
+    )
+    for entry in inline_items:
+        result.catalog.setdefault(str(entry["id"]), deepcopy(entry))
     result.add(getattr(manager.avatar, "inventory", None), PLAYER)
     equipment = getattr(manager.avatar, "equipment", None) or {}
     result.add(
@@ -271,7 +282,10 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
     proposal = VNProgressionIntent.model_validate(raw)
     result = to_chat_progression_intent(proposal)
     try:
-        _hydrate(result, possession_snapshot(manager, entities))
+        snapshot = possession_snapshot(manager, entities)
+        pending = defer_unregistered_items(result, snapshot)
+        _hydrate(result, snapshot)
+        result.narrative_description += pending_item_context(pending)
         conditions = {
             item.id: item.condition_note
             for item in proposal.updated_inventory_items or []

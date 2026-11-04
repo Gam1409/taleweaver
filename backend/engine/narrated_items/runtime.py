@@ -135,9 +135,9 @@ async def reconcile_items(
         )
     except asyncio.CancelledError:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("Completed item reconciliation failed for session %s", manager.game_id)
-        _status(manager, message_id, narration, "failed")
+        _status(manager, message_id, narration, "failed", error_type=type(exc).__name__)
         return [
             "Item reconciliation failed; the narrated item changes have not been confirmed in inventory."
         ]

@@ -11,3 +11,9 @@ Every proposal needs an exact quote from the completed response, valid participa
 The current reconciler covers acquisitions into actor inventories, actor-to-actor transfers, removal and wearing. Scene drops, consumption, locked-container access and gameplay rewards continue through the existing mechanics pipeline. Existing past messages are not retrospectively mined for possessions. Inline cards do not require image generation.
 
 The pre-narration clothing planner can also use the latest completed same-scene narration as evidence that a present giver has a previously described garment. A current player assertion alone cannot establish that source.
+
+Unregistered cosmetic acquisitions proposed before narration are deferred rather than rejected solely for a missing ID. They are not possessions until completed narration passes reconciliation. Known objects, including inventories of absent NPCs and inaccessible containers, retain ordinary ownership validation. Mechanical rewards are not eligible for this deferral.
+
+The session header exposes **Item and travel checks** to the session owner. It shows the latest persisted item result, rejected actions or failure category, and confirmed local-arrival companion results. It explicitly identifies sessions outside VN mode, where this item reconciler does not run. Results describe the latest check, not a complete history.
+
+Dynamic-location confirmation includes currently present NPCs and evidence for co-arrival from the current action. Confirmed companions are bound to the server-created destination ID before normal movement validation. Stationary NPC and access restrictions still apply; recorded results distinguish moved, not moved and rejected companions. This does not retroactively relocate NPCs based on unsupported assertions.

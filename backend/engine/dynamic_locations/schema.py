@@ -27,6 +27,12 @@ class PlaceProposal(BaseModel):
     action_quote: str = Field(min_length=1, max_length=600)
 
 
+class CompanionArrival(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    npc_id: str = Field(min_length=1, max_length=100)
+    evidence: str = Field(min_length=4, max_length=600)
+
+
 class PlaceDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arrival_now: bool
@@ -42,6 +48,7 @@ class PlaceDecision(BaseModel):
     existing_scene_id: str | None = Field(default=None, max_length=50)
     label: str = Field(default="", max_length=100)
     description: str = Field(default="", max_length=1800)
+    companions: list[CompanionArrival] = Field(default_factory=list, max_length=12)
 
 
 def registry(state: SessionState) -> dict:

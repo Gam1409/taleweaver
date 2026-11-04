@@ -36,6 +36,7 @@ from backend.api.routes.adventures.session_visual_presets import (
     router as session_visual_presets_router,
 )
 from backend.api.routes.adventures.sessions import router as sessions_router
+from backend.api.routes.adventures.state_checks import router as state_checks_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
 from backend.api.routes.adventures.turn_replay import router as replay_router
@@ -59,6 +60,7 @@ router.include_router(sessions_router, dependencies=[Depends(session_mutation_le
 router.include_router(checkpoint_policy_router)
 router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
+router.include_router(state_checks_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)
