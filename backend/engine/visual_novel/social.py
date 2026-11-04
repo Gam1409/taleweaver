@@ -12,6 +12,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.prompts import recall_block
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
+from backend.engine.visual_novel.character_context import remembered_direction
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
@@ -85,14 +86,13 @@ async def _scene_evidence(manager: Any) -> tuple[str, str]:
     return str(message.id), str(message.content or "")[-MAX_SCENE_CHARS:]
 
 
-def _character_context(character: CharacterState) -> dict[str, Any]:
+def _character_context(character: CharacterState, source_message_id: str = "") -> dict[str, Any]:
     # Persistence hashes and full ledgers are never useful model context.
     return {
         "core": character.core[:700],
         "goals": [goal[:700] for goal in character.goals],
         "relationship": character.relationship.model_dump(),
-        "emotion": character.emotion,
-        "next_intention": character.next_intention,
+        "remembered_direction": remembered_direction(character, source_message_id),
         "recent_memories_for_orientation_only": [
             {"event": memory.kind, "evidence": memory.evidence[:200]}
             for memory in character.memories[-3:]
@@ -107,13 +107,14 @@ def _payload(
     scene_context: str,
     history: list[dict],
     historical_recall: str = "",
+    source_message_id: str = "",
 ) -> str:
     cast = [
         {
             "npc_id": npc.id,
             "name": npc.name,
             "authored_description": str(getattr(npc, "description", "") or "")[:700],
-            "character": _character_context(social.characters[npc.id]),
+            "character": _character_context(social.characters[npc.id], source_message_id),
             "personality_tendencies": personality_context(npc),
         }
         for npc in npcs
@@ -237,6 +238,7 @@ async def _plan(
                 scene_context,
                 history,
                 recall_block(manager, "vn_social", {str(npc.id) for npc in npcs}),
+                source_message_id=source_id,
             ),
             InteractionPlan,
             llm.model,
@@ -251,4 +253,4 @@ async def _plan(
     mark_processed(social, message_id)
     directed = apply_plan(social, plan, npcs, user_msg, scene_context, source_id)
     save_state(manager.state, social)
-    return narrator_context(directed, npcs)
+    return narrator_context(social, npcs, source_message_id=source_id, directed=directed)

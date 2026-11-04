@@ -124,7 +124,9 @@ def personality_context(entity: Any) -> str:
         return ""
     traits = [f"{CATALOG[key][0]}: {CATALOG[key][1][value][1]}" for key, value in profile.items()]
     return (
-        "Authored tendencies (not rigid rules; current events, relationships and explicit boundaries still matter): "
+        "Authored tendencies (not rigid rules; current events, relationships and explicit boundaries still matter). "
+        "Closeness changes relationships, not automatically voice, values or independent goals. "
+        "Show earned development without treating a temporary mood as a new identity: "
         + " ".join(traits)
     )
 
