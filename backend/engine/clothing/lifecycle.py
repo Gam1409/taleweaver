@@ -71,7 +71,7 @@ async def rewind_created_garments(
     )
     for row in rows:
         metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-        origin = metadata.get("clothing_origin")
+        origin = metadata.get("clothing_origin") or metadata.get("item_origin")
         if (
             not isinstance(origin, dict)
             or not _runtime_origin(origin, session_id)

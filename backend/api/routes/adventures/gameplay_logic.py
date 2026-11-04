@@ -81,6 +81,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
+from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.turn_replay.service import record_input
 from backend.engine.turn_replay.transactions import release_for_model
@@ -2101,6 +2102,20 @@ class GameTurnManager:
 
             response_text = fallback
             yield f"event: chunk\ndata: {json.dumps({'content': fallback})}\n\n"
+
+        if policy.vn and narration_completed:
+            yield f"event: status\ndata: {json.dumps({'content': 'Checking item changes...'})}\n\n"
+            item_messages = await reconcile_items(
+                self,
+                response_text,
+                completed=narration_completed,
+                resolution=draft_narration + "\n" + outcome_json,
+                blocked=bool(rule_violations)
+                or draft_narration.startswith("The attempted item change did not occur;"),
+            )
+            for item_message in item_messages:
+                await self._save_chat_message("system", item_message)
+                yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': item_message})}\n\n"
 
         if policy.vn and read_vn_settings(self.state).scene_staging:
             yield f"event: status\ndata: {json.dumps({'content': 'Checking scene continuity...'})}\n\n"

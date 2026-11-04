@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 
+import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
@@ -245,15 +246,16 @@ async def test_old_checkpoint_without_profile_clears_later_tracking(auth_client,
         assert avatar.visual_profile is None
 
 
+@pytest.mark.parametrize("origin_key", ["clothing_origin", "item_origin"])
 async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
-    auth_client, clothing_world
+    auth_client, clothing_world, origin_key
 ):
     sid = await start(auth_client)
     async with TestSessionLocal() as db:
         avatar, _, _ = await actors(db, sid)
         origin = {"kind": "runtime", "session_id": sid, "source_message_id": "prior"}
         # This creation exists in inventory before the checkpoint, without a world row.
-        avatar.inventory = [*avatar.inventory, {"id": "prior_garment", "clothing_origin": origin}]
+        avatar.inventory = [*avatar.inventory, {"id": "prior_garment", origin_key: origin}]
         checkpoint = await SessionCheckpointService.create_checkpoint(db, sid, "manual")
         await db.commit()
         db.add_all(
@@ -265,7 +267,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Prior",
-                    metadata_json={"clothing_origin": origin},
+                    metadata_json={origin_key: origin},
                 ),
                 WorldEntity(
                     id="garment_legitimate",
@@ -283,7 +285,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Imported",
-                    metadata_json={"clothing_origin": {**origin, "session_id": "source-save"}},
+                    metadata_json={origin_key: {**origin, "session_id": "source-save"}},
                 ),
                 WorldEntity(
                     id="later_created",
@@ -292,7 +294,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Future",
-                    metadata_json={"clothing_origin": {**origin, "source_message_id": "later"}},
+                    metadata_json={origin_key: {**origin, "source_message_id": "later"}},
                 ),
             ]
         )

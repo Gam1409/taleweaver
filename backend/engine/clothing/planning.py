@@ -42,7 +42,7 @@ def _grounded(change: Any, actor: dict, user_msg: str, narration: str) -> bool:
 
 
 def _creation_source_valid(
-    creation: GarmentCreation, actor: dict, sources: dict, possessions: Any
+    creation: GarmentCreation, actor: dict, sources: dict, possessions: Any, narration: str = ""
 ) -> bool:
     if creation.acquisition == "established_wear":
         return (
@@ -57,7 +57,10 @@ def _creation_source_valid(
     if (
         creation.source == "actor_description"
         or not source
-        or creation.source_evidence not in source.get("description", "")
+        or not (
+            creation.source_evidence in source.get("description", "")
+            or (creation.acquisition == "gift" and creation.source_evidence in narration)
+        )
     ):
         return False
     if creation.acquisition == "wardrobe":
@@ -99,7 +102,7 @@ def validate_plan(
     for creation in getattr(proposal, "garment_creations", None) or []:
         actor = actors.get(creation.actor_id, {})
         valid = bool(plan.message_id) and _grounded(creation, actor, user_msg, narration)
-        valid = valid and _creation_source_valid(creation, actor, sources, possessions)
+        valid = valid and _creation_source_valid(creation, actor, sources, possessions, narration)
         known = any(
             item.get("name", "").casefold() == creation.name.casefold()
             for item in possessions.items.values()

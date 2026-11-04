@@ -59,7 +59,10 @@ Ordinary cosmetic clothing can be acquired through garment_creations only when
 the current action establishes a logical source: an accessible wardrobe/container,
 an established shop or giver, or crafting using owned materials actually consumed
 by the same resolved turn. Quote both the actual action and the supplied source
-description. Respect access, payment, materials and story constraints; do not
+description. For a gift from a present NPC, source_evidence may instead quote the
+latest completed narration explicitly establishing that particular garment with the
+giver. A current player assertion alone never establishes a missing garment.
+Respect access, payment, materials and story constraints; do not
 invent free valuables, armor stats, currency, vendors or source locations.
 Use existing item transfers instead if that garment already has an inventory ID.
 Each creation is one ordinary garment, never a default outfit kit. IDs are assigned

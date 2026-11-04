@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.visual_novel.schema import InteractionPlan
 from backend.engine.visual_novel.story_director import STATE_KEY
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -25,7 +26,7 @@ class StoryRoles(TurnRoles):
 
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
-        if schema is InteractionPlan:
+        if schema in (InteractionPlan, ItemExtraction):
             return await super().structured(*args, **kwargs)
         self.calls.append((schema.__name__, args, kwargs))
         return schema.model_validate(
@@ -113,7 +114,7 @@ async def test_departure_persists_without_player_following_and_replay_rewinds_di
         assert "APPROVED NPC INITIATIVE" in prompt
         assert "VN CONTINUATION AND REPETITION CHECK" in prompt
         # With no NPC left here, the existing social pass also skips its request.
-        assert roles.roles.count("small") == 1
+        assert roles.roles.count("small") == 2
 
         roles.initiative = False
         retry = GameTurnManager(db, "session-1", user)
@@ -174,7 +175,7 @@ async def test_scene_focus_persists_without_initiative_and_full_replay_rewinds_i
         focus = state.entity_states[STATE_KEY]["focus"]
         assert focus["orientation"]["current_goal"] == "Find the letter"
         assert "SCENE ORIENTATION" in json.dumps(roles.prompts, ensure_ascii=False, default=str)
-        assert roles.roles.count("small") == 2  # Continuity and social, no extra model call.
+        assert roles.roles.count("small") == 3  # Continuity, social and item reconciliation.
 
         roles.focus = None
         retry = GameTurnManager(db, "session-1", user)
