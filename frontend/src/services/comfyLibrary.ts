@@ -58,7 +58,10 @@ export function rememberWorkflows(
       throw new Error('The workflow library is full (128 versions). Remove unused versions first.')
     const siblings = Object.values(result).filter(item => item.workflow.name === workflow.name)
     const revision = Math.max(0, ...siblings.map(item => item.revision)) + 1
-    result[crypto.randomUUID()] = { revision, workflow: JSON.parse(JSON.stringify(workflow)) }
+    result[
+      globalThis.crypto?.randomUUID?.() ??
+        `workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    ] = { revision, workflow: JSON.parse(JSON.stringify(workflow)) }
   }
   return result
 }

@@ -240,6 +240,7 @@ async def test_job_dispatch_for_each_image_entry_point(auth_client, monkeypatch,
 
 async def test_node_schemas_return_widget_layouts(auth_client, monkeypatch):
     extended_registry = {
+        "EmptyKnown": {},
         "DualCLIPLoader": {
             "input": {
                 "required": {
@@ -276,7 +277,7 @@ async def test_node_schemas_return_widget_layouts(auth_client, monkeypatch):
         "/api/settings/comfyui/node-schemas",
         json={
             "url": "http://127.0.0.1:8188",
-            "classes": ["DualCLIPLoader", "KSampler", "MissingPack"],
+            "classes": ["DualCLIPLoader", "KSampler", "MissingPack", "EmptyKnown"],
         },
     )
     assert response.status_code == 200, response.text
@@ -296,7 +297,8 @@ async def test_node_schemas_return_widget_layouts(auth_client, monkeypatch):
         {"name": "model", "kind": "socket"},
         {"name": "positive", "kind": "socket"},
     ]
-    assert schemas["MissingPack"] == []
+    assert "MissingPack" not in schemas
+    assert schemas["EmptyKnown"] == []
 
 
 async def test_node_schemas_report_server_errors(auth_client, monkeypatch):

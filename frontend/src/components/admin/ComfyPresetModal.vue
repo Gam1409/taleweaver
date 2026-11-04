@@ -51,7 +51,7 @@ const {
   setAutomatic,
   setRules,
   previewPrompt,
-  removeDraft,
+  removeSelectedPreset,
   connectionProblem
 } = useComfyPresetWorkspace(props)
 const dialog = ref<HTMLDialogElement>()
@@ -256,7 +256,7 @@ function create(copy = false): void {
               :purpose="purpose"
               @select="workspace.selectedId = $event"
               @rename="draft.name = $event"
-              @remove-draft="removeDraft"
+              @remove-preset="removeSelectedPreset"
               @configure="tab = 'workflow'"
             />
           </section>

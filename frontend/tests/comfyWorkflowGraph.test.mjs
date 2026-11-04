@@ -162,3 +162,10 @@ test('setBinding enforces the backend contract, clearBinding removes', () => {
   const untouched = clearBinding(original, 'seed')
   assert.equal(untouched, original, 'clearing a missing role is a no-op')
 })
+
+test('quadruple CLIP and upscale loaders have model labels and folders', () => {
+  assert.equal(service.MODEL_FIELD_LABELS.clip_name4, 'Text encoder 4')
+  assert.equal(service.MODEL_FIELD_FOLDERS.clip_name4, 'models/text_encoders')
+  assert.equal(service.MODEL_FIELD_LABELS.model_name, 'Upscale model')
+  assert.equal(service.MODEL_FIELD_FOLDERS.model_name, 'models/upscale_models')
+})

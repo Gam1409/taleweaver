@@ -26,7 +26,7 @@ function setTags(event: Event): void {
 const emit = defineEmits<{
   (event: 'select', id: string): void
   (event: 'rename', value: string): void
-  (event: 'remove-draft'): void
+  (event: 'remove-preset'): void
   (event: 'configure'): void
 }>()
 </script>
@@ -73,16 +73,18 @@ const emit = defineEmits<{
         </label>
       </details>
       <button
-        v-if="
-          !workspace.baseline.comfyui_presets?.[workspace.selectedId] &&
-          Object.keys(workspace.presets).length > 1
-        "
+        :disabled="Object.keys(workspace.presets).length <= 1"
         type="button"
-        class="text-xs text-rose-300 underline"
-        @click="emit('remove-draft')"
+        class="text-xs text-rose-300 underline disabled:opacity-40"
+        @click="emit('remove-preset')"
       >
-        Remove unsaved preset
+        Remove preset
       </button>
+      <p class="text-xs text-slate-400">
+        Removal takes effect on Apply. Assignments and the test selection using a removed preset are
+        cleared; this task uses the selected preset. Workflow versions are kept. Keep at least one
+        preset in the library.
+      </p>
       <p class="text-xs leading-relaxed text-slate-400">
         Switching presets keeps your edits in this window. Duplicate a preset to customize it
         without changing other profiles or stories that use the original.

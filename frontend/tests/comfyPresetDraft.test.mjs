@@ -9,7 +9,7 @@ const libraryUri = `data:text/javascript;base64,${Buffer.from(library).toString(
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replaceAll("'./comfyLibrary'", JSON.stringify(libraryUri))
-const { addStarterPreset, presetWorkspace, newPreset, applyPresetWorkspace, presetProblem, removeUnsavedPreset } =
+const { addStarterPreset, presetWorkspace, newPreset, applyPresetWorkspace, presetProblem, removePreset } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const preset = name => ({
   name,
@@ -74,13 +74,14 @@ test('duplicate edits are isolated and discard is just dropping the workspace', 
   assert.equal(Object.keys(original.comfyui_presets).length, 2)
   assert.equal(workspace.presets[id].name, 'A copy')
 })
-test('unsaved drafts can be removed without deleting saved presets', () => {
+test('saved presets and unsaved drafts can be removed while keeping one selected', () => {
   const workspace = presetWorkspace(options(), 'simple')
-  removeUnsavedPreset(workspace)
-  assert.ok(workspace.presets.a)
+  removePreset(workspace)
+  assert.equal(workspace.presets.a, undefined)
+  assert.equal(workspace.selectedId, 'b')
   const id = newPreset(workspace)
   assert.match(presetProblem(workspace.presets[id]), /base workflow/)
-  removeUnsavedPreset(workspace)
+  removePreset(workspace)
   assert.equal(workspace.presets[id], undefined)
   assert.ok(workspace.presets[workspace.selectedId])
 })
@@ -107,7 +108,7 @@ test('missing automatic templates and incomplete references are actionable', () 
 test('an empty library starts with one editable draft and the 32-preset limit is enforced', () => {
   const workspace = presetWorkspace({ ...options(), comfyui_presets: {} }, 'simple')
   assert.equal(Object.keys(workspace.presets).length, 1)
-  removeUnsavedPreset(workspace)
+  removePreset(workspace)
   assert.equal(Object.keys(workspace.presets).length, 1)
   while (Object.keys(workspace.presets).length < 32) newPreset(workspace)
   assert.throws(() => newPreset(workspace), /at most 32/)
@@ -181,4 +182,51 @@ test('creating a starter replaces only an untouched empty draft and isolates the
   assert.notEqual(workspace.selectedId, id)
   assert.equal(workspace.presets[id].name, 'My portrait')
   assert.deepEqual(original.comfyui_presets, {})
+})
+
+test('HTTP LAN contexts can remember workflows without randomUUID or crypto', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  try {
+    for (const crypto of [{}, undefined]) {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: crypto })
+      const workspace = presetWorkspace(options(), 'simple')
+      assert.ok(Object.keys(workspace.workflows).length)
+      assert.ok(Object.values(workspace.workflows)[0].workflow)
+    }
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'crypto', original)
+    else delete globalThis.crypto
+  }
+})
+
+test('deletion applies only on save, clears dependent selections, and preserves concurrent additions', () => {
+  const original = options()
+  original.comfyui_assignments.npc = 'a'
+  original.comfyui_test_preset = 'a'
+  const workspace = presetWorkspace(original, 'simple')
+  removePreset(workspace)
+  assert.ok(original.comfyui_presets.a)
+  const current = structuredClone(original)
+  current.comfyui_presets.c = preset('Elsewhere')
+  current.comfyui_assignments.background = 'c'
+  const applied = applyPresetWorkspace(current, workspace, 'simple')
+  assert.equal(applied.comfyui_presets.a, undefined)
+  assert.ok(applied.comfyui_presets.b)
+  assert.ok(applied.comfyui_presets.c)
+  assert.deepEqual(applied.comfyui_assignments, { simple:'b', advanced:'b', background:'c' })
+  assert.equal(applied.comfyui_test_preset, null)
+  assert.ok(Object.keys(applied.comfyui_workflows).length)
+})
+
+test('deletion frees a full library slot and protects concurrent preset edits', () => {
+  const original = options()
+  const workspace = presetWorkspace(original, 'simple')
+  while (Object.keys(workspace.presets).length < 32) newPreset(workspace)
+  workspace.selectedId = 'a'
+  removePreset(workspace)
+  assert.doesNotThrow(() => newPreset(workspace))
+  assert.equal(Object.keys(workspace.presets).length, 32)
+  const changed = structuredClone(original)
+  changed.comfyui_presets.a.name = 'Changed elsewhere'
+  assert.throws(() => applyPresetWorkspace(changed, workspace, 'simple'), /changed elsewhere/)
 })

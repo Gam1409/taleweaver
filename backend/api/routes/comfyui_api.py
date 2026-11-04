@@ -114,7 +114,7 @@ async def node_input_schemas(
     """
     registry = await _node_registry(payload.url)
     classes = list(dict.fromkeys(payload.classes))
-    return {name: node_input_schema(registry.get(name)) for name in classes}
+    return {name: node_input_schema(registry[name]) for name in classes if name in registry}
 
 
 @router.post("/check-nodes", response_model=None)

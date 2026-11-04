@@ -8,7 +8,7 @@ import {
   newPreset,
   presetProblem,
   presetWorkspace,
-  removeUnsavedPreset
+  removePreset
 } from '@/services/comfyPresetDraft'
 
 type Detection = { template_id: string | null; models: string[]; message: string }
@@ -169,8 +169,8 @@ export function useComfyPresetWorkspace(props: {
   function add(copy = false): void {
     newPreset(workspace.value, copy)
   }
-  function removeDraft(): void {
-    removeUnsavedPreset(workspace.value)
+  function removeSelectedPreset(): void {
+    removePreset(workspace.value)
   }
   function result(): ComfyOptions {
     return { ...applyPresetWorkspace(props.modelValue, workspace.value, props.purpose ?? props.profile), image_purpose: props.purpose }
@@ -194,7 +194,7 @@ export function useComfyPresetWorkspace(props: {
     setAutomatic,
     setRules,
     previewPrompt,
-    removeDraft,
+    removeSelectedPreset,
     connectionProblem
   }
 }

@@ -20,6 +20,8 @@ def _input_errors(node_id: str, inputs: dict, schema: dict) -> list[str]:
 def _input_kind(spec: Any) -> str:
     """Classify one INPUT_TYPES entry the way the ComfyUI editor renders it."""
     if isinstance(spec, (list, tuple)) and spec:
+        if len(spec) > 1 and isinstance(spec[1], dict) and spec[1].get("forceInput") is True:
+            return "socket"
         first = spec[0]
         if isinstance(first, (list, tuple)):
             return "combo"

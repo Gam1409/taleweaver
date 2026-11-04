@@ -64,7 +64,9 @@ function choose(id: string): void {
 }
 function applyPreset(value: ComfyOptions): void {
   // Editing the library must not accidentally assign a different quality fallback.
-  const assignments = draft.value.comfyui_assignments
+  const assignments = Object.fromEntries(
+    Object.entries(draft.value.comfyui_assignments ?? {}).filter(([, id]) => value.comfyui_presets?.[id])
+  )
   draft.value = { ...value, comfyui_assignments: assignments }
   const id = value.comfyui_assignments?.[purpose.value ?? profile.value]
   if (id) choose(id)

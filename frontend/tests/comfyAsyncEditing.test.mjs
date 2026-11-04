@@ -157,3 +157,14 @@ test('node check works without bindings and clears results when workflow changes
   f.ctx.props.modelValue = workflow('InstalledLoader')
   assert.equal(f.result.nodeReport.value.length, 0)
 })
+
+test('visual editor trims imported workflow names to the API limit', async t => {
+  const f = await mount(t, editorSource,
+    {url: 'https://one', modelValue: workflow('Before')},
+    async () => ({graph: {out: {class_type:'SaveImage', inputs:{}}}, notes: []}), true)
+  const name = 'a'.repeat(140) + '.json'
+  await f.result.loadWorkflow({target: {files: [{name, size: 2, text: async () => '{}'}], value: name}})
+  const update = f.ctx.emitted.find(([event]) => event === 'update:modelValue')
+  assert.ok(update)
+  assert.equal(update[1].name, name.slice(0, 120))
+})

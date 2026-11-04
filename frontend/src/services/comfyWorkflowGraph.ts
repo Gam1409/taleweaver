@@ -51,6 +51,8 @@ export const MODEL_FIELD_LABELS: Record<string, string> = {
   clip_name1: 'Text encoder 1',
   clip_name2: 'Text encoder 2',
   clip_name3: 'Text encoder 3',
+  clip_name4: 'Text encoder 4',
+  model_name: 'Upscale model',
   vae_name: 'VAE',
   lora_name: 'LoRA'
 }
@@ -62,6 +64,8 @@ export const MODEL_FIELD_FOLDERS: Record<string, string> = {
   clip_name1: 'models/text_encoders',
   clip_name2: 'models/text_encoders',
   clip_name3: 'models/text_encoders',
+  clip_name4: 'models/text_encoders',
+  model_name: 'models/upscale_models',
   vae_name: 'models/vae',
   lora_name: 'models/loras'
 }

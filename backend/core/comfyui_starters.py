@@ -123,6 +123,8 @@ MODEL_FIELDS = {
     "clip_name1",
     "clip_name2",
     "clip_name3",
+    "clip_name4",
+    "model_name",
     "vae_name",
     "lora_name",
 }

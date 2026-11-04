@@ -699,3 +699,23 @@ test('live schemas keep image-loader filenames and omit upload controls', async 
     assert.deepEqual((await editor.importWorkflowGraphWithServer(withoutButton, async () => ({ [type]: schema }))).graph['1'].inputs, expected)
   }
 })
+
+test('missing live classes retain offline layouts and unknown-node diagnostics', () => {
+  const result = editor.editorToApiGraph({nodes: [
+    {id: 1, type: 'CheckpointLoaderSimple', inputs: [], outputs: [], widgets_values: ['base.safetensors']},
+    {id: 2, type: 'MissingPack', inputs: [], outputs: [], widgets_values: ['value']}
+  ], links: []}, {})
+  assert.equal(result.graph['1'].inputs.ckpt_name, 'base.safetensors')
+  assert.ok(result.notes.some(note => note.includes('unknown to your ComfyUI server')))
+  assert.ok(!result.notes.some(note => note.includes('server defines 0')))
+})
+
+test('forceInput socket schemas do not consume positional widgets', () => {
+  const result = editor.editorToApiGraph({nodes: [
+    {id: 1, type: 'CustomForcedInput', inputs: [], outputs: [], widgets_values: [0.75]}
+  ], links: []}, {CustomForcedInput: [
+    {name: 'text', kind: 'socket'}, {name: 'choice', kind: 'socket'}, {name: 'strength', kind: 'float'}
+  ]})
+  assert.equal(result.graph['1'].inputs.strength, 0.75)
+  assert.equal(result.notes.length, 0)
+})

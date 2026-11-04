@@ -97,7 +97,7 @@ async function loadWorkflow(event: Event): Promise<void> {
       const target = suggestion.bindings[role]
       if (target) bindings[role] = target
     }
-    update({ name: file.name, graph, bindings, output_node: suggestion.output_node })
+    update({ name: file.name.slice(0, 120), graph, bindings, output_node: suggestion.output_node })
     report.value = [`Imported ${Object.keys(graph).length} nodes; drag them into a comfortable arrangement.`]
       .concat(result.notes)
       .concat(suggestion.notes)

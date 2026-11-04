@@ -102,6 +102,25 @@ export function applyPresetWorkspace(
   const edited = Object.fromEntries(
     changedPresets(workspace).map(id => [id, clonePresetData(workspace.presets[id]!)])
   )
+  const presets = { ...current.comfyui_presets, ...edited }
+  const assignments = { ...current.comfyui_assignments }
+  const removed = Object.keys(workspace.baseline.comfyui_presets ?? {}).filter(
+    id => !workspace.presets[id]
+  )
+  for (const id of removed) {
+    if (
+      current.comfyui_presets?.[id] &&
+      JSON.stringify(current.comfyui_presets[id]) !==
+        JSON.stringify(workspace.baseline.comfyui_presets?.[id])
+    )
+      throw new Error(
+        'A preset marked for removal changed elsewhere. Reopen the preset library before deleting it.'
+      )
+    delete presets[id]
+  }
+  for (const task of Object.keys(assignments) as PresetAssignment[]) {
+    if (removed.includes(assignments[task] ?? '')) delete assignments[task]
+  }
   return {
     ...current,
     comfyui_url:
@@ -111,17 +130,16 @@ export function applyPresetWorkspace(
         ? workspace.timeout
         : current.comfyui_timeout,
     comfyui_workflows: rememberWorkflows(workflows, edited),
-    comfyui_presets: { ...current.comfyui_presets, ...edited },
-    comfyui_assignments: { ...current.comfyui_assignments, [profile]: workspace.selectedId }
+    comfyui_presets: presets,
+    comfyui_test_preset: removed.includes(current.comfyui_test_preset ?? '')
+      ? null
+      : current.comfyui_test_preset,
+    comfyui_assignments: { ...assignments, [profile]: workspace.selectedId }
   }
 }
 
-export function removeUnsavedPreset(workspace: PresetWorkspace): void {
-  if (
-    workspace.baseline.comfyui_presets?.[workspace.selectedId] ||
-    Object.keys(workspace.presets).length <= 1
-  )
-    return
+export function removePreset(workspace: PresetWorkspace): void {
+  if (Object.keys(workspace.presets).length <= 1) return
   delete workspace.presets[workspace.selectedId]
   workspace.selectedId = Object.keys(workspace.presets)[0]!
 }
