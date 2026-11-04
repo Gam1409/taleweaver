@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import DebugWardrobeRecovery, { type WardrobeRecoveryPreview } from './DebugWardrobeRecovery.vue'
 
 interface Clothing {
   category: string
@@ -20,7 +21,11 @@ const props = defineProps<{
   npc: {
     id: string
     current_scene_id: string
-    wardrobe?: { items: WardrobeItem[]; profile_known: boolean }
+    wardrobe?: {
+      items: WardrobeItem[]
+      profile_known: boolean
+      recovery?: WardrobeRecoveryPreview | null
+    }
   }
   scenes: { id: string; label: string }[]
   currentSceneId: string
@@ -99,6 +104,12 @@ function save() {
           Bring to player
         </button>
       </div>
+      <DebugWardrobeRecovery
+        :npc-id="npc.id"
+        :preview="npc.wardrobe?.recovery"
+        :busy="busy"
+        @command="emit('command', $event)"
+      />
       <h4 class="font-bold">Existing clothing</h4>
       <p v-if="!npc.wardrobe?.profile_known" class="text-amber-300">
         Worn state is not established. Missing records do not mean undressed.

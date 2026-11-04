@@ -10,7 +10,7 @@ from backend.engine.clothing.profiles import (
     owned_items,
     validate_profile,
 )
-from backend.engine.clothing.schema import WornItem
+from backend.engine.clothing.schema import VisualProfile, WornItem
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
@@ -68,7 +68,7 @@ def _remove(actor: dict, item_id: str) -> None:
         slot: None if _id(item) == item_id else item for slot, item in actor["equipment"].items()
     }
     raw = actor.get("visual_profile")
-    if raw is not None and load_profile(raw) is None:
+    if raw and load_profile(raw) is None:
         raise ValueError("Invalid appearance profile; item transfer requires review.")
     if raw:
         actor["visual_profile"]["worn"] = [
@@ -87,7 +87,11 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
     if disposition != "worn":
         return
     garment = garment_for_item(item)
-    profile = load_profile(actor.get("visual_profile"))
+    raw = actor.get("visual_profile")
+    profile = load_profile(raw)
+    if profile is None and not raw:
+        profile = VisualProfile()
+        profile.appearance.age_years = actor.get("age_years")
     if garment is None or profile is None:
         raise ValueError(
             "Wearing requires valid garment metadata and an existing appearance profile."
@@ -100,7 +104,7 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
     if identifier not in {entry.item_id for entry in profile.worn}:
         profile.worn.append(WornItem(item_id=identifier))
     actor["visual_profile"] = validate_profile(
-        profile, actor["resolved_inventory"], equipment=actor["equipment"]
+        profile.model_dump(), actor["resolved_inventory"], equipment=actor["equipment"]
     ).model_dump()
     # Clothing layers coexist in worn; receiving an item never equips it as a weapon.
     for slot in item.get("wearable_slots") or []:
@@ -111,8 +115,12 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
 def _resolve(
     action: ItemAction, actors: dict, snapshot: Possessions, narration: str, **creation_options: Any
 ) -> dict:
-    if action.basis != "completed" or action.evidence not in narration:
+    if action.basis not in {"completed", "observed_wear"} or action.evidence not in narration:
         raise ValueError("No exact evidence of a completed item action.")
+    if action.basis == "observed_wear" and (
+        action.source_owner != action.destination_owner or action.disposition != "worn"
+    ):
+        raise ValueError("A wear observation cannot transfer or remove an item.")
     if action.destination_owner not in actors or (
         action.source_owner != SCENE and action.source_owner not in actors
     ):
@@ -170,6 +178,13 @@ def apply_actions(
             actual_owner = snapshot.owners.get(identifier, action.source_owner)
             if actual_owner == action.destination_owner and action.source_owner != actual_owner:
                 continue  # Already applied by the mechanics pass; never duplicate or unequip it.
+            profile = load_profile(actors[action.destination_owner].get("visual_profile"))
+            if (
+                action.basis == "observed_wear"
+                and profile
+                and any(row.item_id == identifier for row in profile.worn)
+            ):
+                continue
             candidate = deepcopy(actors)
             if actual_owner in candidate:
                 _remove(candidate[actual_owner], identifier)

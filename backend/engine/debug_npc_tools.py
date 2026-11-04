@@ -56,7 +56,14 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 "worn": identifier in worn,
             }
         )
-    return {"items": clothes, "profile_known": profile is not None}
+    preview = states.get("__wardrobe_recovery__") or {}
+    recovery = None
+    if preview.get("npc_id") == entity.id:
+        recovery = {
+            key: preview.get(key)
+            for key in ("token", "notes", "messages_scanned", "limited", "accepted", "errors")
+        }
+    return {"items": clothes, "profile_known": profile is not None, "recovery": recovery}
 
 
 async def _npc(db: AsyncSession, state: SessionState, identifier: str) -> WorldEntity | None:

@@ -89,3 +89,46 @@ async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch, pending_ca
     async with TestSessionLocal() as db:
         restored = await db.get(Avatar, avatar_id)
         assert len([item for item in restored.inventory if item["name"] == "Шарф"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_current_wear_description_registers_garment_without_dressing_action(monkeypatch):
+    narration = "Лина стоит у окна в синем хлопковом халате."
+    monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", narration)
+
+    class ObservationRoles(TurnRoles):
+        async def structured(self, *args, **kwargs):
+            schema = kwargs.get("response_model") or args[2]
+            if schema is ItemExtraction:
+                return ItemExtraction(
+                    actions=[
+                        ItemAction(
+                            source_owner="LINA",
+                            destination_owner="LINA",
+                            disposition="worn",
+                            evidence=narration,
+                            basis="observed_wear",
+                            new_item={
+                                "name": "Синий халат",
+                                "description": "Синий хлопковый халат.",
+                                "kind": "clothing",
+                                "clothing": {"layer": 2, "coverage": ["torso", "arms"]},
+                                "wearable_slots": ["Chest"],
+                            },
+                        )
+                    ]
+                )
+            return await super().structured(*args, **kwargs)
+
+    install_roles(monkeypatch, ObservationRoles())
+    async with TestSessionLocal() as db:
+        user, _, state, _ = await seed_vn(db)
+        manager = GameTurnManager(db, "session-1", user)
+        chunks = [chunk async for chunk in manager.process_turn("Посмотреть на Лину.")]
+        assert not any(chunk.startswith("event: error") for chunk in chunks), "".join(chunks)
+        await db.refresh(state)
+        actor = state.entity_states["LINA"]
+        garment = next(item for item in actor["inventory"] if item.get("name") == "Синий халат")
+        assert any(row["item_id"] == garment["id"] for row in actor["visual_profile"]["worn"])
+        assert state.entity_states[KEY]["rejected"] == []
+        assert state.entity_states[KEY]["accepted"][0]["evidence"] == narration

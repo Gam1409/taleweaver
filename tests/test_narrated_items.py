@@ -139,7 +139,7 @@ def test_new_inner_clothing_requires_existing_adult_source_and_detail(age, detai
 
 def test_failed_wear_does_not_remove_item_from_source():
     actors, snapshot = fixtures()
-    actors[PLAYER]["visual_profile"] = None
+    actors[PLAYER]["visual_profile"] = {"version": 999}
     changed, accepted, errors = run([action(disposition="worn")], actors, snapshot)
     assert errors and not accepted and changed == actors
 
@@ -254,3 +254,34 @@ def test_missing_participant_reports_item_role_and_available_actors():
     assert not accepted and changed == fixtures()[0]
     assert "SHIRT: source_owner 'REMOTE' is not present or not recognized" in errors[0]
     assert "Anna [NPC]" in errors[0] and "Hero [__player__]" in errors[0]
+
+
+def test_explicit_wear_bootstraps_missing_profile_without_inventing_appearance():
+    actors, snapshot = fixtures()
+    actors[PLAYER]["visual_profile"] = None
+    changed, accepted, errors = run([action(disposition="worn")], actors, snapshot)
+    assert accepted and not errors
+    assert changed[PLAYER]["visual_profile"]["worn"] == [
+        {"item_id": "SHIRT", "uncovered_regions": []}
+    ]
+    assert changed[PLAYER]["visual_profile"]["appearance"]["hair"] == ""
+
+
+def test_observed_wear_cannot_transfer_or_remove():
+    for proposal in [
+        action(basis="observed_wear", disposition="worn"),
+        action(basis="observed_wear", destination_owner="NPC"),
+    ]:
+        changed, accepted, errors = run([proposal])
+        assert errors and not accepted and changed == fixtures()[0]
+
+
+def test_repeated_wear_observation_preserves_existing_uncovered_regions():
+    actors, snapshot = fixtures()
+    actors["NPC"]["visual_profile"]["worn"][0]["uncovered_regions"] = ["torso"]
+    changed, accepted, errors = run(
+        [action(basis="observed_wear", destination_owner="NPC", disposition="worn")],
+        actors,
+        snapshot,
+    )
+    assert not accepted and not errors and changed == actors
