@@ -88,6 +88,8 @@ async def reconcile_items(
     payload = json.dumps(
         {
             "completed_narration": narration,
+            "player_actor_id": PLAYER,
+            "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
             "actors": [
                 {key: actor.get(key) for key in ("id", "name", "age_years", "visual_profile")}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DebugNpcTools from './DebugNpcTools.vue'
 /**
  * DebugModal — Unified In-Game Debug Panel
  *
@@ -35,26 +36,34 @@ const sessionDebug = computed(() => props.data?.fullWorld || null)
 const sheet = computed(() => props.data?.sheet || null)
 const currentSceneId = computed(() => sessionDebug.value?.session?.current_scene_id || sheet.value?.scene_id || '')
 
+const debugScenes = computed(() => {
+  const nodes = sessionDebug.value?.map?.nodes || props.nodes || props.mapData?.nodes || {}
+  return Object.entries(nodes).map(([id, node]: [string, any]) => ({ id: node.id || id, label: node.label || node.name || id }))
+})
+
 // --- Quick Command Execution Helper ---
 const commandBusy = ref(false)
 const commandSuccessMsg = ref<string | null>(null)
+const commandErrorMsg = ref<string | null>(null)
 const customCommandInput = ref('')
 
 async function runCmd(cmd: string) {
   if (commandBusy.value) return
   commandBusy.value = true
   commandSuccessMsg.value = null
+  commandErrorMsg.value = null
   try {
     if (props.executeCommand) {
       await props.executeCommand(cmd)
     } else {
       emit('executeCommand', cmd)
     }
-    commandSuccessMsg.value = `Executed: ${cmd}`
+    commandSuccessMsg.value = 'Command submitted. See the system message for the result.'
     setTimeout(() => {
       commandSuccessMsg.value = null
     }, 4000)
   } catch (err: any) {
+    commandErrorMsg.value = err instanceof Error ? err.message : 'Debug command failed.'
     console.error('Debug command failed:', err)
   } finally {
     commandBusy.value = false
@@ -589,6 +598,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <!-- TAB CONTENT AREA -->
           <main class="flex-grow min-h-0 overflow-hidden relative flex flex-col bg-slate-950/40">
             <!-- ========================================================= -->
+            <p v-if="commandErrorMsg" role="alert" class="px-6 py-2 text-sm text-rose-300">{{ commandErrorMsg }}</p>
             <!-- TAB 1: ALL NPCS OVERVIEW -->
             <!-- ========================================================= -->
             <section v-if="activeTab === 'npcs'" class="flex-1 flex flex-col min-h-0 p-4 sm:p-6 overflow-hidden">
@@ -770,6 +780,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                       </span>
                     </div>
                   </div>
+
+                  <DebugNpcTools :npc="npc" :scenes="debugScenes" :current-scene-id="currentSceneId" :busy="commandBusy" @command="runCmd" />
 
                   <!-- Bottom: Action Buttons -->
                   <div class="flex items-center gap-1.5 pt-2 border-t border-slate-800/80">

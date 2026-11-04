@@ -1361,6 +1361,7 @@ const {
   fullWorldDebug,
   goBack,
   openDebugInspector,
+  executeDebugCommand,
   openWalkthroughPanel,
   revealWalkthrough,
   handlePlayerInput: handlePlayerInputBase,
@@ -1802,7 +1803,7 @@ usePlayAgentAutoLoop()
       }" 
       :map-data="mapData"
       :nodes="nodes"
-      @execute-command="sendMessage"
+      :execute-command="executeDebugCommand"
       @close="showDebug = false" 
     />
 

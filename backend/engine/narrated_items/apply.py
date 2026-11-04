@@ -11,6 +11,7 @@ from backend.engine.clothing.profiles import (
     validate_profile,
 )
 from backend.engine.clothing.schema import WornItem
+from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
@@ -148,8 +149,10 @@ def apply_actions(
     accepted: list[dict] = []
     errors: list[str] = []
     seen: set[str] = set()
-    for index, action in enumerate(extraction.actions):
+    for index, proposal in enumerate(extraction.actions):
+        action = proposal
         try:
+            action = resolve_participants(proposal, actors)
             item = _resolve(
                 action,
                 actors,
@@ -184,5 +187,6 @@ def apply_actions(
                 }
             )
         except ValueError as exc:
-            errors.append(str(exc))
+            label = action.new_item.name if action.new_item else action.item_id
+            errors.append(f"{label}: {exc}")
     return actors, accepted, errors

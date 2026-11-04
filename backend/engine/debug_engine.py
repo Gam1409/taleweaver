@@ -3,7 +3,13 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
-from backend.engine import debug_inspection, debug_movement, debug_mutations, debug_progression
+from backend.engine import (
+    debug_inspection,
+    debug_movement,
+    debug_mutations,
+    debug_npc_tools,
+    debug_progression,
+)
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -31,6 +37,8 @@ _HANDLERS = {
     "npc_note": debug_mutations.debug_npc_note,
     "note": debug_mutations.debug_npc_note,
     "moveable": debug_movement.debug_moveable,
+    "move_npc": debug_npc_tools.debug_move_npc,
+    "npc_clothing": debug_npc_tools.debug_npc_clothing,
     "open_exit": debug_mutations.debug_open_exit,
     "walkthrough": debug_mutations.debug_walkthrough,
     "game_over": debug_mutations.debug_game_over,

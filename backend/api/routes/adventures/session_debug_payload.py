@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from backend.engine.debug_npc_tools import wardrobe_info
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -383,6 +384,10 @@ async def build_session_debug_payload(
         for ent in entity_lookup.values()
         if ent.entity_type == "NPC"
     ]
+    for npc in npcs_data:
+        npc["wardrobe"] = wardrobe_info(
+            entity_lookup[npc["id"]], list(entity_lookup.values()), entity_overrides
+        )
     scene_npcs: dict[str, list[dict[str, Any]]] = {s_id: [] for s_id in scene_lookup}
     for npc in npcs_data:
         scene_npcs.setdefault(npc["current_scene_id"], []).append(_scene_npc_summary(npc))

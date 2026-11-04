@@ -32,7 +32,7 @@ export function useGameCommandFlow(options: UseGameCommandFlowOptions) {
     showSheet,
     showQuests,
     addNotification,
-    emitSystemMessage,
+    emitSystemMessage
   } = options
 
   const showWalkthrough = ref(false)
@@ -63,10 +63,19 @@ export function useGameCommandFlow(options: UseGameCommandFlowOptions) {
     showDebug.value = true
   }
 
+  const executeDebugCommand = async (command: string) => {
+    if (isActionInputBlocked.value) throw new Error('Wait for the current turn to finish.')
+    await sendMessage(command)
+    fullWorldDebug.value = await gameViewService.fetchFullWorldDebug(routeId.value)
+  }
+
   const loadWalkthrough = async () => {
     if (!routeId.value) return
 
-    walkthroughData.value = await gameViewService.fetchWalkthrough(routeId.value, sheet.value?.exp || 0)
+    walkthroughData.value = await gameViewService.fetchWalkthrough(
+      routeId.value,
+      sheet.value?.exp || 0
+    )
   }
 
   const openWalkthroughPanel = async () => {
@@ -137,8 +146,6 @@ export function useGameCommandFlow(options: UseGameCommandFlowOptions) {
       return
     }
 
-
-
     if (specialCommand === 'debugWalkthrough') {
       await sendMessage('/debug walkthrough')
       await loadWalkthrough()
@@ -160,11 +167,14 @@ export function useGameCommandFlow(options: UseGameCommandFlowOptions) {
     await sendMessage(content)
   }
 
-  watch(() => audioService.lastError.value, (message) => {
-    if (!message || message === lastAudioErrorMessage.value) return
-    addNotification(message, 'error')
-    lastAudioErrorMessage.value = message
-  })
+  watch(
+    () => audioService.lastError.value,
+    message => {
+      if (!message || message === lastAudioErrorMessage.value) return
+      addNotification(message, 'error')
+      lastAudioErrorMessage.value = message
+    }
+  )
 
   return {
     showWalkthrough,
@@ -173,8 +183,9 @@ export function useGameCommandFlow(options: UseGameCommandFlowOptions) {
     fullWorldDebug,
     goBack,
     openDebugInspector,
+    executeDebugCommand,
     openWalkthroughPanel,
     revealWalkthrough,
-    handlePlayerInput,
+    handlePlayerInput
   }
 }

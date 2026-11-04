@@ -231,3 +231,26 @@ def test_gift_can_use_previous_narration_but_not_only_current_player_claim():
     )
     assert len(validate_plan(manager, proposal, player, previous, [npc], scenes).creations) == 1
     assert not validate_plan(manager, proposal, player + previous, "", [npc], scenes).creations
+
+
+def test_unique_actor_names_resolve_to_present_canonical_ids():
+    changed, accepted, errors = run([action(source_owner="anna", destination_owner="Hero")])
+    assert not errors
+    assert accepted[0]["source_owner"] == "NPC"
+    assert accepted[0]["destination_owner"] == PLAYER
+    assert changed[PLAYER]["inventory"][0]["id"] == "SHIRT"
+
+
+def test_ambiguous_actor_name_is_rejected_without_mutation():
+    actors, snapshot = fixtures()
+    actors[PLAYER]["name"] = "Anna"
+    changed, accepted, errors = run([action(source_owner="Anna")], actors, snapshot)
+    assert not accepted and changed == actors
+    assert "SHIRT: source_owner 'Anna' is ambiguous" in errors[0]
+
+
+def test_missing_participant_reports_item_role_and_available_actors():
+    changed, accepted, errors = run([action(source_owner="REMOTE")])
+    assert not accepted and changed == fixtures()[0]
+    assert "SHIRT: source_owner 'REMOTE' is not present or not recognized" in errors[0]
+    assert "Anna [NPC]" in errors[0] and "Hero [__player__]" in errors[0]
