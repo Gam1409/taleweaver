@@ -25,6 +25,7 @@ from backend.api.routes.adventures.living_world_decisions import (
 )
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
 from backend.api.routes.adventures.regeneration import router as regeneration_router
+from backend.api.routes.adventures.scene_debug import router as scene_debug_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
 from backend.api.routes.adventures.session_content_settings import router as content_settings_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
@@ -61,6 +62,7 @@ router.include_router(checkpoint_policy_router)
 router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
 router.include_router(state_checks_router)
+router.include_router(scene_debug_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)

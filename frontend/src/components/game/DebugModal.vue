@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugNpcTools from './DebugNpcTools.vue'
+import DebugSceneJson from './DebugSceneJson.vue'
 /**
  * DebugModal — Unified In-Game Debug Panel
  *
@@ -480,7 +481,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       >
         <div class="w-full max-w-7xl h-[92vh] flex flex-col bg-slate-900/95 border border-cyan-500/30 rounded-3xl shadow-[0_0_80px_rgba(6,182,212,0.2)] overflow-hidden animate-modal-in">
           <!-- TOP HEADER BAR -->
-          <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800/90 bg-slate-950/80 shrink-0">
+          <header class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-800/90 bg-slate-950/80 shrink-0">
             <div class="flex items-center gap-3">
               <div class="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-inner shadow-cyan-500/20">
                 <Terminal class="w-5 h-5" />
@@ -501,6 +502,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                 </div>
               </div>
             </div>
+
+            <DebugSceneJson :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" />
 
             <!-- TAB SELECTOR IN HEADER -->
             <div class="hidden md:flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-2xl border border-slate-800">
