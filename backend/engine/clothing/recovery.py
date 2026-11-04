@@ -15,6 +15,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.recovery_context import KEY, recovery_context
+from backend.engine.clothing.recovery_request import request_proposal
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.schema import Region
 from backend.engine.narrated_items.apply import apply_actions
@@ -169,15 +170,7 @@ async def debug_wardrobe_preview(
             raise ValueError("Recovery context is too large; no changes were made.")
         await db.commit()
         result = await asyncio.wait_for(
-            llm.aexecute_complex_task(
-                PROMPT,
-                payload,
-                RecoveryProposal,
-                llm.model,
-                game_id=state.session_id,
-                operation="wardrobe_recovery",
-                phase="preview",
-            ),
+            request_proposal(llm, PROMPT, payload, RecoveryProposal, state.session_id),
             timeout=deadline,
         )
         proposal = RecoveryProposal.model_validate(result)
@@ -195,7 +188,7 @@ async def debug_wardrobe_preview(
         }
         await db.refresh(state)
         state.entity_states = {**(state.entity_states or {}), KEY: preview}
-        return f"DEBUG: Wardrobe preview ready: {len(accepted)} proposed changes. Review and apply in Location and clothing. Nothing has been added yet."
+        return f"DEBUG: Wardrobe preview ready: {len(accepted)} proposed changes. Review and apply in Debug > NPCs > Clothing. Nothing has been added yet."
     except TimeoutError:
         message = (
             f"Small-model request timed out (configured deadline: {deadline:g}s). "

@@ -41,7 +41,7 @@ const emit = defineEmits<{ command: [value: string] }>()
         }}{{ preview.limited ? ' (older history excluded)' : '' }}.
       </p>
       <p v-if="preview.notes" class="text-amber-200">{{ preview.notes }}</p>
-      <p v-if="!preview.accepted.length">No confirmed missing clothing was proposed.</p>
+      <p v-if="!preview.accepted.length && !preview.errors.length">No confirmed missing clothing was proposed.</p>
       <article
         v-for="(entry, index) in preview.accepted"
         :key="index"
