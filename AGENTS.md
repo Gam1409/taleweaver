@@ -26,6 +26,7 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
      poetry run ruff format --check <modified_files>
      ```
    - Ensure **zero errors** before concluding.
+   - Before every push containing frontend changes, run the complete frontend suite from `frontend/`: `node --test tests/*.test.mjs`. Targeted scripts such as `test:presets` supplement this check; they do not replace it. Resolve failures before publishing.
    - Never suppress complexity (`C901`, `PLR0912`, `PLR0915`) or security (`S`) warnings with `# noqa`; refactor the code instead.
    - Full check / fix command: `poetry run python scripts/lint.py --fix`.
 

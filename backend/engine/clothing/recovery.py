@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.profiles import garment_for_item
@@ -113,6 +115,7 @@ async def debug_wardrobe_preview(
     if not state.is_debug_enabled or avatar is None:
         return "DEBUG ERROR: Wardrobe recovery requires debug mode and a session avatar."
     npc_id = args.partition(" ")[2].strip()
+    deadline = role_timeout(user, "small")
     try:
         context = await recovery_context(db, state, avatar, npc_id)
         llm = GameMasterLLM.for_role(user, "small")
@@ -138,7 +141,7 @@ async def debug_wardrobe_preview(
                 operation="wardrobe_recovery",
                 phase="preview",
             ),
-            timeout=60,
+            timeout=deadline,
         )
         proposal = RecoveryProposal.model_validate(result)
         detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
@@ -157,11 +160,37 @@ async def debug_wardrobe_preview(
         await db.refresh(state)
         state.entity_states = {**(state.entity_states or {}), KEY: preview}
         return f"DEBUG: Wardrobe preview ready: {len(accepted)} proposed changes. Review and apply in Location and clothing. Nothing has been added yet."
-    except (ValueError, TimeoutError) as exc:
-        return f"DEBUG ERROR: Wardrobe preview failed: {exc}"
+    except TimeoutError:
+        message = (
+            f"Small-model request timed out (configured deadline: {deadline:g}s). "
+            "No clothing was changed. Check the Small model server and its timeout in Intelligence settings."
+        )
+    except InferenceUncertainError:
+        message = (
+            "No recovery request was sent: completion of a previous model request is unconfirmed. "
+            "In Administration > Intelligence > Inference queue, refresh and clear the stopped request "
+            "only after verifying generation has stopped on the model server. No clothing was changed."
+        )
+    except InferenceQueueError:
+        message = "No recovery request was sent: the inference queue is unavailable. Try again when it is free. No clothing was changed."
+    except ValueError as exc:
+        message = f"Invalid recovery result: {str(exc).strip()[:500] or type(exc).__name__}. No clothing was changed."
     except Exception as exc:
         logger.exception("Wardrobe recovery preview failed for %s", state.session_id)
-        return f"DEBUG ERROR: Wardrobe preview failed ({type(exc).__name__}); nothing was applied."
+        message = f"Wardrobe preview failed ({type(exc).__name__}). No clothing was changed. Check the model server and logs."
+    state.entity_states = {
+        **(state.entity_states or {}),
+        KEY: {
+            "npc_id": npc_id,
+            "token": str(uuid4()),
+            "accepted": [],
+            "errors": [message],
+            "notes": "Preview failed; no proposal is available to apply.",
+            "messages_scanned": 0,
+            "limited": False,
+        },
+    }
+    return f"DEBUG ERROR: {message}"
 
 
 async def debug_wardrobe_apply(

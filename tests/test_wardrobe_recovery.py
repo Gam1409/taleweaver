@@ -143,3 +143,59 @@ def test_two_garments_from_one_message_have_distinct_ids_and_real_provenance():
         for item in changed["NPC"]["inventory"]
         if item["id"] in ids
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [TimeoutError(), ValueError("")])
+async def test_preview_failure_is_visible_durable_and_uses_role_deadline(monkeypatch, failure):
+    from backend.engine.clothing import recovery
+
+    async with TestSessionLocal() as db:
+        user, avatar, state, _ = await seed_vn(db)
+        state.is_debug_enabled = True
+        state_before = deepcopy(state.entity_states)
+        llm = SimpleNamespace(model="test", aexecute_complex_task=AsyncMock(side_effect=failure))
+        monkeypatch.setattr(recovery.GameMasterLLM, "for_role", lambda *_: llm)
+        monkeypatch.setattr(recovery, "role_timeout", lambda *_: 600.0)
+
+        async def wait_for(request, *, timeout):
+            assert timeout == 600.0
+            return await request
+
+        monkeypatch.setattr(recovery.asyncio, "wait_for", wait_for)
+        result = await DebugEngine.handle_debug_command(
+            db, state, "wardrobe_preview LINA", user=user, avatar=avatar
+        )
+        assert "No clothing was changed" in result
+        if isinstance(failure, TimeoutError):
+            assert "timed out" in result and "600s" in result
+        else:
+            assert "ValueError" in result
+        preview = state.entity_states[KEY]
+        assert preview["errors"] and preview["accepted"] == []
+        assert {k: v for k, v in state.entity_states.items() if k != KEY} == state_before
+        assert "rejected or empty" in await DebugEngine.handle_debug_command(
+            db, state, "wardrobe_apply " + preview["token"], user=user, avatar=avatar
+        )
+
+
+@pytest.mark.asyncio
+async def test_uncertain_queue_is_not_reported_as_invalid_recovery_result(monkeypatch):
+    from backend.core.inference.registry import InferenceUncertainError
+    from backend.engine.clothing import recovery
+
+    async with TestSessionLocal() as db:
+        user, avatar, state, _ = await seed_vn(db)
+        state.is_debug_enabled = True
+        llm = SimpleNamespace(
+            model="test",
+            aexecute_complex_task=AsyncMock(side_effect=InferenceUncertainError("blocked")),
+        )
+        monkeypatch.setattr(recovery.GameMasterLLM, "for_role", lambda *_: llm)
+        result = await DebugEngine.handle_debug_command(
+            db, state, "wardrobe_preview LINA", user=user, avatar=avatar
+        )
+        assert "No recovery request was sent" in result
+        assert "verifying generation has stopped" in result
+        assert "Invalid recovery result" not in result
+        assert not state.entity_states[KEY]["accepted"]

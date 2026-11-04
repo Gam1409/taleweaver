@@ -7,11 +7,16 @@ import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
 
+// This test covers the UUID label; the interactive child's own UI is independent.
+// A data: module cannot resolve relative Vue imports or the child's HTTP dependencies.
+const childStub = `data:text/javascript;base64,${Buffer.from("export default { props: ['sessionId'], render: () => null }").toString('base64')}`
 const source = readFileSync(new URL('../src/components/game/immersive/SessionDiagnosticsId.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
 const compiled = ts.transpileModule(compileScript(descriptor, { id: 'session-debug-id', inlineTemplate: true }).content, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
-}).outputText.replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+}).outputText
+  .replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+  .replace(/from ['"]\.\/SessionStateChecks\.vue['"]/g, `from '${childStub}'`)
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 const render = props => renderToString(createSSRApp({ render: () => h(component, props) }))
 const sessionId = '01a179bd-278e-7539-94dc-4b669f7ac68f'

@@ -226,3 +226,34 @@ async def test_paused_worker_runs_chronicle_without_embedding(journal_world, mon
     assert not await worker._step(claim)
     index.assert_not_awaited()
     summarize.assert_awaited_once_with(claim, chronicle=True)
+
+
+@pytest.mark.parametrize("uncertain", [True, False])
+async def test_inference_admission_defers_memory_without_failure_backoff(
+    journal_world, monkeypatch, uncertain
+):
+    from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+
+    owner, _ = journal_world
+    async with TestSessionLocal() as db:
+        await worker.mark_dirty(db, "portrait-session", owner, None)
+        await db.commit()
+    claim = await worker._claim("portrait-session", owner)
+    error = InferenceUncertainError("blocked") if uncertain else InferenceQueueError("busy")
+    monkeypatch.setattr(worker, "_step", AsyncMock(side_effect=error))
+    failed = AsyncMock()
+    monkeypatch.setattr(worker, "_failed", failed)
+    assert not await worker._process_claim(claim)
+    failed.assert_not_awaited()
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        assert row.status == "pending"
+        assert row.lease_token is None and row.lease_until is None
+        assert "Waiting for inference queue" in row.last_error
+        assert row.indexed_revision < row.desired_revision
+    # Once admission is available, the next idle schedule can claim the pending work.
+    resumed = await worker._claim("portrait-session", owner)
+    assert resumed is not None
+    monkeypatch.setattr(worker, "_step", AsyncMock(return_value=False))
+    assert not await worker._process_claim(resumed)
+    await worker._release(resumed)

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
@@ -327,6 +328,16 @@ async def _process_claim(claim: Claim) -> bool:
         more = await _step(claim)
         _failures.pop(claim.session_id, None)
         return more
+    except (InferenceUncertainError, InferenceQueueError) as exc:
+        reason = (
+            "Waiting for inference queue: completion of a previous request is unconfirmed. "
+            "An administrator must verify it stopped and clear the stopped request."
+            if isinstance(exc, InferenceUncertainError)
+            else "Waiting for inference queue availability; no memory request was submitted."
+        )
+        await _release(claim, status="paused" if claim.paused else "pending", last_error=reason)
+        logger.info("Memory maintenance deferred by inference admission for %s", claim.session_id)
+        return False  # Resume on the next scheduled idle window; never spin on a blocked queue.
     except BackgroundDeferredError:
         await _release(claim)
         return True
