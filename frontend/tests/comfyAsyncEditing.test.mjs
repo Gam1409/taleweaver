@@ -28,7 +28,14 @@ async function mount(t, source, props, request, editor = false) {
   const ctx = { props: reactive(props), request, busy: [], emitted: [], cleanup: [] }
   globalThis[key] = ctx
   source = source.replace(/import[\s\S]*?from ['"][^'"]+['"];?/g, '')
-  if (editor) {
+  if (editor === 'slot') {
+    source = source
+      .replace(/const props = defineProps<[\s\S]*?>\(\)/, `const props = globalThis['${key}'].props`)
+      .replace(/const emit = defineEmits<[\s\S]*?>\(\)/,
+        `const emit = (...args) => globalThis['${key}'].emitted.push(args)`)
+      .replace(/const \{ (importWorkflowGraphWithServer|suggestBindings) \} = await import\([^\n]+\)/g, '')
+    source = `export function setup() { const defineAsyncComponent = () => null; ${source}; return {importFile, report}; }`
+  } else if (editor) {
     source = source
       .replace(/const props = defineProps<[^\n]+\(\)/, `const props = globalThis['${key}'].props`)
       .replace(
@@ -167,4 +174,39 @@ test('visual editor trims imported workflow names to the API limit', async t => 
   const update = f.ctx.emitted.find(([event]) => event === 'update:modelValue')
   assert.ok(update)
   assert.equal(update[1].name, name.slice(0, 120))
+})
+
+const slotSource = readFileSync(
+  new URL('../src/components/admin/ComfyWorkflowSlot.vue', import.meta.url), 'utf8'
+).match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+
+test('slot import warnings survive parent v-model updates and clear when source changes', async t => {
+  const notes = ['Unknown node: positional widgets were skipped instead of guessing.']
+  const f = await mount(t, slotSource,
+    {url: 'https://one', modelValue: workflow('Before'), library: {}},
+    async () => ({graph: {out: {class_type:'CustomNode', inputs:{}}}, notes}), 'slot')
+  await f.result.importFile({target: {files: [{name:'custom.json', size:2, text:async ()=>'{}'}], value:'custom.json'}})
+  const update = f.ctx.emitted.find(([event]) => event === 'update:modelValue')
+  assert.ok(update)
+  f.ctx.props.modelValue = structuredClone(update[1])
+  await tick()
+  assert.deepEqual([...f.result.report.value], notes)
+  f.ctx.props.url = 'https://two'
+  await tick()
+  assert.deepEqual([...f.result.report.value], [])
+})
+
+test('stale slot imports cannot restore warnings after switching workflows', async t => {
+  const pending = deferred()
+  const f = await mount(t, slotSource,
+    {url: 'https://one', modelValue: workflow('Before'), library: {}},
+    () => pending.promise, 'slot')
+  const loading = f.result.importFile({target: {files: [{name:'custom.json', size:2, text:async ()=>'{}'}], value:'custom.json'}})
+  await tick()
+  f.ctx.props.modelValue = workflow('After')
+  await tick()
+  pending.resolve({graph:{}, notes:['Old warning']})
+  await loading
+  assert.deepEqual([...f.result.report.value], [])
+  assert.equal(f.ctx.emitted.length, 0)
 })

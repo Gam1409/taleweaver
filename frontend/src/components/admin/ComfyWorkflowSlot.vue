@@ -32,11 +32,13 @@ const checking = ref(false)
 const importing = ref(false)
 const report = ref<string[]>([])
 let version = 0
+let importedSignature = ''
 watch(
   () => JSON.stringify([props.url, props.modelValue]),
-  () => {
+  signature => {
     version++
-    report.value = []
+    if (signature !== importedSignature) report.value = []
+    importedSignature = ''
     checking.value = false
     importing.value = false
     selected.value = ''
@@ -83,12 +85,15 @@ async function importFile(event: Event): Promise<void> {
     )
     if (current !== version) return
     const suggested = suggestBindings(result.graph)
-    emit('update:modelValue', {
+    const workflow: ComfyWorkflow = {
       name: file.name.slice(0, 120),
       graph: result.graph,
       bindings: suggested.bindings,
       output_node: suggested.output_node
-    })
+    }
+    importedSignature = JSON.stringify([props.url, workflow])
+    report.value = [...result.notes, ...suggested.notes]
+    emit('update:modelValue', workflow)
   } catch (error) {
     if (current === version) report.value = [String(error)]
   } finally {
