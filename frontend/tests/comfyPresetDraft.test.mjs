@@ -9,7 +9,7 @@ const libraryUri = `data:text/javascript;base64,${Buffer.from(library).toString(
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replaceAll("'./comfyLibrary'", JSON.stringify(libraryUri))
-const { presetWorkspace, newPreset, applyPresetWorkspace, presetProblem, removeUnsavedPreset } =
+const { addStarterPreset, presetWorkspace, newPreset, applyPresetWorkspace, presetProblem, removeUnsavedPreset } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const preset = name => ({
   name,
@@ -164,4 +164,21 @@ test('removing a library version preserves pinned workflow and concurrent librar
   assert.equal(applied.comfyui_workflows[removed], undefined)
   assert.ok(applied.comfyui_workflows.remote)
   assert.deepEqual(applied.comfyui_presets.a.generate, initial.comfyui_presets.a.generate)
+})
+
+
+test('creating a starter replaces only an untouched empty draft and isolates the source', () => {
+  const original = {...options(), comfyui_presets: {}, comfyui_assignments: {}}
+  const workspace = presetWorkspace(original, 'simple')
+  const id = workspace.selectedId
+  const template = {...preset('SDXL portrait'), purpose_tags:['npc']}
+  addStarterPreset(workspace, template)
+  assert.equal(workspace.selectedId, id)
+  assert.equal(Object.keys(workspace.presets).length, 1)
+  workspace.presets[id].name = 'My portrait'
+  assert.equal(template.name, 'SDXL portrait')
+  addStarterPreset(workspace, template)
+  assert.notEqual(workspace.selectedId, id)
+  assert.equal(workspace.presets[id].name, 'My portrait')
+  assert.deepEqual(original.comfyui_presets, {})
 })

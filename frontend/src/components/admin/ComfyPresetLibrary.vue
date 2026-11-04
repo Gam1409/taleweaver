@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ComfyPresetBrowser from './ComfyPresetBrowser.vue'
+import ComfyPresetStarter from './ComfyPresetStarter.vue'
+import { addStarterPreset } from '@/services/comfyPresetDraft'
 import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import type { PresetWorkspace } from '@/services/comfyPresetDraft'
-const props = defineProps<{ workspace: PresetWorkspace }>()
+const props = defineProps<{ workspace: PresetWorkspace; purpose?: ImagePurpose }>()
 const selected = computed(() => props.workspace.presets[props.workspace.selectedId]!)
 function togglePurpose(purpose: ImagePurpose, checked: boolean): void {
   const values = new Set(selected.value.purpose_tags ?? [])
@@ -29,6 +31,11 @@ const emit = defineEmits<{
 }>()
 </script>
 <template>
+  <ComfyPresetStarter
+    :purpose="purpose"
+    :disabled="Object.keys(workspace.presets).length >= 32"
+    @create="addStarterPreset(workspace, $event)"
+  />
   <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
     <ComfyPresetBrowser
       :presets="workspace.presets"

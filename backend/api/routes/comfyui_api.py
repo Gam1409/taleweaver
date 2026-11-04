@@ -9,9 +9,12 @@ from pydantic import BaseModel, Field
 
 from backend.core.auth import get_current_admin
 from backend.core.comfyui_config import ComfyPreset, ComfyWorkflow
+from backend.core.comfyui_starter_models import LoaderRecipe
 from backend.core.comfyui_starters import model_choices, starter_catalog
+from backend.core.comfyui_task_templates import preset_catalog, task_preset
 from backend.core.image_model_detection import detect_preset_template
 from backend.core.image_prompt_templates import TEMPLATES
+from backend.core.image_purposes import ImagePurpose
 from backend.engine.comfyui_client import ComfyClient
 from backend.engine.comfyui_validation import inspect_workflow, node_input_schema
 from backend.engine.image_prompt_adapter import prepare_prompt
@@ -48,6 +51,26 @@ async def prompt_templates(_user: User = Depends(get_current_admin)) -> list[dic
 @router.get("/starter-workflows", response_model=None)
 async def starter_workflows(_user: User = Depends(get_current_admin)) -> list[dict[str, Any]]:
     return starter_catalog()
+
+
+class StarterPresetRequest(LoaderRecipe):
+    family: str = Field(min_length=1, max_length=80)
+    purpose: ImagePurpose
+
+
+@router.get("/starter-presets", response_model=None)
+async def starter_presets(_user: User = Depends(get_current_admin)) -> list[dict[str, Any]]:
+    return preset_catalog()
+
+
+@router.post("/starter-presets", response_model=None)
+async def create_starter_preset(
+    payload: StarterPresetRequest, _user: User = Depends(get_current_admin)
+) -> dict[str, Any]:
+    try:
+        return task_preset(payload.family, payload.purpose, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/model-options", response_model=None)

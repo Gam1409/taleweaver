@@ -253,6 +253,7 @@ function create(copy = false): void {
           >
             <ComfyPresetLibrary
               :workspace="workspace"
+              :purpose="purpose"
               @select="workspace.selectedId = $event"
               @rename="draft.name = $event"
               @remove-draft="removeDraft"

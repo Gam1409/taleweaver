@@ -1,42 +1,23 @@
 """Small, editable ComfyUI starter graphs with explicit architecture choices."""
 
-from typing import Any
-
 from backend.core.comfyui_config import ComfyWorkflow
-
-FAMILIES = {
-    "sdxl": {"name": "SDXL", "checkpoint": "sd_xl_base_1.0.safetensors", "cfg": 7.0, "steps": 25},
-    "illustrious": {
-        "name": "Illustrious XL",
-        "checkpoint": "illustriousXL_v01.safetensors",
-        "cfg": 5.0,
-        "steps": 28,
-    },
-    "animagine4": {
-        "name": "Animagine XL 4.0",
-        "checkpoint": "animagine-xl-4.0-opt.safetensors",
-        "cfg": 7.0,
-        "steps": 28,
-    },
-    "flux1": {
-        "name": "FLUX.1 Dev FP8 (combined checkpoint)",
-        "checkpoint": "flux1-dev-fp8.safetensors",
-        "cfg": 1.0,
-        "steps": 20,
-    },
-    "anima": {"name": "Anima / Prefect Anima", "cfg": 4.0, "steps": 30},
-}
+from backend.core.comfyui_starter_models import (
+    FAMILIES,
+    LoaderRecipe,
+    loaders,
+    node,
+    recipe_label,
+    resolved_recipe,
+)
 
 
-def node(kind: str, **inputs: Any) -> dict:
-    return {"class_type": kind, "inputs": inputs}
-
-
-def starter_workflow(family: str, reference: bool = False) -> ComfyWorkflow:
+def starter_workflow(
+    family: str, reference: bool = False, *, recipe: LoaderRecipe | None = None
+) -> ComfyWorkflow:
     if family not in FAMILIES:
         raise ValueError("Unknown starter workflow family.")
     spec = FAMILIES[family]
-    graph, clip, vae = _loaders(family, spec)
+    graph, clip, vae = loaders(family, recipe)
     graph.update(
         {
             "positive": node("CLIPTextEncode", clip=clip, text="A traveler with a brass lantern."),
@@ -51,8 +32,8 @@ def starter_workflow(family: str, reference: bool = False) -> ComfyWorkflow:
                 seed=42,
                 steps=spec["steps"],
                 cfg=spec["cfg"],
-                sampler_name="euler",
-                scheduler="normal",
+                sampler_name=spec["sampler"],
+                scheduler=spec["scheduler"],
                 denoise=1.0,
             ),
             "decode": node("VAEDecode", samples=["sampler", 0], vae=vae),
@@ -68,47 +49,25 @@ def starter_workflow(family: str, reference: bool = False) -> ComfyWorkflow:
     }
     if family == "flux1":
         _flux_conditioning(graph, clip, bindings)
-    if family == "anima":
-        graph["sampler"]["inputs"].update(sampler_name="er_sde", scheduler="simple")
-    if family in ("illustrious", "animagine4"):
-        graph["sampler"]["inputs"]["sampler_name"] = "euler_ancestral"
+    if family in ("sd35", "qwen_image"):
+        graph["latent"]["class_type"] = "EmptySD3LatentImage"
+    if family == "qwen_image":
+        graph["sampling"] = node("ModelSamplingAuraFlow", model=["model", 0], shift=3.1)
+        graph["sampler"]["inputs"]["model"] = ["sampling", 0]
     if reference:
         _reference_input(graph, bindings, vae)
     return ComfyWorkflow.model_validate(
         {
-            "name": f"{spec['name']} — {'img2img' if reference else 'text to image'}",
+            "name": f"General image · {spec['name']} · {'With reference (img2img)' if reference else 'No reference'} · {recipe_label(resolved_recipe(family, recipe))}",
             "graph": graph,
             "bindings": {
                 k: {"node_id": pair[0], "input_name": pair[1]} for k, pair in bindings.items()
             },
             "output_node": "save",
-            "dimension_multiple": 16 if family in ("flux1", "anima") else 8,
+            "dimension_multiple": 16
+            if family in ("flux1", "anima", "nova_anime_am", "qwen_image", "sd35")
+            else 8,
         }
-    )
-
-
-def _loaders(family: str, spec: dict) -> tuple[dict, list, list]:
-    if family == "anima":
-        return (
-            {
-                "model": node(
-                    "UNETLoader", unet_name="prefectAnima_v10.safetensors", weight_dtype="default"
-                ),
-                "clip": node(
-                    "CLIPLoader",
-                    clip_name="qwen_3_06b_base.safetensors",
-                    type="stable_diffusion",
-                    device="default",
-                ),
-                "vae": node("VAELoader", vae_name="qwen_image_vae.safetensors"),
-            },
-            ["clip", 0],
-            ["vae", 0],
-        )
-    return (
-        {"model": node("CheckpointLoaderSimple", ckpt_name=spec["checkpoint"])},
-        ["model", 1],
-        ["model", 2],
     )
 
 

@@ -34,6 +34,17 @@ export function newPreset(workspace: PresetWorkspace, copy = false): string {
   workspace.selectedId = id
   return id
 }
+export function addStarterPreset(workspace: PresetWorkspace, preset: ComfyPreset): void {
+  const current = workspace.presets[workspace.selectedId]
+  const blank =
+    current?.name === 'New preset' &&
+    !current.generate &&
+    !current.reference &&
+    !workspace.baseline.comfyui_presets?.[workspace.selectedId]
+  const id = blank ? workspace.selectedId : newPreset(workspace)
+  workspace.presets[id] = clonePresetData(preset)
+}
+
 export function presetWorkspace(
   options: ComfyOptions,
   profile: PresetAssignment,
@@ -64,7 +75,8 @@ export function changedPresets(workspace: PresetWorkspace): string[] {
 }
 export function presetProblem(preset: ComfyPreset): string {
   if (!preset.name.trim()) return 'Enter a preset name.'
-  if (preset.generate?.bindings.image) return 'Move the image-input workflow to the Reference variant.'
+  if (preset.generate?.bindings.image)
+    return 'Move the image-input workflow to the Reference variant.'
   if (!preset.generate?.bindings.prompt || !preset.generate.output_node)
     return 'Configure the base workflow and its required inputs.'
   if (
