@@ -16,6 +16,7 @@ from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.recovery_context import KEY, recovery_context
 from backend.engine.clothing.runtime import _store_actor
+from backend.engine.clothing.schema import Region
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemAction, ItemExtraction
 
@@ -26,11 +27,13 @@ class RecoveryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_message_id: str
     action: ItemAction
+    uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
+    placement_evidence: str = Field(default="", max_length=800)
 
 
 class RecoveryProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    entries: list[RecoveryEntry] = Field(default_factory=list, max_length=6)
+    entries: list[RecoveryEntry] = Field(default_factory=list, max_length=16)
     notes: str = Field(default="", max_length=1200)
 
 
@@ -43,7 +46,19 @@ Read all messages in order. Only assistant narration establishes completed event
 provides context, not confirmation. Later removal, transfer, loss or destruction wins over earlier
 wear descriptions. Return only garments still owned by target_actor at the end of the history.
 A removed garment still owned by the NPC is carried, not worn. Never return transferred or lost
-items. If current ownership or wear is uncertain, omit it and explain in notes. No implied underwear.
+items. Recover all explicitly established layers, not just the outermost or visible garment.
+Clothes described as under another garment are still worn: a coat over a suit does not exclude
+the suit. Include skirts, stockings and accessories separately when the history establishes them.
+Partial displacement/manipulation is not removal: keep a garment worn if it remains on the actor.
+For confirmed partial exposure, set uncovered_regions only to explicitly exposed covered regions
+and placement_evidence to an exact quote in the source message. Otherwise leave them empty;
+do not invent partial exposure. Fully removed garments still owned by the actor are carried.
+For each distinct garment mentioned, reconcile its latest established ownership/wear state.
+Do not discard lower layers just because the last response emphasizes an outer layer. Omission
+of a garment in a later message alone is not evidence of removal or transfer. Notes must explain
+actual conflicts, missing evidence or transferred/lost garments, not excuse ignoring lower layers.
+Respect detailed_clothing and the target actor's known age when recovering underwear.
+If current ownership or wear is genuinely unresolved, omit it and explain in notes. No implied underwear.
 Each entry cites the exact source_message_id and contiguous evidence from that assistant message.
 Use source_owner=destination_owner=target_actor.id. Only clothing, never ordinary items or rewards.
 Existing canonical possessions override old prose. Reuse IDs; no translated or reworded duplicates.
@@ -77,6 +92,16 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
         if garment is None:
             errors.append("Recovery only accepts clothing with valid garment metadata.")
             continue
+        if entry.uncovered_regions and (
+            action.disposition != "worn"
+            or not set(entry.uncovered_regions).issubset(garment.coverage)
+            or not entry.placement_evidence
+            or entry.placement_evidence not in source["content"]
+        ):
+            errors.append(
+                "Partial clothing placement needs exact evidence and valid covered regions."
+            )
+            continue
         changed, additions, rejected = apply_actions(
             ItemExtraction(actions=[action]),
             actors,
@@ -90,6 +115,10 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
         errors.extend(rejected)
         for addition in additions:
             addition["source_message_id"] = entry.source_message_id
+            addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
+            addition["placement_evidence"] = entry.placement_evidence
+            if entry.uncovered_regions:
+                _set_partial_wear(actors[actor["id"]], addition)
             # Keep real source IDs for checkpoint and regeneration provenance.
             for key in ("item_origin", "clothing_origin"):
                 if key in addition["item"]:
@@ -109,6 +138,12 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
     return actors, accepted, errors
 
 
+def _set_partial_wear(actor: dict, addition: dict) -> None:
+    for worn in actor["visual_profile"]["worn"]:
+        if worn["item_id"] == addition["item"]["id"]:
+            worn["uncovered_regions"] = addition["uncovered_regions"]
+
+
 async def debug_wardrobe_preview(
     db: Any, state: Any, args: str, user: Any = None, adventure: Any = None, avatar: Any = None
 ) -> str:
@@ -118,6 +153,7 @@ async def debug_wardrobe_preview(
     deadline = role_timeout(user, "small")
     try:
         context = await recovery_context(db, state, avatar, npc_id)
+        detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
         llm = GameMasterLLM.for_role(user, "small")
         payload = json.dumps(
             {
@@ -125,6 +161,7 @@ async def debug_wardrobe_preview(
                 "history": context["messages"],
                 "canonical_items": context["snapshot"].items,
                 "owners": context["snapshot"].owners,
+                "detailed_clothing": detailed,
             },
             ensure_ascii=False,
         )
@@ -144,7 +181,6 @@ async def debug_wardrobe_preview(
             timeout=deadline,
         )
         proposal = RecoveryProposal.model_validate(result)
-        detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
         _, accepted, errors = evaluate(context, proposal, detailed, state.session_id)
         preview = {
             "npc_id": npc_id,

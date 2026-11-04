@@ -54,6 +54,11 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 **item,
                 "clothing": garment.model_dump() if garment else None,
                 "worn": identifier in worn,
+                "uncovered_regions": next(
+                    (row.uncovered_regions for row in profile.worn if row.item_id == identifier), []
+                )
+                if profile
+                else [],
             }
         )
     preview = states.get("__wardrobe_recovery__") or {}
@@ -162,9 +167,19 @@ async def _edit_clothing(db: AsyncSession, state: SessionState, edit: WardrobeEd
     if profile is None and raw:
         raise ValueError("Existing visual profile is invalid; repair it before editing clothing.")
     profile = profile or VisualProfile()
+    uncovered = next(
+        (row.uncovered_regions for row in profile.worn if row.item_id == edit.item_id), []
+    )
     profile.worn = [row for row in profile.worn if row.item_id != edit.item_id]
     if edit.worn:
-        profile.worn.append(WornItem(item_id=edit.item_id))
+        profile.worn.append(
+            WornItem(
+                item_id=edit.item_id,
+                uncovered_regions=[
+                    region for region in uncovered if region in edit.clothing.coverage
+                ],
+            )
+        )
     profile = validate_profile(profile.model_dump(), list(items.values()))
     # Update only the edited entry; preserve unrelated inventory representations/metadata.
     updated = [

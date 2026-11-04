@@ -16,6 +16,7 @@ interface WardrobeItem {
   description?: string
   clothing: Clothing | null
   worn: boolean
+  uncovered_regions?: string[]
 }
 const props = defineProps<{
   npc: {
@@ -128,6 +129,9 @@ function save() {
           </button>
         </div>
         <p class="mt-1 text-slate-400">{{ item.description }}</p>
+        <p v-if="item.uncovered_regions?.length" class="text-amber-200">
+          Partially displaced — exposed: {{ item.uncovered_regions.join(', ') }}
+        </p>
         <p v-if="item.clothing" class="text-slate-400">
           Layer {{ item.clothing.layer }} · {{ item.clothing.coverage.join(', ')
           }}{{ item.clothing.underwear ? ' · Underwear' : '' }}

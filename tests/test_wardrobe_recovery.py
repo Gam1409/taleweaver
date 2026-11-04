@@ -199,3 +199,74 @@ async def test_uncertain_queue_is_not_reported_as_invalid_recovery_result(monkey
         assert "verifying generation has stopped" in result
         assert "Invalid recovery result" not in result
         assert not state.entity_states[KEY]["accepted"]
+
+
+def test_recovery_keeps_all_confirmed_layers_and_partial_placement():
+    actors, snapshot = fixtures()
+    text = "Anna wears a coat, jacket, skirt, stockings, scarf, gloves and hat. The skirt is lifted above her legs."
+    entries = []
+    for name in ("Coat", "Jacket", "Skirt", "Stockings", "Scarf", "Gloves", "Hat"):
+        candidate = entry("source", "NPC", name)
+        candidate.action.evidence = text
+        candidate.action.new_item.clothing.coverage = ["legs"] if name == "Skirt" else ["torso"]
+        if name == "Skirt":
+            candidate.uncovered_regions = ["legs"]
+            candidate.placement_evidence = "The skirt is lifted above her legs."
+        entries.append(candidate)
+    context = {
+        "actor": actors["NPC"],
+        "snapshot": snapshot,
+        "messages": [{"id": "source", "role": "assistant", "content": text}],
+    }
+    changed, accepted, errors = evaluate(context, RecoveryProposal(entries=entries), True, "s")
+    assert len(accepted) == 7 and not errors
+    skirt = next(row for row in accepted if row["item"]["name"] == "Skirt")
+    assert skirt["uncovered_regions"] == ["legs"]
+    assert next(
+        row
+        for row in changed["NPC"]["visual_profile"]["worn"]
+        if row["item_id"] == skirt["item"]["id"]
+    )["uncovered_regions"] == ["legs"]
+
+
+@pytest.mark.parametrize("regions,evidence", [(["feet"], TEXT), (["torso"], "invented quote")])
+def test_partial_placement_rejects_wrong_coverage_or_missing_evidence(regions, evidence):
+    actors, snapshot = fixtures()
+    candidate = entry("source", "NPC")
+    candidate.uncovered_regions, candidate.placement_evidence = regions, evidence
+    context = {
+        "actor": actors["NPC"],
+        "snapshot": snapshot,
+        "messages": [{"id": "source", "role": "assistant", "content": TEXT}],
+    }
+    changed, accepted, errors = evaluate(context, RecoveryProposal(entries=[candidate]), True, "s")
+    assert not accepted and errors and changed["NPC"] == actors["NPC"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detailed", [True, False])
+async def test_preview_sends_clothing_detail_setting_to_model(monkeypatch, detailed):
+    import json
+
+    from backend.engine.clothing import recovery
+
+    async with TestSessionLocal() as db:
+        user, avatar, state, _ = await seed_vn(db)
+        state.is_debug_enabled = True
+        state.entity_states = {
+            **state.entity_states,
+            "__manifest_snapshot__": {
+                "original_manifest": {"clothing_settings": {"detailed": detailed}}
+            },
+        }
+        llm = SimpleNamespace(
+            model="test", aexecute_complex_task=AsyncMock(return_value=RecoveryProposal())
+        )
+        monkeypatch.setattr(recovery.GameMasterLLM, "for_role", lambda *_: llm)
+        result = await DebugEngine.handle_debug_command(
+            db, state, "wardrobe_preview LINA", user=user, avatar=avatar
+        )
+        assert "preview ready" in result
+        assert (
+            json.loads(llm.aexecute_complex_task.call_args.args[1])["detailed_clothing"] is detailed
+        )
