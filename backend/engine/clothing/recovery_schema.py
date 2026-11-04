@@ -45,7 +45,16 @@ class RecoveryEntry(BaseModel):
         return value.model_dump() if isinstance(value, ItemAction) else value
 
 
+class OmittedMention(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["underwear_bottom", "underwear_top"]
+    reason: str = Field(min_length=4, max_length=240)
+    source_message_id: str
+    evidence: str = Field(min_length=4, max_length=800)
+
+
 class RecoveryProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
     entries: list[RecoveryEntry] = Field(default_factory=list, max_length=16)
     notes: str = Field(default="", max_length=1200)
+    omitted_mentions: list[OmittedMention] = Field(default_factory=list, max_length=4)

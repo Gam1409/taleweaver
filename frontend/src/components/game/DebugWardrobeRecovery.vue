@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import DebugWardrobeMentions, { type WardrobeMention } from './DebugWardrobeMentions.vue'
+import DebugWardrobeRejections, { type WardrobeRejection } from './DebugWardrobeRejections.vue'
 export interface WardrobeRecoveryPreview {
   token: string
   notes: string
   messages_scanned: number
   limited: boolean
   errors: string[]
+  mention_checks?: WardrobeMention[] | null
+  rejected_entries?: WardrobeRejection[] | null
+  rejected_sources?: Record<string, string> | null
   skipped?: string[] | null
   model_role?: string | null
   accepted: {
+    proposal_index?: number
     item: {
       name: string
       description: string
@@ -21,8 +27,24 @@ export interface WardrobeRecoveryPreview {
     placement_evidence?: string
   }[]
 }
-defineProps<{ npcId: string; preview?: WardrobeRecoveryPreview | null; busy: boolean }>()
+const props = defineProps<{
+  npcId: string
+  preview?: WardrobeRecoveryPreview | null
+  busy: boolean
+}>()
 const modelRole = ref('complex')
+const selected = ref<number[]>([])
+const selectable = computed(() =>
+  (props.preview?.accepted || []).flatMap(entry =>
+    typeof entry.proposal_index === 'number' ? [entry.proposal_index] : []
+  )
+)
+watch(
+  () => props.preview?.token,
+  () => {
+    selected.value = []
+  }
+)
 const emit = defineEmits<{ command: [value: string] }>()
 </script>
 <template>
@@ -58,14 +80,46 @@ const emit = defineEmits<{ command: [value: string] }>()
       <p v-if="!preview.accepted.length && !preview.errors.length">
         No confirmed missing clothing was proposed.
       </p>
+      <div v-if="preview.accepted.length" class="flex flex-wrap items-center gap-3">
+        <span>Choose garments to restore: {{ selected.length }} selected.</span>
+        <button
+          type="button"
+          :disabled="busy"
+          class="text-cyan-300 underline"
+          @click="selected = [...selectable]"
+        >
+          Select all validated
+        </button>
+        <button
+          type="button"
+          :disabled="busy"
+          class="text-slate-400 underline"
+          @click="selected = []"
+        >
+          Clear selection
+        </button>
+      </div>
+      <p
+        v-if="preview.accepted.length && selectable.length !== preview.accepted.length"
+        class="text-amber-200"
+      >
+        Generate a new preview to select garments from this older result.
+      </p>
       <article
         v-for="(entry, index) in preview.accepted"
         :key="index"
         class="space-y-1 rounded bg-slate-800 p-2"
       >
-        <strong
-          >{{ entry.item.name }} — {{ entry.disposition === 'worn' ? 'Worn' : 'Inventory' }}</strong
-        >
+        <label class="flex items-start gap-2 font-bold">
+          <input
+            v-model="selected"
+            type="checkbox"
+            :value="entry.proposal_index"
+            :disabled="busy || typeof entry.proposal_index !== 'number'"
+            class="mt-1"
+          />
+          {{ entry.item.name }} — {{ entry.disposition === 'worn' ? 'Worn' : 'Inventory' }}
+        </label>
         <p>{{ entry.item.description }}</p>
         <p v-if="entry.item.clothing">
           Layer {{ entry.item.clothing.layer }} · {{ entry.item.clothing.coverage.join(', ')
@@ -88,16 +142,32 @@ const emit = defineEmits<{ command: [value: string] }>()
         <p v-for="(reason, index) in preview.skipped" :key="index">{{ reason }}</p>
       </div>
       <p v-if="preview.errors.length" class="text-rose-300">
-        Blocking errors: nothing can be applied until these are resolved with a new preview.
+        Rejected candidates cannot be selected. Other validated garments can be restored
+        independently.
       </p>
-      <p v-for="(error, index) in preview.errors" :key="index" class="text-rose-300">{{ error }}</p>
+      <DebugWardrobeRejections
+        v-if="preview.rejected_entries?.length"
+        :entries="preview.rejected_entries"
+        :sources="preview.rejected_sources"
+      />
+      <p
+        v-for="(error, index) in preview.rejected_entries?.length ? [] : preview.errors"
+        :key="index"
+        class="text-rose-300"
+      >
+        {{ error }}
+      </p>
+      <DebugWardrobeMentions
+        v-if="preview.mention_checks?.length"
+        :checks="preview.mention_checks"
+      />
       <button
         type="button"
-        :disabled="busy || !preview.accepted.length || !!preview.errors.length"
+        :disabled="busy || !selected.length"
         class="rounded bg-emerald-900 px-3 py-2 disabled:opacity-40"
-        @click="emit('command', `/debug wardrobe_apply ${preview.token}`)"
+        @click="emit('command', `/debug wardrobe_apply ${preview.token} ${selected.join(',')}`)"
       >
-        Apply reviewed clothing
+        Restore selected clothing
       </button>
     </div>
   </section>

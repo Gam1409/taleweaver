@@ -4,9 +4,12 @@ import asyncio
 import json
 import logging
 import shlex
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
+
+from pydantic import BaseModel
 
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
@@ -18,10 +21,17 @@ from backend.engine.clothing.recovery_contract import (
     resolve_garment,
     response_schema,
 )
+from backend.engine.clothing.recovery_evidence import evidence_issues, rejected_entry
+from backend.engine.clothing.recovery_mentions import (
+    explicit_mentions,
+    mention_checks,
+    unreviewed_feedback,
+)
 from backend.engine.clothing.recovery_policy import classify_action, partition_rejections
 from backend.engine.clothing.recovery_prompt import PROMPT
-from backend.engine.clothing.recovery_request import request_proposal
-from backend.engine.clothing.recovery_schema import RecoveryProposal
+from backend.engine.clothing.recovery_request import ProposalReview, request_proposal
+from backend.engine.clothing.recovery_schema import RecoveryEntry, RecoveryProposal
+from backend.engine.clothing.recovery_selection import selected_entries
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
@@ -37,35 +47,47 @@ def _source_error(source: dict, source_id: str, action: ItemAction, actor_id: st
     return ""
 
 
-def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_id: str) -> tuple:
+def evaluate(
+    context: dict,
+    proposal: RecoveryProposal,
+    detailed: bool,
+    session_id: str,
+    *,
+    diagnostics: list[dict] | None = None,
+    selected_indices: set[int] | None = None,
+) -> tuple:
     actor = context["actor"]
     actors = {actor["id"]: actor}
-    snapshot = context["snapshot"]
+    snapshot = deepcopy(context["snapshot"])
+    rejected_details = diagnostics if diagnostics is not None else []
     accepted: list[dict] = []
     errors = []
     skipped = []
     sources = {row["id"]: row for row in context["messages"] if row["role"] == "assistant"}
-    for entry in proposal.entries:
+    entries = [
+        (index, entry)
+        for index, entry in enumerate(proposal.entries)
+        if selected_indices is None or index in selected_indices
+    ]
+    for index, entry in entries:
         action = classify_action(entry.action)
+        label = action.new_item.name if action.new_item else str(action.item_id)
         source = sources.get(entry.source_message_id, {})
         source_error = _source_error(source, entry.source_message_id, action, actor["id"])
         if source_error:
-            errors.append(source_error)
+            errors.append(f"{label}: {source_error}")
+            rejected_details.append(rejected_entry(index, entry, label, [source_error]))
             continue
         try:
             garment = resolve_garment(action, snapshot, actor["id"])
         except ValueError as exc:
             errors.append(str(exc))
+            rejected_details.append(rejected_entry(index, entry, label, [str(exc)]))
             continue
-        if entry.uncovered_regions and (
-            action.disposition != "worn"
-            or not set(entry.uncovered_regions).issubset(garment.coverage)
-            or not entry.placement_evidence
-            or entry.placement_evidence not in source["content"]
-        ):
-            errors.append(
-                "Partial clothing placement needs exact evidence and valid covered regions."
-            )
+        issues = evidence_issues(entry, action, source, garment)
+        if issues:
+            errors.extend(f"{label}: {reason}" for reason in issues)
+            rejected_details.append(rejected_entry(index, entry, label, issues, garment))
             continue
         changed, additions, rejected = apply_actions(
             ItemExtraction(actions=[action]),
@@ -74,30 +96,18 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
             source["content"],
             detailed=detailed,
             session_id=session_id,
-            message_id=f"{entry.source_message_id}:wardrobe:{len(accepted)}",
+            message_id=f"{entry.source_message_id}:wardrobe:{index}",
         )
         actors = changed
         blocking, omitted = partition_rejections(rejected)
         errors.extend(blocking)
+        if blocking:
+            rejected_details.append(rejected_entry(index, entry, label, blocking, garment))
         skipped.extend(omitted)
         for addition in additions:
-            addition["source_message_id"] = entry.source_message_id
-            addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
-            addition["placement_evidence"] = entry.placement_evidence
-            if entry.uncovered_regions:
-                _set_partial_wear(actors[actor["id"]], addition)
-            # Keep real source IDs for checkpoint and regeneration provenance.
-            for key in ("item_origin", "clothing_origin"):
-                if key in addition["item"]:
-                    addition["item"][key]["source_message_id"] = entry.source_message_id
+            addition["proposal_index"] = index
+            _finish_addition(actors[actor["id"]], addition, entry)
             identifier = addition["item"]["id"]
-            for field in ("inventory", "resolved_inventory"):
-                actors[actor["id"]][field] = [
-                    addition["item"]
-                    if isinstance(row, dict) and row.get("id") == identifier
-                    else row
-                    for row in actors[actor["id"]][field]
-                ]
             snapshot.items[identifier] = addition["item"]
             snapshot.owners[identifier] = actor["id"]
             snapshot.catalog[identifier] = addition["item"]
@@ -105,10 +115,42 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
     return actors, accepted, errors, skipped
 
 
+def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry) -> None:
+    addition["source_message_id"] = entry.source_message_id
+    addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
+    addition["placement_evidence"] = entry.placement_evidence
+    if entry.uncovered_regions:
+        _set_partial_wear(actor, addition)
+    # Keep real source IDs for checkpoint and regeneration provenance.
+    for key in ("item_origin", "clothing_origin"):
+        if key in addition["item"]:
+            addition["item"][key]["source_message_id"] = entry.source_message_id
+    identifier = addition["item"]["id"]
+    for field in ("inventory", "resolved_inventory"):
+        actor[field] = [
+            addition["item"] if isinstance(row, dict) and row.get("id") == identifier else row
+            for row in actor[field]
+        ]
+
+
 def _set_partial_wear(actor: dict, addition: dict) -> None:
     for worn in actor["visual_profile"]["worn"]:
         if worn["item_id"] == addition["item"]["id"]:
             worn["uncovered_regions"] = addition["uncovered_regions"]
+
+
+def _review_proposal(
+    result: BaseModel, context: dict, detailed: bool, session_id: str
+) -> ProposalReview:
+    proposal = RecoveryProposal.model_validate(result.model_dump())
+    diagnostics: list[dict] = []
+    _, _, errors, _ = evaluate(context, proposal, detailed, session_id, diagnostics=diagnostics)
+    rejected = {row["index"] for row in diagnostics}
+    preserved = [
+        entry.model_dump() for index, entry in enumerate(proposal.entries) if index not in rejected
+    ]
+    errors.extend(unreviewed_feedback(mention_checks(context, proposal)))
+    return ProposalReview(errors=errors, preserved_entries=preserved)
 
 
 async def debug_wardrobe_preview(
@@ -139,6 +181,7 @@ async def debug_wardrobe_preview(
                 "owners": context["snapshot"].owners,
                 "existing_garments": existing_garments(context),
                 "detailed_clothing": detailed,
+                "explicit_garment_mentions": explicit_mentions(context),
             },
             ensure_ascii=False,
         )
@@ -146,11 +189,21 @@ async def debug_wardrobe_preview(
             raise ValueError("Recovery context is too large; no changes were made.")
         await db.commit()
         result = await asyncio.wait_for(
-            request_proposal(llm, PROMPT, payload, response_schema(context), state.session_id),
+            request_proposal(
+                llm,
+                PROMPT,
+                payload,
+                response_schema(context),
+                state.session_id,
+                review=lambda value: _review_proposal(value, context, detailed, state.session_id),
+            ),
             timeout=deadline,
         )
         proposal = RecoveryProposal.model_validate(result.model_dump())
-        _, accepted, errors, skipped = evaluate(context, proposal, detailed, state.session_id)
+        diagnostics: list[dict] = []
+        _, accepted, errors, skipped = evaluate(
+            context, proposal, detailed, state.session_id, diagnostics=diagnostics
+        )
         preview = {
             "npc_id": npc_id,
             "token": str(uuid4()),
@@ -159,6 +212,14 @@ async def debug_wardrobe_preview(
             "accepted": accepted,
             "errors": errors,
             "skipped": skipped,
+            "rejected_entries": diagnostics,
+            "mention_checks": mention_checks(context, proposal),
+            "rejected_sources": {
+                row["id"]: row["content"]
+                for row in context["messages"]
+                if row["role"] == "assistant"
+                and any(issue["source_message_id"] == row["id"] for issue in diagnostics)
+            },
             "model_role": role,
             "notes": proposal.notes,
             "messages_scanned": len(context["messages"]),
@@ -206,24 +267,27 @@ async def debug_wardrobe_apply(
     if not state.is_debug_enabled or avatar is None:
         return "DEBUG ERROR: Wardrobe recovery requires debug mode."
     preview = (state.entity_states or {}).get(KEY) or {}
-    if args.partition(" ")[2].strip() != preview.get("token"):
+    parts = args.split()
+    if len(parts) not in {2, 3} or parts[1] != preview.get("token"):
         return "DEBUG ERROR: Preview is missing or has been replaced. Generate a new preview."
-    if preview.get("errors") or not preview.get("accepted"):
-        return "DEBUG ERROR: Preview has rejected or empty changes; nothing was applied."
+    try:
+        selected = selected_entries(preview, parts[2] if len(parts) == 3 else None)
+    except ValueError as exc:
+        return f"DEBUG ERROR: {exc}"
     context = await recovery_context(db, state, avatar, preview["npc_id"])
     if context["fingerprint"] != preview.get("fingerprint"):
         return "DEBUG ERROR: Story or state changed after preview. Generate a new preview."
     detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
     actors, accepted, errors, skipped = evaluate(
-        context, RecoveryProposal.model_validate(preview["proposal"]), detailed, state.session_id
+        context,
+        RecoveryProposal.model_validate(preview["proposal"]),
+        detailed,
+        state.session_id,
+        selected_indices=selected,
     )
-    if (
-        errors
-        or not accepted
-        or accepted != preview["accepted"]
-        or skipped != preview.get("skipped", [])
-    ):
-        return "DEBUG ERROR: Preview has rejected or empty changes; nothing was applied."
+    expected = [row for row in preview["accepted"] if row.get("proposal_index") in selected]
+    if errors or skipped or not accepted or accepted != expected:
+        return "DEBUG ERROR: Selected changes failed revalidation; nothing was applied."
     states = dict(state.entity_states or {})
     _store_actor(SimpleNamespace(state=state, avatar=avatar), states, actors[preview["npc_id"]])
     states.pop(KEY, None)

@@ -1,0 +1,56 @@
+"""Explain rejected recovery evidence without guessing facts or rewriting quotations."""
+
+from backend.engine.clothing.recovery_schema import RecoveryEntry
+from backend.engine.clothing.schema import Garment
+from backend.engine.narrated_items.schema import ItemAction
+
+
+def evidence_issues(
+    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment
+) -> list[str]:
+    issues = []
+    if action.basis not in {"completed", "observed_wear"}:
+        issues.append(
+            f"Action basis '{action.basis}' is not a confirmed event or wear observation."
+        )
+    if action.evidence not in source["content"]:
+        issues.append(
+            "Item quote is not an exact contiguous substring of the cited assistant message. Copy the original words without translation, paraphrase or combined fragments."
+        )
+    if action.basis == "observed_wear" and action.disposition != "worn":
+        issues.append(
+            "observed_wear requires disposition=worn; completed removal uses completed/carried."
+        )
+    if not entry.uncovered_regions:
+        return issues
+    if action.disposition != "worn":
+        issues.append("Partial placement requires a garment that is still worn.")
+    invalid = sorted(set(entry.uncovered_regions) - set(garment.coverage))
+    if invalid:
+        issues.append(
+            f"Exposed regions {', '.join(invalid)} are outside garment coverage {', '.join(garment.coverage)}."
+        )
+    if not entry.placement_evidence:
+        issues.append("Partial placement has no evidence quote.")
+    elif entry.placement_evidence not in source["content"]:
+        issues.append(
+            "Placement quote is not an exact contiguous substring of the same cited assistant message."
+        )
+    return issues
+
+
+def rejected_entry(
+    index: int, entry: RecoveryEntry, label: str, reasons: list[str], garment: Garment | None = None
+) -> dict:
+    return {
+        "index": index,
+        "label": label,
+        "source_message_id": entry.source_message_id,
+        "basis": entry.action.basis,
+        "disposition": entry.action.disposition,
+        "evidence": entry.action.evidence,
+        "placement_evidence": entry.placement_evidence,
+        "coverage": garment.coverage if garment else [],
+        "uncovered_regions": entry.uncovered_regions,
+        "reasons": reasons,
+    }

@@ -75,6 +75,9 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 "errors",
                 "skipped",
                 "model_role",
+                "rejected_entries",
+                "rejected_sources",
+                "mention_checks",
             )
         }
     return {"items": clothes, "profile_known": profile is not None, "recovery": recovery}
