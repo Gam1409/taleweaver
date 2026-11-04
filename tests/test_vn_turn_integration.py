@@ -194,6 +194,8 @@ async def test_real_vn_turn_roles_language_social_state_snapshot_and_reload(monk
         prompt = json.dumps(roles.prompts, ensure_ascii=False, default=str)
         assert "VISUAL NOVEL NARRATION CONTRACT" in prompt
         assert "PACING: LEISURELY" in prompt
+        assert "PROSE FOCUS FOR THIS TURN" in prompt
+        assert "CONTINUING SCENE" in prompt
         assert "RUSSIAN" in prompt
         assert "sitcom" not in prompt.lower()
         messages = list(

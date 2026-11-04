@@ -80,6 +80,7 @@ from backend.api.routes.adventures.session_language import (
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
+from backend.engine.narration_focus import narration_focus
 from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.turn_replay.service import record_input
 from backend.engine.turn_replay.transactions import release_for_model
@@ -1947,7 +1948,13 @@ class GameTurnManager:
 
         exits_task = ""
         scene_changed_this_turn = self.state.current_scene_id != scene_id_before_turn
-        if not policy.vn and (self._is_lookaround_request(user_msg) or scene_changed_this_turn):
+        inspection_requested = self._is_lookaround_request(user_msg)
+        reminders.append(
+            narration_focus(
+                scene_changed=scene_changed_this_turn, inspection_requested=inspection_requested
+            )
+        )
+        if not policy.vn and (inspection_requested or scene_changed_this_turn):
             exits_task = build_exit_description_task(await self._build_scene_exits_context_json())
 
         if policy.vn and not narration_only:
