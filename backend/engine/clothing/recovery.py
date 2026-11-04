@@ -12,8 +12,12 @@ from backend.core.inference.registry import InferenceQueueError, InferenceUncert
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.context import detail_settings
-from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.recovery_context import KEY, recovery_context
+from backend.engine.clothing.recovery_contract import (
+    existing_garments,
+    resolve_garment,
+    response_schema,
+)
 from backend.engine.clothing.recovery_policy import classify_action, partition_rejections
 from backend.engine.clothing.recovery_prompt import PROMPT
 from backend.engine.clothing.recovery_request import request_proposal
@@ -48,13 +52,10 @@ def evaluate(context: dict, proposal: RecoveryProposal, detailed: bool, session_
         if source_error:
             errors.append(source_error)
             continue
-        garment = (
-            action.new_item.clothing
-            if action.new_item
-            else garment_for_item(snapshot.items.get(action.item_id, {}))
-        )
-        if garment is None:
-            errors.append("Recovery only accepts clothing with valid garment metadata.")
+        try:
+            garment = resolve_garment(action, snapshot, actor["id"])
+        except ValueError as exc:
+            errors.append(str(exc))
             continue
         if entry.uncovered_regions and (
             action.disposition != "worn"
@@ -136,6 +137,7 @@ async def debug_wardrobe_preview(
                 "history": context["messages"],
                 "canonical_items": context["snapshot"].items,
                 "owners": context["snapshot"].owners,
+                "existing_garments": existing_garments(context),
                 "detailed_clothing": detailed,
             },
             ensure_ascii=False,
@@ -144,10 +146,10 @@ async def debug_wardrobe_preview(
             raise ValueError("Recovery context is too large; no changes were made.")
         await db.commit()
         result = await asyncio.wait_for(
-            request_proposal(llm, PROMPT, payload, RecoveryProposal, state.session_id),
+            request_proposal(llm, PROMPT, payload, response_schema(context), state.session_id),
             timeout=deadline,
         )
-        proposal = RecoveryProposal.model_validate(result)
+        proposal = RecoveryProposal.model_validate(result.model_dump())
         _, accepted, errors, skipped = evaluate(context, proposal, detailed, state.session_id)
         preview = {
             "npc_id": npc_id,

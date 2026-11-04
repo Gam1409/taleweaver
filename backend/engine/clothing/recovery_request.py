@@ -49,7 +49,7 @@ async def _request(
         operation="wardrobe_recovery",
         phase=phase,
     )
-    return model.model_validate(result)
+    return model.model_validate(result.model_dump() if isinstance(result, BaseModel) else result)
 
 
 async def request_proposal(

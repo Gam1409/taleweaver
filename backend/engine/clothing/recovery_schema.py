@@ -1,9 +1,12 @@
 """Recovery wire shapes expose identity exclusivity to structured-output models."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from backend.engine.clothing.schema import Region
+from backend.engine.clothing.schema import Garment, Region
 from backend.engine.narrated_items.schema import ItemAction, NewItem
+from backend.schemas.authoring_completion import EquipmentSlot
 
 
 class ExistingRecoveryAction(ItemAction):
@@ -15,9 +18,17 @@ class ExistingRecoveryAction(ItemAction):
     new_item: None = Field(default=None, description="Must be null for an existing item.")
 
 
+class RecoveryGarment(NewItem):
+    kind: Literal["clothing"] = "clothing"
+    clothing: Garment
+    wearable_slots: list[EquipmentSlot] = Field(min_length=1, max_length=4)
+
+
 class NewRecoveryAction(ItemAction):
     item_id: None = Field(default=None, description="Must be null. The engine assigns new IDs.")
-    new_item: NewItem = Field(description="Evidence-backed description of the missing garment.")
+    new_item: RecoveryGarment = Field(
+        description="Evidence-backed description of the missing garment."
+    )
 
 
 class RecoveryEntry(BaseModel):
