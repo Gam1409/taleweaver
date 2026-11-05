@@ -254,3 +254,12 @@ original candidate list. Review responses cite exact passage IDs which the host
 resolves into quotations before applying existing evidence and agenda checks.
 The evaluator records semantic false acceptances with a deliberate narrator
 counterexample probe. These protocol changes do not enable CHPM by default.
+
+
+## Research state core
+
+The independent evidence/identity foundation and its exact matrix coverage are
+tracked in [the research roadmap](chpm-research-roadmap.md). It is tested offline
+and is not yet substituted for the live dialogue pilot. Both supplied research
+source files are preserved with checksums. No psychological-accuracy claim follows
+from passing the kernel's program-invariant tests.
