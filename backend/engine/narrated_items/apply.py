@@ -11,6 +11,7 @@ from backend.engine.clothing.profiles import (
     validate_profile,
 )
 from backend.engine.clothing.schema import VisualProfile, WornItem
+from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
@@ -39,9 +40,7 @@ def _new_item(
         and proposal.clothing.underwear
         and not (detailed and type(age) is int and age >= 18)
     ):
-        raise ValueError(
-            "New inner clothing requires detailed clothing and an established adult owner."
-        )
+        raise ItemPolicyError("inner_creation_policy")
     origin = {"kind": "runtime", "session_id": session_id, "source_message_id": message_id}
     item: dict[str, Any] = {
         "id": "item_" + uuid5(NAMESPACE_URL, f"{session_id}:{message_id}:{index}").hex,
@@ -98,9 +97,7 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
         )
     age = actor.get("age_years")
     if garment.underwear and not (detailed and type(age) is int and age >= 18):
-        raise ValueError(
-            "Wearing inner clothing requires detailed clothing and an established adult age."
-        )
+        raise ItemPolicyError("inner_wear_policy")
     if identifier not in {entry.item_id for entry in profile.worn}:
         profile.worn.append(WornItem(item_id=identifier))
     actor["visual_profile"] = validate_profile(
@@ -150,6 +147,7 @@ def apply_actions(
     detailed: bool,
     session_id: str,
     message_id: str,
+    failures: list[ItemFailure] | None = None,
 ) -> tuple[dict, list[dict], list[str]]:
     """Validate each action on copies; failures never partially remove possessions."""
     actors = deepcopy(actors)
@@ -203,5 +201,10 @@ def apply_actions(
             )
         except ValueError as exc:
             label = action.new_item.name if action.new_item else action.item_id
-            errors.append(f"{label}: {exc}")
+            failure = ItemFailure(
+                str(label), str(exc), exc.code if isinstance(exc, ItemPolicyError) else None
+            )
+            errors.append(failure.message())
+            if failures is not None:
+                failures.append(failure)
     return actors, accepted, errors

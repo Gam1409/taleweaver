@@ -32,6 +32,7 @@ from backend.engine.clothing.recovery_schema import RecoveryEntry, RecoveryPropo
 from backend.engine.clothing.recovery_selection import selected_entries
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.narrated_items.apply import apply_actions
+from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ def evaluate(
             errors.extend(f"{label}: {reason}" for reason in issues)
             rejected_details.append(rejected_entry(index, entry, label, issues, garment))
             continue
-        changed, additions, rejected = apply_actions(
+        failures: list[ItemFailure] = []
+        changed, additions, _ = apply_actions(
             ItemExtraction(actions=[action]),
             actors,
             snapshot,
@@ -95,10 +97,11 @@ def evaluate(
             detailed=detailed,
             session_id=session_id,
             message_id=f"{entry.source_message_id}:wardrobe:{index}",
+            failures=failures,
         )
         actors = changed
         blocking, omitted = partition_rejections(
-            rejected, detailed=detailed, age=actor.get("age_years")
+            failures, detailed=detailed, age=actor.get("age_years")
         )
         errors.extend(blocking)
         if blocking:

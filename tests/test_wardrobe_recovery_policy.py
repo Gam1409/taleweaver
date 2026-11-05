@@ -8,13 +8,13 @@ import pytest
 from backend.engine.clothing.recovery import evaluate
 from backend.engine.clothing.recovery_context import KEY
 from backend.engine.clothing.recovery_policy import (
-    POLICY_REJECTIONS,
     classify_action,
     partition_rejections,
 )
 from backend.engine.clothing.recovery_prompt import PROMPT
 from backend.engine.clothing.recovery_schema import RecoveryProposal
 from backend.engine.debug_engine import DebugEngine
+from backend.engine.narrated_items.errors import ItemFailure
 from backend.models.chat import ChatMessage
 from tests.conftest import TestSessionLocal
 from tests.test_narrated_items import fixtures
@@ -126,13 +126,27 @@ def test_prompt_is_history_specific_and_disambiguates_missing_records():
 )
 def test_policy_skip_names_actual_unmet_requirements(detailed, age, reasons):
     errors, skipped = partition_rejections(
-        ["Named garment: " + POLICY_REJECTIONS[0], "bad source"], detailed=detailed, age=age
+        [
+            ItemFailure("Named garment", "Policy wording can change", "inner_creation_policy"),
+            ItemFailure("Other garment", "bad source"),
+        ],
+        detailed=detailed,
+        age=age,
     )
-    assert errors == ["bad source"]
+    assert errors == ["Other garment: bad source"]
     assert len(skipped) == 1 and skipped[0].startswith("Named garment: ")
     assert all(reason in skipped[0] for reason in reasons)
     assert ("tracking is disabled" in skipped[0]) == (not detailed)
     assert ("age is not recorded" in skipped[0]) == (age is None)
+
+
+def test_policy_classification_never_parses_a_human_error_suffix():
+    from backend.engine.narrated_items.errors import NEW_INNER_CLOTHING
+
+    errors, skipped = partition_rejections(
+        [ItemFailure("Misleading name", NEW_INNER_CLOTHING)], detailed=False, age=None
+    )
+    assert errors == [f"Misleading name: {NEW_INNER_CLOTHING}"] and not skipped
 
 
 def test_duplicate_policy_skips_are_displayed_once():
