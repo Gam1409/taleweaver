@@ -76,8 +76,9 @@ semantically correct. The model still proposes alternatives and goal alignment;
 the question/goal gate and qualitative frontier select among them. This does not
 rank competing motives by calibrated psychological weight. The prose reviewer
 can also err. Neither its acceptance nor deterministic selection proves personality
-fidelity. Numerical affect, desires, needs and personality development remain
-separate future work.
+fidelity. [Qualitative affect/needs](chpm-experience.md) and
+[developmental reflections](chpm-development.md) now supply separate contextual
+views. Calibrated numerical dynamics remain future work.
 
 Automated tests cover unavailable/foreign/closed sources, request-only motives,
 contradictory goal directions, permitted goal tradeoffs, challenged beliefs,

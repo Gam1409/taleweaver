@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from backend.engine.chpm import host_sources
+from backend.engine.chpm import host_sources, roster
 from backend.engine.chpm.core.history import count
 from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIENCES
 from backend.engine.chpm.host_state import Mind
@@ -10,17 +10,18 @@ from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, three excerpts, two interpretations, two experiences, own speech,
-# and up to twelve heard passages. A single observer may receive all heard entries.
-EVENT_RESERVE = 22
+# up to twelve heard passages and two developmental reflections. A single
+# observer may receive all heard entries even in a twenty-character scene.
+EVENT_RESERVE = 24
 SOURCE_RESERVE = 18
-BELIEF_RESERVE = 2
+BELIEF_RESERVE = 3
 EXPERIENCE_RESERVE = 2
 
 
 def required_calls(settings: Settings, count: int | None = None) -> int:
     if settings.mode == "off":
         return 0
-    actors = len(settings.actor_ids) if count is None else count
+    actors = roster.active_limit(settings) if count is None else count
     # Perception + proposals; live also needs review and a repair/review pair.
     return actors + (4 if settings.mode == "live" else 1)
 
@@ -62,7 +63,7 @@ def inspect(mind: Mind) -> dict:
     }
 
 
-def _ensure_budget(state: KernelState, actors: list[str]) -> None:
+def ensure_budget(state: KernelState, actors: list[str]) -> None:
     required = required_calls(state.settings, len(actors))
     if state.settings.max_calls_per_turn < required:
         raise ChpmError(
@@ -73,7 +74,7 @@ def _ensure_budget(state: KernelState, actors: list[str]) -> None:
 
 
 def ensure_turn(state: KernelState, actors: list[str]) -> None:
-    _ensure_budget(state, actors)
+    ensure_budget(state, actors)
     if state.settings.mode != "live":
         return
     full = [
@@ -93,7 +94,7 @@ def ensure_turn(state: KernelState, actors: list[str]) -> None:
 
 
 async def admit(manager: Any, state: KernelState, actors: list[str]) -> None:
-    _ensure_budget(state, actors)
+    ensure_budget(state, actors)
     if state.settings.mode != "live":
         return
     # Source edits/deletions may have freed a causal suffix. Do not let a stale

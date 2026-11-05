@@ -19,18 +19,36 @@ characters). If access or attribution is unclear, omit that excerpt and mark
 uncertain=true. No available quote means an empty list, not an invented event.
 actor_id must copy an exact KEY from present_observers. Values are display names,
 never IDs. Do not translate, replace, or invent an ID, even when a name is familiar.
+Set engaged=true for directly addressed NPCs and direct participants of an outward
+interaction requiring their response. Include all such participants, including a
+group addressed together. Mere visibility or a mention does not require a response.
+Use exact supporting quotes. If direct engagement is ambiguous, mark uncertain=true
+and engaged=true conservatively, rather than silently omitting a possible addressee.
+recent_interlocutors lists the last completed turn's active participants, when still
+present. It can help resolve a conversational continuation, but does not establish
+that every present NPC heard private speech or that they all must respond.
 """
 
 
 async def project(
-    manager: Any, settings: Settings, usage: Usage, message: str, names: dict[str, str]
+    manager: Any,
+    settings: Settings,
+    usage: Usage,
+    message: str,
+    names: dict[str, str],
+    *,
+    recent_interlocutors: list[str] | None = None,
 ) -> dict[str, Perception]:
     result = await inference.request(
         manager,
         settings,
         usage,
         INSTRUCTION,
-        {"player_message_untrusted": message, "present_observers": names},
+        {
+            "player_message_untrusted": message,
+            "present_observers": names,
+            "recent_interlocutors": recent_interlocutors or [],
+        },
         Projection,
         "perception",
         identifiers={"actor_id": sorted(names)},
@@ -50,6 +68,8 @@ def validate_projection(
 
 
 def _validate_quotes(entry: Perception, message: str) -> None:
+    if entry.engaged and not entry.quotes and not entry.uncertain:
+        raise ChpmError("Direct engagement needs evidence or explicit attribution uncertainty.")
     if len(set(entry.quotes)) != len(entry.quotes):
         raise ChpmError("CHPM perception repeated the same evidence.")
     if any(not quote.strip() or len(quote) > 600 or quote not in message for quote in entry.quotes):

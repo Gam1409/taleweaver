@@ -20,9 +20,9 @@ class HeardReference(Reference):
 class Review(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
-    evidence: list[Reference] = Field(default_factory=list, max_length=3)
+    evidence: list[Reference] = Field(default_factory=list, max_length=20)
     heard: list[HeardReference] = Field(default_factory=list, max_length=12)
-    agenda_evidence: list[Reference] = Field(default_factory=list, max_length=3)
+    agenda_evidence: list[Reference] = Field(default_factory=list, max_length=20)
 
 
 def index(text: str) -> dict[str, str]:

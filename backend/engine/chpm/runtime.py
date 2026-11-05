@@ -11,11 +11,13 @@ from backend.engine.chpm import (
     capacity,
     cognition,
     context,
+    development_context,
     experience,
     host_adapter,
     memory,
     perception,
     prompts,
+    roster,
 )
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
@@ -50,6 +52,7 @@ class Turn:
     memories: dict[str, list[MemoryEntry]] = field(default_factory=dict)
     agendas: dict[str, list[AgendaEntry]] = field(default_factory=dict)
     minds: dict[str, Mind] = field(default_factory=dict)
+    deferred_names: dict[str, str] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -76,6 +79,7 @@ def contract(turn: Turn) -> str:
             ]
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
             data[actor]["subjective_experience_not_traits"] = experience.view(mind)
+            data[actor]["developing_tendencies"] = development_context.tendencies(mind)
             changed = [
                 b
                 for b in mind.snapshot.beliefs
@@ -84,7 +88,11 @@ def contract(turn: Turn) -> str:
             data[actor]["subjective_assessments_not_world_facts"] = relationships.claims(
                 mind.snapshot, tuple(changed)
             )
-    return prompts.NARRATE + json.dumps(data, ensure_ascii=False)
+    return (
+        prompts.NARRATE
+        + json.dumps(data, ensure_ascii=False)
+        + roster.instruction(turn.deferred_names)
+    )
 
 
 async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
@@ -110,7 +118,13 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
         actor.id: str(actor.name) for actor in actors if context.available(actor, manager.state)
     }
     try:
-        await capacity.admit(manager, state, [actor.id for actor in selected])
+        if len(selected) <= state.settings.max_active_npcs:
+            await capacity.admit(manager, state, [actor.id for actor in selected])
+        else:
+            capacity.ensure_budget(
+                state,
+                [actor.id for actor in selected[: state.settings.max_active_npcs]],
+            )
         await _prepare(manager, turn, message, selected)
     except Exception as exc:
         turn.usage.status = "failed"
@@ -143,9 +157,24 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
         }
     else:
         turn.perceptions = await perception.project(
-            manager, turn.initial.settings, turn.usage, observed.player_request, turn.names
+            manager,
+            turn.initial.settings,
+            turn.usage,
+            observed.player_request,
+            turn.names,
+            recent_interlocutors=roster.recent(turn.initial, set(turn.names)),
         )
-    for actor in sorted(actors, key=lambda item: item.id):
+    active_ids = roster.select(turn.initial, turn.perceptions)
+    active = [actor for actor in actors if actor.id in active_ids]
+    turn.deferred_names = {
+        actor.id: str(actor.name) for actor in actors if actor.id not in active_ids
+    }
+    turn.names = {actor.id: str(actor.name) for actor in active}
+    await capacity.admit(manager, turn.initial, active_ids)
+    turn.usage.detail = (
+        f"Active NPCs: {len(active)}; present but inactive: {len(turn.deferred_names)}."
+    )
+    for actor in sorted(active, key=lambda item: item.id):
         await _prepare_actor(manager, turn, actor, observed)
 
 
@@ -228,6 +257,7 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
     for actor, decision in turn.decisions.items():
         _finish_decision(turn, decision, reply)
         result.actors[actor] = decision
+        result.last_active[actor] = turn.initial.revision + 1
         result.memories[actor] = turn.memories.get(actor, [])
         additions = _new_memories(turn, decision, reply)
         memory.append(result, actor, additions)

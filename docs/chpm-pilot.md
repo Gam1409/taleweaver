@@ -7,8 +7,9 @@ role through the existing router and shared admission queue.
 
 ## Session controls
 
-Open **Session Memory & Settings → NPC behavior · CHPM pilot**. Select up to three
-known characters and save between turns.
+Open **Session Memory & Settings → NPC behavior · CHPM pilot**. Select up to 20
+known characters and save between turns. The active limit defaults to three; see
+[larger casts](chpm-large-casts.md) for focus, rotation and full-group processing.
 
 - **Standard:** the existing dialogue pipeline.
 - **Observe:** compute alternatives and a selected intention without adding them
@@ -300,3 +301,10 @@ semantic distinctness of candidate intentions is an evaluation criterion.
 Live narration remains buffered until review and commit. The ordinary chat status
 shows `Reviewing NPC reply...` during validation, including any bounded repair.
 This progress message does not expose unvalidated story text or restore streaming.
+
+## Latest pilot additions
+
+[Slow developmental reflections](chpm-development.md) qualify behavior with dated
+source evidence while retaining original identity. [The cast/history matrix](chpm-matrix-evaluation.md)
+prepares live evaluation across 360 synthetic cases. Local mock success is not
+psychological validation; live evaluation remains pending.

@@ -20,6 +20,22 @@ const state = (revision = 0) => ({
   characters: [{ id: 'NPC', name: 'Lina' }], usage: { calls: 0, input_chars: 0, output_chars: 0, repairs: 0, status: 'idle', detail: '' }, trace: [],
 })
 
+test('twenty-person roster budgets active participants and explicitly supports all present', async t => {
+  const f = fixture(t, async () => new Response(JSON.stringify(state())))
+  await tick()
+  f.draft.value.mode = 'live'
+  f.draft.value.actor_ids = Array.from({ length: 20 }, (_, i) => `NPC-${i}`)
+  f.draft.value.max_active_npcs = 3
+  f.draft.value.max_calls_per_turn = 7
+  assert.equal(f.minimumCalls.value, 7)
+  assert.equal(f.budgetWarning.value, false)
+  f.draft.value.max_active_npcs = 20
+  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.budgetWarning.value, true)
+  f.draft.value.max_calls_per_turn = 24
+  assert.equal(f.budgetWarning.value, false)
+})
+
 function fixture(t, fetch) {
   t.mock.method(globalThis, 'fetch', fetch)
   const scope = effectScope()

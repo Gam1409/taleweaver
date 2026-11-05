@@ -73,6 +73,7 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
     # Cached decisions belong to the old input/session. Persistent identity and
     # declared goals survive; the next turn must choose its own intention anew.
     value.actors = {}
+    value.last_active = {}
     value.usage = Usage()
     value.revision = 0
     result[KEY] = value.model_dump(mode="json")

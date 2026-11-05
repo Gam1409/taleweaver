@@ -10,6 +10,10 @@ from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
 TIERS = ((6, 1000, 3, 8, 24), (6, 600, 2, 6, 6), (4, 300, 1, 4, 2), (4, 300, 0, 2, 0))
 
 
+class ContextBudgetError(ChpmError):
+    """Required views do not fit the configured request size."""
+
+
 def pack(
     mind: Mind,
     observation: Observation,
@@ -17,6 +21,9 @@ def pack(
     entries: list[AgendaEntry],
     settings: Settings,
     instruction: str,
+    *,
+    schema: type[GroundedProposal] = GroundedProposal,
+    extra: dict | None = None,
 ) -> tuple[appraisal_context.Window, motivation.Catalogue, dict, dict]:
     cues = " ".join(
         source.text
@@ -37,15 +44,22 @@ def pack(
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()
         ids["motive_id"] = list(catalogue.sources)
+        development = (extra or {}).get("development_context", {})
+        ids["episode_id"] = [item["episode_id"] for item in development.get("basis", [])]
+        ids["trait_key"] = [trait.key for trait in mind.genesis.identity.traits]
+        ids["existing_id"] = [
+            item["development_id"] for item in development.get("current_tendencies", [])
+        ]
         goals = mind.genesis.identity.authored_goals
         if all(len(goal) <= 300 for goal in goals):
             ids["goal_quote"] = ["", *goals]
         payload = _payload(mind, supplied, window, catalogue, index, dialogue)
-        system, content = inference.compose(instruction, payload, GroundedProposal, ids)
+        payload.update(extra or {})
+        system, content = inference.compose(instruction, payload, schema, ids)
         size = len(system) + len(content)
         if size <= settings.max_input_chars:
             return window, catalogue, payload, ids
-    raise ChpmError(
+    raise ContextBudgetError(
         f"CHPM required context exceeds its budget ({size} > {settings.max_input_chars} characters). No request was sent; increase the input limit explicitly."
     )
 

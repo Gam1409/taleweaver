@@ -48,9 +48,9 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
     ]
     assert 2 + excerpts + 1 + heard == capacity.SOURCE_RESERVE
     experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]
-    assert capacity.SOURCE_RESERVE + interpretations + experiences == capacity.EVENT_RESERVE
+    assert capacity.SOURCE_RESERVE + interpretations + experiences + 2 == capacity.EVENT_RESERVE
     assert experiences == capacity.EXPERIENCE_RESERVE
-    assert interpretations == capacity.BELIEF_RESERVE
+    assert interpretations + 1 == capacity.BELIEF_RESERVE
 
 
 def test_full_beliefs_allow_revisions_but_reject_new_beliefs_with_transition_error(monkeypatch):

@@ -16,9 +16,9 @@ IDs, changed sources, corrupt projections and wrong identities still fail.
 Rewind, source retraction and session copying cross archive boundaries. Archival
 commits with the reviewed turn; failed turns never publish a partial rollover.
 
-Before inference, admission reserves 22 events/evidence records, 18 source
-bindings, two potentially new beliefs and two affect/need dimensions: one frame, one aggregate world change,
-three perceived excerpts, two interpretations, two experience appraisals, own speech and twelve heard
+Before inference, admission reserves 24 events/evidence records, 18 source
+bindings, three potentially new beliefs and two affect/need dimensions: one frame, one aggregate world change,
+three perceived excerpts, two interpretations, two experience appraisals, up to two developmental reflections, own speech and twelve heard
 passages. At 80% of any total limit, settings warn. If the whole turn may not fit,
 CHPM pauses before requests. It neither deletes history nor silently switches
 behavior. Explicitly choosing Standard or deselecting affected NPCs preserves
@@ -76,7 +76,8 @@ repair calls are used only on a mismatch; provider retries can add transport cos
 Old settings with smaller budgets still load unchanged. Before CHPM inference,
 admission checks the actually present selected NPCs and requests a settings change
 if the budget is inadequate. It does not silently raise a saved limit. The settings
-UI checks the full selected roster, preventing a surprise when all NPCs are present.
+UI checks the configured active limit; the selected roster can contain 20 NPCs.
+See [cast scheduling](chpm-large-casts.md) for direct-participant overflow and costs.
 
 With multiple NPCs, proposals are sequential and text appears only after narration
 and review. The UI warns that slow local models may take several minutes. This is
@@ -89,8 +90,8 @@ must preserve unaffected voices and prose.
 The first completed live turn pins original identity. Later character-card edits
 do not migrate it, including after off/on. Settings now explain this explicitly.
 Experiences can update source-bound beliefs and declared goals without rewriting
-that baseline. Long-term personality development or an explicit identity migration
-must be separate versioned operations, not an automatic response to a player's
+that baseline. The [developmental reflection policy](chpm-development.md) now adds tentative
+source-bound qualifications. An explicit identity migration remains separate, not an automatic response to a player's
 instruction or an inferred temporary emotion.
 
 Production observations now carry a monotonic host `turn_revision` from the

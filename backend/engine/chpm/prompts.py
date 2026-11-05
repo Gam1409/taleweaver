@@ -60,6 +60,9 @@ subjective_experience_not_traits is private, fallible context, not a list to nar
 Recent feelings need not match outward expression; historical_current_unknown is
 not a current emotion. Never turn arousal into desire/consent, or a temporary state
 into a personality rewrite. Preserve the selected intention and the NPC's own voice.
+developing_tendencies are source-bound gradual qualifications of the original
+identity, not replacement cards. Treat contested tendencies as uncertain; do not
+generalize a local relationship or scene-bound conversational habit to everyone.
 """
 
 VERIFY = """Review the proposed narration against the supplied NPC dialogue contracts.
@@ -83,6 +86,8 @@ Traits are contextual tendencies; a tradeoff between sourced motives is allowed.
 Subjective experience is tentative context, not a new personality or required
 display of feelings. Historical states do not establish current intensity. General
 arousal does not establish desire or consent. Do not require state labels in prose.
+Allow contextual development explicitly grounded in developing_tendencies while
+preserving the historical identity and unrelated traits; contested is not certain.
 Distinguish generic approval to keep generating from a concrete in-scene choice
 that belongs to the player. A question mark alone is not a violation.
 Do not infer consent, agreement or completed actions from the player's request.

@@ -37,8 +37,16 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
   assert.match(html, /processed sequentially/)
   assert.match(html, /does not stream/)
   assert.match(html, /Minimum for this selection: 7/)
-  assert.match(html, /Later edits to their character card do not replace/)
+  assert.match(html, /Later card edits do not replace/)
   assert.doesNotMatch(await render(1), /processed sequentially/)
+})
+
+test('large casts expose focused processing and an explicit all-present choice', async () => {
+  const html = await render(20)
+  assert.match(html, /Character roster \(up to 20/)
+  assert.match(html, /Active NPCs per turn/)
+  assert.match(html, /Twenty active NPCs require 24 CHPM requests/)
+  assert.match(html, /Attribution is model-based and can be mistaken/)
 })
 
 test('capacity warning exposes the explicit standard-mode choice and preserved history', async () => {

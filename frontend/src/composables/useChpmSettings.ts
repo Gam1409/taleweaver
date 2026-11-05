@@ -4,6 +4,7 @@ import { apiFetch } from '@/services/http'
 export interface ChpmSettings {
   mode: 'off' | 'shadow' | 'live'
   actor_ids: string[]
+  max_active_npcs: number
   model_role: 'small' | 'complex'
   max_output_tokens: number
   max_input_chars: number
@@ -41,7 +42,7 @@ export function useChpmSettings(sessionId: () => string) {
   const error = ref('')
   const dirty = computed(() => !!status.value && JSON.stringify(draft.value) !== JSON.stringify(status.value.settings))
   const minimumCalls = computed(() => !draft.value || draft.value.mode === 'off'
-    ? 0 : draft.value.actor_ids.length + (draft.value.mode === 'live' ? 4 : 1))
+    ? 0 : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3) + (draft.value.mode === 'live' ? 4 : 1))
   const budgetWarning = computed(() => !!draft.value && draft.value.max_calls_per_turn < minimumCalls.value)
   const historyWarnings = computed(() => draft.value?.mode !== 'live' ? [] : draft.value.actor_ids.flatMap(id => {
     const capacity = status.value?.history_capacity?.[id]

@@ -28,13 +28,18 @@ defineExpose({ save })
           <button type="button" class="rounded border border-amber-300/50 px-3 py-2 font-semibold" @click="selectStandard">Select Standard (save to apply)</button>
         </div>
         <fieldset class="space-y-2">
-          <legend class="mb-2 text-xs text-slate-300">Characters (up to 3; only present NPCs are processed)</legend>
+          <legend class="mb-2 text-xs text-slate-300">Character roster (up to 20; absent NPCs retain their saved psychology)</legend>
           <p v-if="!status.characters.length" class="text-xs text-slate-400">Meet a character before selecting them here.</p>
           <label v-for="actor in status.characters" :key="actor.id" class="flex items-center gap-2 text-sm text-slate-200">
-            <input v-model="draft.actor_ids" type="checkbox" :value="actor.id" :disabled="draft.actor_ids.length >= 3 && !draft.actor_ids.includes(actor.id)" class="accent-cyan-400" />
+            <input v-model="draft.actor_ids" type="checkbox" :value="actor.id" :disabled="draft.actor_ids.length >= 20 && !draft.actor_ids.includes(actor.id)" class="accent-cyan-400" />
             {{ actor.name }}
           </label>
         </fieldset>
+        <label class="block text-xs text-slate-300">Active NPCs per turn
+          <input v-model.number="draft.max_active_npcs" type="number" min="1" max="20" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" />
+        </label>
+        <p class="text-xs text-slate-400">Default: 3. In larger casts, process direct participants without filling spare places. With no direct participants, keep the current conversation; choose another group when its participants leave. Inactive characters keep their state and do not receive new dialogue or psychological updates. If direct participants exceed this limit, the turn stops visibly. Set 20 to process every present selected NPC, and raise the request budget accordingly. Attribution is model-based and can be mistaken.</p>
+        <p v-if="draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 24 CHPM requests including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
         <p v-if="draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200">Selected NPCs are processed sequentially. With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
         <label class="block text-xs text-slate-300">Use existing model configuration
           <select v-model="draft.model_role" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
@@ -46,9 +51,9 @@ defineExpose({ save })
         <details class="rounded-lg border border-slate-700 p-3">
           <summary class="cursor-pointer text-xs text-slate-300">Request limits</summary>
           <div class="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-300">
-            <label>Requests per turn<input v-model.number="draft.max_calls_per_turn" type="number" :min="Math.max(1, minimumCalls)" max="8" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
-            <label>Decision/review output tokens<input v-model.number="draft.max_output_tokens" type="number" min="512" max="2048" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
-            <label class="col-span-2">Input size per request (characters, including instructions)<input v-model.number="draft.max_input_chars" type="number" min="8000" max="48000" step="1000" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label>Requests per turn<input v-model.number="draft.max_calls_per_turn" type="number" :min="Math.max(1, minimumCalls)" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label>Decision/review output tokens<input v-model.number="draft.max_output_tokens" type="number" min="512" max="8192" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label class="col-span-2">Input size per request (characters, including instructions)<input v-model.number="draft.max_input_chars" type="number" min="8000" max="192000" step="1000" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label class="col-span-2">Remembered observations per NPC<input v-model.number="draft.memory_limit" type="number" min="0" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
           </div>
           <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review and reserves two calls for one repair and another review. Minimum for this selection: {{ minimumCalls }}. Reserved calls are used only if needed. A repair uses the Complex model with up to 4,096 output tokens. The ordinary narrator request is separate from this CHPM budget. These are logical requests; provider retries may add cost.</p>
@@ -58,7 +63,7 @@ defineExpose({ save })
         </details>
       </template>
       <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Recorded goals, promises and story events remain. Standard mode pauses ledger updates; sources are checked again when enabled. Save between turns.</p>
-      <p class="text-xs text-slate-400">The first completed enabled turn pins the NPC's original character, traits and goal. Later edits to their character card do not replace this psychological identity, even after disabling and re-enabling CHPM. Experiences can update subjective beliefs and declared goals; long-term personality change and an explicit identity migration are not implemented yet.</p>
+      <p class="text-xs text-slate-400">The first completed enabled turn pins the NPC's original character, traits and goal. Later card edits do not replace this psychological identity. Dated experiences can support tentative conversational habits, relationship expectations and gradual trait tendencies; counterevidence remains visible. These qualifications do not rewrite the card or erase its values. Consolidation is deferred if its optional context cannot fit. This is not a validated clinical simulation or numerical personality model.</p>
     </fieldset>
     <p v-if="status?.agenda_counts" class="mt-3 text-xs text-slate-400">Recorded agenda: {{ status.agenda_counts.active }} active · {{ status.agenda_counts.closed }} closed (last saved state; completion reports are not verified world outcomes).</p>
     <div v-if="status && status.usage.status !== 'idle'" class="mt-4 text-xs text-slate-400" aria-live="polite">

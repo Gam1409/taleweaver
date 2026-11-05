@@ -36,6 +36,7 @@ def retract(state: Any, message_id: str) -> None:
     # Later decisions can depend on earlier speech. Clear all derived pilot
     # decisions on a source change rather than pretending they were recomputed.
     current.actors = {}
+    current.last_active = {}
     actors = (
         set(current.memories) | set(current.minds) | {entry.actor_id for entry in current.agenda}
     )

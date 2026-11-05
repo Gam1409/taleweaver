@@ -5,14 +5,16 @@ from typing import Any
 from backend.engine.chpm import (
     agenda,
     appraisal,
-    cognitive_context,
+    development,
+    development_request,
     experience,
     inference,
     initiative,
     motivation,
     prompts,
 )
-from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS, GroundedProposal
+from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
+from backend.engine.chpm.development_contracts import DevelopmentProposal
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import existing, fingerprint, select
 from backend.engine.chpm.schema import (
@@ -60,9 +62,16 @@ async def deliberate(
     previous: Decision | None = None,
 ) -> tuple[Decision, Mind]:
     instruction = prompts.PROPOSE + INSTRUCTIONS + motivation.INSTRUCTIONS + experience.INSTRUCTIONS
-    window, motives, payload, identifiers = cognitive_context.pack(
-        mind, observation, supplied, entries, settings, instruction
-    )
+    (
+        window,
+        motives,
+        payload,
+        identifiers,
+        schema,
+        instruction,
+        development_sources,
+        development_status,
+    ) = development_request.prepare(mind, observation, supplied, entries, settings, instruction)
     key = fingerprint(payload)
     cached = existing(previous, observation, key)
     if cached is not None:
@@ -73,7 +82,7 @@ async def deliberate(
         usage,
         instruction,
         payload,
-        GroundedProposal,
+        schema,
         "proposal",
         identifiers=identifiers,
     )
@@ -83,6 +92,12 @@ async def deliberate(
     )
     changed, experience_ids = experience.accept(
         changed, raw.experiences, window, motives, message_id=observation.message_id
+    )
+    changed, development_ids = development.accept(
+        changed,
+        raw.developments if isinstance(raw, DevelopmentProposal) else [],
+        development_sources,
+        message_id=observation.message_id,
     )
     proposal = raw.canonical()
     agenda.validate_proposal(proposal, entries)
@@ -97,6 +112,8 @@ async def deliberate(
     )
     decision.interpretation_ids = accepted_ids
     decision.experience_ids = experience_ids
+    decision.development_ids = development_ids
+    decision.development_status = development_status
     decision.motivation_policy = motivation.POLICY
     decision.candidate_motives = resolved_motives
     return decision, changed

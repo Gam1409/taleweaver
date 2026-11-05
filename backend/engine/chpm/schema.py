@@ -14,11 +14,12 @@ class Contract(BaseModel):
 
 class Settings(Contract):
     mode: Literal["off", "shadow", "live"] = "off"
-    actor_ids: list[str] = Field(default_factory=list, max_length=3)
+    actor_ids: list[str] = Field(default_factory=list, max_length=20)
+    max_active_npcs: int = Field(default=3, ge=1, le=20, strict=True)
     model_role: Literal["small", "complex"] = "complex"
-    max_output_tokens: int = Field(default=1200, ge=512, le=2048, strict=True)
-    max_input_chars: int = Field(default=24000, ge=8000, le=48000, strict=True)
-    max_calls_per_turn: int = Field(default=7, ge=1, le=8, strict=True)
+    max_output_tokens: int = Field(default=1200, ge=512, le=8192, strict=True)
+    max_input_chars: int = Field(default=24000, ge=8000, le=192000, strict=True)
+    max_calls_per_turn: int = Field(default=7, ge=1, le=24, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
 
     @model_validator(mode="after")
@@ -29,7 +30,7 @@ class Settings(Contract):
             raise ValueError("Invalid NPC identifier.")
         if self.mode != "off" and not self.actor_ids:
             raise ValueError("Choose at least one NPC.")
-        minimum = len(self.actor_ids) + (1 if self.mode == "live" else 0)
+        minimum = min(len(self.actor_ids), self.max_active_npcs) + (1 if self.mode == "live" else 0)
         if self.mode != "off" and self.max_calls_per_turn < minimum:
             raise ValueError("The call budget must cover the selected NPCs and live validation.")
         return self
@@ -55,10 +56,11 @@ class Perception(Contract):
     actor_id: str
     quotes: list[str] = Field(default_factory=list, max_length=3)
     uncertain: StrictBool = False
+    engaged: StrictBool = False
 
 
 class Projection(Contract):
-    audience: list[Perception] = Field(max_length=3)
+    audience: list[Perception] = Field(max_length=20)
 
 
 class MemoryEntry(Contract):
@@ -173,6 +175,10 @@ class Decision(Contract):
     spoken_evidence: str = ""
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
     experience_ids: list[str] = Field(default_factory=list, max_length=2)
+    development_ids: list[str] = Field(default_factory=list, max_length=2)
+    development_status: Literal["not_yet_eligible", "available", "deferred_input_budget"] = (
+        "not_yet_eligible"
+    )
     selection_reasons: list[str] = Field(default_factory=list, max_length=4)
     question_gate: QuestionGate | None = None
     motive_dominance: dict[ActionKind, list[ActionKind]] = Field(default_factory=dict, max_length=4)
@@ -216,8 +222,9 @@ class KernelState(Contract):
     revision: int = Field(default=0, ge=0)
     settings: Settings = Field(default_factory=Settings)
     # A high-water record per actor rejects old events without an unbounded journal.
-    actors: dict[str, Decision] = Field(default_factory=dict, max_length=3)
-    memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=3)
+    actors: dict[str, Decision] = Field(default_factory=dict, max_length=32)
+    memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=32)
+    last_active: dict[str, int] = Field(default_factory=dict, max_length=32)
     agenda: list[AgendaEntry] = Field(default_factory=list, max_length=256)
     minds: dict[str, Mind] = Field(default_factory=dict, max_length=32)
     usage: Usage = Field(default_factory=Usage)
@@ -250,6 +257,6 @@ class AgendaEvidence(SpokenEvidence):
 class Verdict(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
-    evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=3)
+    evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=20)
     heard: list[HeardSpeech] = Field(default_factory=list, max_length=12)
-    agenda_evidence: list[AgendaEvidence] = Field(default_factory=list, max_length=3)
+    agenda_evidence: list[AgendaEvidence] = Field(default_factory=list, max_length=20)

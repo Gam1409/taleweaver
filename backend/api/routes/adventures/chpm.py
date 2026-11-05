@@ -167,6 +167,7 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         **value,
         "actors": prior.get("actors", {}) if same_mode and same_actors else {},
         "memories": prior.get("memories", {}) if same_mode and same_actors else {},
+        "last_active": prior.get("last_active", {}),
         # Never copy promises made in the completed turn into its retry baseline.
         "agenda": prior.get("agenda", []),
         # The current core may include observations from the completed reply.

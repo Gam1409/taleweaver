@@ -208,7 +208,7 @@ receives speech observations. The new production adapter adds observer-local wor
 not a complete witnessed world-event vocabulary. This trajectory has only mock-based tests so far, not a
 completed live run or proof of psychological development.
 
-## Next implementation slices
+## Implemented pilot slices and next validation
 
 The [exact archive and lexical subjective-memory view](chpm-memory-lifecycle.md)
 are implemented. Total storage remains finite; semantic consolidation is future work.
@@ -228,8 +228,13 @@ are implemented. Total storage remains finite; semantic consolidation is future 
    with tested dynamics if warranted. Current freshness policy does not measure
    recovery; numerical decay/physiological transitions remain open. General
    affective arousal is not automatically sexual desire or agreement.
-5. Consider relationship-specific attachment, habits and trait development only
-   after the simpler mechanisms have independent benefit and identifiable effects.
+5. Evaluate the implemented [slow developmental reflections](chpm-development.md):
+   local conversational habits, directed expectations and trait qualifications.
+   Their engineering gates are not psychological validation. Attachment dynamics,
+   numerical traits and evolving self-narrative remain outside this pilot.
+6. Run the [360-case cast/history matrix](chpm-matrix-evaluation.md) after restarting
+   the model server. It covers 1–20 NPCs, short/long history and three genres; local
+   mock tests do not establish psychological quality or live performance.
 
 The research document's distinction between engineering invariants, internal model
 behavior, psychological validity and artistic quality applies throughout.

@@ -56,6 +56,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             "narration": text,
             "present_speakers": turn.present_names,
             "controlled_actor_ids": sorted(turn.decisions),
+            "inactive_controlled_actors": turn.deferred_names,
             "passages": available,
         },
         passages.Review,
@@ -91,6 +92,7 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
             entry.actor_id not in turn.decisions
             or entry.speaker_id not in turn.present_names
             or entry.speaker_id == entry.actor_id
+            or entry.speaker_id in turn.deferred_names
             or not entry.quote
             or entry.quote not in text
         ):
