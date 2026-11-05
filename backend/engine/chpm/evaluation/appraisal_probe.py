@@ -77,7 +77,10 @@ async def _step(
     number: int,
     message: str,
     timeout: float,
+    *,
+    render: bool | None = None,
 ) -> tuple[dict, Mind]:
+    should_render = number == len(CASES) if render is None else render
     measured = MeasuredFactory(factory, limit=7, timeout=timeout)
     host = SimpleNamespace(
         user=None,
@@ -115,7 +118,9 @@ async def _step(
         "message": message,
         "error": "",
         "response": "",
-        "scope": "synthetic reports; cognition only except final two-role turn",
+        "scope": "synthetic reports; cognition and reviewed narration"
+        if should_render
+        else "synthetic reports; cognition only",
     }
     accepted = before
     try:
@@ -137,7 +142,7 @@ async def _step(
             pending,
         )
         result["decision"] = decision.model_dump()
-        if number == len(CASES):
+        if should_render:
             result["response"] = await _render(
                 host, actor, settings, usage, decision, pending, observed, measured
             )
@@ -204,7 +209,7 @@ async def _render(
         system_prompt=system + payload,
     )
     reply = SimpleNamespace(
-        id="reply-final",
+        id=f"reply-{observed.message_id}",
         session_id=host.game_id,
         role="assistant",
         content=text,

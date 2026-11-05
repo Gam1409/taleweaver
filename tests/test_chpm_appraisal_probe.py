@@ -1,9 +1,13 @@
 """The explicit live probe remains bounded and can be verified without a server."""
 
+from types import SimpleNamespace
+
 import pytest
 
-from backend.engine.chpm.evaluation.appraisal_probe import CASES, run
+from backend.engine.chpm.evaluation.appraisal_probe import CASES, _step, run
+from backend.engine.chpm.schema import Settings
 from tests.test_chpm_evaluation import Models
+from tests.test_chpm_host_state import mind
 
 
 async def test_bounded_probe_exercises_both_roles_and_saves_all_results(tmp_path):
@@ -28,3 +32,29 @@ async def test_failed_probe_keeps_accepted_state_and_does_not_render(tmp_path):
     assert all(result["status"] == "failed" for result in results)
     assert all(result["before"] == result["after"] for result in results)
     assert all(len(result["calls"]) == 1 for result in results)
+
+
+async def test_two_reviewed_turns_retain_distinct_reply_sources():
+    actor = SimpleNamespace(
+        id="npc", name="Engineer", character="Independent engineer", goal="Keep bridges safe"
+    )
+    value = mind(session="appraisal-probe")
+    for number in (1, 2):
+        result, value = await _step(
+            Models(),
+            actor,
+            Settings(mode="live", actor_ids=["npc"]),
+            value,
+            number,
+            "Let us inspect it.",
+            10,
+            render=True,
+        )
+        assert result["status"] == "ok", result["error"]
+        assert [call["phase"] for call in result["calls"]] == [
+            "proposal",
+            "narration",
+            "validation",
+        ]
+    replies = {source.message_id for source in value.sources.values() if source.role == "assistant"}
+    assert replies == {"reply-input-1", "reply-input-2"}
