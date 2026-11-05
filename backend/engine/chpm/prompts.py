@@ -29,7 +29,12 @@ No inferred consent, possessions, history or emotional certainty from a request.
 Follow the JSON schema, be concise, and do not restate these instructions.
 """
 
-NARRATE = """CHPM DIALOGUE CONTRACT (private data, not prose to repeat):
+NARRATE = """
+Use agent_observed_sources as this NPC's source-bound knowledge when realizing a
+selected intention. Preserve concrete locations, item identities and access codes;
+do not invent replacements or claim another NPC knows these sources. Historical
+reports are not current world facts; current host state overrides them.
+CHPM DIALOGUE CONTRACT (private data, not prose to repeat):
 For the named NPCs, express the selected dialogue intention in their established
 voice. Other planning suggestions do not override it. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
@@ -89,8 +94,12 @@ certainty, or inventing desire/trust merely because the player asked. Acceptance
 and refusal can both fit a character. Do not require reasons to be spoken aloud.
 Traits are contextual tendencies; a tradeoff between sourced motives is allowed.
 Subjective experience is tentative context, not a new personality or required
-display of feelings. Historical states do not establish current intensity. General
-arousal does not establish desire or consent. An optional sexual_desire appraisal
+display of feelings. Historical states do not establish current intensity.
+agent_observed_sources contain exact excerpts this NPC obtained through tools.
+Preserve their concrete items, locations and codes if conveying them; never replace
+missing details with invented specifics. Reported/historical information retains
+that status; current host state takes precedence. Do not restate unrelated sources.
+General arousal does not establish desire or consent. An optional sexual_desire appraisal
 does not establish affection, trust, consent or an action; do not turn it into an
 obligation to approach its target or describe sexual behaviour. Do not require state labels in prose.
 Allow contextual development explicitly grounded in developing_tendencies while

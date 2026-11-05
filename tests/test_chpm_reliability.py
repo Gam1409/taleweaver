@@ -239,7 +239,7 @@ def test_envelope_migration_preserves_old_request_budget_and_identity():
     raw["actors"]["npc"].pop("perception_audit")
     migrated = KernelState.model_validate(raw)
     assert migrated == original
-    assert migrated.schema_version == 3
+    assert migrated.schema_version == 4
     assert migrated.settings.max_calls_per_turn == 5
     assert raw["schema_version"] == 1
 

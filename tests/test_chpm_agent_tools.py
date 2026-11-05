@@ -196,3 +196,31 @@ def test_search_does_not_return_the_current_question_as_an_old_memory():
     result = tools.search("cabinet code")["results"]
     assert len(result) == 1 and result[0]["source_message_id"] == "old"
     assert "7319" in result[0]["text"]
+
+
+@pytest.mark.parametrize(
+    "opaque,expected", [(False, {"sweater", "jeans", "bra"}), (True, {"sweater", "jeans"})]
+)
+def test_red_underwear_visibility_under_sweater_and_jeans(opaque, expected):
+    actor = clothing_actor()
+    actor.inventory = [
+        item("bra", 0, ["torso"], underwear=True),
+        item("briefs", 0, ["pelvis"], underwear=True),
+        item("jeans", 2, ["pelvis", "legs"]),
+        item("sweater", 2, ["torso", "arms"], opaque=opaque),
+    ]
+    actor.inventory[0]["name"] = "Red bra"
+    actor.inventory[1]["name"] = "Red briefs"
+    actor.visual_profile = profile("bra", "briefs", "jeans", "sweater", age=30)
+    state = SimpleNamespace(
+        current_scene_id="room",
+        entity_states={
+            "__manifest_snapshot__": {
+                "original_manifest": {"clothing_settings": {"detailed": True}}
+            }
+        },
+    )
+    view = agent_views.project(actor, state, [])
+    assert {garment["item_id"] for garment in view["clothing"]} == expected
+    assert "Red briefs" not in str(view)
+    assert ("Red bra" in str(view)) is not opaque

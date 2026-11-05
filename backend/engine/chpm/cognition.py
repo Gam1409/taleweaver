@@ -5,6 +5,7 @@ from typing import Any
 from backend.engine.chpm import (
     agenda,
     agent,
+    agent_context,
     appraisal,
     development,
     development_request,
@@ -83,6 +84,7 @@ async def deliberate(
         mind, pinned = tools.mind, tools.pins
         supplied = {
             **supplied,
+            "agent_contract": "source-handoff-v1",
             "agent_lookup_status": [
                 {"tool": request["tool"], "status": result["status"]}
                 for step in audit
@@ -146,6 +148,7 @@ async def deliberate(
             motives=resolved_motives,
         )
         decision.agent_audit = audit
+        decision.agent_evidence = agent_context.collect(pinned, observation)
         decision.interpretation_ids = accepted_ids
         decision.experience_ids = experience_ids
         decision.development_ids = development_ids

@@ -288,7 +288,7 @@ from passing the kernel's program-invariant tests.
 
 ## Contract versions and perception granularity
 
-`KernelState.schema_version=3` versions the host/session envelope;
+`KernelState.schema_version=4` versions the host/session envelope;
 `Snapshot.schema_version=4` separately versions each observer's core history layout,
 including `Experience` events and their derived `experiences` projection.
 `transition_version=evidence-ledger-v3` identifies the experience contract including
@@ -372,4 +372,4 @@ these revisions; repeat the same fixtures with each comparison model.
 
 ## Optional agent lookups
 
-See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, visible clothing, call budgets and trace semantics. The feature defaults to off; envelope versions 1/2 migrate to 3 without enabling it.
+See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, visible clothing, call budgets and trace semantics. The feature defaults to off; envelope versions 1/2/3 migrate to 4 without enabling it.

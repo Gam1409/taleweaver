@@ -164,7 +164,20 @@ class ProposalOptions(Contract):
         )
 
 
+class AgentEvidence(Contract):
+    source_id: str = Field(min_length=1, max_length=100)
+    record_id: str = Field(min_length=1, max_length=100)
+    source_message_id: str = Field(min_length=1, max_length=100)
+    source_revision_id: str | None = None
+    source_hash: str = Field(min_length=1, max_length=100)
+    speaker_id: str = Field(min_length=1, max_length=100)
+    kind: Literal["reported", "witnessed"]
+    text: str = Field(min_length=1, max_length=2000)
+    current_turn: bool
+
+
 class Decision(Contract):
+    agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=8)
     agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
     perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
     actor_id: str
@@ -194,6 +207,14 @@ class Decision(Contract):
     candidate_motives: dict[
         ActionKind, Annotated[list[ResolvedMotive], Field(min_length=1, max_length=3)]
     ] = Field(default_factory=dict, max_length=4)
+
+    @model_validator(mode="after")
+    def bounded_agent_evidence(self) -> "Decision":
+        if sum(len(source.text) for source in self.agent_evidence) > 6000:
+            raise ValueError("Agent evidence exceeds its combined text budget.")
+        if len({source.record_id for source in self.agent_evidence}) != len(self.agent_evidence):
+            raise ValueError("Agent evidence repeats a source.")
+        return self
 
     @model_validator(mode="after")
     def complete_motive_trace(self) -> "Decision":
@@ -227,13 +248,13 @@ class Usage(Contract):
 
 
 class KernelState(Contract):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
 
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_envelope(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("schema_version") in {1, 2}:
-            return {**value, "schema_version": 3}
+        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3}:
+            return {**value, "schema_version": 4}
         return value
 
     revision: int = Field(default=0, ge=0)

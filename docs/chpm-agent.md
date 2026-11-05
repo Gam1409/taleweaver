@@ -64,7 +64,7 @@ remain historical; current host facts take precedence.
   truncation flag; cosmetic verbosity cannot reject valid tool requests.
   This trace is exposed through the existing administrator-only endpoint.
 
-Host envelope version 3 migrates versions 1/2, retaining budgets and state, with
+Host envelope version 4 migrates versions 1/2/3, retaining budgets and state, with
 agent lookups defaulting to off. The core snapshot is independently versioned.
 
 ## Local validation and pending live work
@@ -94,3 +94,10 @@ requires an explicit endpoint/user, run ID and total call quota. The matrix's
 synthetic fixtures have no live wardrobe database, so visible clothing must also
 be tested in a saved VN session; the tool reports unavailable there rather than
 inventing a fixture wardrobe. Manifest v5 records the agent and input overrides.
+
+Retrieved excerpts also reach the narrator and reviewer as `agent_observed_sources`,
+independently of which motives the model selects. IDs, provenance, exact text,
+historical/current status and report/witness distinction are retained. The host
+rechecks these excerpts against the same observer's saved sources before rendering;
+missing/retracted/altered sources fail visibly. A model reviewer can still miss
+semantic contradictions; this handoff fixes missing input, not model infallibility.

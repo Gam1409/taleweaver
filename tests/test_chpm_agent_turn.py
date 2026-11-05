@@ -123,7 +123,7 @@ def test_envelope_two_migrates_without_enabling_agent_or_changing_budget():
     raw["settings"].pop("agent_steps")
     saved_budget = raw["settings"]["max_calls_per_turn"]
     restored = KernelState.model_validate(raw)
-    assert restored.schema_version == 3 and restored.settings.agent_steps == 0
+    assert restored.schema_version == 4 and restored.settings.agent_steps == 0
     assert restored.settings.max_calls_per_turn == saved_budget
     assert raw["schema_version"] == 2 and "agent_steps" not in raw["settings"]
 

@@ -8,6 +8,7 @@ from typing import Any
 from backend.core.game_modes import is_vn
 from backend.engine.chpm import (
     agenda,
+    agent_context,
     agent_views,
     capacity,
     cognition,
@@ -80,6 +81,7 @@ def contract_data(turn: Turn) -> dict:
                 motive.model_dump()
                 for motive in decision.candidate_motives.get(decision.selected.kind, [])
             ]
+            data[actor]["agent_observed_sources"] = agent_context.present(decision, mind)
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
             data[actor]["subjective_experience_not_traits"] = experience.view(mind)
             data[actor]["developing_tendencies"] = development_context.tendencies(mind)
