@@ -77,7 +77,7 @@ async def deliberate(
     prior = semantic_choice.previous_context(mind, previous, observation)
     supplied = {
         **supplied,
-        "proposal_contract": "motivated-choice-v1",
+        "proposal_contract": "motivated-choice-v2",
         "previous_intention": prior.model_dump() if prior else None,
     }
     pinned = {}

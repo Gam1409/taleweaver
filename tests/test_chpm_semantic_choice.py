@@ -58,7 +58,7 @@ def test_preference_survives_message_and_session_id_changes_and_candidate_order(
             context_hash="same-context",
         )
         assert result.selected.kind == preferred
-        assert result.policy_version == "motivated-choice-v1"
+        assert result.policy_version == "motivated-choice-v2"
         assert Decision.model_validate_json(result.model_dump_json()) == result
 
 
@@ -177,10 +177,83 @@ def test_continuity_requires_own_retained_delivered_speech_and_exact_revision():
 def test_saved_envelope_migrates_without_reselecting_old_decisions():
     raw = KernelState().model_dump()
     raw["schema_version"] = 4
-    assert KernelState.model_validate(raw).schema_version == 5
+    assert KernelState.model_validate(raw).schema_version == 6
     assert raw["schema_version"] == 4
     result = choose()
     broken = result.model_dump()
     broken["choice_preference"]["preferred"] = "DEFER"
     with pytest.raises(ValidationError, match="differs"):
         Decision.model_validate(broken)
+
+
+def test_explicit_goal_label_cannot_override_a_grounded_personal_preference():
+    value, window, _, _ = fixture()
+    catalogue = motivation.build(value, [], window)
+    raw = grounded_proposal().model_dump()
+    raw["candidates"]["CONTINUE"]["motives"][0]["motive_id"] = "character"
+    raw["candidates"]["DEFER"]["motives"][0]["motive_id"] = "goal1"
+    raw["choice"]["motive_ids"] = ["character"]
+    proposal = Draft.model_validate(raw).materialize(catalogue)
+    result = semantic_choice.select(
+        "npc",
+        observation(),
+        proposal.canonical(),
+        None,
+        proposal.choice,
+        motivation.resolve(proposal, catalogue),
+        window,
+        None,
+        context_hash="same",
+    )
+    assert result.selected.kind == "CONTINUE"
+    assert result.selected.goal_alignment == "unknown"
+    assert proposal.candidates["DEFER"].goal_alignment == "supports"
+
+
+def test_source_set_dominance_is_audited_without_pretending_to_measure_preference():
+    value, window, raw, _ = fixture()
+    data = raw.model_dump()
+    data["candidates"]["DEFER"]["motives"].append(
+        {
+            "motive_id": "character",
+            "effect": "supports",
+            "relevance": "An additional possible consideration.",
+        }
+    )
+    catalogue = motivation.build(value, [], window)
+    proposal = Draft.model_validate(data).materialize(catalogue)
+    result = semantic_choice.select(
+        "npc",
+        observation(),
+        proposal.canonical(),
+        None,
+        proposal.choice,
+        motivation.resolve(proposal, catalogue),
+        window,
+        None,
+        context_hash="same",
+    )
+    assert result.selected.kind == "CONTINUE"
+    assert result.motive_dominance["CONTINUE"] == ["DEFER"]
+
+
+def test_unresolved_question_dependencies_still_block_conditional_actions():
+    value, window, raw, _ = fixture()
+    data = raw.model_dump()
+    data["candidates"]["CLARIFY"] = deepcopy(data["candidates"]["CONTINUE"])
+    data["candidates"]["CLARIFY"]["intention"] = "Ask whether the player wants to discuss the plan."
+    data["question_gate"] = {
+        "kind": "player_intention",
+        "missing_fact": "Does the player want to discuss the plan?",
+        "branches": [{"answer": "Yes", "action": "CONTINUE"}, {"answer": "No", "action": "DEFER"}],
+    }
+    catalogue = motivation.build(value, [], window)
+    proposal = Draft.model_validate(data).materialize(catalogue)
+    args = ("npc", observation(), proposal.canonical(), proposal.question_gate)
+    tail = (motivation.resolve(proposal, catalogue), window, None)
+    with pytest.raises(ValueError, match="unresolved"):
+        semantic_choice.select(*args, proposal.choice, *tail, context_hash="same")
+    choice = proposal.choice.model_copy(update={"preferred": "CLARIFY"})
+    assert (
+        semantic_choice.select(*args, choice, *tail, context_hash="same").selected.kind == "CLARIFY"
+    )

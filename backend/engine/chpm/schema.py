@@ -210,7 +210,11 @@ class Decision(Contract):
     proposal: Proposal
     selected: Candidate
     policy_version: Literal[
-        "goal-first-v1", "initiative-gated-v1", "motive-frontier-v1", "motivated-choice-v1"
+        "goal-first-v1",
+        "initiative-gated-v1",
+        "motive-frontier-v1",
+        "motivated-choice-v1",
+        "motivated-choice-v2",
     ] = "goal-first-v1"
     status: Literal["selected", "delivered", "shadow"] = "selected"
     reply_id: str | None = None
@@ -243,7 +247,7 @@ class Decision(Contract):
     @model_validator(mode="after")
     def complete_motive_trace(self) -> "Decision":
         offered = {candidate.kind for candidate in self.proposal.candidates}
-        if self.policy_version == "motivated-choice-v1":
+        if self.policy_version in {"motivated-choice-v1", "motivated-choice-v2"}:
             if self.choice_preference is None or self.motivation_policy is None:
                 raise ValueError("Semantic selection requires its preference and motive trace.")
             if self.choice_preference.preferred != self.selected.kind:
@@ -277,13 +281,13 @@ class Usage(Contract):
 
 
 class KernelState(Contract):
-    schema_version: Literal[5] = 5
+    schema_version: Literal[6] = 6
 
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_envelope(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3, 4}:
-            return {**value, "schema_version": 5}
+        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3, 4, 5}:
+            return {**value, "schema_version": 6}
         return value
 
     revision: int = Field(default=0, ge=0)

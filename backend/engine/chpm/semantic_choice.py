@@ -58,25 +58,13 @@ def eligible(proposal: Proposal, gate: QuestionGate | None) -> tuple[list[Candid
         raise ChpmError("CHPM proposal offers no independent dialogue alternative.")
     blocked, reason = initiative.question_blocks(choices, gate)
     free = [c for c in independent if c.kind not in blocked]
-    conditional = [c for c in independent if c.kind in blocked]
-    priority = initiative.PRIORITY
-    useful = bool(free) and (
-        not conditional
-        or min(priority[c.goal_alignment] for c in free)
-        <= min(priority[c.goal_alignment] for c in conditional)
-    )
-    if not useful and blocked and choices["CLARIFY"].goal_alignment != "conflicts":
-        return [choices["CLARIFY"]], reason
+    # Goal labels and source-set dominance describe tradeoffs; they are not
+    # calibrated psychological preferences and cannot veto a grounded choice.
+    if blocked:
+        free.append(choices["CLARIFY"])
     if not free:
-        raise ChpmError("No independent intention; clarification conflicts with the goal.")
-    best = min(priority[c.goal_alignment] for c in free)
-    if (
-        best == priority["conflicts"]
-        and "CLARIFY" in choices
-        and choices["CLARIFY"].goal_alignment != "conflicts"
-    ):
-        raise ChpmError("An unsupported question cannot force goal-conflicting compliance.")
-    return [c for c in free if priority[c.goal_alignment] == best], reason
+        raise ChpmError("No independent or justified clarifying intention is available.")
+    return free, reason
 
 
 def select(
@@ -95,10 +83,10 @@ def select(
         raise ChpmError("A live proposal must state its source-grounded preferred intention.")
     candidates, reason = eligible(proposal, gate)
     comparisons = preference.compare(candidates, motives)
-    allowed = {c.kind: c for c in candidates if not comparisons[c.kind]}
+    allowed = {c.kind: c for c in candidates}
     if choice.preferred not in allowed:
         raise ChpmError(
-            "Preferred intention is conditional, dominated, or outside the eligible goal frontier. "
+            "Preferred intention is unoffered or depends on an unresolved question. "
             + "Eligible keys: "
             + ", ".join(sorted(allowed))
             + "."
@@ -124,7 +112,7 @@ def select(
         context_hash=context_hash,
         proposal=proposal,
         selected=selected.model_copy(deep=True),
-        policy_version="motivated-choice-v1",
+        policy_version="motivated-choice-v2",
         choice_preference=choice,
         previous_intention=prior,
         question_gate=gate,
@@ -164,9 +152,9 @@ def _continuity(choice: ChoicePreference, prior: PreviousIntention | None, windo
 INSTRUCTIONS = """
 CHOICE: Return choice.preferred (candidate key), motive_ids (its own cited grounds,
 including personal support), reason (brief situational tradeoff), continuity and
-change_basis (exact source_id/quote pairs). Choose a useful independent alternative
-at the best goal alignment: supports > neutral/unknown > conflicts. An option with
-strictly fewer personal supports and no fewer tensions cannot beat its alternative.
+change_basis (exact source_id/quote pairs). Choose what this NPC prefers now.
+Goal alignment and motive counts are annotations, not automatic rankings. Explain
+why the selected personal motive matters more here, including real tradeoffs.
 Respect question-gate dependencies; never execute an unresolved conditional action.
 Without previous_intention use continuity=new, change_basis=[]. Otherwise maintain
 the actual course, not just its label, or revise with evidence explaining WHY NOW.

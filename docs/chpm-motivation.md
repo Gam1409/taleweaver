@@ -112,10 +112,17 @@ algorithmic sensitivity, not the truth of model-generated reasons or psychologic
 validity. A valid source reference alone cannot establish the meaning of a motive.
 
 
-## Current live arbitration: motivated-choice-v1
+## Current live arbitration: motivated-choice-v2
 
-The same eligibility/frontier checks now validate an explicit model preference in
-the original proposal request. The remaining metadata-hash tie-break applies only
-to historical/legacy policies, not new live grounded decisions. See the continuity
-contract in `chpm-pilot.md`. A valid citation proves provenance, not psychological
-truth; there is still no calibrated human utility function or guaranteed realism.
+New live grounded decisions use a model preference with cited personal grounds and
+an explicit continuity explanation. Source access, own supporting motivation and
+unresolved question dependencies remain hard checks. Goal alignment and motive-set
+dominance remain in the trace but cannot veto an otherwise admissible preference.
+The first explicit-choice revision (v1) retained the old goal frontier; a live case
+showed that an indirect personal ground was rejected merely because another option
+cited the goal by name. No psychological priority follows from that difference.
+
+The metadata-hash tie-break remains only in historical/legacy policies. Saved v1
+decisions are not retroactively reselected. See `chpm-pilot.md`. A valid citation
+proves provenance, not psychological truth: semantic relevance and preference are
+still fallible model judgments, with no calibrated human utility function.
