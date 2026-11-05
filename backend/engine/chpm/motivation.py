@@ -160,8 +160,8 @@ outer input field. These are source references, not unrestricted reasoning.
 At least one supports ground must be this NPC's authored character/trait/value/role/
 goal or active declared agenda. A player's demand alone is not a personal motive.
 Acceptance and refusal can both fit. Do not invent desire to justify compliance.
-A goal supports/conflicts claim must cite the matching authored_goal containing
-goal_quote with supports/tension respectively. Preserve conflicting motives;
+The host derives goal alignment from authored_goal motives and their
+supports/tension effects; do not generate a second independent goal judgment. Preserve conflicting motives;
 traits are contextual tendencies, not absolute commands. Reports stay reports,
 challenged beliefs remain disputed, commitments are intentions rather than outcomes.
 Do not cite absent/closed agenda, another observer's knowledge or newly proposed

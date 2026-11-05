@@ -16,9 +16,9 @@ IDs, changed sources, corrupt projections and wrong identities still fail.
 Rewind, source retraction and session copying cross archive boundaries. Archival
 commits with the reviewed turn; failed turns never publish a partial rollover.
 
-Before inference, admission reserves 24 events/evidence records, 18 source
+Before inference, admission reserves 53 events/evidence records, 47 source
 bindings, three potentially new beliefs and two affect/need dimensions: one frame, one aggregate world change,
-three perceived excerpts, two interpretations, two experience appraisals, up to two developmental reflections, own speech and twelve heard
+up to 32 perceived excerpts, two interpretations, two experience appraisals, up to two developmental reflections, own speech and twelve heard
 passages. At 80% of any total limit, settings warn. If the whole turn may not fit,
 CHPM pauses before requests. It neither deletes history nor silently switches
 behavior. Explicitly choosing Standard or deselecting affected NPCs preserves
@@ -67,9 +67,9 @@ reduces repeated replay work; it does not solve unbounded archival storage.
 
 ## Model budget and latency
 
-New settings default to seven logical CHPM requests per turn. Enabling live mode
-requires `selected NPCs + 4`: perception, one proposal per NPC, review, and reserve
-for one prose repair plus another review. Shadow requires `selected NPCs + 1`.
+New settings default to eight logical CHPM requests per turn. Enabling live mode
+requires `active NPCs + 5`: perception, one proposal per NPC, review, and reserve
+for one shared proposal retry plus one prose repair and another review. Shadow requires `selected NPCs + 1`.
 The ordinary narration request is outside this CHPM-specific limit. Reserved
 repair calls are used only on a mismatch; provider retries can add transport cost.
 

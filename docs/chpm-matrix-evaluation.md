@@ -30,16 +30,16 @@ histories. A plan lists its maximum logical calls including narration and repair
 Planning does not discover models or send requests.
 
 After explicitly starting the model server, choose a small subset and an adequate
-total quota. For example, this single case allows at most eight logical calls:
+total quota. For example, this single case allows at most nine logical calls:
 
 ```bash
 poetry run python -m backend.engine.chpm.evaluation.matrix_cli run \
   --case fantasy-conflict-n20-h40 \
   --endpoint https://YOUR-SERVER/v1 --model YOUR_MODEL \
-  --run-id cast20-first --max-total-calls 8
+  --run-id cast20-first --max-total-calls 9
 ```
 
-Add `--all-present` and use quota 25 to test twenty simultaneous active characters.
+Add `--all-present` and use quota 26 to test twenty simultaneous active characters.
 The harness deliberately uses larger explicit request limits for that test.
 Alternatively use `--user ACCOUNT` for configured roles. Existing router, URL
 validation and shared inference admission remain in effect. No session settings
@@ -66,7 +66,7 @@ poetry run python -m backend.engine.chpm.evaluation.matrix_cli plan --suite stre
 poetry run python -m backend.engine.chpm.evaluation.matrix_cli run \
   --suite stress --case recall-exact-h40 \
   --endpoint https://YOUR-SERVER/v1 --model YOUR_MODEL \
-  --run-id memory-first --max-total-calls 6
+  --run-id memory-first --max-total-calls 7
 ```
 
 Results include the actual perception projection and the proposal's bounded
@@ -101,3 +101,5 @@ controlled causal study and does not prove accurate human psychology.
 Automated tests use mock models only. Live results are model- and configuration-
 specific; inspect their artifacts and behavioral ratings before treating the
 pilot as validated. Technical completion alone does not validate NPC psychology.
+
+Matrix v3 uses complete-fragment perception, explicit source freshness, derived goal alignment and a shared proposal-repair reserve. Compare models using the same v3 fixtures; v2 live measurements used different contracts. The actual repair payload, feedback and turn usage are retained in artifacts.

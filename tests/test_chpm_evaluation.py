@@ -13,6 +13,7 @@ from backend.engine.chpm.evaluation.cases import cases, choose
 from backend.engine.chpm.evaluation.contracts import Rating
 from backend.engine.chpm.evaluation.runner import run_arm
 from backend.engine.chpm.schema import Settings
+from tests.chpm_projection_fixture import public_projection
 from tests.test_chpm_kernel import motivated_candidates
 
 SPEECH = "Let us start with the joints."
@@ -45,9 +46,7 @@ class Models:
             return SPEECH
         payload = json.loads(content)
         if phase == "perception":
-            return json.dumps(
-                {"audience": [{"actor_id": "npc", "quotes": [payload["player_message_untrusted"]]}]}
-            )
+            return json.dumps(public_projection(payload))
         if phase == "proposal":
             return json.dumps(
                 {

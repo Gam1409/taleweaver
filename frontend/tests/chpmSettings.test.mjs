@@ -26,13 +26,13 @@ test('twenty-person roster budgets active participants and explicitly supports a
   f.draft.value.mode = 'live'
   f.draft.value.actor_ids = Array.from({ length: 20 }, (_, i) => `NPC-${i}`)
   f.draft.value.max_active_npcs = 3
-  f.draft.value.max_calls_per_turn = 7
-  assert.equal(f.minimumCalls.value, 7)
+  f.draft.value.max_calls_per_turn = 8
+  assert.equal(f.minimumCalls.value, 8)
   assert.equal(f.budgetWarning.value, false)
   f.draft.value.max_active_npcs = 20
-  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.minimumCalls.value, 25)
   assert.equal(f.budgetWarning.value, true)
-  f.draft.value.max_calls_per_turn = 24
+  f.draft.value.max_calls_per_turn = 25
   assert.equal(f.budgetWarning.value, false)
 })
 
@@ -98,7 +98,7 @@ test('switching sessions aborts and discards a late response', async t => {
   assert.equal(f.status.value.revision, 8)
 })
 
-test('three live NPCs need seven requests without silently raising the saved budget', async t => {
+test('three live NPCs need eight requests without silently raising the saved budget', async t => {
   const calls = []
   const f = fixture(t, async (_url, options) => {
     calls.push(options.method)
@@ -107,12 +107,12 @@ test('three live NPCs need seven requests without silently raising the saved bud
   await tick()
   f.draft.value.mode = 'live'
   f.draft.value.actor_ids = ['NPC', 'B', 'C']
-  assert.equal(f.minimumCalls.value, 7)
+  assert.equal(f.minimumCalls.value, 8)
   assert.equal(f.budgetWarning.value, true)
   assert.equal(f.draft.value.max_calls_per_turn, 6)
   assert.equal(await f.save(), false)
   assert.deepEqual(calls, ['GET'])
-  f.draft.value.max_calls_per_turn = 7
+  f.draft.value.max_calls_per_turn = 8
   assert.equal(f.budgetWarning.value, false)
   f.draft.value.mode = 'shadow'
   assert.equal(f.minimumCalls.value, 4)

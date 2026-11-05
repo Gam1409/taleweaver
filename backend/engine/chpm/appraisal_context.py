@@ -102,8 +102,15 @@ def build(
                     "kind": "reported" if source.kind == "speech" else "witnessed",
                     "text": text,
                     "excerpted": len(text) < len(source.text),
+                    "source_message_id": source.message_id,
+                    "current_turn": source.message_id == current_message_id
+                    if current_message_id is not None
+                    else None,
+                    "evidence_order": next(
+                        i for i, (key, _) in enumerate(available) if key == record_id
+                    ),
                 }
-                for alias, (_, source, text) in sources.items()
+                for alias, (record_id, source, text) in sources.items()
             ],
             "existing_beliefs": claims,
             "evidence_omitted": len(available) - len(sources),

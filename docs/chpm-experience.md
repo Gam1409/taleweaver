@@ -33,7 +33,7 @@ observer has the feelings the speaker attributes to them.
 The latest appraisal per channel/dimension/subject is projected separately; all
 accepted events remain in the exact journal/archive. At most 128 dimensions are
 retained per observer. Admission reserves two potential new dimensions and two
-events before inference; a full turn reserves 24 events in total.
+events before inference; a full turn reserves 53 events in total.
 
 Up to eight recent dimension records are exposed in the cognitive/narrator context.
 For 30 simulation minutes they are labelled recent appraisals; afterwards the

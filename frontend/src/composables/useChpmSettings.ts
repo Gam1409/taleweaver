@@ -17,7 +17,7 @@ export interface ChpmStatus {
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; status: string; detail: string; memory_evictions: number }
+  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number }
   trace: unknown[]
   memory_counts: Record<string, number>
   memory: Record<string, unknown[]>
@@ -42,7 +42,7 @@ export function useChpmSettings(sessionId: () => string) {
   const error = ref('')
   const dirty = computed(() => !!status.value && JSON.stringify(draft.value) !== JSON.stringify(status.value.settings))
   const minimumCalls = computed(() => !draft.value || draft.value.mode === 'off'
-    ? 0 : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3) + (draft.value.mode === 'live' ? 4 : 1))
+    ? 0 : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3) + (draft.value.mode === 'live' ? 5 : 1))
   const budgetWarning = computed(() => !!draft.value && draft.value.max_calls_per_turn < minimumCalls.value)
   const historyWarnings = computed(() => draft.value?.mode !== 'live' ? [] : draft.value.actor_ids.flatMap(id => {
     const capacity = status.value?.history_capacity?.[id]
@@ -89,7 +89,7 @@ export function useChpmSettings(sessionId: () => string) {
   async function save(): Promise<boolean> {
     if (busy.value) return false
     if (budgetWarning.value) {
-      error.value = `Use at least ${minimumCalls.value} requests per turn to cover perception and, in enabled mode, one repair and repeat review.`
+      error.value = `Use at least ${minimumCalls.value} requests per turn to cover perception and, in enabled mode, one proposal retry, narration repair and repeat review.`
       return false
     }
     if (!status.value || !dirty.value) return true

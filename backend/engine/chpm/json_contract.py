@@ -41,6 +41,12 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
     properties = node.get("properties", {})
     for key, allowed in identifiers.items():
         if key in properties:
+            if properties[key].get("type") == "array":
+                properties[key]["items"] = {**properties[key].get("items", {}), "enum": allowed}
+                continue
+            if properties[key].get("type") == "object":
+                properties[key]["propertyNames"] = {"enum": allowed}
+                continue
             null_only = properties[key].get("type") == "null"
             nullable = null_only or any(
                 option.get("type") == "null" for option in properties[key].get("anyOf", [])

@@ -51,9 +51,13 @@ async def test_invalid_or_ambiguous_output_is_not_repaired(text):
 
 
 async def test_display_name_never_replaces_actor_id_even_in_valid_json():
-    with pytest.raises(ChpmError, match="every present selected NPC"):
+    with pytest.raises(ChpmError, match="unavailable observer"):
         await perception.project(
-            host(BODY.replace('"npc"', '"Mara"')), Settings(), Usage(), "Hello", {"npc": "Mara"}
+            host('{"fragments":{"p0":{"kind":"speech","observers":["Mara"],"engaged":[]}}}'),
+            Settings(),
+            Usage(),
+            "Hello",
+            {"npc": "Mara"},
         )
 
 

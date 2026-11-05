@@ -7,6 +7,7 @@ import pytest
 
 from backend.engine.chpm import context, inference, perception, rendering, runtime
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import (
     KernelState,
     Perception,
@@ -69,7 +70,11 @@ async def test_preparation_is_once_and_shadow_does_not_direct_narration(monkeypa
         "project",
         AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello"])}),
     )
-    mocked = AsyncMock(return_value=grounded_proposal() if mode == "live" else proposal())
+    mocked = AsyncMock(
+        return_value=Draft.model_validate(grounded_proposal().model_dump())
+        if mode == "live"
+        else proposal()
+    )
     monkeypatch.setattr(inference, "request", mocked)
     result = await runtime.prepare(host, "Hello", [actor])
     assert bool(result) == (mode == "live")

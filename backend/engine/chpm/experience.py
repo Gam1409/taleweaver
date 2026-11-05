@@ -153,5 +153,8 @@ cannot refresh/intensify a state. historical_current_unknown means current inten
 is unknown, not calm. Time alone never proves recovery. Consider recent appraisals
 without counting them as independent evidence or rewriting values. Do not invent
 feelings retrospectively to justify an action. No world/expression patch is authorized.
+At least one citation for each new experience MUST have current_turn=true in
+visible_evidence. Sources with false are historical; null means freshness is unknown.
+Historical evidence can contextualize a current trigger, never replace it.
 These categories and freshness horizons are engineering policy, not clinical laws.
 """

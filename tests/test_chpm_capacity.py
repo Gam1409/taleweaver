@@ -132,12 +132,12 @@ def test_legacy_budget_loads_but_three_actor_live_turn_needs_repair_reserve():
     settings = Settings(mode="live", actor_ids=["a", "b", "c"], max_calls_per_turn=6)
     state = KernelState(settings=settings)
     assert KernelState.model_validate_json(state.model_dump_json()).settings.max_calls_per_turn == 6
-    with pytest.raises(ChpmError, match="at least 7"):
+    with pytest.raises(ChpmError, match="at least 8"):
         capacity.ensure_turn(state, ["a", "b", "c"])
-    capacity.ensure_turn(state, ["a", "b"])
+    capacity.ensure_turn(state, ["a"])
     state.settings.max_calls_per_turn = Settings().max_calls_per_turn
     capacity.ensure_turn(state, ["a", "b", "c"])
-    assert capacity.required_calls(state.settings) == 7
+    assert capacity.required_calls(state.settings) == 8
     state.settings.mode = "shadow"
     assert capacity.required_calls(state.settings) == 4
 

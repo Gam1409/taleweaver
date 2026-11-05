@@ -44,6 +44,12 @@ def pack(
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()
         ids["motive_id"] = list(catalogue.sources)
+        ids["personal_motive_ids"] = [
+            key
+            for key, source in catalogue.sources.items()
+            if source.status in {"authored", "declared"}
+            and source.subject_id == catalogue.observer_id
+        ]
         development = (extra or {}).get("development_context", {})
         ids["episode_id"] = [item["episode_id"] for item in development.get("basis", [])]
         ids["trait_key"] = [trait.key for trait in mind.genesis.identity.traits]

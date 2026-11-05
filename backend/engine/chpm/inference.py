@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import json_contract
@@ -12,6 +12,19 @@ from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class InvalidResponseError(ChpmError):
+    """A completed model response failed validation; transport failures are separate."""
+
+
+def validation_feedback(error: ValueError) -> str:
+    if isinstance(error, ValidationError):
+        return "; ".join(
+            f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+            for item in error.errors(include_input=False, include_url=False)[:4]
+        )[:600]
+    return str(error)[:600]
 
 
 def compose(
@@ -64,10 +77,15 @@ async def request(
             timeout=float(llm.request_timeout),
         )
         usage.output_chars += len(result)
-        return json_contract.parse(schema, result)
     except Exception as exc:
         raise ChpmError(
             f"CHPM {phase} failed ({type(exc).__name__}). No decision was applied."
+        ) from exc
+    try:
+        return json_contract.parse(schema, result)
+    except ValueError as exc:
+        raise InvalidResponseError(
+            f"CHPM {phase} response invalid: {validation_feedback(exc)}"
         ) from exc
 
 

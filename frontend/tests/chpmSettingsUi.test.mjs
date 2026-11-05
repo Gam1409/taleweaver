@@ -20,8 +20,8 @@ const component = (await import(`data:text/javascript;base64,${Buffer.from(compi
 async function render(count, warnings = []) {
   globalThis.__chpmSettingsFixture = {
     status: ref({ available: true, characters: [], usage: { status: 'idle' }, trace: [] }),
-    draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 7 }),
-    busy: ref(false), error: ref(''), minimumCalls: ref(count + 4),
+    draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 8 }),
+    busy: ref(false), error: ref(''), minimumCalls: ref(count + 5),
     budgetWarning: ref(false), historyWarnings: ref(warnings),
     load() {}, save() {}, selectStandard() {},
   }
@@ -36,7 +36,7 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
   const html = await render(3)
   assert.match(html, /processed sequentially/)
   assert.match(html, /does not stream/)
-  assert.match(html, /Minimum for this selection: 7/)
+  assert.match(html, /Minimum for this selection: 8/)
   assert.match(html, /Later card edits do not replace/)
   assert.doesNotMatch(await render(1), /processed sequentially/)
 })
@@ -45,7 +45,7 @@ test('large casts expose focused processing and an explicit all-present choice',
   const html = await render(20)
   assert.match(html, /Character roster \(up to 20/)
   assert.match(html, /Active NPCs per turn/)
-  assert.match(html, /Twenty active NPCs require 24 CHPM requests/)
+  assert.match(html, /Twenty active NPCs require 25 CHPM requests/)
   assert.match(html, /Attribution is model-based and can be mistaken/)
 })
 

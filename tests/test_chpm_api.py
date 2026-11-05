@@ -148,9 +148,9 @@ async def test_live_settings_require_space_for_repair_before_enabling(auth_clien
     response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=4))
     assert response.status_code == 422
     assert "repair" in response.json()["detail"]
-    response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=5))
+    response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=6))
     assert response.status_code == 200
-    assert response.json()["required_call_budget"] == 5
+    assert response.json()["required_call_budget"] == 6
     assert response.json()["history_capacity"] == {}
 
 

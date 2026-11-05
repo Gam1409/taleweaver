@@ -10,12 +10,12 @@ from backend.engine.chpm.evaluation import matrix_cases
 
 def manifest(cases: list[matrix_cases.MatrixCase], *, all_present: bool = False) -> dict:
     return {
-        "suite": "chpm-cast-matrix-v2",
+        "suite": "chpm-cast-matrix-v3",
         "scope": "Synthetic source histories; production perception, cognition, scheduling, narration, review and commit. No game DB or image generation.",
         "cases": [asdict(case) for case in cases],
         "all_present": all_present,
         "max_logical_calls": sum(
-            (case.population if all_present else case.active) + 5 for case in cases
+            (case.population if all_present else case.active) + 6 for case in cases
         ),
         "token_cost": "Unknown until measured; logical call bounds exclude transport retries.",
         "rubrics": {key: value[1] for key, value in matrix_cases.SITUATIONS.items()},

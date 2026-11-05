@@ -53,6 +53,7 @@ class Turn:
     agendas: dict[str, list[AgendaEntry]] = field(default_factory=dict)
     minds: dict[str, Mind] = field(default_factory=dict)
     deferred_names: dict[str, str] = field(default_factory=dict)
+    reply_character_budget: int | None = None
 
 
 def current(manager: Any) -> Turn | None:
@@ -65,7 +66,7 @@ def buffered(manager: Any) -> bool:
     return bool(turn and turn.initial.settings.mode == "live" and turn.decisions)
 
 
-def contract(turn: Turn) -> str:
+def contract_data(turn: Turn) -> dict:
     data = {
         actor: {"name": turn.names.get(actor, actor), **decision.selected.model_dump()}
         for actor, decision in turn.decisions.items()
@@ -88,10 +89,19 @@ def contract(turn: Turn) -> str:
             data[actor]["subjective_assessments_not_world_facts"] = relationships.claims(
                 mind.snapshot, tuple(changed)
             )
+    return data
+
+
+def contract(turn: Turn) -> str:
     return (
         prompts.NARRATE
-        + json.dumps(data, ensure_ascii=False)
+        + json.dumps(contract_data(turn), ensure_ascii=False, separators=(",", ":"))
         + roster.instruction(turn.deferred_names)
+        + (
+            f"\nKeep the complete reply within {turn.reply_character_budget} characters for review."
+            if turn.reply_character_budget
+            else ""
+        )
     )
 
 
@@ -176,6 +186,9 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     )
     for actor in sorted(active, key=lambda item: item.id):
         await _prepare_actor(manager, turn, actor, observed)
+    from backend.engine.chpm.rendering import preflight
+
+    preflight(turn)
 
 
 async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:
@@ -215,6 +228,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
         update={
             "player_request": "\n".join(perceived.quotes),
             "perception_uncertain": perceived.uncertain,
+            "perception_kinds": perceived.quote_kinds,
         }
     )
     supplied["observation"] = actor_observation.model_dump()
@@ -233,6 +247,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
             turn.minds[actor.id],
             previous,
         )
+        turn.decisions[actor.id].perception_audit = perceived.coverage
         return
     turn.decisions[actor.id] = await cognition.decide(
         manager,
@@ -244,6 +259,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
         turn.agendas[actor.id],
         previous,
     )
+    turn.decisions[actor.id].perception_audit = perceived.coverage
 
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:

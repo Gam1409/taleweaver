@@ -7,6 +7,7 @@ import pytest
 
 from backend.engine.chpm import context, inference, memory, perception, rendering, runtime
 from backend.engine.chpm.kernel import ChpmError, digest
+from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import HeardSpeech, KernelState, Perception, Projection, Settings
 from backend.engine.chpm.state import KEY, load, retract
 from tests.test_chpm_kernel import grounded_proposal, observation
@@ -59,7 +60,7 @@ async def test_private_player_text_never_reaches_individual_cognition(monkeypatc
     monkeypatch.setattr(runtime, "release_for_model", AsyncMock())
     projector = AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello."])})
     monkeypatch.setattr(perception, "project", projector)
-    proposal_call = AsyncMock(return_value=grounded_proposal())
+    proposal_call = AsyncMock(return_value=Draft.model_validate(grounded_proposal().model_dump()))
     monkeypatch.setattr(inference, "request", proposal_call)
     await runtime.prepare(host, private, [actor])
     payload = proposal_call.call_args.args[4]
@@ -77,7 +78,7 @@ async def test_new_scene_npcs_do_not_receive_the_old_scene_request(monkeypatch):
     monkeypatch.setattr(runtime, "release_for_model", AsyncMock())
     projector = AsyncMock(side_effect=AssertionError("Must not project across scenes"))
     monkeypatch.setattr(perception, "project", projector)
-    called = AsyncMock(return_value=grounded_proposal())
+    called = AsyncMock(return_value=Draft.model_validate(grounded_proposal().model_dump()))
     monkeypatch.setattr(inference, "request", called)
     await runtime.prepare(host, "Private conversation before leaving", [actor])
     payload = called.call_args.args[4]

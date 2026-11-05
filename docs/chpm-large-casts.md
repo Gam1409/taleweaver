@@ -43,9 +43,9 @@ NPCs. This bounds memory writes but can omit conversational details.
 ## Cost controls
 
 For `A` active NPCs, successful live control normally uses `A + 2` CHPM calls:
-one perception, `A` proposals and one review. Reserve two more for one repair and
-repeat review. The ordinary narrator call is separate. Thus three active NPCs
-reserve 7 CHPM calls; twenty reserve 24. Unused reserve is not spent. Lower actual
+one perception, `A` proposals and one review. Reserve one shared proposal retry
+and two more for narration repair and repeat review. The ordinary narrator call is separate. Thus three active NPCs
+reserve 8 CHPM calls; twenty reserve 25. Unused reserve is not spent. Lower actual
 participation costs less. Provider retries can add physical calls and cost.
 
 Set Active NPCs per turn to 20 for full processing. Requests are sequential and

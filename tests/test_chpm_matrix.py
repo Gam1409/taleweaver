@@ -5,6 +5,7 @@ import json
 import pytest
 
 from backend.engine.chpm.evaluation import matrix_cases, matrix_cli, matrix_runner
+from tests.chpm_projection_fixture import public_projection
 from tests.test_chpm_kernel import grounded_proposal
 
 
@@ -28,18 +29,7 @@ class Models:
         if self.fault == phase:
             return '{"broken":'
         if phase == "perception":
-            return json.dumps(
-                {
-                    "audience": [
-                        {
-                            "actor_id": key,
-                            "quotes": [body["player_message_untrusted"]],
-                            "engaged": key == "npc-01",
-                        }
-                        for key in body["present_observers"]
-                    ]
-                }
-            )
+            return json.dumps(public_projection(body))
         if phase == "proposal":
             self.active.append(body["actor_id"])
             value = grounded_proposal().model_dump()
@@ -83,7 +73,7 @@ def test_manifest_has_full_traits_diverse_worlds_counts_histories_and_no_calls()
     for actor in matrix_cases.actors(case()):
         assert set(actor.metadata_json["personality_profile"]) == set(matrix_cases.FIELDS)
         assert all(actor.metadata_json["personality_profile"].values())
-    assert matrix_cli.manifest([case()], all_present=True)["max_logical_calls"] == 25
+    assert matrix_cli.manifest([case()], all_present=True)["max_logical_calls"] == 26
 
 
 def test_situations_reach_cognition_and_do_not_assert_private_feelings():

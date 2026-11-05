@@ -1,6 +1,6 @@
 """Versioned pilot contracts. No transport, database, or Concordia dependencies."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
@@ -19,7 +19,7 @@ class Settings(Contract):
     model_role: Literal["small", "complex"] = "complex"
     max_output_tokens: int = Field(default=1200, ge=512, le=8192, strict=True)
     max_input_chars: int = Field(default=24000, ge=8000, le=192000, strict=True)
-    max_calls_per_turn: int = Field(default=7, ge=1, le=24, strict=True)
+    max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
 
     @model_validator(mode="after")
@@ -50,13 +50,17 @@ class Observation(Contract):
     # This is an unverified request, never a world fact or a belief update.
     player_request: str = Field(max_length=6000)
     perception_uncertain: bool = False
+    perception_kinds: list[str] = Field(default_factory=list, max_length=32)
 
 
 class Perception(Contract):
     actor_id: str
-    quotes: list[str] = Field(default_factory=list, max_length=3)
+    quotes: list[str] = Field(default_factory=list, max_length=32)
     uncertain: StrictBool = False
     engaged: StrictBool = False
+    coverage: dict[str, str] = Field(default_factory=dict, max_length=32)
+    observed_kinds: dict[str, str] = Field(default_factory=dict, max_length=32)
+    quote_kinds: list[str] = Field(default_factory=list, max_length=32)
 
 
 class Projection(Contract):
@@ -160,6 +164,7 @@ class ProposalOptions(Contract):
 
 
 class Decision(Contract):
+    perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
     actor_id: str
     observation: Observation
     context_hash: str
@@ -212,13 +217,23 @@ class Usage(Contract):
     input_chars: int = 0
     output_chars: int = 0
     repairs: int = 0
+    proposal_repairs: int = 0
+    proposal_feedback: list[str] = Field(default_factory=list, max_length=2)
     status: Literal["idle", "prepared", "validated", "shadow", "failed"] = "idle"
     detail: str = ""
     memory_evictions: int = 0
 
 
 class KernelState(Contract):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_pilot_envelope(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("schema_version") == 1:
+            return {**value, "schema_version": 2}
+        return value
+
     revision: int = Field(default=0, ge=0)
     settings: Settings = Field(default_factory=Settings)
     # A high-water record per actor rejects old events without an unbounded journal.

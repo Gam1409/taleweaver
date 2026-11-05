@@ -45,11 +45,11 @@ class MeasuredModel:
             input_chars=len(system) + len(content),
         )
         self.owner.calls.append(call)
-        if call.phase == "proposal":
+        if call.phase in {"proposal", "proposal_repair"}:
             payload = json.loads(content)
             call.context_audit = {
                 key: payload[key]
-                for key in ("actor_id", "appraisal_context", "context_packing")
+                for key in ("actor_id", "appraisal_context", "context_packing", "proposal_feedback")
                 if key in payload
             }
         self.inner.max_tokens = self.max_tokens

@@ -34,13 +34,13 @@ async def run(
         mode="live",
         actor_ids=[a.id for a in cast],
         max_active_npcs=active,
-        max_calls_per_turn=active + 4,
+        max_calls_per_turn=active + 5,
         max_input_chars=96000 if active > 3 else 24000,
         max_output_tokens=8192 if case.population > 3 else 2048,
     )
     session = "matrix-" + case.id
     before = KernelState(settings=settings, minds={a.id: seed(case, a, session) for a in cast})
-    measured = MeasuredFactory(factory, limit=active + 5, timeout=timeout)
+    measured = MeasuredFactory(factory, limit=active + 6, timeout=timeout)
     minute = case.history_turns * (1440 if case.daily else 2) + 1
     host = SimpleNamespace(
         game_id=session,
@@ -72,6 +72,7 @@ async def run(
     after = load(host.state)
     result.update(
         calls=[call.model_dump() for call in measured.calls],
+        usage=turn.usage.model_dump(),
         perceptions={key: value.model_dump() for key, value in turn.perceptions.items()},
         active=list(turn.decisions),
         inactive=list(turn.deferred_names),
@@ -110,6 +111,7 @@ async def _think(host: Any, turn: runtime.Turn, case: MatrixCase, actor: Any, mi
         minute=minute,
         player_request="\n".join(heard.quotes),
         perception_uncertain=heard.uncertain,
+        perception_kinds=heard.quote_kinds,
     )
     pending = turn.initial.minds[actor.id]
     facts = HostFacts(
@@ -148,9 +150,11 @@ async def _think(host: Any, turn: runtime.Turn, case: MatrixCase, actor: Any, mi
     turn.decisions[actor.id], turn.minds[actor.id] = await cognition.deliberate(
         host, turn.initial.settings, turn.usage, actor.id, observed, supplied, [], pending
     )
+    turn.decisions[actor.id].perception_audit = heard.coverage
 
 
 async def _speak(host: Any, turn: runtime.Turn, case: MatrixCase, factory: MeasuredFactory) -> str:
+    rendering.preflight(turn)
     system = BASELINE + "\n" + runtime.contract(turn)
     content = json.dumps(
         {"language": "English", "scene": case.scene, "player_message_untrusted": case.message}

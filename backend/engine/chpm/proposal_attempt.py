@@ -1,0 +1,66 @@
+"""One shared proposal retry, preserving room for the remaining turn and prose review."""
+
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+from backend.engine.chpm import inference
+from backend.engine.chpm.core.errors import TransitionError
+from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.schema import Settings, Usage
+
+T = TypeVar("T", bound=BaseModel)
+R = TypeVar("R")
+
+
+async def request(
+    manager: Any,
+    settings: Settings,
+    usage: Usage,
+    instruction: str,
+    payload: dict,
+    schema: type[T],
+    identifiers: dict,
+    accept: Callable[[T], R],
+) -> R:
+    phase = "proposal"
+    while True:
+        try:
+            raw = await inference.request(
+                manager,
+                settings,
+                usage,
+                instruction,
+                payload,
+                schema,
+                phase,
+                identifiers=identifiers,
+            )
+        except inference.InvalidResponseError as exc:
+            feedback = str(exc)
+        else:
+            try:
+                return accept(raw)
+            except (ChpmError, TransitionError, ValidationError) as exc:
+                feedback = inference.validation_feedback(exc)
+        usage.proposal_feedback.append(feedback[:600])
+        if phase == "proposal_repair" or usage.proposal_repairs:
+            raise ChpmError("CHPM proposal remains invalid; no decision applied. " + feedback)
+        turn = getattr(manager, "_chpm_turn", None)
+        remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
+        reserve = remaining + (3 if settings.mode == "live" else 0)
+        if usage.calls + 1 + reserve > settings.max_calls_per_turn:
+            raise ChpmError("CHPM proposal retry has no reserved request budget. " + feedback)
+        payload = {
+            **payload,
+            "proposal_feedback": {
+                "error": feedback,
+                "instruction": "Produce a complete corrected proposal from the original evidence. Preserve exact citations and identity. Do not invent facts to satisfy validation.",
+            },
+        }
+        prompt, content = inference.compose(instruction, payload, schema, identifiers)
+        if len(prompt) + len(content) > settings.max_input_chars:
+            raise ChpmError("CHPM proposal retry cannot fit its input budget. " + feedback)
+        usage.proposal_repairs += 1
+        phase = "proposal_repair"

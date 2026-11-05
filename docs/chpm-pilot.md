@@ -201,7 +201,7 @@ output tokens. Real token cost depends on language and tokenizer; the limits bel
 still apply and fail visibly rather than silently dropping entries.
 
 Defaults are 1,200 output tokens per proposal/review, 24,000 input characters per
-request including instructions/schema, and seven logical CHPM requests per turn.
+request including instructions/schema, and eight logical CHPM requests per turn.
 The configured role's lower output limit still applies. A repair is separately
 capped at 4,096 output tokens and uses the same request-count/input-size limits.
 No private decision is requested for absent selected NPCs.
@@ -211,13 +211,13 @@ No private decision is requested for absent selected NPCs.
 | Standard | 0 |
 | Observe, successful | N + 1 |
 | Enabled, first review passes | N + 2 |
-| Enabled, one repair and second review | N + 4 |
+| Enabled, narration repair and second review | N + 4 |
+| Enabled, proposal retry plus narration repair and second review | N + 5 |
 
 These counts assume at least one selected NPC is present in the input's scene.
-Cross-scene input is withheld without a perception request. For three NPCs, seven
-requests are needed to allow a repair; a legacy six-call budget permits the initial
-review but cannot cover that repair. New settings now default to seven, and live settings
-changes must reserve N + 4. Older budgets still load, but turn admission checks the
+Cross-scene input is withheld without a perception request. For three NPCs, eight
+requests reserve one shared proposal retry and a narration repair/review pair.
+New settings default to eight, and live settings changes must reserve N + 5. Older budgets still load, but turn admission checks the
 present roster before CHPM inference and requests an explicit budget adjustment.
 The system also checks that two requests remain before starting a repair.
 Exhaustion is visible, not a silent switch to standard mode. See the
@@ -288,7 +288,7 @@ from passing the kernel's program-invariant tests.
 
 ## Contract versions and perception granularity
 
-`KernelState.schema_version=1` versions the host/session envelope;
+`KernelState.schema_version=2` versions the host/session envelope;
 `Snapshot.schema_version=3` separately versions each observer's core history layout,
 including `Experience` events and their derived `experiences` projection.
 `transition_version=evidence-ledger-v2` identifies the reducer contract with that
@@ -319,3 +319,52 @@ This progress message does not expose unvalidated story text or restore streamin
 source evidence while retaining original identity. [The cast/history matrix](chpm-matrix-evaluation.md)
 prepares live evaluation across 360 synthetic cases. Local mock success is not
 psychological validation; model-specific live results require separate review.
+
+
+## Reliability revisions after live stress testing
+
+The envelope migrates schema 1 to 2 without changing saved budgets, identity or
+history. New fields record proposal retries and perception coverage; core Snapshot
+remains version 3. Older readers must not consume the new envelope.
+
+Perception now classifies every numbered input fragment once, using shared observer
+IDs. Speech, attempted/claimed actions and expressed intentions are kept before
+incidental gestures (at most two). Private, inaccessible and mixed/uncertain
+fragments are not exposed. Up to 32 fragments and 6,000 input characters are allowed;
+overflow or missing classifications stop visibly, never silently truncate essential
+input. Exact text comes from the host; the model returns IDs/classifications.
+Classification can still be wrong: coverage checks prove accounting, not semantic
+understanding. `Decision.perception_audit` records retained categories and omitted
+fragment reasons in the administrator trace; this audit is not NPC knowledge.
+
+Visible appraisal evidence now supplies source message IDs, evidence order and
+`current_turn` (true/false, or null when the caller cannot establish it). Current
+experience still requires current evidence; historical grounds cannot refresh it.
+Personal motive arrays are constrained to the observer's own authored/declared
+sources. Live proposals omit redundant goal alignment/quotation judgments: these
+are derived from cited authored-goal motives. Conflicting goal directions remain
+unknown, with both motives retained. Legacy model-supplied goal fields are ignored,
+never used to override the source-derived result.
+
+One shared proposal retry per turn can repair a completed malformed or invalid
+proposal. It gets precise feedback and the original evidence, and repeats all
+schema, source, motive and state checks against the original mind. Transport errors
+are not retried here. It cannot consume the remaining actors' proposals or the
+review/repair reserve. A second invalid proposal fails the turn. Initial packing
+reserves 2,048 input characters for feedback; an oversized retry still fails visibly.
+Retry count and feedback appear in the session settings diagnostics and evaluation
+artifacts. No failed attempt is committed.
+
+Review receives structured contracts and the full narration once, in ordered
+passages, without a second copy or JSON-inside-JSON. A preflight after decisions
+and before narration checks room for a useful reply and supplies a character cap.
+It reserves headroom, not a guarantee for arbitrarily large host resolutions: every
+actual request still obeys the configured limit and fails visibly on overflow.
+The model's larger advertised context never silently increases session limits.
+
+New sessions default to eight CHPM calls for three active NPCs; existing smaller
+budgets remain unchanged and require explicit adjustment in session settings.
+Twenty active NPCs require a reserve of 25 CHPM calls plus the separate narrator.
+These bounds do not include transport retries. Successful calls consume no unused
+reserve. The former model's live measurements do not establish the reliability of
+these revisions; repeat the same fixtures with each comparison model.
