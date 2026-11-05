@@ -61,7 +61,7 @@ async def test_experience_and_motive_policy_share_the_reviewed_turn_transaction(
         assert any("Reviewing NPC reply..." in c for c in chunks)
         current = load(manager.state)
         decision = current.actors["LINA"]
-        assert decision.policy_version == "motive-frontier-v1"
+        assert decision.policy_version == "motivated-choice-v2"
         assert len(decision.experience_ids) == 1
         assert current.minds["LINA"].snapshot.experiences[0].dimension == "autonomy"
         assert "subjective_experience_not_traits" in str(roles.prompts[-1])

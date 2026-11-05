@@ -16,7 +16,14 @@ from backend.engine.chpm.evaluation.runner import BASELINE
 from backend.engine.chpm.host_state import Mind, Source, record
 from backend.engine.chpm.identity_adapter import from_actor
 from backend.engine.chpm.kernel import ChpmError, digest
-from backend.engine.chpm.schema import KernelState, Observation, Perception, Settings, Usage
+from backend.engine.chpm.schema import (
+    Decision,
+    KernelState,
+    Observation,
+    Perception,
+    Settings,
+    Usage,
+)
 from backend.engine.chpm.state import KEY, load
 
 CASES = (
@@ -79,6 +86,8 @@ async def _step(
     timeout: float,
     *,
     render: bool | None = None,
+    previous: Decision | None = None,
+    scene: str = "Разговор у рабочего стола; новых подтверждённых результатов проверки нет.",
 ) -> tuple[dict, Mind]:
     should_render = number == len(CASES) if render is None else render
     measured = MeasuredFactory(factory, limit=7, timeout=timeout)
@@ -88,7 +97,13 @@ async def _step(
         _chpm_model_factory=measured,
         state=SimpleNamespace(
             in_game_time=number,
-            entity_states={KEY: KernelState(settings=settings, minds={"npc": before}).model_dump()},
+            entity_states={
+                KEY: KernelState(
+                    settings=settings,
+                    minds={"npc": before},
+                    actors={"npc": previous} if previous else {},
+                ).model_dump()
+            },
         ),
     )
     observed = Observation(
@@ -140,13 +155,15 @@ async def _step(
             supplied,
             [],
             pending,
+            previous,
         )
         result["decision"] = decision.model_dump()
         if should_render:
             result["response"] = await _render(
-                host, actor, settings, usage, decision, pending, observed, measured
+                host, actor, settings, usage, decision, pending, observed, measured, scene
             )
             accepted = load(host.state).minds["npc"]
+            result["decision"] = load(host.state).actors["npc"].model_dump()
         else:
             accepted = pending
         result["status"] = "ok"
@@ -170,6 +187,7 @@ async def _render(
     pending: Mind,
     observed: Observation,
     measured: MeasuredFactory,
+    scene: str,
 ) -> str:
     turn = runtime.Turn(
         load(host.state),
@@ -190,7 +208,7 @@ async def _render(
             "character": actor.character,
             "goal": actor.goal,
             "player_message_untrusted": observed.player_request,
-            "scene": "Разговор у рабочего стола; новых подтверждённых результатов проверки нет.",
+            "scene": scene,
         },
         ensure_ascii=False,
     )
@@ -205,7 +223,7 @@ async def _render(
         host,
         text,
         completed=True,
-        resolution="No confirmed inspection results.",
+        resolution=scene,
         system_prompt=system + payload,
     )
     reply = SimpleNamespace(

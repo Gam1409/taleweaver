@@ -60,7 +60,19 @@ def grounded_proposal():
             }
         ),
         interpretations=[],
+        choice=preferred_choice(),
     )
+
+
+def preferred_choice(payload=None, preferred="CONTINUE", motive="goal1"):
+    prior = (payload or {}).get("previous_intention")
+    return {
+        "preferred": preferred,
+        "motive_ids": [motive],
+        "reason": "Continue the established purpose through a concrete discussion.",
+        "continuity": "maintain" if prior else "new",
+        "change_basis": [],
+    }
 
 
 def motivated_candidates(candidates, *, enabled=True):

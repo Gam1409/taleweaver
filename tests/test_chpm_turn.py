@@ -13,7 +13,7 @@ from backend.models.chat import ChatMessage
 from backend.models.turn_replay import TurnReplay
 from tests.chpm_projection_fixture import public_projection
 from tests.conftest import TestSessionLocal
-from tests.test_chpm_kernel import motivated_candidates
+from tests.test_chpm_kernel import motivated_candidates, preferred_choice
 from tests.test_vn_turn_integration import ACTION, NARRATION, TurnRoles, install_roles, seed_vn
 
 
@@ -66,7 +66,7 @@ class ChpmRoles(TurnRoles):
         return json.dumps(
             {
                 **(
-                    {"interpretations": []}
+                    {"interpretations": [], "choice": preferred_choice(supplied)}
                     if "appraisal_context" in supplied
                     else {"appraisal": "A chance to talk."}
                 ),

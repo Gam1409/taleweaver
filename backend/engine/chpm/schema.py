@@ -164,6 +164,19 @@ class ProposalOptions(Contract):
         )
 
 
+class ChoiceEvidence(Contract):
+    source_id: str = Field(min_length=1, max_length=100)
+    quote: str = Field(min_length=1, max_length=300)
+
+
+class ChoicePreference(Contract):
+    preferred: ActionKind
+    motive_ids: list[str] = Field(min_length=1, max_length=3)
+    reason: str = Field(min_length=1, max_length=300)
+    continuity: Literal["new", "maintain", "revise"]
+    change_basis: list[ChoiceEvidence] = Field(default_factory=list, max_length=2)
+
+
 class AgentEvidence(Contract):
     source_id: str = Field(min_length=1, max_length=100)
     record_id: str = Field(min_length=1, max_length=100)
@@ -176,7 +189,18 @@ class AgentEvidence(Contract):
     current_turn: bool
 
 
+class PreviousIntention(Contract):
+    selected: Candidate
+    scene_id: str
+    source_message_id: str
+    source_hash: str
+    source_revision_id: str | None = None
+    spoken_evidence: str = Field(min_length=1, max_length=2000)
+
+
 class Decision(Contract):
+    choice_preference: ChoicePreference | None = None
+    previous_intention: PreviousIntention | None = None
     agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=8)
     agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
     perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
@@ -185,9 +209,13 @@ class Decision(Contract):
     context_hash: str
     proposal: Proposal
     selected: Candidate
-    policy_version: Literal["goal-first-v1", "initiative-gated-v1", "motive-frontier-v1"] = (
-        "goal-first-v1"
-    )
+    policy_version: Literal[
+        "goal-first-v1",
+        "initiative-gated-v1",
+        "motive-frontier-v1",
+        "motivated-choice-v1",
+        "motivated-choice-v2",
+    ] = "goal-first-v1"
     status: Literal["selected", "delivered", "shadow"] = "selected"
     reply_id: str | None = None
     reply_revision: str | None = None
@@ -219,6 +247,11 @@ class Decision(Contract):
     @model_validator(mode="after")
     def complete_motive_trace(self) -> "Decision":
         offered = {candidate.kind for candidate in self.proposal.candidates}
+        if self.policy_version in {"motivated-choice-v1", "motivated-choice-v2"}:
+            if self.choice_preference is None or self.motivation_policy is None:
+                raise ValueError("Semantic selection requires its preference and motive trace.")
+            if self.choice_preference.preferred != self.selected.kind:
+                raise ValueError("Selected intention differs from the validated preference.")
         if any(
             key not in offered or key in others or not set(others) <= offered
             for key, others in self.motive_dominance.items()
@@ -248,13 +281,13 @@ class Usage(Contract):
 
 
 class KernelState(Contract):
-    schema_version: Literal[4] = 4
+    schema_version: Literal[6] = 6
 
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_envelope(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3}:
-            return {**value, "schema_version": 4}
+        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3, 4, 5}:
+            return {**value, "schema_version": 6}
         return value
 
     revision: int = Field(default=0, ge=0)

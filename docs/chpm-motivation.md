@@ -86,9 +86,9 @@ source retraction, old/new serialization and real VN rollback after an invalid
 unselected alternative. Different trait profiles produce different source inputs;
 this data invariant is not a claim that their actions must always differ.
 
-## Qualitative arbitration: motive-frontier-v1
+## Historical arbitration: motive-frontier-v1
 
-Live selection now compares eligible, equally goal-aligned alternatives after the
+The earlier live policy compares eligible, equally goal-aligned alternatives after the
 existing clarification/independence gate. A candidate dominates another only when
 its supported personal sources are a superset and its personal tensions a subset,
 with at least one strict improvement. Source identity and exact source text form
@@ -110,3 +110,19 @@ choice changes. Separate tests cover genuine tradeoffs, duplicated aliases,
 reported pressure, question gates, and persisted trace validation. These establish
 algorithmic sensitivity, not the truth of model-generated reasons or psychological
 validity. A valid source reference alone cannot establish the meaning of a motive.
+
+
+## Current live arbitration: motivated-choice-v2
+
+New live grounded decisions use a model preference with cited personal grounds and
+an explicit continuity explanation. Source access, own supporting motivation and
+unresolved question dependencies remain hard checks. Goal alignment and motive-set
+dominance remain in the trace but cannot veto an otherwise admissible preference.
+The first explicit-choice revision (v1) retained the old goal frontier; a live case
+showed that an indirect personal ground was rejected merely because another option
+cited the goal by name. No psychological priority follows from that difference.
+
+The metadata-hash tie-break remains only in historical/legacy policies. Saved v1
+decisions are not retroactively reselected. See `chpm-pilot.md`. A valid citation
+proves provenance, not psychological truth: semantic relevance and preference are
+still fallible model judgments, with no calibrated human utility function.

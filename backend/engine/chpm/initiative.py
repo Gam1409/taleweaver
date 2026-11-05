@@ -32,7 +32,7 @@ def select(
     independent = [candidate for candidate in proposal.candidates if candidate.kind != "CLARIFY"]
     if not independent:
         raise ChpmError("CHPM proposal offers no independent dialogue alternative.")
-    blocked, reason = _blocked(choices, gate)
+    blocked, reason = question_blocks(choices, gate)
     reasons = [reason]
     comparisons: dict[ActionKind, list[ActionKind]] = {}
     free = [candidate for candidate in independent if candidate.kind not in blocked]
@@ -77,7 +77,9 @@ def select(
     return result
 
 
-def _blocked(choices: dict[str, Candidate], gate: QuestionGate | None) -> tuple[set[str], str]:
+def question_blocks(
+    choices: dict[str, Candidate], gate: QuestionGate | None
+) -> tuple[set[str], str]:
     if "CLARIFY" not in choices:
         return set(), "No clarification was proposed."
     if gate is None:

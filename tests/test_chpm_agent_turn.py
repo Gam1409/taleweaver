@@ -55,7 +55,7 @@ async def test_agent_turn_commits_only_after_review_and_failures_keep_original_s
         await db.commit()
         before = load(state)
         manager, chunks = await run(db, user)
-        if fault:
+        if fault in {"timeout", "review"}:
             assert any(c.startswith("event: error") for c in chunks), "".join(chunks)
             assert not any(c.startswith("event: chunk") for c in chunks)
             await db.refresh(state)
@@ -64,6 +64,13 @@ async def test_agent_turn_commits_only_after_review_and_failures_keep_original_s
         assert any(c.startswith("event: final") for c in chunks), "".join(chunks)
         saved = load(manager.state)
         audit = saved.actors["LINA"].agent_audit
+        if fault == "json":
+            assert len(audit) == 1 and audit[0]["stop"] == "invalid_plan"
+            assert audit[0]["lookup_performed"] is False
+            assert saved.usage.calls == 4
+            assert roles.proposal_inputs[0]["agent_plan_status"] == ["invalid_plan"]
+            assert roles.chpm_calls == ["perception", "agent_lookup", "proposal", "validation"]
+            return
         assert len(audit) == 2 and audit[-1]["stop"] == "ready"
         assert saved.usage.calls == 5
         assert roles.chpm_calls == [
@@ -123,7 +130,7 @@ def test_envelope_two_migrates_without_enabling_agent_or_changing_budget():
     raw["settings"].pop("agent_steps")
     saved_budget = raw["settings"]["max_calls_per_turn"]
     restored = KernelState.model_validate(raw)
-    assert restored.schema_version == 4 and restored.settings.agent_steps == 0
+    assert restored.schema_version == 6 and restored.settings.agent_steps == 0
     assert restored.settings.max_calls_per_turn == saved_budget
     assert raw["schema_version"] == 2 and "agent_steps" not in raw["settings"]
 
@@ -173,3 +180,49 @@ async def test_cosmetic_purpose_length_does_not_reject_valid_tool_requests():
     assert usage.calls == 1 and audit[0]["results"][0]["status"] == "ok"
     assert audit[0]["purpose"] == purpose[:180] and audit[0]["purpose_truncated"]
     assert audit[0]["stop"] == "step_limit"
+
+
+@pytest.mark.parametrize(
+    "requests",
+    [
+        [{"tool": "invented_tool", "argument": "secret"}],
+        [{"tool": "search_memory", "argument": "x" * 161}],
+        [{"tool": "inspect_self"}] * 3,
+    ],
+)
+async def test_invalid_optional_plan_executes_nothing_and_records_visible_degradation(requests):
+    model = Replies([json.dumps({"requests": requests})])
+    host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda role: model)
+    usage = Usage()
+    before = mind()
+    tools, audit = await agent.investigate(
+        host,
+        Settings(agent_steps=2),
+        usage,
+        before,
+        observation(),
+        {},
+    )
+    assert usage.calls == 1
+    assert tools.mind == before and not tools.pins
+    assert audit == [
+        {
+            "purpose": "",
+            "requests": [],
+            "results": [],
+            "stop": "invalid_plan",
+            "error_type": "InvalidResponseError",
+            "lookup_performed": False,
+        }
+    ]
+
+
+async def test_optional_plan_transport_failure_still_stops_the_turn():
+    from unittest.mock import AsyncMock
+
+    model = Replies([])
+    model.aexecute_simple_task = AsyncMock(side_effect=TimeoutError())
+    host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda role: model)
+    with pytest.raises(ValueError, match="TimeoutError"):
+        await agent.investigate(host, Settings(agent_steps=2), Usage(), mind(), observation(), {})
+    model.aexecute_simple_task.assert_awaited_once()

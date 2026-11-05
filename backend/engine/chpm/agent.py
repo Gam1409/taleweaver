@@ -34,28 +34,45 @@ async def investigate(
     transcript: list[dict] = []
     audit: list[dict] = []
     for index in range(settings.agent_steps):
-        step = await inference.request(
-            manager,
-            settings.model_copy(update={"max_output_tokens": min(768, settings.max_output_tokens)}),
-            usage,
-            INSTRUCTIONS,
-            {
-                "observer_id": mind.genesis.scope.observer_id,
-                "identity": mind.genesis.identity.model_dump(mode="json"),
-                "observation": observation.model_dump(),
-                "current_state": supplied.get("psychological_state", {}),
-                "agenda": supplied.get("declared_agenda_not_world_facts", []),
-                "visible_clothing_actors": {
-                    key: value["name"]
-                    for key, value in tools.clothing.items()
-                    if facts and key in facts.visible_actor_ids
+        try:
+            step = await inference.request(
+                manager,
+                settings.model_copy(
+                    update={"max_output_tokens": min(768, settings.max_output_tokens)}
+                ),
+                usage,
+                INSTRUCTIONS,
+                {
+                    "observer_id": mind.genesis.scope.observer_id,
+                    "identity": mind.genesis.identity.model_dump(mode="json"),
+                    "observation": observation.model_dump(),
+                    "current_state": supplied.get("psychological_state", {}),
+                    "agenda": supplied.get("declared_agenda_not_world_facts", []),
+                    "visible_clothing_actors": {
+                        key: value["name"]
+                        for key, value in tools.clothing.items()
+                        if facts and key in facts.visible_actor_ids
+                    },
+                    "remaining_rounds": settings.agent_steps - index,
+                    "previous_lookups": transcript,
                 },
-                "remaining_rounds": settings.agent_steps - index,
-                "previous_lookups": transcript,
-            },
-            Step,
-            "agent_lookup",
-        )
+                Step,
+                "agent_lookup",
+            )
+        except (inference.InvalidResponseError, inference.OutputBudgetError) as exc:
+            # A completed but malformed optional plan is not evidence of no memory.
+            # Never execute a partially valid batch or retry an uncertain transport.
+            audit.append(
+                {
+                    "purpose": "",
+                    "requests": [],
+                    "results": [],
+                    "stop": "invalid_plan",
+                    "error_type": type(exc).__name__,
+                    "lookup_performed": False,
+                }
+            )
+            break
         results = [tools.execute(request) for request in step.requests]
         transcript.append({"requests": [r.model_dump() for r in step.requests], "results": results})
         audit.append(

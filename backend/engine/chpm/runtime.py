@@ -83,6 +83,13 @@ def contract_data(turn: Turn) -> dict:
             ]
             data[actor]["agent_observed_sources"] = agent_context.present(decision, mind)
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
+            if decision.choice_preference is not None:
+                data[actor]["choice_preference_not_prose"] = decision.choice_preference.model_dump()
+                data[actor]["previous_intention_not_world_completion"] = (
+                    decision.previous_intention.model_dump()
+                    if decision.previous_intention
+                    else None
+                )
             data[actor]["subjective_experience_not_traits"] = experience.view(mind)
             data[actor]["developing_tendencies"] = development_context.tendencies(mind)
             changed = [

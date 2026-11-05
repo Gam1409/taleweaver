@@ -92,6 +92,12 @@ def test_current_and_historical_sources_are_explicit_and_ordered():
 
 def test_goal_judgment_is_derived_without_trusting_retired_model_fields():
     raw = candidates().model_dump()
+    raw["choice"] = {
+        "preferred": "ACCEPT",
+        "motive_ids": ["goal1"],
+        "reason": "Preserve bridge safety",
+        "continuity": "new",
+    }
     raw["candidates"]["ACCEPT"]["goal_alignment"] = "tension"
     raw["candidates"]["ACCEPT"]["goal_quote"] = "Invented goal"
     draft = Draft.model_validate(raw)
@@ -239,7 +245,7 @@ def test_envelope_migration_preserves_old_request_budget_and_identity():
     raw["actors"]["npc"].pop("perception_audit")
     migrated = KernelState.model_validate(raw)
     assert migrated == original
-    assert migrated.schema_version == 4
+    assert migrated.schema_version == 6
     assert migrated.settings.max_calls_per_turn == 5
     assert raw["schema_version"] == 1
 

@@ -11,11 +11,11 @@ from backend.engine.chpm import (
     development_request,
     experience,
     inference,
-    initiative,
     motivation,
     prompts,
     proposal_attempt,
     proposal_draft,
+    semantic_choice,
 )
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
@@ -74,7 +74,12 @@ async def deliberate(
 ) -> tuple[Decision, Mind]:
     if mind.genesis.scope.observer_id != actor_id:
         raise ChpmError("CHPM cognition belongs to another NPC.")
-    supplied = {**supplied, "proposal_contract": "grounded-intents-v2"}
+    prior = semantic_choice.previous_context(mind, previous, observation)
+    supplied = {
+        **supplied,
+        "proposal_contract": "motivated-choice-v2",
+        "previous_intention": prior.model_dump() if prior else None,
+    }
     pinned = {}
     audit: list[dict] = []
     if settings.agent_steps and settings.mode == "live":
@@ -85,6 +90,7 @@ async def deliberate(
         supplied = {
             **supplied,
             "agent_contract": "source-handoff-v1",
+            "agent_plan_status": [step["stop"] for step in audit],
             "agent_lookup_status": [
                 {"tool": request["tool"], "status": result["status"]}
                 for step in audit
@@ -96,6 +102,7 @@ async def deliberate(
         + INSTRUCTIONS
         + motivation.INSTRUCTIONS
         + experience.INSTRUCTIONS
+        + semantic_choice.INSTRUCTIONS
         + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives."
     )
     (
@@ -138,14 +145,16 @@ async def deliberate(
         )
         proposal = raw.canonical()
         agenda.validate_proposal(proposal, entries)
-        decision = initiative.select(
+        decision = semantic_choice.select(
             actor_id,
             observation,
             proposal,
             raw.question_gate,
-            goal=supplied["authored_goal"],
+            raw.choice,
+            resolved_motives,
+            window,
+            prior,
             context_hash=key,
-            motives=resolved_motives,
         )
         decision.agent_audit = audit
         decision.agent_evidence = agent_context.collect(pinned, observation)

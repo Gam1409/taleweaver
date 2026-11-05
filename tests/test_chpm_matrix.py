@@ -6,7 +6,7 @@ import pytest
 
 from backend.engine.chpm.evaluation import matrix_cases, matrix_cli, matrix_runner
 from tests.chpm_projection_fixture import public_projection
-from tests.test_chpm_kernel import grounded_proposal
+from tests.test_chpm_kernel import grounded_proposal, preferred_choice
 
 
 class Models:
@@ -33,6 +33,7 @@ class Models:
         if phase == "proposal":
             self.active.append(body["actor_id"])
             value = grounded_proposal().model_dump()
+            value["choice"] = preferred_choice(body)
             value["candidates"]["CONTINUE"]["goal_quote"] = body["authored_goal"]
             return json.dumps(value)
         if phase in {"narration", "repair"}:

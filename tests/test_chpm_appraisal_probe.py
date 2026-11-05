@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.engine.chpm.evaluation.appraisal_probe import CASES, _step, run
-from backend.engine.chpm.schema import Settings
+from backend.engine.chpm.schema import Decision, Settings
 from tests.test_chpm_evaluation import Models
 from tests.test_chpm_host_state import mind
 
@@ -39,6 +39,7 @@ async def test_two_reviewed_turns_retain_distinct_reply_sources():
         id="npc", name="Engineer", character="Independent engineer", goal="Keep bridges safe"
     )
     value = mind(session="appraisal-probe")
+    previous = None
     for number in (1, 2):
         result, value = await _step(
             Models(),
@@ -49,8 +50,12 @@ async def test_two_reviewed_turns_retain_distinct_reply_sources():
             "Let us inspect it.",
             10,
             render=True,
+            previous=previous,
         )
         assert result["status"] == "ok", result["error"]
+        previous = Decision.model_validate(result["decision"])
+        assert previous.status == "delivered"
+        assert (previous.previous_intention is not None) == (number == 2)
         assert [call["phase"] for call in result["calls"]] == [
             "proposal",
             "narration",
