@@ -43,8 +43,8 @@ library. It provides:
 - Journal replay, original identity/scope checks against host-supplied genesis,
   complete projection validation on restore, and reconstruction
   through a chosen cursor. Rewind removes later observations and their derived
-  beliefs from the active projection. Branch creation/host transaction coordination
-  remain integration work; this is not distributed exactly-once execution.
+  beliefs from the active projection. Session forks and host transaction integration
+  are described below; this is not distributed exactly-once execution.
 - Explicit simulation minutes. Clock advancement does not automatically heal
   relationships, change traits or invent events. No affect decay is installed yet.
 
@@ -54,10 +54,52 @@ not infer Big Five scores from seven unrelated categorical fields. Unknown field
 are not filled with numerical zero. An empty/oversized authored description is a
 visible import error rather than an invented or truncated identity.
 
-This new core is **not yet wired into live turn selection**. The existing optional
-dialogue pilot still owns current session behavior, memory and agenda. This avoids
-silently replacing that implementation before the new transition policies and host
-adapters are ready. No additional inference is triggered by importing this core.
+The core is now connected to the optional **live VN dialogue pilot** through
+`host_adapter`, `host_sources` and `host_state`. The pilot still selects intentions
+and reviews narration. This integration adds no LLM calls and does not enable CHPM
+by default. Off and shadow modes do not advance the new core.
+
+## Host integration: identity, observations and persistence
+
+- The first successful live turn pins the NPC's authored description, categorical
+  traits and original goal. Both intention selection and the narrator contract
+  receive that identity. Later edits to the mutable NPC card, feelings or player
+  requests do not silently replace it. New declared goals/commitments remain in
+  the pilot's separate source-bound agenda. Explicit identity migration is not yet
+  available; disabling/re-enabling CHPM does not reset the baseline.
+- The current witnessed host frame contains only the selected, physically present
+  observer's ID and authoritative scene ID. It deliberately excludes hidden actors,
+  private memories, scene prose and unverified outcomes. Approved player excerpts
+  and reviewed assistant speech are stored as **reports**, not world facts.
+  Observations begin when enabled; past events are not reconstructed automatically.
+- The full state lives in `entity_states.__chpm__.minds`: original genesis,
+  accepted journal, projection and message bindings. Pending observations remain
+  turn-local until the reviewed reply is committed. Failed turns cannot publish
+  them. Recovery snapshots and checkpoints include the whole state; restore checks
+  projection integrity and session scope before changing live rows.
+- Every observation is bound to a saved message, revision and content hash. Before
+  the next decision, sources are checked again. Editing/deleting a source rewinds
+  that observer to before its earliest affected event, removing the causal suffix
+  and dependent pilot speech/agenda. This is conservative invalidation, not a claim
+  that unaffected later inferences have been recomputed.
+- Copy/export-import explicitly rebinds message IDs and session scope and replays
+  events, preserving original identity, beliefs and their citation chains. Missing
+  sources remove their dependent suffix. Cached decisions are not copied. These
+  are independent session forks, not a distributed branch-merging protocol.
+- Settings changes preserve the current core while keeping the pre-turn replay
+  baseline separate: observations from a completed reply cannot leak into retry.
+  The owner receives counts; full private state is returned only to administrators
+  in the existing CHPM inspection API. No new frontend inspection panel is added.
+- Limits remain explicit: 32 archived NPC identities and 512 events per observer.
+  Exhaustion fails visibly without dropping history. Long-running consolidation
+  is still required. Model context includes one current host frame and at most
+  eight existing subjective beliefs, not the full event journal. Existing input
+  character/call limits still apply; more prompt text does not mean free tokens.
+
+The host does **not** yet produce psychological interpretations automatically.
+Beliefs can be represented/replayed by the core, but new live turns currently add
+only the allowlisted observations. Appraisal, affect, needs and relationship
+transition policies are the next slice, not claimed behavior of this integration.
 
 ## Research matrix coverage
 
@@ -67,12 +109,14 @@ adapters are ready. No additional inference is triggered by importing this core.
 | V30–V31, V34; TR03–TR04 | Source-bound subjective propositions, roots and retained challenges | No calibrated posterior or reliability estimation; not complete TR04 |
 | V42–V45; T13 | Subject/domain-local belief records; tests preserve unrelated records | Numerical relationship dynamics and affection are not implemented |
 | V57, V59; T08, T12, T22 | Observations versus inference/reflection; root deduplication | Retrieval/consolidation policies are not complete |
-| V65–V69; T01, T03, T23–T25 | Revision/cursor/event checks, replay, validated restore, rewind | Full host persistence, cross-branch forks and accepted RNG tape are later work |
-| T02, T06 | Other observers' unavailable citations are rejected; core has no hidden-world input | Host visibility filtering remains essential |
+| V65–V69; T01, T03, T23–T25 | Revision/cursor/event checks, atomic host persistence, replay, validated restore, rewind and session copy | Distributed branch merge and accepted RNG tape are later work |
+| T02, T06 | Other observers' unavailable citations are rejected; live host frame exposes only own scene | Speech perception/review still depends on model interpretation |
 | T04, T27–T28 | No wall-clock transitions, model failure event, or model dependency | Catch-up scheduler/pending barrier integration not implemented |
 | T09 | Independent conflicting evidence produces a tracked challenged belief | No claim of empirical accuracy of belief revision |
 
-Tests in `tests/test_chpm_core.py` establish only those stated program invariants.
+Tests in `tests/test_chpm_core.py` and `tests/test_chpm_host_*.py` establish only
+those stated program invariants, including real VN transactions with mock models,
+source edits, failed turns, settings, snapshot restore and session copy/import.
 They do not establish all Gate 0/1 requirements or psychological validity. In
 particular, T20 remains probabilistic for unrestricted prose: a valid source
 reference does not prove correct interpretation of a speech act.
@@ -89,20 +133,20 @@ breach, attempted identity rewrite, a trauma reminder, repair and an invitation.
 Accepted decisions, sourced memory and agenda carry forward using the existing
 pilot's production `finish` boundary in an isolated in-memory host. Failed steps
 do not become memories or personality events. External events are authored;
-retrieval is simulated. The current dialogue pilot passes speech observations to
-cognition, while the authored host scene goes to the narrator; a direct witnessed
-world-event adapter is still missing. This is a known causal-input gap, not a
-completed psychology pipeline. This trajectory has only mock-based tests so far, not a
+retrieval is simulated. This isolated evaluation harness does not yet exercise the
+new live host adapter: its authored host scene goes to the narrator, while cognition
+receives speech observations. The new production adapter adds own-location input,
+not a complete witnessed world-event vocabulary. This trajectory has only mock-based tests so far, not a
 completed live run or proof of psychological development.
 
 ## Next implementation slices
 
-1. Connect an observer-filtered host event adapter and atomic host persistence to
-   the new core. Keep world fact, report, interpretation, intention and outcome
-   separate; do not promote arbitrary narration into confirmed observations.
-2. Introduce versioned, explicit subjective appraisal and relationship policies.
+1. Introduce versioned, explicit subjective appraisal and relationship policies.
    Keep alternatives/unknown, subject and domain locality, and distinguish fear,
    desire, attraction, consent, trust, affection and displayed expression.
+2. Expand the host's observer-filtered world-event vocabulary and exercise it in
+   the isolated trajectory evaluator. Keep fact, report, interpretation, intention
+   and outcome distinct; do not promote arbitrary narration into observations.
 3. Integrate competing goals/commitments and causal intent selection on controlled
    candidate sets. Record policy reasons; do not ask the LLM to retroactively invent
    a motive for the chosen action or use player approval as reward.

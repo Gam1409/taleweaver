@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from backend.engine.chpm.host_state import Mind
+
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -173,10 +175,13 @@ class KernelState(Contract):
     actors: dict[str, Decision] = Field(default_factory=dict, max_length=3)
     memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=3)
     agenda: list[AgendaEntry] = Field(default_factory=list, max_length=256)
+    minds: dict[str, Mind] = Field(default_factory=dict, max_length=32)
     usage: Usage = Field(default_factory=Usage)
 
     @model_validator(mode="after")
     def bounded_observer_memory(self) -> "KernelState":
+        if any(actor != mind.genesis.scope.observer_id for actor, mind in self.minds.items()):
+            raise ValueError("Psychological state is indexed under another NPC.")
         if len({entry.id for entry in self.agenda}) != len(self.agenda):
             raise ValueError("Duplicate CHPM agenda ID.")
         for actor, entries in self.memories.items():

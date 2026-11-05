@@ -10,6 +10,7 @@ import uuid6
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.archive_safety import MAX_UPLOAD_BYTES, copy_asset, validate_archive
+from backend.engine.chpm.lifecycle import fork as fork_chpm
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
@@ -228,8 +229,12 @@ class SessionImporter:
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
                 restore_memory(session_state, session_state_data, message_ids)
-                session_state.entity_states = remap_illustrations(
-                    remap_social_state(session_state.entity_states, message_ids), message_ids
+                session_state.entity_states = fork_chpm(
+                    remap_illustrations(
+                        remap_social_state(session_state.entity_states, message_ids), message_ids
+                    ),
+                    message_ids,
+                    new_session_id,
                 )
 
                 # 7. Create WorldScenes

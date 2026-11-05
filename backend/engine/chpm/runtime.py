@@ -6,13 +6,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.game_modes import is_vn
-from backend.engine.chpm import agenda, cognition, context, memory, perception, prompts
+from backend.engine.chpm import (
+    agenda,
+    cognition,
+    context,
+    host_adapter,
+    memory,
+    perception,
+    prompts,
+)
+from backend.engine.chpm.core.reducer import TransitionError
+from backend.engine.chpm.host_state import Mind, removed_messages
 from backend.engine.chpm.kernel import ChpmError, digest
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
     KernelState,
     MemoryEntry,
+    Observation,
     Perception,
     Usage,
     Verdict,
@@ -35,6 +46,7 @@ class Turn:
     perceptions: dict[str, Perception] = field(default_factory=dict)
     memories: dict[str, list[MemoryEntry]] = field(default_factory=dict)
     agendas: dict[str, list[AgendaEntry]] = field(default_factory=dict)
+    minds: dict[str, Mind] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -52,6 +64,9 @@ def contract(turn: Turn) -> str:
         actor: {"name": turn.names.get(actor, actor), **decision.selected.model_dump()}
         for actor, decision in turn.decisions.items()
     }
+    for actor, mind in turn.minds.items():
+        if actor in data:
+            data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
     return prompts.NARRATE + json.dumps(data, ensure_ascii=False)
 
 
@@ -81,7 +96,9 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
         await _prepare(manager, turn, message, selected)
     except Exception as exc:
         turn.usage.status = "failed"
-        turn.usage.detail = str(exc) if isinstance(exc, ChpmError) else type(exc).__name__
+        turn.usage.detail = (
+            str(exc) if isinstance(exc, (ChpmError, TransitionError)) else type(exc).__name__
+        )
         logger.warning(
             "CHPM preparation failed: session=%s error=%s", manager.game_id, type(exc).__name__
         )
@@ -111,53 +128,82 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
             manager, turn.initial.settings, turn.usage, observed.player_request, turn.names
         )
     for actor in sorted(actors, key=lambda item: item.id):
-        previous = turn.initial.actors.get(actor.id)
-        retained = await memory.recall(
-            manager,
-            actor.id,
-            turn.initial.memories.get(actor.id, []),
-            turn.initial.settings.memory_limit,
-        )
-        turn.memories[actor.id] = retained
-        legacy = previous if not retained and turn.initial.settings.memory_limit else None
-        supplied = await context.actor_context(manager, actor, legacy, retained)
-        turn.agendas[actor.id] = await agenda.recall(manager, actor.id, turn.initial.agenda)
-        supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
-        supplied["agenda_creation_available"] = (
-            len(turn.initial.agenda) < agenda.MAX_RECORDS
-            and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
-        )
-        perceived = turn.perceptions[actor.id]
-        actor_observation = observed.model_copy(
-            update={
-                "player_request": "\n".join(perceived.quotes),
-                "perception_uncertain": perceived.uncertain,
-            }
-        )
-        supplied["observation"] = actor_observation.model_dump()
-        turn.decisions[actor.id] = await cognition.decide(
-            manager,
-            turn.initial.settings,
-            turn.usage,
-            actor.id,
-            actor_observation,
-            supplied,
-            turn.agendas[actor.id],
-            previous,
-        )
+        await _prepare_actor(manager, turn, actor, observed)
+
+
+async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:
+    previous = turn.initial.actors.get(actor.id)
+    retained = await memory.recall(
+        manager,
+        actor.id,
+        turn.initial.memories.get(actor.id, []),
+        turn.initial.settings.memory_limit,
+    )
+    entries = await agenda.recall(manager, actor.id, turn.initial.agenda)
+    invalid: set[str] = set()
+    authored = actor
+    if turn.initial.settings.mode == "live":
+        turn.minds[actor.id] = await host_adapter.prepare(manager, turn, actor, observed)
+        authored = host_adapter.actor_view(actor, turn.minds[actor.id])
+        if actor.id in turn.initial.minds:
+            invalid = removed_messages(turn.initial.minds[actor.id], turn.minds[actor.id])
+    retained = [entry for entry in retained if entry.source_message_id not in invalid]
+    for message_id in sorted(invalid):
+        entries = agenda.retract(entries, message_id)
+    turn.memories[actor.id] = retained
+    turn.agendas[actor.id] = entries
+    legacy = (
+        previous if not invalid and not retained and turn.initial.settings.memory_limit else None
+    )
+    supplied = await context.actor_context(manager, authored, legacy, retained)
+    if actor.id in turn.minds:
+        supplied["psychological_state"] = host_adapter.context(turn.minds[actor.id])
+    supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
+    supplied["agenda_creation_available"] = (
+        len(turn.initial.agenda) < agenda.MAX_RECORDS
+        and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
+    )
+    perceived = turn.perceptions[actor.id]
+    actor_observation = observed.model_copy(
+        update={
+            "player_request": "\n".join(perceived.quotes),
+            "perception_uncertain": perceived.uncertain,
+        }
+    )
+    supplied["observation"] = actor_observation.model_dump()
+    # Recall and core-source reconciliation opened a read transaction after the
+    # initial release. The session lease protects the snapshot while inference runs.
+    await release_for_model(manager)
+    turn.decisions[actor.id] = await cognition.decide(
+        manager,
+        turn.initial.settings,
+        turn.usage,
+        actor.id,
+        actor_observation,
+        supplied,
+        turn.agendas[actor.id],
+        previous,
+    )
 
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:
     turn = current(manager)
     if turn is None or not completed:
         return
+    if turn.minds and reply.session_id != manager.game_id:
+        raise ChpmError("CHPM completed reply belongs to another session.")
     result = turn.initial.model_copy(deep=True)
     result.usage = turn.usage
     for actor, decision in turn.decisions.items():
         _finish_decision(turn, decision, reply)
         result.actors[actor] = decision
         result.memories[actor] = turn.memories.get(actor, [])
-        memory.append(result, actor, _new_memories(turn, decision, reply))
+        additions = _new_memories(turn, decision, reply)
+        memory.append(result, actor, additions)
+        if actor in turn.minds:
+            result.minds[actor] = host_adapter.finish(
+                turn, reply, additions, actor, minute=max(0, int(manager.state.in_game_time or 0))
+            )
     if turn.initial.settings.mode == "live" and turn.verdict:
         retained_agenda = [entry for entry in result.agenda if entry.actor_id not in turn.agendas]
         retained_agenda.extend(entry for entries in turn.agendas.values() for entry in entries)

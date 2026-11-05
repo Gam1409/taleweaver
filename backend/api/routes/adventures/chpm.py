@@ -47,6 +47,16 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
         "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
+        "psychology_counts": {
+            actor: {
+                "observations": len(mind.sources),
+                "beliefs": len(mind.snapshot.beliefs),
+            }
+            for actor, mind in current.minds.items()
+        },
+        "psychology": {actor: mind.model_dump(mode="json") for actor, mind in current.minds.items()}
+        if user.role == "admin"
+        else {},
         "agenda_counts": {
             "active": sum(entry.closure is None for entry in current.agenda),
             "closed": sum(entry.closure is not None for entry in current.agenda),
@@ -152,6 +162,9 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         "memories": prior.get("memories", {}) if same_mode and same_actors else {},
         # Never copy promises made in the completed turn into its retry baseline.
         "agenda": prior.get("agenda", []),
+        # The current core may include observations from the completed reply.
+        # Never transplant them into the replay's pre-turn snapshot, even on off/on.
+        "minds": prior.get("minds", {}),
         "usage": Usage().model_dump(),
     }
     state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}

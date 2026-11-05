@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.clothing.lifecycle import (
     CHECKPOINT_KEY,
     capture_item_ids,
@@ -220,6 +221,7 @@ class SessionCheckpointService:
         snapshot = checkpoint.state_snapshot or {}
         avatar_snapshot = snapshot.get("avatar") or {}
         state_snapshot = snapshot.get("session_state") or {}
+        restored_entities = deepcopy(validate_chpm(state_snapshot.get("entity_states"), session_id))
 
         avatar.hp = int(avatar_snapshot.get("hp", avatar.hp))
         avatar.max_hp = int(avatar_snapshot.get("max_hp", avatar.max_hp))
@@ -252,7 +254,6 @@ class SessionCheckpointService:
         state.time_config = deepcopy(state_snapshot.get("time_config") or {})
         state.inventory = deepcopy(state_snapshot.get("inventory") or [])
         previous_places = deepcopy(registry(state))
-        restored_entities = deepcopy(state_snapshot.get("entity_states") or {})
         restored_entities.pop("__portrait_requests__", None)
         state.entity_states = reset(restored_entities)
         state.living_world = fork_simulation(

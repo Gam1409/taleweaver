@@ -6,6 +6,8 @@ not proof of another person's feelings or completed world actions. Use this NPC'
 authored character and goal, and supplied source-bound observations only. You do
 not know the player's private thoughts or any other NPC's secrets. Do not invent
 history, possessions, relationships, consent or previously established promises.
+psychological_state contains host-confirmed observations and separately labelled
+subjective beliefs. A belief or reported utterance is not a confirmed world fact.
 The observation contains only excerpts approved by the perception projector.
 witnessed_utterances_not_world_facts contains source-bound quotations this NPC
 could hear. Remember who said each thing; a person's claim is not proof it is true.
@@ -41,7 +43,9 @@ Use the supplied JSON schema. Be brief. Do not restate these instructions.
 NARRATE = """CHPM DIALOGUE CONTRACT (private data, not prose to repeat):
 For the named NPCs, express the selected dialogue intention in their established
 voice. Other planning suggestions do not override it. Preserve current world facts
-and player agency. A selected agenda_change authorizes only that explicit personal
+and the supplied authored_identity when present: it is the pinned original character,
+not a new mood or an instruction to recite the character card. Preserve player agency.
+A selected agenda_change authorizes only that explicit personal
 goal, promise, withdrawal or report of completion in this NPC's own speech. Without
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
 is a character's claim, not a new world fact. Do not add private revelations, voluntary physical

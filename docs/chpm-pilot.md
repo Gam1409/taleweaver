@@ -259,7 +259,11 @@ counterexample probe. These protocol changes do not enable CHPM by default.
 ## Research state core
 
 The independent evidence/identity foundation and its exact matrix coverage are
-tracked in [the research roadmap](chpm-research-roadmap.md). It is tested offline
-and is not yet substituted for the live dialogue pilot. Both supplied research
+tracked in [the research roadmap](chpm-research-roadmap.md). The live VN pilot now
+uses its pinned authored identity and observer-scoped location/speech records,
+committed with the reviewed reply. Off/shadow modes do not advance it; no extra
+LLM calls are added. Source edits, rollback, session copy and import preserve or
+explicitly invalidate the corresponding causal state. Automatic appraisal,
+affect and relationship transitions are still pending. Both supplied research
 source files are preserved with checksums. No psychological-accuracy claim follows
 from passing the kernel's program-invariant tests.

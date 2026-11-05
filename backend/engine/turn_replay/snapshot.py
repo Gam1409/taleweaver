@@ -8,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import DateTime, Table, and_, delete, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
 from backend.models.avatar import Avatar
@@ -116,6 +117,7 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
     if snapshot.get("version") != 1 or snapshot["state"]["session_id"] != session_id:
         raise ValueError("Invalid turn snapshot")
     restored_state = decoded(SessionState.__table__, snapshot["state"])
+    validate_chpm(restored_state.get("entity_states"), session_id)
     game = await db.get(GameSession, session_id)
     (restored_state.get("entity_states") or {}).pop("__portrait_requests__", None)
     restored_state["living_world"] = fork_simulation(

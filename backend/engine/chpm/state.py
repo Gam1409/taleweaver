@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.engine.chpm import agenda
+from backend.engine.chpm.host_state import before_messages, removed_messages
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState
 
@@ -30,14 +31,29 @@ def controls(state: Any, actor_id: str) -> bool:
 
 def retract(state: Any, message_id: str) -> None:
     current = load(state)
-    if not current.actors and not current.memories and not current.agenda:
+    if not current.actors and not current.memories and not current.agenda and not current.minds:
         return
     # Later decisions can depend on earlier speech. Clear all derived pilot
     # decisions on a source change rather than pretending they were recomputed.
     current.actors = {}
-    current.memories = {
-        actor: [entry for entry in entries if entry.source_message_id != message_id]
-        for actor, entries in current.memories.items()
-    }
-    current.agenda = agenda.retract(current.agenda, message_id)
+    actors = (
+        set(current.memories) | set(current.minds) | {entry.actor_id for entry in current.agenda}
+    )
+    retained_agenda = []
+    for actor in sorted(actors):
+        invalid = {message_id}
+        if actor in current.minds:
+            mind = current.minds[actor]
+            changed = before_messages(mind, {message_id})
+            invalid.update(removed_messages(mind, changed))
+            current.minds[actor] = changed
+        if actor in current.memories:
+            current.memories[actor] = [
+                entry for entry in current.memories[actor] if entry.source_message_id not in invalid
+            ]
+        entries = [entry for entry in current.agenda if entry.actor_id == actor]
+        for invalid_id in sorted(invalid):
+            entries = agenda.retract(entries, invalid_id)
+        retained_agenda.extend(entries)
+    current.agenda = retained_agenda
     save(state, current, expected_revision=current.revision)
