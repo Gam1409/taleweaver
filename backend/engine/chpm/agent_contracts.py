@@ -21,15 +21,17 @@ class Lookup(Contract):
 
 
 class Step(Contract):
-    purpose: str = Field(min_length=1, max_length=180)
+    # A display label is not decision evidence; cap it in the audit, not execution.
+    purpose: str = ""
     requests: list[Lookup] = Field(max_length=2)
 
 
 INSTRUCTIONS = """Choose only necessary read-only lookups before this NPC decides how to respond.
 Return requests=[] when the available information is sufficient. Each round costs a model call.
 You may make up to two lookups per round. No permission from the player is needed for these reads.
-search_memory(argument=query): lexical RAG over this observer's source-checked history only,
-including archived events; try concrete cues/synonyms if a previous query missed.
+search_memory(argument=query): lexical RAG over this observer's source-checked PRIOR turns only,
+including archived events. Current input is already supplied, not a memory search hit.
+Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.

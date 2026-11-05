@@ -186,3 +186,13 @@ def test_clothing_detail_settings_apply_after_occlusion_and_unknown_age_is_not_g
     actor.age_years = None
     actor.visual_profile = profile("inner")
     assert agent_views.project(actor, state, [])["clothing"] == []
+
+
+def test_search_does_not_return_the_current_question_as_an_old_memory():
+    value = record(mind(), source("old", "The cabinet code is 7319."), minute=1)
+    value = record(value, source("input", "Where is the blue navigation instrument?"), minute=2)
+    tools = Tools(value, observation(), {})
+    assert tools.search("blue navigation instrument")["results"] == []
+    result = tools.search("cabinet code")["results"]
+    assert len(result) == 1 and result[0]["source_message_id"] == "old"
+    assert "7319" in result[0]["text"]

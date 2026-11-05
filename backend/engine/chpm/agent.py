@@ -60,7 +60,8 @@ async def investigate(
         transcript.append({"requests": [r.model_dump() for r in step.requests], "results": results})
         audit.append(
             {
-                "purpose": step.purpose,
+                "purpose": step.purpose[:180],
+                "purpose_truncated": len(step.purpose) > 180,
                 "requests": [r.model_dump() for r in step.requests],
                 "results": [_summary(result) for result in results],
                 "stop": "ready"

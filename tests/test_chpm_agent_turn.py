@@ -154,3 +154,22 @@ async def test_matrix_agent_mode_records_calls_trace_and_original_identity_offli
     assert result["decisions"]["npc-01"]["agent_audit"][-1]["stop"] == "step_limit"
     with pytest.raises(ValueError, match="25-call"):
         matrix_cli.manifest([case(20)], all_present=True, agent_steps=2)
+
+
+async def test_cosmetic_purpose_length_does_not_reject_valid_tool_requests():
+    purpose = "A long explanation about why I need this source. " * 8
+    model = Replies(
+        [
+            json.dumps(
+                {"purpose": purpose, "requests": [{"tool": "search_memory", "argument": "promise"}]}
+            )
+        ]
+    )
+    host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda role: model)
+    usage = Usage()
+    _, audit = await agent.investigate(
+        host, Settings(agent_steps=1), usage, mind(), observation(), {}
+    )
+    assert usage.calls == 1 and audit[0]["results"][0]["status"] == "ok"
+    assert audit[0]["purpose"] == purpose[:180] and audit[0]["purpose_truncated"]
+    assert audit[0]["stop"] == "step_limit"

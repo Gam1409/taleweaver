@@ -44,6 +44,7 @@ class Tools:
             for index, item in enumerate(self.mind.snapshot.evidence)
             if item.event_id in self.mind.sources
             and self.mind.sources[item.event_id].kind in {"speech", "world_event"}
+            and self.mind.sources[item.event_id].message_id != self.observation.message_id
         }
         documents = [
             MemoryDocument(

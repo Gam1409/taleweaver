@@ -19,7 +19,7 @@ Available tools:
 
 | Tool | Input | Scope/result |
 | --- | --- | --- |
-| `search_memory` | concrete query, up to 160 characters | Existing RAG ranker over this NPC's reconciled speech/world observations, including archived sources; at most two hits |
+| `search_memory` | concrete query, up to 160 characters | Existing RAG ranker over this NPC's reconciled speech/world observations from prior turns, including archived sources; at most two hits |
 | `read_memory` | ID returned earlier in this investigation | Original observed excerpt, at most 2,000 characters; never the entire original chat message |
 | `inspect_self` | empty argument | Current host frame: own location, owned item names/IDs and worn IDs; unknowns and omissions remain explicit |
 | `visible_clothing` | present NPC ID | Session-resolved clothing projected by opaque layers and uncovered regions, with layer number and visible regions |
@@ -60,6 +60,8 @@ remain historical; current host facts take precedence.
   Rewind/regeneration invalidate their source-bound causal history as before.
 - `Decision.agent_audit` records short purposes, requests, result statuses, original
   source/message IDs, and stop reason. Full model deliberation is not requested.
+  A long optional purpose label is shortened to 180 characters with an explicit
+  truncation flag; cosmetic verbosity cannot reject valid tool requests.
   This trace is exposed through the existing administrator-only endpoint.
 
 Host envelope version 3 migrates versions 1/2, retaining budgets and state, with
