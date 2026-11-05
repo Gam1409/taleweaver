@@ -58,7 +58,13 @@ async def deliberate(
     mind: Mind,
     previous: Decision | None = None,
 ) -> tuple[Decision, Mind]:
-    window = appraisal_context.build(mind)
+    # Only perceived speech can cue recall, never the player's unobserved narration.
+    cues = " ".join(
+        source.text
+        for source in mind.sources.values()
+        if source.message_id == observation.message_id and source.kind in {"speech", "world_event"}
+    )
+    window = appraisal_context.build(mind, query=cues)
     motives = motivation.build(mind, entries, window)
     identifiers = window.identifiers()
     identifiers["motive_id"] = list(motives.sources)

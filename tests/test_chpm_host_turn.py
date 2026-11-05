@@ -53,10 +53,9 @@ async def test_core_is_committed_with_reply_and_original_identity_reaches_both_r
         messages = {row.id: row for row in await db.scalars(select(ChatMessage))}
         assert all(source.message_id in messages for source in saved.sources.values())
         context = roles.proposal_inputs[0]["psychological_state"]
-        assert json.loads(context["current_host_observations"][0]["text"]) == {
-            "observer_id": "LINA",
-            "own_scene_id": manager.state.current_scene_id,
-        }
+        frame = json.loads(context["current_host_observations"][0]["text"])
+        assert frame["scene_id"] == manager.state.current_scene_id
+        assert frame["observation"] == "current_host_state"
         npc = await db.scalar(
             select(WorldEntity).where(
                 WorldEntity.session_id == "session-1", WorldEntity.id == "LINA"

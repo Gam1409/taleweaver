@@ -27,6 +27,9 @@ export interface ChpmStatus {
     used: { events: number; evidence: number; sources: number; beliefs: number }
     limits: { events: number; evidence: number; sources: number; beliefs: number }
     blocking_resources: string[]
+    active_events: number
+    archived_events: number
+    archive_blocks: number
   }>
   required_call_budget?: number
 }

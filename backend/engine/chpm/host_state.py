@@ -7,9 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.engine.chpm.core.contracts import Event, Genesis, Observe, Snapshot
+from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.limits import MAX_EVENTS
 from backend.engine.chpm.core.reducer import apply
 from backend.engine.chpm.core.replay import restore, rewind
+from backend.engine.chpm.host_observation_contracts import HostFacts
 
 
 class Source(BaseModel):
@@ -19,8 +21,15 @@ class Source(BaseModel):
     content_hash: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]
     speaker_id: str = Field(min_length=1, max_length=100)
-    kind: Literal["speech", "host_frame"]
+    kind: Literal["speech", "host_frame", "world_event"]
     text: str = Field(min_length=1, max_length=2000)
+    facts: HostFacts | None = None
+
+    @model_validator(mode="after")
+    def frame_facts_only(self) -> "Source":
+        if self.facts is not None and self.kind != "host_frame":
+            raise ValueError("Only a host frame can carry authoritative state.")
+        return self
 
 
 class Mind(BaseModel):
@@ -34,7 +43,7 @@ class Mind(BaseModel):
         restore(self.snapshot.model_dump(), expected_genesis=self.genesis)
         observations = {
             event.event_id: event
-            for event in self.snapshot.journal
+            for event in events(self.snapshot)
             if isinstance(event.payload, Observe)
         }
         if set(observations) != set(self.sources):
@@ -49,7 +58,11 @@ class Mind(BaseModel):
 
 
 def identifier(source: Source, genesis: Genesis) -> str:
-    return fingerprint({"scope": genesis.scope.model_dump(), "source": source.model_dump()})
+    body = source.model_dump()
+    # Legacy hashes included revision_id=None. Omit only the new optional field.
+    if source.facts is None:
+        body.pop("facts")
+    return fingerprint({"scope": genesis.scope.model_dump(), "source": body})
 
 
 def payload(source: Source, genesis: Genesis) -> Observe:
@@ -63,10 +76,12 @@ def payload(source: Source, genesis: Genesis) -> Observe:
     if source.kind == "host_frame":
         # Repeated snapshots of the same location are not independent confirmations.
         root = {"scope": genesis.scope.model_dump(), "frame": source.text}
+        if source.facts is not None:
+            root["facts"] = source.facts.model_dump()
     return Observe(
         record_id=identifier(source, genesis),
         text=source.text,
-        source_kind="witnessed" if source.kind == "host_frame" else "reported",
+        source_kind="reported" if source.kind == "speech" else "witnessed",
         root_ids=(fingerprint(root),),
     )
 
@@ -89,13 +104,13 @@ def record(mind: Mind, source: Source, *, minute: int) -> Mind:
 def before_messages(mind: Mind, message_ids: set[str]) -> Mind:
     removed = {key for key, source in mind.sources.items() if source.message_id in message_ids}
     earliest = min(
-        (event.sequence for event in mind.snapshot.journal if event.event_id in removed),
+        (event.sequence for event in events(mind.snapshot) if event.event_id in removed),
         default=None,
     )
     if earliest is None:
         return mind
     changed = rewind(mind.snapshot, through_sequence=earliest - 1)
-    kept = {event.event_id for event in changed.journal}
+    kept = {event.event_id for event in events(changed)}
     return Mind(
         genesis=mind.genesis,
         snapshot=changed,

@@ -1,10 +1,9 @@
 """Allowlisted host observations and pinned identity for the live dialogue pilot."""
 
-import json
 from types import SimpleNamespace
 from typing import Any
 
-from backend.engine.chpm import host_sources, identity_adapter
+from backend.engine.chpm import host_observations, host_sources, identity_adapter
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
@@ -31,7 +30,8 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
     if mind.genesis.scope != scope:
         raise ChpmError("CHPM psychological state belongs to another session or NPC.")
     mind = await host_sources.reconcile(manager, mind)
-    frame = json.dumps({"observer_id": actor.id, "own_scene_id": observed.scene_id}, sort_keys=True)
+    facts = host_observations.capture(manager.state, actor, turn.present_names)
+    change = host_observations.difference(host_observations.previous(mind), facts)
     anchor = {
         "message_id": observed.message_id,
         "revision_id": observed.revision_id,
@@ -40,9 +40,21 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
     }
     mind = record(
         mind,
-        Source(**anchor, speaker_id=actor.id, kind="host_frame", text=frame),
+        Source(
+            **anchor,
+            speaker_id=actor.id,
+            kind="host_frame",
+            text=host_observations.frame(facts),
+            facts=facts,
+        ),
         minute=observed.minute,
     )
+    if change:
+        mind = record(
+            mind,
+            Source(**anchor, speaker_id=actor.id, kind="world_event", text=change),
+            minute=observed.minute,
+        )
     for quote in turn.perceptions[actor.id].quotes:
         mind = record(
             mind,
@@ -66,7 +78,11 @@ def actor_view(actor: Any, mind: Mind) -> Any:
 
 
 def context(mind: Mind) -> dict:
-    frames = [entry for entry in mind.snapshot.evidence if entry.source_kind == "witnessed"]
+    frames = [
+        entry
+        for entry in mind.snapshot.evidence
+        if entry.event_id in mind.sources and mind.sources[entry.event_id].kind == "host_frame"
+    ]
     beliefs = relationships.recent(mind.snapshot)
     return {
         "current_host_observations": [item.model_dump() for item in frames[-1:]],

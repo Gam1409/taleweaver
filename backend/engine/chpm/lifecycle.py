@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from backend.engine.chpm import agenda
 from backend.engine.chpm.core.contracts import Event, Genesis, Interpret, Observe
+from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import apply, initial
 from backend.engine.chpm.host_state import (
     Mind,
@@ -88,7 +89,7 @@ def _fork_mind(mind: Mind, message_ids: dict[str, str], session_id: str) -> Mind
     snapshot = initial(genesis)
     sources = {}
     record_ids: dict[str, str] = {}
-    for event in mind.snapshot.journal:
+    for event in events(mind.snapshot):
         body = event.payload
         event_id = fingerprint({"scope": genesis.scope.model_dump(), "event": event.event_id})
         if isinstance(body, Observe):

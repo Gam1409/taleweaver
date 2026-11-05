@@ -1,30 +1,56 @@
 # CHPM history, capacity and subjective memory
 
-## Current storage policy: explicit pause, no automatic forgetting
+## Current storage: exact archive and bounded working history
 
-The live pilot still retains up to 512 core events/evidence records and 256 beliefs
-per observer. **Consolidation and archival are not implemented.** Raising these
-limits without a retention and invalidation policy would only postpone exhaustion.
+Snapshot schema 2 keeps at most 256 active events. When that window fills, the
+oldest 128 events move atomically to an immutable archive block in the same saved
+Mind. Events, source bindings, evidence roots, beliefs and pinned identity are
+retained exactly. The total cap is 8,192 events/evidence records/source bindings
+and 2,048 beliefs per NPC; 32 psychological identities per session remain the cap.
+This is **lossless journal archival, not byte compression or unlimited storage**.
+The full evidence/source projection is still saved and validated.
 
-Before CHPM inference, the host now reserves capacity for a complete worst-case
-turn: one scene frame, three perceived excerpts, two interpretations, one own
-speech passage and twelve heard passages. That is 19 events/evidence records,
-17 host source bindings and two potentially new beliefs. Revisions of existing
-beliefs may need less, but admission must also allow new propositions.
+Schema-1 snapshots migrate only their event layout on load. Old source hashes
+remain valid. Restore replays archive plus active journal; duplicate archived
+IDs, changed sources, corrupt projections and wrong identities still fail.
+Rewind, source retraction and session copying cross archive boundaries. Archival
+commits with the reviewed turn; failed turns never publish a partial rollover.
 
-At 80% of a resource limit, session settings show a warning. If a whole turn may
-not fit, CHPM pauses before its model calls with an actionable message. No old
-events are deleted, no identity is reset and no unvalidated narrator silently
-takes over. The owner can explicitly select **Standard** and save, or deselect
-affected NPCs, to continue with ordinary behavior. Their psychological state is
-retained. Re-enabling does not remove the limit. Off-scene or unselected NPCs do
-not block a turn. The API exposes counts/status to the owner; private records
-remain administrator-only.
+Before inference, admission reserves 20 events/evidence records, 18 source
+bindings and two potentially new beliefs: one frame, one aggregate world change,
+three perceived excerpts, two interpretations, own speech and twelve heard
+passages. At 80% of any total limit, settings warn. If the whole turn may not fit,
+CHPM pauses before requests. It neither deletes history nor silently switches
+behavior. Explicitly choosing Standard or deselecting affected NPCs preserves
+their saved history. Re-enabling does not reset the finite limit.
 
-This is the specification's explicit degraded-operation option, not a claim to
-support indefinitely long live CHPM sessions. A conservative reserve may pause
-before the final slot is filled. Existing source invalidation/rewind can reduce
-history, but it is not a recommended substitute for consolidation.
+## Fragmentary recall without fabricated summaries
+
+Live appraisal sees six recent speech/world-change sources (up to 1,000 characters
+each). Older sources form chronological groups of 16; these are deterministic
+retrieval groups, **not model-inferred semantic episodes**. Perceived speech and
+confirmed world differences cue lexical retrieval of at most three older source
+fragments, each at most 300 characters. Unobserved player narration cannot cue
+retrieval. Common words are filtered; matching and recency determine selection.
+No embeddings, sentiment scoring, clinical memory-strength estimate or extra LLM
+summary call is involved. Synonyms without lexical overlap can miss.
+
+Each fragment carries the original source alias and a scoped group fingerprint.
+The original record/root IDs remain authoritative. Retrieval never adds events,
+independent confirmation, belief strength or assumed details. Citations may use
+only the exposed contiguous fragment. Historical observations cannot overwrite
+current host facts. Missing recall is not evidence that an event never happened.
+Counts report older sources, groups, matches, returned fragments and omitted
+matches. Derived groups are rebuilt from accepted sources, so edits/rewind cannot
+leave a stale persistent summary or retrieval index.
+
+The separate short dialogue window and its `memory_limit` setting are unchanged;
+zero disables that window, not the enabled core's private appraisal history.
+Active promises/goals remain in the separate agenda. The eight-recent-belief view
+is unchanged: there is no semantic retrieval of old beliefs yet. Emotionally
+weighted salience, associative retrieval, learned episode summaries and selective
+loss of detail in storage remain future policies. This version reduces what the
+model sees while retaining the exact audit record.
 
 ## Replay cost
 
@@ -73,41 +99,15 @@ ordering when timestamps coincide. Timestamp-only legacy observations remain
 readable; ambiguous equal-time inputs without a host order fail explicitly.
 Simulation minutes still have their separate meaning.
 
-## Planned consolidation: archival truth versus an NPC's memory
+## Next policies and psychological limits
 
-The user's proposal of gradually fragmentary memory fits a two-layer design:
+Archival and lexical fragments provide the provenance foundation, not a complete
+simulation of human forgetting. A future semantic consolidation policy must
+preserve source/root links, contradictions, uncertainty, active commitments and
+retractability. Its failure must leave the previous state usable. A summary or
+repeated recollection must never count as independent evidence.
 
-1. **Exact archive**: immutable source events and their provenance, available to
-   replay, correction and audit. This is not automatically available to the model.
-2. **Subjective memory**: bounded recent episodes, compact older recollections,
-   retrieval cues and explicit gaps. These are what the NPC can recall in a turn.
-
-An older episode could retain “this person let me down” while no longer exposing
-the exact conversation. Its interpretation remains subjective. Missing detail
-must not be fabricated, and a summary or repeated recollection must not create
-new independent evidence roots. Recalling an old episode is distinct from a new
-world event or fresh confirmation that the remembered interpretation was correct.
-
-Age alone must not decide accessibility. Active commitments, repeated experiences,
-personal relevance and emotionally significant events may remain accessible longer.
-The representation should distinguish detailed, summarized and fragmentary recall,
-without pretending those labels are measured human memory strength. RAG relevance
-is a retrieval signal, not truth, confidence or psychological importance.
-
-The next implementation should introduce versioned episode records containing:
-observer/session scope, time interval, source IDs and root IDs, participants,
-summary, retrieval cues, unresolved contradictions and explicit unknown details.
-Bounded recent events can then move to an archive-backed checkpoint only after
-equivalence checks for beliefs, roots, identity, active commitments and replay.
-
-Edited-source invalidation must cover summaries, retrieval indexes and derived
-beliefs. Rewind across an archive boundary must remain possible, or the exact
-boundary must be made explicit before enabling the policy. Compaction must be
-atomic and idempotent; a failed summary model must leave the previous state usable.
-None of these archival/consolidation steps is claimed to be implemented here.
-
-Severe experiences can plausibly produce substantial changes in behavior. Their
-simulation requires a separate dynamic-state/development layer with provenance
-and competing explanations; it must not automatically replace the original
-personality or equate one adverse event with a clinical diagnosis. This system
-does not establish clinical or psychological validity.
+Severe experiences may plausibly change behavior, but dynamic affect and enduring
+personality development require their own versioned policies. They must not
+replace the original identity or turn a single adverse event into a clinical
+diagnosis. This system does not establish clinical or psychological validity.

@@ -76,6 +76,16 @@ proposition rather than overwriting history. Only NEW propositions include about
 domain and statement, with belief_id=null. Do not duplicate an existing proposition.
 No confidence numbers, trait changes, set_trust, hidden facts or world effects.
 Repeated reports and apologies are not independent proof or automatic forgiveness.
+Witnessed host_state_difference describes only confirmed changes between two
+observations. It does not establish who caused them, why, or what an absent person
+did. visible_actors_removed means no longer visible, not proof of departure/death.
+Unknown or omitted possessions/clothing do not mean none. Other actors' private
+inventory and thoughts are unavailable. Current host state overrides old frames.
+episodic_recall exposes older extractive fragments selected by lexical cues.
+They retain their original source IDs and are NOT new events or fresh confirmation.
+Fragments omit details; never fill gaps, infer nothing happened from a recall miss,
+or replace current world state with a historical observation. Retrieval rank is
+not confidence. An old interpretation remains subjective even when remembered again.
 Choose candidates considering established character, goals and these tentative
 interpretations. Uncertainty does not mandate clarification or refusal each turn.
 Autonomy includes acceptance, refusal, negotiation, initiative and choosing silence.

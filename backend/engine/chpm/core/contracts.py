@@ -1,10 +1,11 @@
 """Source-bound subjective state, not a claim of calibrated human psychology."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .limits import MAX_BELIEFS, MAX_EVENTS
+from .limits import ACTIVE_EVENTS, ARCHIVE_BLOCK, MAX_BELIEFS, MAX_EVENTS
+from .log_layout import split
 
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
@@ -117,8 +118,12 @@ class Belief(Contract):
     probability: None = None
 
 
+class EventArchive(Contract):
+    events: tuple[Event, ...] = Field(min_length=ARCHIVE_BLOCK, max_length=ARCHIVE_BLOCK)
+
+
 class Snapshot(Contract):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     transition_version: Literal["evidence-ledger-v1"] = "evidence-ledger-v1"
     genesis: Genesis
     revision: Sequence = 0
@@ -126,7 +131,30 @@ class Snapshot(Contract):
     sim_minute: Sequence
     evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVENTS)
     beliefs: tuple[Belief, ...] = Field(default=(), max_length=MAX_BELIEFS)
-    journal: tuple[Event, ...] = Field(default=(), max_length=MAX_EVENTS)
+    archive: tuple[EventArchive, ...] = Field(
+        default=(), max_length=(MAX_EVENTS - ACTIVE_EVENTS) // ARCHIVE_BLOCK
+    )
+    journal: tuple[Event, ...] = Field(default=(), max_length=ACTIVE_EVENTS)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_event_layout(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or value.get("schema_version") != 1:
+            return value
+        if (
+            value.get("archive")
+            or len(value.get("journal", ())) > 512
+            or len(value.get("evidence", ())) > 512
+            or len(value.get("beliefs", ())) > 256
+        ):
+            raise ValueError("Invalid legacy event layout.")
+        blocks, journal = split(tuple(value.get("journal", ())))
+        return {
+            **value,
+            "schema_version": 2,
+            "archive": [{"events": block} for block in blocks],
+            "journal": journal,
+        }
 
 
 class Transition(Contract):

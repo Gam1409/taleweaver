@@ -42,9 +42,11 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
 })
 
 test('capacity warning exposes the explicit standard-mode choice and preserved history', async () => {
-  const html = await render(1, [{ id: 'npc', name: 'Lina', status: 'pause_required', used: { events: 500, beliefs: 20 }, limits: { events: 512, beliefs: 256 } }])
+  const html = await render(1, [{ id: 'npc', name: 'Lina', status: 'pause_required', used: { events: 8180, beliefs: 20 }, limits: { events: 8192, beliefs: 2048 }, active_events: 244, archived_events: 7936 }])
   assert.match(html, /Needs attention/)
-  assert.match(html, /500\/512 events/)
+  assert.match(html, /8180\/8192 events/)
+  assert.match(html, /244 active \/ 7936 archived events/)
+  assert.match(html, /total storage is finite/)
   assert.match(html, /Select Standard \(save to apply\)/)
   assert.match(html, /Original identity and psychological history stay saved/)
 })

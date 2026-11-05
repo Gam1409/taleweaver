@@ -10,6 +10,7 @@ from backend.engine.chpm import capacity, context, runtime
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core import replay as replay_module
 from backend.engine.chpm.core.contracts import Event
+from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import TransitionError, apply
 from backend.engine.chpm.host_state import Mind, identifier, payload
 from backend.engine.chpm.kernel import ChpmError
@@ -45,12 +46,13 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
     interpretations = GroundedProposal.model_json_schema()["properties"]["interpretations"][
         "maxItems"
     ]
-    assert 1 + excerpts + 1 + heard == capacity.SOURCE_RESERVE
+    assert 2 + excerpts + 1 + heard == capacity.SOURCE_RESERVE
     assert capacity.SOURCE_RESERVE + interpretations == capacity.EVENT_RESERVE
     assert interpretations == capacity.BELIEF_RESERVE
 
 
-def test_boundary_admits_a_whole_turn_then_requires_explicit_pause():
+def test_boundary_admits_a_whole_turn_then_requires_explicit_pause(monkeypatch):
+    monkeypatch.setattr(capacity, "MAX_EVENTS", 512)
     value = filled(512 - capacity.EVENT_RESERVE)
     state = KernelState(settings=Settings(mode="live", actor_ids=["npc"]), minds={"npc": value})
     assert capacity.inspect(value)["status"] == "warning"
@@ -69,6 +71,7 @@ def test_boundary_admits_a_whole_turn_then_requires_explicit_pause():
 async def test_full_journal_stops_before_any_chpm_preparation_and_preserves_saved_state(
     monkeypatch,
 ):
+    monkeypatch.setattr(capacity, "MAX_EVENTS", 512)
     host, actor = manager("live")
     value = filled(512)
     saved = load(host.state)
@@ -87,6 +90,7 @@ async def test_full_journal_stops_before_any_chpm_preparation_and_preserves_save
 
 
 async def test_capacity_admission_allows_normal_reconciliation_to_free_invalid_sources(monkeypatch):
+    monkeypatch.setattr(capacity, "MAX_EVENTS", 512)
     value = filled(512)
     state = KernelState(settings=Settings(mode="live", actor_ids=["npc"]), minds={"npc": value})
     original = state.model_dump()
@@ -133,7 +137,7 @@ def test_replay_reuses_verified_prefixes_and_still_rejects_tampered_projection(m
         sim_minute=481,
         payload={"kind": "advance"},
     )
-    updated = replay_module.replay(value.genesis, (*value.snapshot.journal, event))
+    updated = replay_module.replay(value.genesis, (*events(value.snapshot), event))
     assert len(wrapped) == 1 and updated.cursor == 481
     raw["sim_minute"] = 999
     with pytest.raises(TransitionError, match="projection disagrees"):

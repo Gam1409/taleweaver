@@ -3,15 +3,16 @@
 from typing import Any
 
 from backend.engine.chpm import host_sources
+from backend.engine.chpm.core.history import count
 from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState, Settings
 
-# One frame, up to three perceived excerpts, two interpretations, own speech,
+# One frame, one aggregate world change, three excerpts, two interpretations, own speech,
 # and up to twelve heard passages. A single observer may receive all heard entries.
-EVENT_RESERVE = 19
-SOURCE_RESERVE = 17
+EVENT_RESERVE = 20
+SOURCE_RESERVE = 18
 BELIEF_RESERVE = 2
 
 
@@ -25,7 +26,7 @@ def required_calls(settings: Settings, count: int | None = None) -> int:
 
 def inspect(mind: Mind) -> dict:
     used = {
-        "events": len(mind.snapshot.journal),
+        "events": count(mind.snapshot),
         "evidence": len(mind.snapshot.evidence),
         "sources": len(mind.sources),
         "beliefs": len(mind.snapshot.beliefs),
@@ -51,6 +52,9 @@ def inspect(mind: Mind) -> dict:
         "limits": limits,
         "turn_reserve": reserve,
         "blocking_resources": blocked,
+        "active_events": len(mind.snapshot.journal),
+        "archived_events": count(mind.snapshot) - len(mind.snapshot.journal),
+        "archive_blocks": len(mind.snapshot.archive),
     }
 
 
@@ -80,7 +84,7 @@ def ensure_turn(state: KernelState, actors: list[str]) -> None:
             "No history was discarded or replaced. Open session NPC behavior settings and "
             "explicitly choose Standard, or deselect these NPCs, to continue without their CHPM "
             "control. Their original identity and psychological history remain saved. "
-            "Automatic archive/consolidation is not yet available."
+            "The exact archive has a finite storage limit; no archived sources were discarded."
         )
 
 

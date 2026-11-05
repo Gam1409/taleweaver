@@ -1,7 +1,19 @@
 """Pure, deterministic, observer-local evidence transitions with no state patches."""
 
-from .contracts import Belief, Event, Evidence, Genesis, Interpret, Observe, Snapshot, Transition
+from .contracts import (
+    Belief,
+    Event,
+    EventArchive,
+    Evidence,
+    Genesis,
+    Interpret,
+    Observe,
+    Snapshot,
+    Transition,
+)
+from .history import count, events
 from .limits import MAX_EVENTS
+from .log_layout import split
 
 
 class TransitionError(ValueError):
@@ -15,7 +27,7 @@ def initial(genesis: Genesis) -> Snapshot:
 def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transition:
     if event.scope != snapshot.genesis.scope:
         raise TransitionError("Event belongs to another world, branch or observer.")
-    prior = next((item for item in snapshot.journal if item.event_id == event.event_id), None)
+    prior = next((item for item in events(snapshot) if item.event_id == event.event_id), None)
     if prior is not None:
         if prior != event:
             raise TransitionError("An event ID was reused with different content.")
@@ -24,9 +36,10 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
         raise TransitionError("Stale state revision.")
     if event.sequence <= snapshot.cursor or event.sim_minute < snapshot.sim_minute:
         raise TransitionError("Event cursor or simulation time moved backwards.")
-    if len(snapshot.journal) >= MAX_EVENTS:
+    if count(snapshot) >= MAX_EVENTS:
         raise TransitionError("Journal capacity reached; no history was discarded.")
     evidence, beliefs, added = _project(snapshot, event)
+    archived, journal = split((*snapshot.journal, event))
     result = Snapshot(
         genesis=snapshot.genesis,
         revision=snapshot.revision + 1,
@@ -34,7 +47,8 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
         sim_minute=event.sim_minute,
         evidence=evidence,
         beliefs=beliefs,
-        journal=(*snapshot.journal, event),
+        archive=(*snapshot.archive, *(EventArchive(events=block) for block in archived)),
+        journal=journal,
     )
     return Transition(snapshot=result, added_roots=added)
 

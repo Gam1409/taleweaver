@@ -24,12 +24,13 @@ class MotiveSource(Contract):
         "declared_goal",
         "commitment",
         "report",
+        "world_observation",
         "subjective_belief",
     ]
     text: str = Field(min_length=1, max_length=2000)
     provenance_id: str = Field(min_length=1, max_length=100)
     subject_id: str = Field(min_length=1, max_length=100)
-    status: Literal["authored", "declared", "reported", "tentative", "challenged"]
+    status: Literal["authored", "declared", "reported", "tentative", "challenged", "witnessed"]
 
 
 class ResolvedMotive(Contract):

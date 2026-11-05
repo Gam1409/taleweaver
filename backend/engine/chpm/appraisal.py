@@ -3,6 +3,7 @@
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import Assessment, Revision
 from backend.engine.chpm.core.contracts import Citation, Interpret
+from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.ports import accept_interpretation
 from backend.engine.chpm.host_state import Mind, fingerprint
 from backend.engine.chpm.kernel import ChpmError
@@ -20,7 +21,7 @@ def accept(
             raise ChpmError("CHPM appraisal repeats a proposition in one batch.")
         seen.add(body.belief_id)
         accepted.append(body.record_id)
-        if any(event.event_id == body.record_id for event in snapshot.journal):
+        if any(event.event_id == body.record_id for event in events(snapshot)):
             continue
         snapshot = accept_interpretation(
             snapshot,

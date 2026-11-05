@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from backend.engine.chpm import episodic_memory, host_observations
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source
@@ -22,17 +23,25 @@ class Window:
         }
 
 
-def build(mind: Mind) -> Window:
+def build(mind: Mind, *, query: str = "") -> Window:
     available = [
         (entry.id, mind.sources[entry.event_id])
         for entry in mind.snapshot.evidence
-        if entry.event_id in mind.sources and mind.sources[entry.event_id].kind == "speech"
+        if entry.event_id in mind.sources
+        and mind.sources[entry.event_id].kind in {"speech", "world_event"}
     ]
     selected = available[-6:]
     sources = {
         f"e{index}": (record_id, source, source.text[:1000])
         for index, (record_id, source) in enumerate(selected, 1)
     }
+    recalled, recall_status = episodic_memory.recall(mind, available, query)
+    sources.update(
+        {
+            f"r{index}": (item.record_id, item.source, item.fragment)
+            for index, item in enumerate(recalled, 1)
+        }
+    )
     # These are visible excerpts, not permission to cite the omitted remainder.
     beliefs = {
         f"b{index}": belief
@@ -41,11 +50,13 @@ def build(mind: Mind) -> Window:
         and len(belief.statement) <= 240
         and belief.about_id != mind.genesis.scope.observer_id
     }
+    facts = host_observations.previous(mind)
     subjects = tuple(
         sorted(
             (
                 {s.speaker_id for _, s, _ in sources.values()}
                 | {b.about_id for b in beliefs.values()}
+                | set(facts.visible_actor_ids if facts else ())
             )
             - {mind.genesis.scope.observer_id}
         )
@@ -66,14 +77,24 @@ def build(mind: Mind) -> Window:
                 {
                     "source_id": alias,
                     "speaker_id": source.speaker_id,
-                    "kind": "reported",
+                    "kind": "reported" if source.kind == "speech" else "witnessed",
                     "text": text,
                     "excerpted": len(text) < len(source.text),
                 }
                 for alias, (_, source, text) in sources.items()
             ],
             "existing_beliefs": claims,
-            "evidence_omitted": len(available) - len(selected),
+            "evidence_omitted": len(available) - len(sources),
             "beliefs_omitted": len(mind.snapshot.beliefs) - len(beliefs),
+            "episodic_recall": recall_status,
+            "recollected_episodes": [
+                {
+                    "source_id": f"r{index}",
+                    "episode_id": item.episode_id,
+                    "detail": "fragment",
+                    "historical": True,
+                }
+                for index, item in enumerate(recalled, 1)
+            ],
         },
     )

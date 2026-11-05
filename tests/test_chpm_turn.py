@@ -64,7 +64,15 @@ class ChpmRoles(TurnRoles):
         supplied = json.loads(payload)
         self.proposal_inputs.append(supplied)
         assert "recent_dialogue" not in supplied
-        assert "HIDDEN_RING" not in payload
+        # Live cognition may know its OWN possessions; shadow keeps the old input.
+        if "psychological_state" in supplied:
+            frame = json.loads(
+                supplied["psychological_state"]["current_host_observations"][0]["text"]
+            )
+            assert frame["owned_items"] == [{"id": "HIDDEN_RING", "name": "Hidden ring"}]
+            assert "ABSENT" not in frame["visible_actor_ids"]
+        else:
+            assert "HIDDEN_RING" not in payload
         return json.dumps(
             {
                 **(

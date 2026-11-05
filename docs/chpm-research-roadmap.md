@@ -67,9 +67,11 @@ by default. Off and shadow modes do not advance the new core.
   requests do not silently replace it. New declared goals/commitments remain in
   the pilot's separate source-bound agenda. Explicit identity migration is not yet
   available; disabling/re-enabling CHPM does not reset the baseline.
-- The current witnessed host frame contains only the selected, physically present
-  observer's ID and authoritative scene ID. It deliberately excludes hidden actors,
-  private memories, scene prose and unverified outcomes. Approved player excerpts
+- The current witnessed host frame contains the observer's authoritative scene,
+  visible co-present NPC IDs, own possessions and known worn item IDs. Changes
+  since the previous observation form a separate witnessed source, with unknown
+  causes. It excludes hidden actors, other inventories, private memories, scene
+  prose and unverified outcomes. See [world perception](chpm-world-perception.md). Approved player excerpts
   and reviewed assistant speech are stored as **reports**, not world facts.
   Observations begin when enabled; past events are not reconstructed automatically.
 - The full state lives in `entity_states.__chpm__.minds`: original genesis,
@@ -90,11 +92,13 @@ by default. Off and shadow modes do not advance the new core.
   baseline separate: observations from a completed reply cannot leak into retry.
   The owner receives counts; full private state is returned only to administrators
   in the existing CHPM inspection API. No new frontend inspection panel is added.
-- Limits remain explicit: 32 archived NPC identities and 512 events per observer.
+- Limits remain explicit: 32 psychological identities, 256 active events and
+  8,192 total archived/active events per observer, with 2,048 beliefs.
   [Capacity admission](chpm-memory-lifecycle.md) now checks a whole-turn reserve
   before CHPM inference, warns in settings and requires an explicit pause/Standard
-  selection instead of failing midway or dropping history. Long-running consolidation
-  is still required. Verified replay prefixes are cached with bounded memory.
+  selection instead of failing midway or dropping history. Exact archival is
+  implemented; semantic consolidation remains future work. Verified replay
+  prefixes are cached with bounded memory.
   Model context includes one current host frame and at most
   eight existing subjective beliefs, not the full event journal. Existing input
   character/call limits still apply; more prompt text does not mean free tokens.
@@ -107,8 +111,9 @@ validates the complete assessment batch **before** intent selection; the reviewe
 reply still commits the batch atomically. Shadow retains the older comparison
 path. No additional LLM calls are added, and CHPM remains off by default.
 
-`appraisal_context` exposes at most six recent speech sources with excerpts of up
-to 1,000 characters, eight recent beliefs and known subject IDs. Excerpts and
+`appraisal_context` exposes at most six recent speech/world-change sources with
+excerpts of up to 1,000 characters, up to three older 300-character fragments
+retrieved by perceived lexical cues, eight recent beliefs and known subject IDs. Excerpts and
 omitted counts are labelled. Citations must match the actual visible excerpt,
 not a hidden remainder. Beliefs are selected by last accepted interpretation,
 not lexicographical ID. The existing input/output limits still apply; this adds
@@ -162,7 +167,7 @@ No extra call or numerical trait/relationship update is added.
 | V42–V45; T13 | Directed qualitative relationship expectations; tests preserve other people/domains | Numerical relationship/affect dynamics are not implemented |
 | V57, V59; T08, T12, T22 | Observations versus inference/reflection; root deduplication | Retrieval/consolidation policies are not complete |
 | V65–V69; T01, T03, T23–T25 | Revision/cursor/event checks, atomic host persistence, replay, validated restore, rewind and session copy | Distributed branch merge and accepted RNG tape are later work |
-| T02, T06 | Other observers' unavailable citations are rejected; live host frame exposes only own scene | Speech perception/review still depends on model interpretation |
+| T02, T06 | Other observers' unavailable citations are rejected; live host frame exposes own scene, own possessions and visible NPC IDs | Speech perception/review still depends on model interpretation |
 | T04, T27–T28 | No wall-clock transitions, model failure event, or model dependency | Catch-up scheduler/pending barrier integration not implemented |
 | T09 | Independent conflicting evidence produces a tracked challenged belief | No claim of empirical accuracy of belief revision |
 
@@ -190,14 +195,14 @@ pilot's production `finish` boundary in an isolated in-memory host. Failed steps
 do not become memories or personality events. External events are authored;
 retrieval is simulated. This isolated evaluation harness does not yet exercise the
 new live host adapter: its authored host scene goes to the narrator, while cognition
-receives speech observations. The new production adapter adds own-location input,
+receives speech observations. The new production adapter adds observer-local world state and differences,
 not a complete witnessed world-event vocabulary. This trajectory has only mock-based tests so far, not a
 completed live run or proof of psychological development.
 
 ## Next implementation slices
 
-Before prolonged live use, implement the [archive and subjective-memory separation](chpm-memory-lifecycle.md).
-The current explicit pause is an interim policy, not automatic consolidation.
+The [exact archive and lexical subjective-memory view](chpm-memory-lifecycle.md)
+are implemented. Total storage remains finite; semantic consolidation is future work.
 
 1. Evaluate the new source-bound candidate motives with controlled counterfactual
    pairs and source ablations. Structural grounding is implemented; semantic goal

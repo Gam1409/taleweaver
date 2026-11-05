@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any
 
 from .contracts import Event, Genesis, Snapshot
+from .history import events
 from .reducer import TransitionError, apply, initial
 
 
@@ -29,7 +30,7 @@ def restore(raw: dict[str, Any], *, expected_genesis: Genesis) -> Snapshot:
     candidate = Snapshot.model_validate(raw)
     if candidate.genesis != expected_genesis:
         raise TransitionError("Snapshot does not match the host's original identity and scope.")
-    rebuilt = replay(candidate.genesis, candidate.journal)
+    rebuilt = replay(candidate.genesis, events(candidate))
     if rebuilt != candidate:
         raise TransitionError("Snapshot projection disagrees with its accepted event journal.")
     return rebuilt
@@ -42,7 +43,7 @@ def rewind(snapshot: Snapshot, *, through_sequence: int) -> Snapshot:
     # this active projection, including its derived beliefs and source records.
     return replay(
         snapshot.genesis,
-        tuple(event for event in snapshot.journal if event.sequence <= through_sequence),
+        tuple(event for event in events(snapshot) if event.sequence <= through_sequence),
     )
 
 

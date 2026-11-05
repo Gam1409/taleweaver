@@ -30,7 +30,7 @@ def _visible_source(source: MotiveSource) -> dict:
     value = source.model_dump(exclude={"provenance_id"})
     # The speech/belief text is already in appraisal_context. Keep its resolved
     # copy in the trace, but do not spend the input budget on duplicate excerpts.
-    if source.kind in {"report", "subjective_belief"}:
+    if source.kind in {"report", "subjective_belief", "world_observation"}:
         value.pop("text")
         value["appraisal_ref"] = source.id.split("-", 1)[1]
     return value
@@ -73,11 +73,11 @@ def build(mind: Mind, entries: list[AgendaEntry], window: Window) -> Catalogue:
     sources.extend(
         MotiveSource(
             id=f"report-{alias}",
-            kind="report",
+            kind="report" if source.kind == "speech" else "world_observation",
             text=text,
             provenance_id=record_id,
             subject_id=source.speaker_id,
-            status="reported",
+            status="reported" if source.kind == "speech" else "witnessed",
         )
         for alias, (record_id, source, text) in window.sources.items()
     )
