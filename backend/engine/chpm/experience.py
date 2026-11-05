@@ -141,8 +141,15 @@ EXPERIENCE: Return experiences (0-2, [] if unwarranted), separately from beliefs
 These are tentative estimates about this observer, not measurements or trait edits.
 Each needs exact visible citations including a CURRENT observed trigger, authored/
 active-agenda personal_motive_ids, a short explanation, alternatives and unknowns.
-For affect use fear/anger/sadness/joy/shame/interest/arousal; arousal is general
-activation, NOT sexual desire. about_id=null or a known subject. For need_satisfaction
+For affect use fear/anger/sadness/joy/shame/interest/arousal/sexual_desire; arousal is
+general activation, NOT sexual desire. about_id=null or a known subject.
+sexual_desire is optional: estimate it only with a current trigger and a personal
+basis, without requiring a sexual act. about_id identifies its known target when
+grounded; null means no specified target. Omission means unassessed, not absent.
+Never infer sexual_desire from arousal, friendliness or a player's demand alone.
+Desire does not establish affection, trust, consent, obedience or an action; those
+remain separate. Do not rewrite baseline identity or goals to explain it.
+For need_satisfaction
 or need_frustration use autonomy/competence/relatedness/rest/safety, about_id=null.
 Satisfaction and frustration are independent; low satisfaction is not automatically
 frustration. Levels are absent/low/moderate/high. Unknown means no estimate, not absent.

@@ -90,7 +90,9 @@ and refusal can both fit a character. Do not require reasons to be spoken aloud.
 Traits are contextual tendencies; a tradeoff between sourced motives is allowed.
 Subjective experience is tentative context, not a new personality or required
 display of feelings. Historical states do not establish current intensity. General
-arousal does not establish desire or consent. Do not require state labels in prose.
+arousal does not establish desire or consent. An optional sexual_desire appraisal
+does not establish affection, trust, consent or an action; do not turn it into an
+obligation to approach its target or describe sexual behaviour. Do not require state labels in prose.
 Allow contextual development explicitly grounded in developing_tendencies while
 preserving the historical identity and unrelated traits; contested is not certain.
 Distinguish generic approval to keep generating from a concrete in-scene choice

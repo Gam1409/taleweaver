@@ -92,6 +92,7 @@ class ExperienceValue(Contract):
         "shame",
         "interest",
         "arousal",
+        "sexual_desire",
         "autonomy",
         "competence",
         "relatedness",
@@ -111,6 +112,7 @@ class ExperienceValue(Contract):
             "shame",
             "interest",
             "arousal",
+            "sexual_desire",
         }
         if (self.channel == "affect") != affect:
             raise ValueError("Experience dimension does not match its channel.")
@@ -182,8 +184,8 @@ class EventArchive(Contract):
 
 
 class Snapshot(Contract):
-    schema_version: Literal[3] = 3
-    transition_version: Literal["evidence-ledger-v2"] = "evidence-ledger-v2"
+    schema_version: Literal[4] = 4
+    transition_version: Literal["evidence-ledger-v3"] = "evidence-ledger-v3"
     genesis: Genesis
     revision: Sequence = 0
     cursor: Sequence = 0
@@ -199,6 +201,10 @@ class Snapshot(Contract):
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_snapshot(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("schema_version") == 3:
+            if value.get("transition_version") != "evidence-ledger-v2":
+                raise ValueError("Unsupported legacy transition version.")
+            return {**value, "schema_version": 4, "transition_version": "evidence-ledger-v3"}
         if not isinstance(value, dict) or value.get("schema_version") not in (1, 2):
             return value
         if value.get("transition_version", "evidence-ledger-v1") != "evidence-ledger-v1":
@@ -221,8 +227,8 @@ class Snapshot(Contract):
         # events and projections too; restore() still verifies them by exact replay.
         return {
             **value,
-            "schema_version": 3,
-            "transition_version": "evidence-ledger-v2",
+            "schema_version": 4,
+            "transition_version": "evidence-ledger-v3",
         }
 
 

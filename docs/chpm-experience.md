@@ -9,7 +9,8 @@ not overwritten by an experience event.
 
 ## Representations and grounding
 
-- Affect: fear, anger, sadness, joy, shame, interest and general arousal. Arousal is
+- Affect: fear, anger, sadness, joy, shame, interest, general arousal and optional
+  sexual desire. Arousal is
   general activation, not sexual desire or consent. Affect can concern a known
   subject or have no named target. Several feelings may coexist.
 - Need satisfaction and need frustration: separate channels for autonomy,
@@ -27,6 +28,16 @@ and rejects repeated grounds as a new update. A repeated event ID is idempotent.
 This validates provenance, **not the psychological correctness of the estimate**.
 A quoted demand can be interpreted as pressure; it does not establish that the
 observer has the feelings the speaker attributes to them.
+
+`sexual_desire` is an optional affect appraisal, not a required personality field.
+It can exist without a sexual act. `about_id` names a known target or remains null
+when no target is specified. An omitted appraisal is unassessed; `level=absent`
+is an explicit sourced estimate of absence. General arousal never creates this
+dimension automatically. Desire can coexist with distrust, conflicting goals or
+a decision not to act. It does not grant consent, imply affection, compel approach,
+or rewrite baseline traits. The existing current-evidence, freshness, rewind and
+reviewed-commit rules apply without an extra model call. No mature-content policy
+or image-generation prompt is changed by this addition.
 
 ## Time, persistence and expression
 
