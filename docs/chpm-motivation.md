@@ -14,7 +14,7 @@ flowchart LR
     E[Visible reports and subjective beliefs] --> C
     C --> P[Same proposal call: interpretations and motivated candidates]
     P --> V[Resolve IDs, own support, goal direction]
-    V --> S[Existing initiative and goal selection]
+    V --> S[Question gate, goal priority and personal-motive frontier]
     S --> N[Selected intention and private motives to narrator]
     N --> R[Existing narration review]
     R --> T[Atomic reply and decision trace]
@@ -66,12 +66,14 @@ review context use additional tokens. Existing character, output and call budget
 remain enforced; oversized input or malformed output fails visibly. There is no
 silent expansion of model context or truncation of the pinned character. A source
 can appear in more than one motive category (for example the authored value also
-appears as a trait); **source count is not a score** and gives no ranking bonus.
+appears as a trait). No numerical source-count score is used; exact duplicate
+aliases are deduplicated. Semantically duplicated but differently worded motives
+remain a model-quality limitation, not a solved grounding problem.
 
 Structural validity establishes that a source exists, is accessible and was
 referenced consistently. It does **not** prove that a relevance statement is
 semantically correct. The model still proposes alternatives and goal alignment;
-the existing goal/initiative selector still ranks them. This stage does not yet
+the question/goal gate and qualitative frontier select among them. This does not
 rank competing motives by calibrated psychological weight. The prose reviewer
 can also err. Neither its acceptance nor deterministic selection proves personality
 fidelity. Numerical affect, desires, needs and personality development remain
@@ -82,3 +84,28 @@ contradictory goal directions, permitted goal tradeoffs, challenged beliefs,
 source retraction, old/new serialization and real VN rollback after an invalid
 unselected alternative. Different trait profiles produce different source inputs;
 this data invariant is not a claim that their actions must always differ.
+
+## Qualitative arbitration: motive-frontier-v1
+
+Live selection now compares eligible, equally goal-aligned alternatives after the
+existing clarification/independence gate. A candidate dominates another only when
+its supported personal sources are a superset and its personal tensions a subset,
+with at least one strict improvement. Source identity and exact source text form
+sets: duplicating aliases does not add votes. Only authored identity and active
+declared agenda count in this comparison. Reported pressure and subjective beliefs
+do not become extra votes. Their semantic relevance still informs candidate
+construction, where model fallibility remains.
+
+Incomparable tradeoffs remain incomparable; the system does not invent scalar
+utility, certainty or approval rewards. Remaining ties keep the deterministic
+session/message/action hash. This is explicitly not calibrated human preference.
+Goal priority and the existing information-gap gate remain in force. Conditional
+alternatives cannot eliminate an independently available action. Necessary
+clarification remains possible. The Decision stores the compared alternatives,
+which dominated which, the policy version and the original resolved motives.
+
+Fixed-candidate counterfactual tests swap only the sourced tension and verify the
+choice changes. Separate tests cover genuine tradeoffs, duplicated aliases,
+reported pressure, question gates, and persisted trace validation. These establish
+algorithmic sensitivity, not the truth of model-generated reasons or psychological
+validity. A valid source reference alone cannot establish the meaning of a motive.

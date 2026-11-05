@@ -103,6 +103,7 @@ async def deliberate(
         raw.question_gate,
         goal=supplied["authored_goal"],
         context_hash=key,
+        motives=resolved_motives,
     )
     decision.interpretation_ids = accepted_ids
     decision.motivation_policy = motivation.POLICY

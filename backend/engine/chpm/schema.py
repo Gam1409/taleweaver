@@ -163,7 +163,9 @@ class Decision(Contract):
     context_hash: str
     proposal: Proposal
     selected: Candidate
-    policy_version: Literal["goal-first-v1", "initiative-gated-v1"] = "goal-first-v1"
+    policy_version: Literal["goal-first-v1", "initiative-gated-v1", "motive-frontier-v1"] = (
+        "goal-first-v1"
+    )
     status: Literal["selected", "delivered", "shadow"] = "selected"
     reply_id: str | None = None
     reply_revision: str | None = None
@@ -172,6 +174,7 @@ class Decision(Contract):
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
     selection_reasons: list[str] = Field(default_factory=list, max_length=4)
     question_gate: QuestionGate | None = None
+    motive_dominance: dict[ActionKind, list[ActionKind]] = Field(default_factory=dict, max_length=4)
 
     motivation_policy: Literal["source-grounded-v1"] | None = None
     candidate_motives: dict[
@@ -180,11 +183,18 @@ class Decision(Contract):
 
     @model_validator(mode="after")
     def complete_motive_trace(self) -> "Decision":
+        offered = {candidate.kind for candidate in self.proposal.candidates}
+        if any(
+            key not in offered or key in others or not set(others) <= offered
+            for key, others in self.motive_dominance.items()
+        ):
+            raise ValueError("Motive comparisons must refer to distinct offered alternatives.")
+        if self.policy_version == "motive-frontier-v1" and self.motivation_policy is None:
+            raise ValueError("Motive-based selection requires a complete source-grounded trace.")
         if self.motivation_policy is None:
             if self.candidate_motives:
                 raise ValueError("Candidate motives require their policy version.")
             return self
-        offered = {candidate.kind for candidate in self.proposal.candidates}
         if set(self.candidate_motives) != offered or self.selected.kind not in offered:
             raise ValueError("Motivation trace must cover every offered candidate.")
         return self
