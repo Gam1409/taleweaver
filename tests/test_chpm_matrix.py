@@ -86,6 +86,19 @@ def test_manifest_has_full_traits_diverse_worlds_counts_histories_and_no_calls()
     assert matrix_cli.manifest([case()], all_present=True)["max_logical_calls"] == 25
 
 
+def test_situations_reach_cognition_and_do_not_assert_private_feelings():
+    variants = [
+        matrix_cases.MatrixCase("test", "everyday", situation, 1, 0, 1, False)
+        for situation in matrix_cases.SITUATIONS
+    ]
+    assert len({item.message for item in variants}) == len(variants)
+    fear = next(item for item in variants if item.situation == "fear")
+    assert "audible crash" in fear.observed_event
+    assert "fear" not in fear.observed_event
+    attraction = next(item for item in variants if item.situation == "attraction")
+    assert not attraction.observed_event
+
+
 @pytest.mark.parametrize(
     "population,history,all_present",
     [(1, 0, False), (5, 12, False), (20, 40, False), (20, 40, True)],

@@ -54,6 +54,33 @@ records phase timing, roles, input/output characters, provider token usage when
 available, raw responses, decisions and before/after cursor/state details. Logs
 can contain private prompts if adapted to real data; keep them private.
 
+## Memory and dense-action stress suite
+
+`--suite stress` selects five additional fixtures: literal recall after forty turns,
+a paraphrase without matching cue words, a recent correction superseding an old
+fact, many actions in three turns, and brief speech surrounded by outward actions
+and a private thought. These are authored histories, not generated trajectories.
+
+```bash
+poetry run python -m backend.engine.chpm.evaluation.matrix_cli plan --suite stress
+poetry run python -m backend.engine.chpm.evaluation.matrix_cli run \
+  --suite stress --case recall-exact-h40 \
+  --endpoint https://YOUR-SERVER/v1 --model YOUR_MODEL \
+  --run-id memory-first --max-total-calls 6
+```
+
+Results include the actual perception projection and the proposal's bounded
+`context_audit`: evidence excerpts, recalled fragment aliases, retrieval counts
+and context packing tier. Check which facts reached the model before interpreting
+its answer. Current CHPM episodic retrieval is lexical; missing a paraphrase is a
+known capability limit, not evidence that semantic retrieval works. The general
+game RAG pipeline is separate and needs its own retrieval/integration tests.
+
+A server's advertised context window does not change CHPM's configured character
+budget. Large raw-model context tests must be labelled separately from a full
+CHPM turn. Count input tokens with the actual server tokenizer, leave output room,
+and preserve timeout failures rather than accepting incomplete responses.
+
 ## What to evaluate
 
 Hard tests check identity preservation, no inactive-state mutation, exact evidence,
@@ -71,4 +98,6 @@ Use the existing paired/trajectory harness for baseline comparisons and consecut
 generated turns. The new matrix isolates cast/history dimensions; it is not a
 controlled causal study and does not prove accurate human psychology.
 
-Automated tests use mock models only. A live run of this new matrix is still pending.
+Automated tests use mock models only. Live results are model- and configuration-
+specific; inspect their artifacts and behavioral ratings before treating the
+pilot as validated. Technical completion alone does not validate NPC psychology.

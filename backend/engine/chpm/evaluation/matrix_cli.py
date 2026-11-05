@@ -10,7 +10,7 @@ from backend.engine.chpm.evaluation import matrix_cases
 
 def manifest(cases: list[matrix_cases.MatrixCase], *, all_present: bool = False) -> dict:
     return {
-        "suite": "chpm-cast-matrix-v1",
+        "suite": "chpm-cast-matrix-v2",
         "scope": "Synthetic source histories; production perception, cognition, scheduling, narration, review and commit. No game DB or image generation.",
         "cases": [asdict(case) for case in cases],
         "all_present": all_present,
@@ -19,7 +19,8 @@ def manifest(cases: list[matrix_cases.MatrixCase], *, all_present: bool = False)
         ),
         "token_cost": "Unknown until measured; logical call bounds exclude transport retries.",
         "rubrics": {key: value[1] for key, value in matrix_cases.SITUATIONS.items()},
-        "history": "0 or 12 same-evening turns; 40 turns across game days. Authored fixture speech, not model-generated prehistory.",
+        "history": "Authored fixture speech, not model-generated prehistory. Each case records its history length and whether events are daily or two minutes apart.",
+        "current_events": "Only explicit author-assigned public test events enter cognition as world observations. Feelings are not supplied as external facts.",
         "review": [
             "Trace decision changes to personal motives and observed sources.",
             "Compare characters' choices, not just wording or warmth.",
@@ -75,7 +76,7 @@ async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "run"))
-    parser.add_argument("--suite", choices=("smoke", "large", "full"), default="smoke")
+    parser.add_argument("--suite", choices=("smoke", "large", "full", "stress"), default="smoke")
     parser.add_argument("--case", action="append", default=[], dest="cases")
     parser.add_argument("--all-present", action="store_true")
     parser.add_argument("--max-total-calls", type=int, default=0)

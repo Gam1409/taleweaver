@@ -1,6 +1,7 @@
 """Measure logical router calls; keep missing provider usage unknown."""
 
 import asyncio
+import json
 import time
 from collections.abc import Callable
 from typing import Any
@@ -44,6 +45,13 @@ class MeasuredModel:
             input_chars=len(system) + len(content),
         )
         self.owner.calls.append(call)
+        if call.phase == "proposal":
+            payload = json.loads(content)
+            call.context_audit = {
+                key: payload[key]
+                for key in ("actor_id", "appraisal_context", "context_packing")
+                if key in payload
+            }
         self.inner.max_tokens = self.max_tokens
         self.inner.enable_thinking = self.enable_thinking
         started = time.perf_counter()

@@ -72,6 +72,7 @@ async def run(
     after = load(host.state)
     result.update(
         calls=[call.model_dump() for call in measured.calls],
+        perceptions={key: value.model_dump() for key, value in turn.perceptions.items()},
         active=list(turn.decisions),
         inactive=list(turn.deferred_names),
         identity_unchanged=all(
@@ -119,6 +120,7 @@ async def _think(host: Any, turn: runtime.Turn, case: MatrixCase, actor: Any, mi
         message_id="input", content_hash=observed.content_hash, role="user"
     )
     change = host_observations.difference(host_observations.previous(pending), facts)
+    change = "\n".join(part for part in (change, case.observed_event) if part)
     pending = record(
         pending,
         Source(**anchor, speaker_id=actor.id, kind="host_frame", text=frame, facts=facts),

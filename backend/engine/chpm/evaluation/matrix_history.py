@@ -5,7 +5,7 @@ from typing import Any
 from backend.engine.chpm import host_observations, identity_adapter
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
-from backend.engine.chpm.evaluation.matrix_cases import HISTORY, MatrixCase
+from backend.engine.chpm.evaluation.matrix_cases import MatrixCase
 from backend.engine.chpm.host_observation_contracts import HostFacts
 from backend.engine.chpm.host_state import Mind, Source, record
 from backend.engine.chpm.kernel import digest
@@ -34,10 +34,7 @@ def seed(case: MatrixCase, actor: Any, session: str) -> Mind:
             ),
             minute=minute,
         )
-        text = (
-            HISTORY[turn % len(HISTORY)]
-            + f" This was discussion {turn + 1}; my responsibility remains part {actor.id}."
-        )
+        text = case.history_text(turn, actor.id)
         mind = record(
             mind,
             Source(

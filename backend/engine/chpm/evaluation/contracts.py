@@ -58,6 +58,7 @@ class Call(Contract):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     status: Literal["ok", "failed"] = "failed"
+    context_audit: dict = Field(default_factory=dict)
 
 
 class Result(Contract):
