@@ -8,9 +8,11 @@ from backend.engine.chpm.appraisal_contracts import (
     Assessment,
     FeltExperience,
     GroundedProposal,
+    Grounds,
     Revision,
 )
 from backend.engine.chpm.core.contracts import Contract
+from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.development_contracts import Development, DevelopmentProposal
 from backend.engine.chpm.motivation import Catalogue
 from backend.engine.chpm.motivation_contracts import Motive
@@ -33,15 +35,31 @@ class Intent(Contract):
         return value
 
 
+class NewBelief(Grounds):
+    about_id: str = Field(min_length=1, max_length=100)
+    domain: Domain
+    statement: str = Field(min_length=1, max_length=240)
+
+
 class Draft(Contract):
     choice: ChoicePreference
-    interpretations: list[Assessment | Revision] = Field(max_length=2)
+    new_beliefs: list[NewBelief] = Field(max_length=2)
+    belief_revisions: list[Revision] = Field(max_length=2)
     experiences: list[FeltExperience] = Field(default_factory=list, max_length=2)
     candidates: dict[ActionKind, Intent] = Field(min_length=2, max_length=4)
     question_gate: QuestionGate | None = None
 
+    @model_validator(mode="after")
+    def appraisal_budget(self) -> "Draft":
+        if len(self.new_beliefs) + len(self.belief_revisions) > 2:
+            raise ValueError("At most two new beliefs and revisions combined per turn.")
+        return self
+
     def materialize(self, catalogue: Catalogue) -> GroundedProposal:
-        body = self.model_dump()
+        body = self.model_dump(exclude={"new_beliefs", "belief_revisions"})
+        body["interpretations"] = [
+            Assessment(**item.model_dump()).model_dump() for item in self.new_beliefs
+        ] + [item.model_dump() for item in self.belief_revisions]
         for kind, candidate in self.candidates.items():
             body["candidates"][kind].update(_goal(candidate, catalogue))
         schema = DevelopmentProposal if isinstance(self, DevelopmentDraft) else GroundedProposal

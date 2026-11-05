@@ -42,7 +42,7 @@ class AppraisalRoles(ChpmRoles):
         if self.invalid:
             proposed["citations"][0]["quote"] = "NEVER_SAID_THIS"
         body = json.loads(result)
-        body["interpretations"] = [proposed]
+        body["belief_revisions" if existing else "new_beliefs"] = [proposed]
         if self.invalid_motive:
             body["candidates"]["DEFER"]["motives"][0]["motive_id"] = "another-npc-secret"
         return json.dumps(body)

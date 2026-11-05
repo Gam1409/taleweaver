@@ -78,15 +78,18 @@ async def deliberate(
     supplied = {
         **supplied,
         "proposal_contract": "motivated-choice-v2",
+        "appraisal_contract": "split-beliefs-v1",
         "previous_intention": prior.model_dump() if prior else None,
     }
     pinned = {}
+    pinned_beliefs = {}
     audit: list[dict] = []
     if settings.agent_steps and settings.mode == "live":
         tools, audit = await agent.investigate(
             manager, settings, usage, mind, observation, supplied
         )
         mind, pinned = tools.mind, tools.pins
+        pinned_beliefs = tools.beliefs
         supplied = {
             **supplied,
             "agent_contract": "source-handoff-v1",
@@ -122,6 +125,7 @@ async def deliberate(
         settings.model_copy(update={"max_input_chars": settings.max_input_chars - 2048}),
         instruction,
         pinned=pinned,
+        pinned_beliefs=pinned_beliefs,
     )
     key = fingerprint(payload)
     cached = existing(previous, observation, key)

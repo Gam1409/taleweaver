@@ -11,6 +11,7 @@ from backend.engine.chpm import (
     proposal_draft,
 )
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
+from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.development_contracts import DevelopmentProposal
 from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
@@ -36,6 +37,7 @@ def prepare(
     instruction: str,
     *,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
+    pinned_beliefs: dict[str, Belief] | None = None,
 ) -> Prepared:
     available = development_context.episodes(mind)
     allowed = development_context.eligible(mind, available)
@@ -53,6 +55,7 @@ def prepare(
                 schema=DevelopmentProposal,
                 wire_schema=proposal_draft.DevelopmentDraft,
                 pinned=pinned,
+                pinned_beliefs=pinned_beliefs,
                 extra={"development_context": body},
             )
             return Prepared(
@@ -75,6 +78,7 @@ def prepare(
         extra={"development_context": body},
         wire_schema=proposal_draft.Draft,
         pinned=pinned,
+        pinned_beliefs=pinned_beliefs,
     )
     return Prepared(
         *packed,

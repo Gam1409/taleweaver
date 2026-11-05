@@ -64,6 +64,19 @@ def grounded_proposal():
     )
 
 
+def wire_proposal(value=None):
+    """A current model response; internal canonical proposals keep their own schema."""
+    body = (value or grounded_proposal()).model_dump()
+    entries = body.pop("interpretations")
+    body["new_beliefs"] = [
+        {key: value for key, value in item.items() if key != "belief_id"}
+        for item in entries
+        if item.get("belief_id") is None
+    ]
+    body["belief_revisions"] = [item for item in entries if item.get("belief_id") is not None]
+    return body
+
+
 def preferred_choice(payload=None, preferred="CONTINUE", motive="goal1"):
     prior = (payload or {}).get("previous_intention")
     return {

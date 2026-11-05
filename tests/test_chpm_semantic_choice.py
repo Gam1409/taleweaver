@@ -10,14 +10,14 @@ from backend.engine.chpm.host_state import record
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import ChoicePreference, Decision, KernelState, PreviousIntention
 from tests.test_chpm_host_state import mind, source
-from tests.test_chpm_kernel import grounded_proposal, observation, preferred_choice
+from tests.test_chpm_kernel import observation, preferred_choice, wire_proposal
 
 
 def fixture(preferred="CONTINUE"):
     value = mind()
     window = appraisal_context.build(value)
     catalogue = motivation.build(value, [], window)
-    raw = grounded_proposal().model_dump()
+    raw = wire_proposal()
     raw["candidates"]["DEFER"]["motives"] = deepcopy(raw["candidates"]["CONTINUE"]["motives"])
     raw["choice"] = preferred_choice(preferred=preferred)
     proposal = Draft.model_validate(raw).materialize(catalogue)
@@ -78,7 +78,7 @@ def test_invalid_preference_has_no_hash_or_random_fallback(changes):
 
 
 def test_missing_preference_is_not_silently_derived_from_array_order():
-    raw = grounded_proposal().model_dump()
+    raw = wire_proposal()
     raw.pop("choice")
     with pytest.raises(ValidationError, match="choice"):
         Draft.model_validate(raw)
@@ -189,7 +189,7 @@ def test_saved_envelope_migrates_without_reselecting_old_decisions():
 def test_explicit_goal_label_cannot_override_a_grounded_personal_preference():
     value, window, _, _ = fixture()
     catalogue = motivation.build(value, [], window)
-    raw = grounded_proposal().model_dump()
+    raw = wire_proposal()
     raw["candidates"]["CONTINUE"]["motives"][0]["motive_id"] = "character"
     raw["candidates"]["DEFER"]["motives"][0]["motive_id"] = "goal1"
     raw["choice"]["motive_ids"] = ["character"]
@@ -212,7 +212,7 @@ def test_explicit_goal_label_cannot_override_a_grounded_personal_preference():
 
 def test_source_set_dominance_is_audited_without_pretending_to_measure_preference():
     value, window, raw, _ = fixture()
-    data = raw.model_dump()
+    data = wire_proposal(raw)
     data["candidates"]["DEFER"]["motives"].append(
         {
             "motive_id": "character",
@@ -239,7 +239,7 @@ def test_source_set_dominance_is_audited_without_pretending_to_measure_preferenc
 
 def test_unresolved_question_dependencies_still_block_conditional_actions():
     value, window, raw, _ = fixture()
-    data = raw.model_dump()
+    data = wire_proposal(raw)
     data["candidates"]["CLARIFY"] = deepcopy(data["candidates"]["CONTINUE"])
     data["candidates"]["CLARIFY"]["intention"] = "Ask whether the player wants to discuss the plan."
     data["question_gate"] = {

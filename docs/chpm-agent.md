@@ -23,12 +23,25 @@ Available tools:
 | `read_memory` | ID returned earlier in this investigation | Original observed excerpt, at most 2,000 characters; never the entire original chat message |
 | `inspect_self` | empty argument | Current host frame: own location, owned item names/IDs and worn IDs; unknowns and omissions remain explicit |
 | `visible_clothing` | present NPC ID | Session-resolved clothing projected by opaque layers and uncovered regions, with layer number and visible regions |
+| `inspect_beliefs` | subject actor ID | Up to two recent own beliefs about that person, marked tentative/challenged and subjective; never that person's private thoughts |
+| `read_belief_basis` | belief ID returned by inspection in this investigation | Up to two recent interpretations, each with up to two exact source quotes, preserving support/challenge of the proposition |
 
 Search is **lexical**, not embedding-based. The model can supply alternate cues,
 but a miss does not establish that an event never occurred. The session-wide RAG
 index, global summaries, private thoughts, and other NPCs' inventories are not
 exposed. There is no certified NPC audience ACL on those broader sources yet.
 Reusing the RAG ranker does not grant access to its global document collector.
+
+Belief inspection pins at most two propositions across the entire investigation.
+Their handles remain available in the proposal's belief and motive allowlists even
+when ordinary historical context packing would omit them. A stale/retracted belief
+cannot be read using an old handle. Evidence reads share the existing 6,000-character
+source budget; each citation is at most 300 characters, with explicit omission counts
+or unavailable/budget statuses. They do not revise beliefs themselves. Only the
+validated proposal may propose a revision, and only a reviewed turn commits it.
+Supporting/challenging a proposition never means approving/disapproving its subject.
+Retrieved quotes reach narration/review with report/witness provenance; subjective
+belief statements are not manufactured into observed world facts.
 
 Visible clothing uses canonical object metadata, session overrides, the existing
 clothing-detail setting and explicit age rules. Covered lower layers and carried
@@ -64,8 +77,23 @@ remain historical; current host facts take precedence.
   truncation flag; cosmetic verbosity cannot reject valid tool requests.
   This trace is exposed through the existing administrator-only endpoint.
 
-Host envelope version 4 migrates versions 1/2/3, retaining budgets and state, with
+Host envelope version 6 migrates versions 1–5, retaining budgets and state, with
 agent lookups defaulting to off. The core snapshot is independently versioned.
+
+### Cost of the two belief tools
+
+Local measurement against `bc33c1e6` (2026-11-05), using production prompt/schema
+serialization: the planner instructions and schema grow from 1,920 to 2,227 Unicode
+characters, **+307 per invoked round**. Roughly 80–110 English tokens is a planning
+estimate, not an Artemis tokenizer measurement. The split-belief proposal instruction
+and schema together grow by only 13 characters after removing redundant wording.
+No extra round, request allowance, output budget or endpoint is added.
+
+One fixture with a challenged promise returned 192 characters from inspection and
+758 from basis lookup; 37 exact source characters were pinned. These are fixture
+measurements, not a worst-case guarantee. Actual input usage depends on returned
+beliefs/sources and later handoff. Choosing an available round instead of stopping
+early still costs a model call. All existing input limits remain enforced.
 
 ## Local validation and pending live work
 
@@ -74,8 +102,10 @@ handles, session isolation, clothing occlusion/displacement, unknown/stale views
 canonical/session clothing data, request admission, early stop, step limits,
 malformed JSON/timeouts, successful VN commit and rollback after rejected prose.
 
-The stopped Artemis live run predates this implementation. No claim of improved
-psychological fidelity, recall quality or speed can be made from mocked tests.
+The belief tools and split-belief wire schema have only local mock coverage.
+Earlier Artemis live runs exercised memory/clothing reads and source handoff, but
+do not validate these new additions. No claim of improved psychological fidelity,
+recall quality or speed can be made from mocked tests.
 A short controlled comparison must use the same scenes with agent off/on: exact
 and paraphrased recall, revised old facts, dense short speech/actions, visible
 clothing changes, multi-session isolation, and two active NPCs. Evaluate semantic
