@@ -32,6 +32,7 @@ def build(
     recall_limit: int = 3,
     belief_limit: int = 8,
     current_message_id: str | None = None,
+    pinned: dict[str, tuple[str, Source, str]] | None = None,
 ) -> Window:
     available = [
         (entry.id, mind.sources[entry.event_id])
@@ -64,6 +65,10 @@ def build(
             for index, item in enumerate(recalled, 1)
         }
     )
+    if pinned:
+        pinned_ids = {item[0] for item in pinned.values()}
+        sources = {alias: item for alias, item in sources.items() if item[0] not in pinned_ids}
+        sources.update(pinned)
     # These are visible excerpts, not permission to cite the omitted remainder.
     beliefs = {
         f"b{index}": belief
@@ -83,6 +88,8 @@ def build(
             - {mind.genesis.scope.observer_id}
         )
     )
+    order = {entry.id: index for index, entry in enumerate(mind.snapshot.evidence)}
+    source_aliases = {item[0]: alias for alias, item in sources.items()}
     claims = relationships.claims(mind.snapshot, tuple(beliefs.values()))
     aliases = {belief.id: alias for alias, belief in beliefs.items()}
     for claim in claims:
@@ -106,24 +113,24 @@ def build(
                     "current_turn": source.message_id == current_message_id
                     if current_message_id is not None
                     else None,
-                    "evidence_order": next(
-                        i for i, (key, _) in enumerate(available) if key == record_id
-                    ),
+                    "evidence_order": order[record_id],
                 }
                 for alias, (record_id, source, text) in sources.items()
             ],
             "existing_beliefs": claims,
-            "evidence_omitted": len(available) - len(sources),
+            "evidence_omitted": len(
+                {key for key, _ in available} - {item[0] for item in sources.values()}
+            ),
             "beliefs_omitted": len(mind.snapshot.beliefs) - len(beliefs),
             "episodic_recall": recall_status,
             "recollected_episodes": [
                 {
-                    "source_id": f"r{index}",
+                    "source_id": source_aliases[item.record_id],
                     "episode_id": item.episode_id,
                     "detail": "fragment",
                     "historical": True,
                 }
-                for index, item in enumerate(recalled, 1)
+                for item in recalled
             ],
         },
     )

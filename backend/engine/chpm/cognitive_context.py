@@ -1,8 +1,8 @@
 """Fit optional historical views without dropping identity or changing saved budgets."""
 
-from backend.engine.chpm import appraisal_context, experience, inference, motivation
+from backend.engine.chpm import appraisal_context, experience, inference, motivation, proposal_draft
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
-from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
 
@@ -24,6 +24,8 @@ def pack(
     *,
     schema: type[GroundedProposal] = GroundedProposal,
     extra: dict | None = None,
+    pinned: dict[str, tuple[str, Source, str]] | None = None,
+    wire_schema: type[proposal_draft.Draft] | None = None,
 ) -> tuple[appraisal_context.Window, motivation.Catalogue, dict, dict]:
     cues = " ".join(
         source.text
@@ -40,6 +42,7 @@ def pack(
             recall_limit=recall,
             belief_limit=beliefs,
             current_message_id=observation.message_id,
+            pinned=pinned,
         )
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()
@@ -61,7 +64,7 @@ def pack(
             ids["goal_quote"] = ["", *goals]
         payload = _payload(mind, supplied, window, catalogue, index, dialogue)
         payload.update(extra or {})
-        system, content = inference.compose(instruction, payload, schema, ids)
+        system, content = inference.compose(instruction, payload, wire_schema or schema, ids)
         size = len(system) + len(content)
         if size <= settings.max_input_chars:
             return window, catalogue, payload, ids
@@ -80,7 +83,7 @@ def _payload(
 ) -> dict:
     previous = supplied.get("witnessed_utterances_not_world_facts", [])
     kept = previous[-dialogue:] if dialogue else []
-    return {
+    result = {
         **supplied,
         "witnessed_utterances_not_world_facts": kept,
         "appraisal_context": window.payload,
@@ -93,3 +96,22 @@ def _payload(
             "canonical_history_changed": False,
         },
     }
+
+    # Use a reference only when every character of the request is still present
+    # in the current evidence. This removes duplication, never observations.
+    observed = supplied.get("observation", {})
+    current = [
+        (alias, text)
+        for alias, (_, source, text) in window.sources.items()
+        if source.message_id == observed.get("message_id")
+        and source.kind == "speech"
+        and source.speaker_id == "@player"
+    ]
+    if tier == len(TIERS) - 1 and "\n".join(text for _, text in current) == observed.get(
+        "player_request"
+    ):
+        result["observation"] = {
+            key: value for key, value in observed.items() if key != "player_request"
+        }
+        result["observation"]["player_request_source_ids"] = [alias for alias, _ in current]
+    return result

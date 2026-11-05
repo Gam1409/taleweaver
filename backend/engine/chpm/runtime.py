@@ -8,6 +8,7 @@ from typing import Any
 from backend.core.game_modes import is_vn
 from backend.engine.chpm import (
     agenda,
+    agent_views,
     capacity,
     cognition,
     context,
@@ -54,6 +55,7 @@ class Turn:
     minds: dict[str, Mind] = field(default_factory=dict)
     deferred_names: dict[str, str] = field(default_factory=dict)
     reply_character_budget: int | None = None
+    agent_clothing: dict[str, dict] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -184,6 +186,8 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     turn.usage.detail = (
         f"Active NPCs: {len(active)}; present but inactive: {len(turn.deferred_names)}."
     )
+    if turn.initial.settings.mode == "live" and turn.initial.settings.agent_steps:
+        turn.agent_clothing = await agent_views.capture(manager)
     for actor in sorted(active, key=lambda item: item.id):
         await _prepare_actor(manager, turn, actor, observed)
     from backend.engine.chpm.rendering import preflight

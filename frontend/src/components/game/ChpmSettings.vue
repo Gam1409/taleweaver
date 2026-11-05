@@ -39,7 +39,7 @@ defineExpose({ save })
           <input v-model.number="draft.max_active_npcs" type="number" min="1" max="20" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" />
         </label>
         <p class="text-xs text-slate-400">Default: 3. In larger casts, process direct participants without filling spare places. With no direct participants, keep the current conversation; choose another group when its participants leave. Inactive characters keep their state and do not receive new dialogue or psychological updates. If direct participants exceed this limit, the turn stops visibly. Set 20 to process every present selected NPC, and raise the request budget accordingly. Attribution is model-based and can be mistaken.</p>
-        <p v-if="draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 25 CHPM requests including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
+        <p v-if="draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 25 CHPM requests with agent lookups off including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
         <p v-if="draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200">Selected NPCs are processed sequentially. With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
         <label class="block text-xs text-slate-300">Use existing model configuration
           <select v-model="draft.model_role" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
@@ -47,7 +47,15 @@ defineExpose({ save })
           </select>
         </label>
         <p class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs; Living World private decisions must be disabled.</p>
-        <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. Enabled mode reserves one shared proposal retry plus two requests for narration repair and repeat review.</p>
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent lookups per active NPC
+          <select v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+            <option :value="0">Off — existing decision flow</option>
+            <option :value="1">Up to 1 lookup round</option>
+            <option :value="2">Up to 2 rounds — can refine a search or read a result</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Optional, read-only lookups scoped to this session and NPC. Searches known history, checks own possessions, and reads visible clothing layers of present NPCs. Each round adds one model request with up to two local tool reads; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, or 6 for two rounds.</span>
+        </label>
+        <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</p>
         <details class="rounded-lg border border-slate-700 p-3">
           <summary class="cursor-pointer text-xs text-slate-300">Request limits</summary>
           <div class="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-300">

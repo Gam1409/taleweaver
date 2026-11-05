@@ -13,15 +13,29 @@ def manifest(
     *,
     all_present: bool = False,
     max_output_tokens: int | None = None,
+    agent_steps: int = 0,
+    max_input_chars: int | None = None,
 ) -> dict:
+    if agent_steps not in {0, 1, 2}:
+        raise ValueError("Agent rounds must be 0, 1 or 2.")
+    if max_input_chars is not None and not 8000 <= max_input_chars <= 192000:
+        raise ValueError("Input budget must be between 8000 and 192000 characters.")
+    if any(
+        (case.population if all_present else case.active) * (1 + agent_steps) + 5 > 25
+        for case in cases
+    ):
+        raise ValueError("Agent/cast combination exceeds the 25-call CHPM turn limit.")
     return {
-        "suite": "chpm-cast-matrix-v4",
+        "suite": "chpm-cast-matrix-v5",
         "scope": "Synthetic source histories; production perception, cognition, scheduling, narration, review and commit. No game DB or image generation.",
         "cases": [asdict(case) for case in cases],
         "all_present": all_present,
         "output_token_override": max_output_tokens,
+        "agent_steps": agent_steps,
+        "input_character_override": max_input_chars,
         "max_logical_calls": sum(
-            (case.population if all_present else case.active) + 6 for case in cases
+            (case.population if all_present else case.active) * (1 + agent_steps) + 6
+            for case in cases
         ),
         "token_cost": "Unknown until measured; logical call bounds exclude transport retries.",
         "rubrics": {key: value[1] for key, value in matrix_cases.SITUATIONS.items()},
@@ -40,7 +54,15 @@ def manifest(
 
 async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]) -> None:
     output_limit = getattr(args, "output_tokens", None)
-    plan = manifest(cases, all_present=args.all_present, max_output_tokens=output_limit)
+    agent_steps = getattr(args, "agent_steps", 0)
+    input_limit = getattr(args, "input_chars", None)
+    plan = manifest(
+        cases,
+        all_present=args.all_present,
+        max_output_tokens=output_limit,
+        agent_steps=agent_steps,
+        max_input_chars=input_limit,
+    )
     if plan["max_logical_calls"] > args.max_total_calls:
         raise ValueError(
             f"Plan needs up to {plan['max_logical_calls']} logical calls; quota is {args.max_total_calls}."
@@ -64,6 +86,8 @@ async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]
             all_present=args.all_present,
             timeout=args.timeout,
             max_output_tokens=output_limit,
+            agent_steps=agent_steps,
+            max_input_chars=input_limit,
         )
         calls += len(result["calls"])
         target = storage.path(folder, "results.jsonl")
@@ -106,6 +130,12 @@ def main() -> None:
         choices=range(512, 8193),
         help="Explicit CHPM output limit; also sets temporary endpoint role limits. Saved role limits still apply with --user.",
     )
+    parser.add_argument("--agent-steps", type=int, choices=(0, 1, 2), default=0)
+    parser.add_argument(
+        "--input-chars",
+        type=int,
+        help="Explicit input character budget, unchanged across an off/on comparison.",
+    )
     parser.add_argument("--case", action="append", default=[], dest="cases")
     parser.add_argument("--all-present", action="store_true")
     parser.add_argument("--max-total-calls", type=int, default=0)
@@ -120,7 +150,13 @@ def main() -> None:
     if args.action == "plan":
         print(
             json.dumps(
-                manifest(cases, all_present=args.all_present, max_output_tokens=args.output_tokens),
+                manifest(
+                    cases,
+                    all_present=args.all_present,
+                    max_output_tokens=args.output_tokens,
+                    agent_steps=args.agent_steps,
+                    max_input_chars=args.input_chars,
+                ),
                 ensure_ascii=False,
                 indent=2,
             )

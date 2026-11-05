@@ -1,5 +1,6 @@
 """Account for every input fragment; classification remains a fallible model task."""
 
+import re
 from typing import Literal
 
 from pydantic import Field
@@ -29,7 +30,11 @@ class Projection(Contract):
 def index(message: str) -> dict[str, str]:
     if len(message) > MAX_OBSERVED_CHARS:
         raise ChpmError("CHPM perception input exceeds 6000 characters; no fragments were dropped.")
-    result = passages.index(message)
+    # Isolate paired quotations before sentence splitting. This separates short
+    # speech after a parenthetical thought without declaring all quotes public.
+    pieces = re.split(r'("[^"\n]+"|«[^»\n]+»|“[^”\n]+”)', message)
+    chunks = [chunk for piece in pieces for chunk in passages.index(piece).values()]
+    result = {f"p{index}": chunk for index, chunk in enumerate(chunks)}
     if len(result) > MAX_FRAGMENTS:
         raise ChpmError(
             "CHPM perception needs more than 32 fragments; split this dense message. No fragments were dropped."

@@ -10,6 +10,7 @@ export interface ChpmSettings {
   max_input_chars: number
   max_calls_per_turn: number
   memory_limit: number
+  agent_steps?: number
 }
 
 export interface ChpmStatus {
@@ -42,7 +43,7 @@ export function useChpmSettings(sessionId: () => string) {
   const error = ref('')
   const dirty = computed(() => !!status.value && JSON.stringify(draft.value) !== JSON.stringify(status.value.settings))
   const minimumCalls = computed(() => !draft.value || draft.value.mode === 'off'
-    ? 0 : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3) + (draft.value.mode === 'live' ? 5 : 1))
+    ? 0 : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3) * (1 + (draft.value.mode === 'live' ? (draft.value.agent_steps ?? 0) : 0)) + (draft.value.mode === 'live' ? 5 : 1))
   const budgetWarning = computed(() => !!draft.value && draft.value.max_calls_per_turn < minimumCalls.value)
   const historyWarnings = computed(() => draft.value?.mode !== 'live' ? [] : draft.value.actor_ids.flatMap(id => {
     const capacity = status.value?.history_capacity?.[id]

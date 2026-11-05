@@ -288,14 +288,15 @@ from passing the kernel's program-invariant tests.
 
 ## Contract versions and perception granularity
 
-`KernelState.schema_version=2` versions the host/session envelope;
-`Snapshot.schema_version=3` separately versions each observer's core history layout,
+`KernelState.schema_version=3` versions the host/session envelope;
+`Snapshot.schema_version=4` separately versions each observer's core history layout,
 including `Experience` events and their derived `experiences` projection.
-`transition_version=evidence-ledger-v2` identifies the reducer contract with that
-additional event type.
+`transition_version=evidence-ledger-v3` identifies the experience contract including
+the optional `sexual_desire` dimension, distinct from general arousal.
 They are different contracts and need not increment together.
 
-The new reader migrates pilot snapshots 1/2 with `evidence-ledger-v1` without
+The new reader migrates pilot snapshots 1/2 with `evidence-ledger-v1` and snapshot 3
+with `evidence-ledger-v2` without
 discarding events, source IDs, beliefs or experiences. It also accepts the earlier
 pilot's unversioned Experience addition to schema 2. Activation still requires
 exact replay to match the saved projection. Unknown versions are rejected; there
@@ -368,3 +369,7 @@ Twenty active NPCs require a reserve of 25 CHPM calls plus the separate narrator
 These bounds do not include transport retries. Successful calls consume no unused
 reserve. The former model's live measurements do not establish the reliability of
 these revisions; repeat the same fixtures with each comparison model.
+
+## Optional agent lookups
+
+See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, visible clothing, call budgets and trace semantics. The feature defaults to off; envelope versions 1/2 migrate to 3 without enabling it.

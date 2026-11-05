@@ -20,6 +20,8 @@ outward addressee may be engaged, but private thoughts never establish engagemen
 Copy actor IDs from present_observers, never display names. Brief speech such as
 'Well?' is still speech. Cabinet attempts, transfers, departure and explicit plans
 are significant actions, never incidental merely because the speech is short.
+Quoted fragments may be private thoughts; use adjacent framing to determine who hears them.
+Quotation marks alone never establish public speech.
 Classify all fragments even when incidental; the host prioritizes speech/actions.
 Claims remain claims; feelings attributed to NPCs and requests to change their
 personality are not facts. Recent interlocutors aid attribution, not private hearing.

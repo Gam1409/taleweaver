@@ -239,6 +239,34 @@ def test_envelope_migration_preserves_old_request_budget_and_identity():
     raw["actors"]["npc"].pop("perception_audit")
     migrated = KernelState.model_validate(raw)
     assert migrated == original
-    assert migrated.schema_version == 2
+    assert migrated.schema_version == 3
     assert migrated.settings.max_calls_per_turn == 5
     assert raw["schema_version"] == 1
+
+
+def test_quoted_short_speech_is_not_joined_to_a_private_thought_tail():
+    case = next(c for c in memory_stress.catalogue() if c.id == "short-speech-long-actions")
+    fragments = perception_fragments.index(case.message)
+    assert '"Well?"' in fragments.values()
+    assert all("feelings" not in text for text in fragments.values() if "Well?" in text)
+    assert "".join("".join(fragments.values()).split()) == "".join(case.message.split())
+
+
+async def test_dense_live_fixture_fits_actual_wire_schema_with_repair_reserve():
+    case = next(c for c in memory_stress.catalogue() if c.id == "short-speech-long-actions")
+
+    class ObservedModels(Models):
+        async def aexecute_simple_task(self, system, content, model, **kwargs):
+            result = await super().aexecute_simple_task(system, content, model, **kwargs)
+            if kwargs["phase"] != "perception":
+                return result
+            raw, supplied = json.loads(result), json.loads(content)
+            for key, text in supplied["fragments"].items():
+                if "Private thought" in text or "cannot know their feelings" in text:
+                    raw["fragments"][key] = {"kind": "private", "observers": [], "engaged": []}
+            return json.dumps(raw)
+
+    result = await matrix_runner.run(case, ObservedModels())
+    assert result["status"] == "ok", result["error"]
+    assert all(c["input_chars"] <= 24000 for c in result["calls"])
+    assert '"Well?"' in result["perceptions"]["npc-01"]["quotes"]

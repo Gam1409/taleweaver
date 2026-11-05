@@ -46,7 +46,13 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
     interpretations = GroundedProposal.model_json_schema()["properties"]["interpretations"][
         "maxItems"
     ]
-    assert 2 + excerpts + 1 + heard == capacity.SOURCE_RESERVE
+    from backend.engine.chpm.agent_contracts import Step
+
+    lookups = (
+        Settings.model_json_schema()["properties"]["agent_steps"]["maximum"]
+        * Step.model_json_schema()["properties"]["requests"]["maxItems"]
+    )
+    assert 2 + excerpts + 1 + heard + lookups == capacity.SOURCE_RESERVE
     experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]
     assert capacity.SOURCE_RESERVE + interpretations + experiences + 2 == capacity.EVENT_RESERVE
     assert experiences == capacity.EXPERIENCE_RESERVE

@@ -21,6 +21,7 @@ class Settings(Contract):
     max_input_chars: int = Field(default=24000, ge=8000, le=192000, strict=True)
     max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
+    agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
 
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
@@ -164,6 +165,7 @@ class ProposalOptions(Contract):
 
 
 class Decision(Contract):
+    agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
     perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
     actor_id: str
     observation: Observation
@@ -225,13 +227,13 @@ class Usage(Contract):
 
 
 class KernelState(Contract):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
 
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_envelope(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("schema_version") == 1:
-            return {**value, "schema_version": 2}
+        if isinstance(value, dict) and value.get("schema_version") in {1, 2}:
+            return {**value, "schema_version": 3}
         return value
 
     revision: int = Field(default=0, ge=0)

@@ -10,10 +10,10 @@ from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
-# up to twelve heard passages and two developmental reflections. A single
+# up to twelve heard passages, four tool observations and two developmental reflections. A single
 # observer may receive all heard entries even in a twenty-character scene.
-EVENT_RESERVE = 53
-SOURCE_RESERVE = 47
+EVENT_RESERVE = 57
+SOURCE_RESERVE = 51
 BELIEF_RESERVE = 3
 EXPERIENCE_RESERVE = 2
 
@@ -23,7 +23,9 @@ def required_calls(settings: Settings, count: int | None = None) -> int:
         return 0
     actors = roster.active_limit(settings) if count is None else count
     # Perception + proposals; live also needs review and a repair/review pair.
-    return actors + (5 if settings.mode == "live" else 1)
+    return actors * (1 + (settings.agent_steps if settings.mode == "live" else 0)) + (
+        5 if settings.mode == "live" else 1
+    )
 
 
 def inspect(mind: Mind) -> dict:
@@ -69,7 +71,7 @@ def ensure_budget(state: KernelState, actors: list[str]) -> None:
         raise ChpmError(
             f"CHPM is paused before model requests: this turn needs a budget of at least {required} "
             "requests, including perception and (in live mode) one shared proposal retry, "
-            "one narration repair and repeat review. "
+            "one narration repair, repeat review and configured agent lookups. "
             "Increase Requests per turn in session NPC behavior settings. No history was changed."
         )
 

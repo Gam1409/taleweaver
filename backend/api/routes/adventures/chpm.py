@@ -139,7 +139,7 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
         raise HTTPException(
             422,
             f"The request budget must be at least {required}: perception, selected NPCs, "
-            "and in live mode review plus one repair and repeat review.",
+            "and in live mode agent rounds, proposal retry, review, narration repair and repeat review.",
         )
     ids = {row["id"] for row in await _characters(db, state)}
     if not set(settings.actor_ids) <= ids:

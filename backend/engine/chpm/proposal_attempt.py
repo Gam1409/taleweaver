@@ -49,7 +49,7 @@ async def request(
             raise ChpmError("CHPM proposal remains invalid; no decision applied. " + feedback)
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
-        reserve = remaining + (3 if settings.mode == "live" else 0)
+        reserve = remaining * (1 + settings.agent_steps) + (3 if settings.mode == "live" else 0)
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
             raise ChpmError("CHPM proposal retry has no reserved request budget. " + feedback)
         payload = {

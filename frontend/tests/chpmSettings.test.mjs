@@ -136,3 +136,16 @@ test('capacity warning offers an explicit draft-only switch preserving stored hi
   assert.equal(f.historyWarnings.value.length, 0)
   assert.equal(f.dirty.value, true)
 })
+
+test('agent rounds reserve calls per active NPC and stay off in observe mode', async t => {
+  const f = fixture(t, async () => new Response(JSON.stringify(state())))
+  await tick()
+  f.draft.value.mode = 'live'
+  f.draft.value.actor_ids = ['A', 'B', 'C']
+  f.draft.value.agent_steps = 2
+  f.draft.value.max_calls_per_turn = 8
+  assert.equal(f.minimumCalls.value, 14)
+  assert.equal(await f.save(), false)
+  f.draft.value.mode = 'shadow'
+  assert.equal(f.minimumCalls.value, 4)
+})

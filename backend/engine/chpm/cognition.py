@@ -4,6 +4,7 @@ from typing import Any
 
 from backend.engine.chpm import (
     agenda,
+    agent,
     appraisal,
     development,
     development_request,
@@ -18,7 +19,7 @@ from backend.engine.chpm import (
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
 from backend.engine.chpm.host_state import Mind
-from backend.engine.chpm.kernel import existing, fingerprint, select
+from backend.engine.chpm.kernel import ChpmError, existing, fingerprint, select
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
@@ -70,8 +71,31 @@ async def deliberate(
     mind: Mind,
     previous: Decision | None = None,
 ) -> tuple[Decision, Mind]:
+    if mind.genesis.scope.observer_id != actor_id:
+        raise ChpmError("CHPM cognition belongs to another NPC.")
     supplied = {**supplied, "proposal_contract": "grounded-intents-v2"}
-    instruction = prompts.PROPOSE + INSTRUCTIONS + motivation.INSTRUCTIONS + experience.INSTRUCTIONS
+    pinned = {}
+    audit: list[dict] = []
+    if settings.agent_steps and settings.mode == "live":
+        tools, audit = await agent.investigate(
+            manager, settings, usage, mind, observation, supplied
+        )
+        mind, pinned = tools.mind, tools.pins
+        supplied = {
+            **supplied,
+            "agent_lookup_status": [
+                {"tool": request["tool"], "status": result["status"]}
+                for step in audit
+                for request, result in zip(step["requests"], step["results"], strict=True)
+            ],
+        }
+    instruction = (
+        prompts.PROPOSE
+        + INSTRUCTIONS
+        + motivation.INSTRUCTIONS
+        + experience.INSTRUCTIONS
+        + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives."
+    )
     (
         window,
         motives,
@@ -88,6 +112,7 @@ async def deliberate(
         entries,
         settings.model_copy(update={"max_input_chars": settings.max_input_chars - 2048}),
         instruction,
+        pinned=pinned,
     )
     key = fingerprint(payload)
     cached = existing(previous, observation, key)
@@ -120,6 +145,7 @@ async def deliberate(
             context_hash=key,
             motives=resolved_motives,
         )
+        decision.agent_audit = audit
         decision.interpretation_ids = accepted_ids
         decision.experience_ids = experience_ids
         decision.development_ids = development_ids
@@ -132,8 +158,7 @@ async def deliberate(
         manager,
         settings,
         usage,
-        instruction
-        + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives.",
+        instruction,
         payload,
         proposal_draft.DevelopmentDraft if schema is DevelopmentProposal else proposal_draft.Draft,
         identifiers,

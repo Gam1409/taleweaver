@@ -32,6 +32,8 @@ async def run(
     all_present: bool = False,
     timeout: float = 120,
     max_output_tokens: int | None = None,
+    agent_steps: int = 0,
+    max_input_chars: int | None = None,
 ) -> dict:
     cast = actors(case)
     active = case.population if all_present else case.active
@@ -39,15 +41,18 @@ async def run(
         mode="live",
         actor_ids=[a.id for a in cast],
         max_active_npcs=active,
-        max_calls_per_turn=active + 5,
-        max_input_chars=96000 if active > 3 else 24000,
+        agent_steps=agent_steps,
+        max_calls_per_turn=active * (1 + agent_steps) + 5,
+        max_input_chars=max_input_chars
+        if max_input_chars is not None
+        else (96000 if active > 3 else 24000),
         max_output_tokens=max_output_tokens
         if max_output_tokens is not None
         else (8192 if case.population > 3 else 2048),
     )
     session = "matrix-" + case.id
     before = KernelState(settings=settings, minds={a.id: seed(case, a, session) for a in cast})
-    measured = MeasuredFactory(factory, limit=active + 6, timeout=timeout)
+    measured = MeasuredFactory(factory, limit=active * (1 + agent_steps) + 6, timeout=timeout)
     minute = case.history_turns * (1440 if case.daily else 2) + 1
     host = SimpleNamespace(
         game_id=session,
