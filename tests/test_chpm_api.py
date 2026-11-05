@@ -142,3 +142,46 @@ async def test_perception_requires_a_request_budget_and_mode_switch_clears_memor
     response = await auth_client.patch(PATH, json=update("live", revision=1))
     assert response.status_code == 200
     assert response.json()["memory"] == {}
+
+
+async def test_agenda_survives_mode_switch_without_leaking_into_retry_baseline(
+    auth_client, chpm_world
+):
+    from tests.test_chpm_agenda import undertaking
+
+    assert (await auth_client.patch(PATH, json=update("live"))).status_code == 200
+    async with TestSessionLocal() as db:
+        saved = await capture(db, "portrait-session")
+        db.add(
+            TurnReplay(
+                session_id="portrait-session", before=saved, input_text="Hello", status="ready"
+            )
+        )
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        value = deepcopy(state.entity_states)
+        value[KEY]["agenda"] = [undertaking(actor="NPC_NEW").model_dump()]
+        state.entity_states = value
+        await db.commit()
+    response = await auth_client.patch(PATH, json=update("off", revision=1))
+    assert response.status_code == 200, response.text
+    assert response.json()["agenda_counts"] == {"active": 1, "closed": 0}
+    assert len(response.json()["agenda"]) == 1
+    async with TestSessionLocal() as db:
+        replay = await db.get(TurnReplay, "portrait-session")
+        assert replay.before["state"]["entity_states"][KEY]["agenda"] == []
+        current_snapshot = await capture(db, "portrait-session")
+        await restore(db, "portrait-session", saved)
+        await db.commit()
+        assert (await auth_client.get(PATH)).json()["agenda"] == []
+        await restore(db, "portrait-session", current_snapshot)
+        user = await db.scalar(select(User).where(User.username == "test_user"))
+        user.role = "user"
+        await db.commit()
+    public = (await auth_client.get(PATH)).json()
+    assert public["agenda"] == []
+    assert public["agenda_counts"]["active"] == 1
+    response = await auth_client.patch(PATH, json=update("live", revision=2))
+    assert response.status_code == 200, response.text
+    assert response.json()["agenda_counts"]["active"] == 1

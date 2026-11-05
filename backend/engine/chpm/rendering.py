@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import inference, prompts
+from backend.engine.chpm import agenda, inference, prompts
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.runtime import Turn, contract, current
 from backend.engine.chpm.schema import Verdict
@@ -72,6 +72,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     if verdict.matches and verdict.issues:
         raise ChpmError("CHPM validator returned a contradictory verdict.")
     _validate_hearing(turn, verdict, text)
+    agenda.validate_evidence(turn.decisions, verdict)
     return verdict
 
 

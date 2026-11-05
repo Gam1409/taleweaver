@@ -23,6 +23,7 @@ session should not have two private decision systems controlling the same NPC.
 
 Changing mode or selection clears the pilot's private decision memory, including
 the retry baseline. It does not undo world events, inventory, or published story.
+The separate declared-agenda ledger survives mode and selection changes.
 Changing only request limits preserves current memory. Checkpoint restore restores
 the saved mode and memory along with other session state.
 
@@ -33,7 +34,8 @@ The pure kernel records provenance, rejects stale/conflicting observations,
 validates authored-goal citations, deduplicates candidate kinds, and selects an
 intention with a versioned policy. It does not introduce numerical personality,
 relationship, attachment, needs, or mood scales, background reflection, new
-physical actions, or automatic promises.
+physical actions, or automatic world progress. Selected dialogue may now explicitly
+create or close declared goals and commitments through the ledger below.
 
 The cognitive input contains the selected NPC's authored character/goal/profile,
 projected observable excerpts from the player request, and a bounded window of
@@ -113,16 +115,78 @@ audibility is still model-assisted. Observe mode retains only projected player
 observations because its ordinary narration is not reviewed by CHPM.
 
 Old quotations leave the configured window with an explicit eviction count.
-This is a bounded transcript, not an obligation ledger or long-term belief graph.
-Setting the window to zero stops recalling previous quotations. The CHPM settings
+The transcript is separate from the declared-agenda ledger; it is not a long-term
+belief graph.
+Setting the window to zero stops transcript recall; it does not erase the agenda. The CHPM settings
 endpoint exposes memory contents only in the administrator trace; ordinary owners
 see counts. Existing explicitly enabled raw session debug and save exports retain
 their established access to the complete session state.
+
+## Declared goals and commitments (stage three)
+
+A candidate may optionally propose one `agenda_change`: declare a personal `goal`
+or `commitment`, explicitly `withdraw` an active entry, or `report_done`. The
+selected change becomes part of the narrator contract. The existing live reviewer
+must provide an exact quotation within that NPC's attributed speech expressing
+that specific change. A missing, extra, foreign, or non-spoken evidence entry
+fails visibly before publication. Goals and promises are never created directly
+from a player claim, another character's words, or an unselected candidate.
+
+The host assigns IDs, validates ownership and active target IDs, requires closure
+to copy the target's text, and writes the ledger with the completed reply. Each
+creation and closure has its own message/revision/hash/quotation provenance.
+Semantic agreement, promise attribution, and paraphrased duplicates still depend
+on the model reviewer: exact quotations do not prove their interpretation.
+
+The proposal sees only its owner's source-checked active entries, including the
+original quotation. This permits returning to unfinished business beyond the
+transcript window. It does not require reciting every goal every turn or treating
+promises as orders above personality. The deterministic authored-goal ranking is
+unchanged; dynamic agenda entries inform the proposed alternatives, not a new
+fixed numerical priority. Authored character/goal fields are never rewritten.
+
+`report_done` means **the NPC said it was done**. It closes the dialogue agenda,
+not a world quest. It cannot transfer items, award rewards, move an actor, or
+prove an action happened. Closing by silence, elapsed time, or an inferred
+reaction is unsupported. Reaffirming a promise needs no new entry.
+
+The ledger has at most eight active entries per NPC and 256 total records per
+session, including closed entries. Closed records remain in the archive but are
+not sent to cognition. Exact repeated active descriptions are rejected; stable
+source-bound IDs prevent duplicate application of the same accepted change.
+There is no silent eviction or truncation at either cap: a new entry beyond the
+cap fails visibly and rolls back the turn. Archive compaction is future work;
+Standard mode remains available without discarding the ledger.
+
+Sources are rechecked before cognition independently of `memory_limit`. A missing
+or changed creation removes the entry from the usable ledger; an invalid closure
+reopens an otherwise valid entry. If reopening exceeds the active cap, preparation
+fails visibly instead of hiding obligations. Regeneration retracts matching
+creation/closure sources; checkpoints and whole-turn replay restore the historical
+ledger. Settings updates preserve the historical retry ledger rather than copying
+promises from the completed reply into its own pre-turn snapshot.
+
+Observe mode reads the existing ledger for its proposed decisions but cannot
+change it. Standard mode pauses all CHPM processing. Commitments spoken by the
+ordinary narrator while CHPM is off or in Observe are not retroactively imported,
+and ordinary-mode closures are not automatically reconciled. Existing entries
+remain historical declarations, not a guarantee of current world truth. Only
+Enabled mode publishes ledger changes after review and transaction commit.
+
+The settings panel shows counts from the last saved state. The administrator trace
+includes sources and closure reasons; ordinary owners receive counts only through
+this endpoint. The existing explicit raw-debug/export policy is unchanged.
 
 ## Requests and cost
 
 Stage two adds up to one shared perception request before individual proposals.
 Memory increases proposal input size, bounded by the same per-request limit.
+Stage three adds **no logical requests**: agenda evidence uses the existing review.
+An active entry adds up to 300 text and 600 quotation characters plus JSON/ID
+overhead to its owner's proposal (eight entries: up to 7,200 text characters plus
+overhead). The expanded schemas and optional selected change add further input/
+output tokens. Real token cost depends on language and tokenizer; the limits below
+still apply and fail visibly rather than silently dropping entries.
 
 Defaults are 1,200 output tokens per proposal/review, 24,000 input characters per
 request including instructions/schema, and six logical CHPM requests per turn.

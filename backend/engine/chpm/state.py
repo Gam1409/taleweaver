@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from backend.engine.chpm import agenda
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState
 
@@ -29,7 +30,7 @@ def controls(state: Any, actor_id: str) -> bool:
 
 def retract(state: Any, message_id: str) -> None:
     current = load(state)
-    if not current.actors and not current.memories:
+    if not current.actors and not current.memories and not current.agenda:
         return
     # Later decisions can depend on earlier speech. Clear all derived pilot
     # decisions on a source change rather than pretending they were recomputed.
@@ -38,4 +39,5 @@ def retract(state: Any, message_id: str) -> None:
         actor: [entry for entry in entries if entry.source_message_id != message_id]
         for actor, entries in current.memories.items()
     }
+    current.agenda = agenda.retract(current.agenda, message_id)
     save(state, current, expected_revision=current.revision)

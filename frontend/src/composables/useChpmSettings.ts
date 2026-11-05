@@ -20,6 +20,8 @@ export interface ChpmStatus {
   trace: unknown[]
   memory_counts: Record<string, number>
   memory: Record<string, unknown[]>
+  agenda_counts: { active: number; closed: number }
+  agenda: unknown[]
 }
 
 export function useChpmSettings(sessionId: () => string) {

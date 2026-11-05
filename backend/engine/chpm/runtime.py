@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.game_modes import is_vn
-from backend.engine.chpm import context, inference, memory, perception, prompts
+from backend.engine.chpm import agenda, context, inference, memory, perception, prompts
 from backend.engine.chpm.kernel import ChpmError, digest, existing, fingerprint, select
 from backend.engine.chpm.schema import (
+    AgendaEntry,
     Decision,
     KernelState,
     MemoryEntry,
@@ -34,6 +35,7 @@ class Turn:
     present_names: dict[str, str] = field(default_factory=dict)
     perceptions: dict[str, Perception] = field(default_factory=dict)
     memories: dict[str, list[MemoryEntry]] = field(default_factory=dict)
+    agendas: dict[str, list[AgendaEntry]] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -120,6 +122,12 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
         turn.memories[actor.id] = retained
         legacy = previous if not retained and turn.initial.settings.memory_limit else None
         supplied = await context.actor_context(manager, actor, legacy, retained)
+        turn.agendas[actor.id] = await agenda.recall(manager, actor.id, turn.initial.agenda)
+        supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
+        supplied["agenda_creation_available"] = (
+            len(turn.initial.agenda) < agenda.MAX_RECORDS
+            and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
+        )
         perceived = turn.perceptions[actor.id]
         actor_observation = observed.model_copy(
             update={
@@ -147,6 +155,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
                 goal=supplied["authored_goal"],
                 context_hash=key,
             )
+            agenda.validate_proposal(proposal, turn.agendas[actor.id])
         turn.decisions[actor.id] = decision
 
 
@@ -161,6 +170,10 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         result.actors[actor] = decision
         result.memories[actor] = turn.memories.get(actor, [])
         memory.append(result, actor, _new_memories(turn, decision, reply))
+    if turn.initial.settings.mode == "live" and turn.verdict:
+        retained_agenda = [entry for entry in result.agenda if entry.actor_id not in turn.agendas]
+        retained_agenda.extend(entry for entries in turn.agendas.values() for entry in entries)
+        result.agenda = agenda.apply(retained_agenda, turn.decisions, turn.verdict, reply)
     save(manager.state, result, expected_revision=turn.initial.revision)
     manager._chpm_turn = None
 

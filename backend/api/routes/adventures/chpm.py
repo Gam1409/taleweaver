@@ -47,6 +47,11 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
         "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
+        "agenda_counts": {
+            "active": sum(entry.closure is None for entry in current.agenda),
+            "closed": sum(entry.closure is not None for entry in current.agenda),
+        },
+        "agenda": [entry.model_dump() for entry in current.agenda] if user.role == "admin" else [],
         "memory": {
             actor: [entry.model_dump() for entry in entries]
             for actor, entries in current.memories.items()
@@ -145,6 +150,8 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         **value,
         "actors": prior.get("actors", {}) if same_mode and same_actors else {},
         "memories": prior.get("memories", {}) if same_mode and same_actors else {},
+        # Never copy promises made in the completed turn into its retry baseline.
+        "agenda": prior.get("agenda", []),
         "usage": Usage().model_dump(),
     }
     state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}

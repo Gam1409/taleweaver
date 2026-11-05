@@ -46,20 +46,23 @@ defineExpose({ save })
           </div>
           <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review. At most one repair and another review. A repair uses the Complex model with up to 4,096 output tokens. These are logical requests; provider retries may add cost.</p>
           <p class="mt-2 text-xs text-slate-400">Memory retains source-checked quotations, not assumed beliefs. Oldest quotations leave the bounded window; edited or removed sources are excluded. Set the window to 0 to stop recalling previous quotations.</p>
+          <p class="mt-2 text-xs text-slate-400">Declared goals and promises have a separate source-checked ledger: up to 8 active entries per NPC, 256 records per session. Enabled mode records selected changes only after speech review. Observe mode does not change this ledger. No additional model request is needed.</p>
         </details>
       </template>
-      <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Existing story events remain. Save between turns.</p>
+      <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Recorded goals, promises and story events remain. Standard mode pauses ledger updates; sources are checked again when enabled. Save between turns.</p>
     </fieldset>
+    <p v-if="status?.agenda_counts" class="mt-3 text-xs text-slate-400">Recorded agenda: {{ status.agenda_counts.active }} active · {{ status.agenda_counts.closed }} closed (last saved state; completion reports are not verified world outcomes).</p>
     <div v-if="status && status.usage.status !== 'idle'" class="mt-4 text-xs text-slate-400" aria-live="polite">
       Last completed turn: {{ status.usage.status }} · {{ status.usage.calls }} requests · {{ status.usage.repairs }} repairs.<br />
       {{ status.usage.input_chars }} input / {{ status.usage.output_chars }} output characters (not token counts).
       <p v-if="status.usage.memory_evictions">{{ status.usage.memory_evictions }} older quotations left the memory window this turn.</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
-    <details v-if="status?.trace.length" class="mt-3 text-xs text-slate-400">
+    <details v-if="status && (status.trace.length || status.agenda?.length)" class="mt-3 text-xs text-slate-400">
       <summary class="cursor-pointer">Administrator decision trace</summary>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.trace, null, 2) }}</pre>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.memory, null, 2) }}</pre>
+      <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.agenda, null, 2) }}</pre>
     </details>
   </details>
 </template>

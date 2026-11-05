@@ -68,12 +68,52 @@ class MemoryEntry(Contract):
     quote: str = Field(min_length=1, max_length=2000)
 
 
+class AgendaIntent(Contract):
+    action: Literal["goal", "commitment", "withdraw", "report_done"]
+    text: str = Field(min_length=1, max_length=300)
+    entry_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def valid_target(self) -> "AgendaIntent":
+        if (self.action in {"withdraw", "report_done"}) != bool(self.entry_id):
+            raise ValueError("Only closing an existing agenda entry requires its ID.")
+        return self
+
+
+class AgendaClosure(Contract):
+    reason: Literal["withdraw", "report_done"]
+    source: MemoryEntry
+
+
+class AgendaEntry(Contract):
+    id: str = Field(min_length=1, max_length=64)
+    actor_id: str
+    kind: Literal["goal", "commitment"]
+    text: str = Field(min_length=1, max_length=300)
+    source: MemoryEntry
+    closure: AgendaClosure | None = None
+
+    @model_validator(mode="after")
+    def own_speech_only(self) -> "AgendaEntry":
+        sources = [self.source] + ([self.closure.source] if self.closure else [])
+        if any(
+            item.observer_id != self.actor_id
+            or item.speaker_id != self.actor_id
+            or item.source_role != "assistant"
+            or item.kind != "own_speech"
+            for item in sources
+        ):
+            raise ValueError("Agenda evidence must be the owner's own assistant speech.")
+        return self
+
+
 class Candidate(Contract):
     kind: Literal["CONTINUE", "INITIATE", "ACCEPT", "REFUSE", "NEGOTIATE", "CLARIFY", "DEFER"]
     intention: str = Field(min_length=1, max_length=400)
     goal_alignment: Literal["supports", "neutral", "conflicts", "unknown"] = "unknown"
     goal_quote: str = Field(default="", max_length=300)
     reconsider_if: str = Field(min_length=1, max_length=200)
+    agenda_change: AgendaIntent | None = None
 
 
 class Proposal(Contract):
@@ -112,10 +152,13 @@ class KernelState(Contract):
     # A high-water record per actor rejects old events without an unbounded journal.
     actors: dict[str, Decision] = Field(default_factory=dict, max_length=3)
     memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=3)
+    agenda: list[AgendaEntry] = Field(default_factory=list, max_length=256)
     usage: Usage = Field(default_factory=Usage)
 
     @model_validator(mode="after")
     def bounded_observer_memory(self) -> "KernelState":
+        if len({entry.id for entry in self.agenda}) != len(self.agenda):
+            raise ValueError("Duplicate CHPM agenda ID.")
         for actor, entries in self.memories.items():
             if len(entries) > 24 or any(entry.observer_id != actor for entry in entries):
                 raise ValueError("Invalid CHPM observer memory window.")
@@ -131,8 +174,13 @@ class HeardSpeech(SpokenEvidence):
     speaker_id: str
 
 
+class AgendaEvidence(SpokenEvidence):
+    quote: str = Field(min_length=1, max_length=600)
+
+
 class Verdict(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
     evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=3)
     heard: list[HeardSpeech] = Field(default_factory=list, max_length=12)
+    agenda_evidence: list[AgendaEvidence] = Field(default_factory=list, max_length=3)
