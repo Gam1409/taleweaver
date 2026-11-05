@@ -18,6 +18,7 @@ from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Contract, Settings, Usage
 from tests.test_chpm_appraisal import heard
+from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_matrix import Models
 from tests.test_chpm_motivation import candidates, catalogue
 from tests.test_chpm_runtime import prepared
@@ -91,7 +92,7 @@ def test_current_and_historical_sources_are_explicit_and_ordered():
 
 
 def test_goal_judgment_is_derived_without_trusting_retired_model_fields():
-    raw = candidates().model_dump()
+    raw = wire_proposal(candidates())
     raw["choice"] = {
         "preferred": "ACCEPT",
         "motive_ids": ["goal1"],

@@ -74,22 +74,22 @@ class GroundedProposal(Contract):
 
 
 INSTRUCTIONS = """
-APPRAISAL: Return interpretations (0-2, [] if unwarranted), candidates, optional
-question_gate; omit obsolete appraisal. Known-subject reliability, competence,
-benevolence, affection and boundaries are distinct subjective domains.
-Cite visible source_id plus exact contiguous quote. NEW beliefs have about_id,
-domain, statement, belief_id=null. Revisions have ONLY belief_id, stance, citations,
-alternatives, unknowns: support/challenge the original proposition without rewriting
-it. No duplicate beliefs, probabilities, trait edits or world effects. Alternatives
-and unknowns preserve uncertainty; empty lists do not prove certainty.
-Witnessed state changes establish neither cause nor hidden intent. Not visible
-means neither dead nor departed. Missing recall/data establishes no absence.
-Old fragments remain historical, not fresh evidence; current host facts prevail.
-Reported feelings, arousal, fear, politeness and demands do not prove agreement.
-CLARIFY needs a decision-changing external fact or the player's undecided choice,
-with two distinct answers mapped to TWO OTHER candidate keys. Prefer an equally
-useful independent action. Do not invent dependencies to stall or ask the player
-to choose this NPC's wishes/permission to speak. Contextual social questions may
-instead express curiosity/care/suspicion/negotiation when they advance the selected
-intention; do not append them habitually. Uncertainty need not cause refusal.
+APPRAISAL: new_beliefs and belief_revisions are required arrays ([] if unwarranted),
+at most TWO entries combined. Omit obsolete appraisal/interpretations.
+New entries: about_id, domain, statement; revisions: belief_id instead.
+Both: stance, citations, alternatives, unknowns. Cite visible source_id + exact quote.
+Support/challenge the STATEMENT, not the person/request; never rewrite it on revision.
+Reconsider relevant existing beliefs rather than duplicating them. An explanation
+can challenge suspicion without proving completion. Repeated grounds add no independent
+confirmation. Domains stay distinct and subjective. No probabilities, trait edits
+or world effects; empty alternatives/unknowns do not establish certainty.
+Observed changes prove neither cause nor hidden intent. Not visible means neither
+dead nor departed; missing recall proves no absence. Old fragments remain historical;
+current host facts prevail. Feelings, arousal, fear, politeness and demands prove no agreement.
+CLARIFY requires a decision-changing external fact or undecided player choice:
+two distinct answers mapped to TWO OTHER candidate keys. Prefer an equally useful
+independent action. Never invent dependencies to stall or ask the player to choose
+this NPC's wishes/permission to speak. Contextual questions may express curiosity,
+care, suspicion or negotiation when advancing the intention, not as habitual endings.
+Uncertainty need not cause refusal.
 """

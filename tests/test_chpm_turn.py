@@ -66,7 +66,11 @@ class ChpmRoles(TurnRoles):
         return json.dumps(
             {
                 **(
-                    {"interpretations": [], "choice": preferred_choice(supplied)}
+                    {
+                        "new_beliefs": [],
+                        "belief_revisions": [],
+                        "choice": preferred_choice(supplied),
+                    }
                     if "appraisal_context" in supplied
                     else {"appraisal": "A chance to talk."}
                 ),

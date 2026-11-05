@@ -51,7 +51,11 @@ class Models:
             return json.dumps(
                 {
                     **(
-                        {"interpretations": [], "choice": preferred_choice(payload)}
+                        {
+                            "new_beliefs": [],
+                            "belief_revisions": [],
+                            "choice": preferred_choice(payload),
+                        }
                         if "appraisal_context" in payload
                         else {"appraisal": "A natural continuation"}
                     ),

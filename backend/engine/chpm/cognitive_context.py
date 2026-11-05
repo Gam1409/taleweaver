@@ -2,6 +2,7 @@
 
 from backend.engine.chpm import appraisal_context, experience, inference, motivation, proposal_draft
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
+from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
@@ -25,6 +26,7 @@ def pack(
     schema: type[GroundedProposal] = GroundedProposal,
     extra: dict | None = None,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
+    pinned_beliefs: dict[str, Belief] | None = None,
     wire_schema: type[proposal_draft.Draft] | None = None,
 ) -> tuple[appraisal_context.Window, motivation.Catalogue, dict, dict]:
     cues = " ".join(
@@ -43,6 +45,7 @@ def pack(
             belief_limit=beliefs,
             current_message_id=observation.message_id,
             pinned=pinned,
+            pinned_beliefs=pinned_beliefs,
         )
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()

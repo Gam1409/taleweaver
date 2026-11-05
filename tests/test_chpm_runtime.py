@@ -18,7 +18,7 @@ from backend.engine.chpm.schema import (
 )
 from backend.engine.chpm.state import KEY, load
 from backend.engine.turn_replay import stream
-from tests.test_chpm_kernel import decision, grounded_proposal, observation, proposal
+from tests.test_chpm_kernel import decision, observation, proposal, wire_proposal
 
 
 def manager(mode="live"):
@@ -71,9 +71,7 @@ async def test_preparation_is_once_and_shadow_does_not_direct_narration(monkeypa
         AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello"])}),
     )
     mocked = AsyncMock(
-        return_value=Draft.model_validate(grounded_proposal().model_dump())
-        if mode == "live"
-        else proposal()
+        return_value=Draft.model_validate(wire_proposal()) if mode == "live" else proposal()
     )
     monkeypatch.setattr(inference, "request", mocked)
     result = await runtime.prepare(host, "Hello", [actor])

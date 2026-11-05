@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from backend.engine.chpm import episodic_memory, host_observations
+from backend.engine.chpm import agent_beliefs, episodic_memory, host_observations
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source
@@ -33,6 +33,7 @@ def build(
     belief_limit: int = 8,
     current_message_id: str | None = None,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
+    pinned_beliefs: dict[str, Belief] | None = None,
 ) -> Window:
     available = [
         (entry.id, mind.sources[entry.event_id])
@@ -77,6 +78,10 @@ def build(
         and len(belief.statement) <= 240
         and belief.about_id != mind.genesis.scope.observer_id
     }
+    selected_beliefs = agent_beliefs.pinned_view(mind.snapshot.beliefs, pinned_beliefs or {})
+    pinned_ids = {belief.id for belief in selected_beliefs.values()}
+    beliefs = {alias: belief for alias, belief in beliefs.items() if belief.id not in pinned_ids}
+    beliefs.update(selected_beliefs)
     facts = host_observations.previous(mind)
     subjects = tuple(
         sorted(

@@ -295,6 +295,17 @@ including `Experience` events and their derived `experiences` projection.
 the optional `sexual_desire` dimension, distinct from general arousal.
 They are different contracts and need not increment together.
 
+The model-facing appraisal protocol `split-beliefs-v1` uses two required arrays:
+`new_beliefs` and `belief_revisions`, at most two entries combined. New beliefs carry
+subject/domain/statement; revisions carry only an existing belief handle plus
+stance, exact citations, alternatives and unknowns. The host converts both into
+the unchanged canonical interpretation events. This is a wire-only change, not
+a saved-state migration; envelope/core versions therefore remain 6 and 4/v3.
+Old `interpretations` model responses are rejected and can use the existing single
+proposal repair. Supporting/challenging the statement is distinct from approving
+a person or complying with a request. Semantic correctness still requires model
+evaluation; schema validity alone cannot prove sound psychological inference.
+
 The new reader migrates pilot snapshots 1/2 with `evidence-ledger-v1` and snapshot 3
 with `evidence-ledger-v2` without
 discarding events, source IDs, beliefs or experiences. It also accepts the earlier

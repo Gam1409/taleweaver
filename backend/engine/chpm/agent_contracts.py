@@ -8,7 +8,14 @@ from backend.engine.chpm.schema import Contract
 
 
 class Lookup(Contract):
-    tool: Literal["search_memory", "read_memory", "inspect_self", "visible_clothing"]
+    tool: Literal[
+        "search_memory",
+        "read_memory",
+        "inspect_self",
+        "visible_clothing",
+        "inspect_beliefs",
+        "read_belief_basis",
+    ]
     argument: str = Field(default="", max_length=160)
 
     @model_validator(mode="after")
@@ -35,6 +42,9 @@ Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.
+inspect_beliefs(argument=actor_id): up to two OWN subjective beliefs about that person.
+read_belief_basis(argument=belief_id): grounds for a belief ID returned by inspect_beliefs.
+Grounds support/challenge the statement, not the person. A belief is never a world fact.
 Hidden clothing and other people's inventories are unavailable. Unknown is not empty or undressed.
 Historical reports are not world facts; newer host state wins. A search miss proves nothing.
 The tools cannot supply global history, other minds, private player thoughts, or hidden items.

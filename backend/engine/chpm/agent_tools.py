@@ -5,8 +5,9 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from backend.engine.chpm import host_observations
+from backend.engine.chpm import agent_beliefs, host_observations
 from backend.engine.chpm.agent_contracts import Lookup
+from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source, identifier, record
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation
@@ -23,6 +24,7 @@ class Tools:
     clothing: dict[str, dict]
     pins: dict[str, tuple[str, Source, str]] = field(default_factory=dict)
     exposed: dict[str, tuple[str, Source]] = field(default_factory=dict)
+    beliefs: dict[str, Belief] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
@@ -36,6 +38,10 @@ class Tools:
             return self.expose(*item, full=True) if item else {"status": "unavailable_source"}
         if lookup.tool == "inspect_self":
             return self.inspect_self()
+        if lookup.tool == "inspect_beliefs":
+            return agent_beliefs.inspect(self, lookup.argument)
+        if lookup.tool == "read_belief_basis":
+            return agent_beliefs.basis(self, lookup.argument)
         return self.visible_clothing(lookup.argument)
 
     def search(self, query: str) -> dict:
@@ -75,7 +81,15 @@ class Tools:
             ],
         }
 
-    def expose(self, key: str, source: Source, *, full: bool = False, query: str = "") -> dict:
+    def expose(
+        self,
+        key: str,
+        source: Source,
+        *,
+        full: bool = False,
+        query: str = "",
+        fragment: str | None = None,
+    ) -> dict:
         match = next(
             (
                 m
@@ -85,16 +99,22 @@ class Tools:
             None,
         )
         start = 0 if full or match is None else max(0, match.start() - 80)
-        text = source.text if full else source.text[start : start + 600]
+        text = (
+            fragment
+            if fragment is not None
+            else source.text
+            if full
+            else source.text[start : start + 600]
+        )
         alias = next(
             (a for a, item in self.pins.items() if item[0] == key), f"a{len(self.pins) + 1}"
         )
+        if alias in self.pins:
+            previous = self.pins[alias][2]
+            text = previous if text in previous else text if previous in text else source.text
         used = sum(len(item[2]) for a, item in self.pins.items() if a != alias)
         if used + len(text) > MAX_PINNED_CHARS:
             return {"status": "evidence_budget_exhausted"}
-        # Do not shrink a full source when a later search encounters it again.
-        if alias in self.pins and len(self.pins[alias][2]) > len(text):
-            text = self.pins[alias][2]
         self.pins[alias] = (key, source, text)
         self.exposed[key] = (key, source)
         return {
