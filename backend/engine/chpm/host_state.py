@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.engine.chpm.core.contracts import Event, Genesis, Observe, Snapshot
+from backend.engine.chpm.core.limits import MAX_EVENTS
 from backend.engine.chpm.core.reducer import apply
 from backend.engine.chpm.core.replay import restore, rewind
 
@@ -26,7 +27,7 @@ class Mind(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     genesis: Genesis
     snapshot: Snapshot
-    sources: dict[str, Source] = Field(default_factory=dict, max_length=512)
+    sources: dict[str, Source] = Field(default_factory=dict, max_length=MAX_EVENTS)
 
     @model_validator(mode="after")
     def consistent(self) -> "Mind":

@@ -102,6 +102,19 @@ def test_duplicate_and_stale_observations_do_not_advance_state():
     assert existing(first, observation(message_id="new", sequence=11), "context") is None
 
 
+@pytest.mark.parametrize("identifier", ["aaaa", "zzzz"])
+def test_equal_timestamps_use_host_turn_revision_never_identifier_sorting(identifier):
+    first = decision(turn_revision=7)
+    next_turn = observation(message_id=identifier, turn_revision=8)
+    assert existing(first, next_turn, "context") is None
+    with pytest.raises(ChpmError, match="older"):
+        existing(first, next_turn.model_copy(update={"turn_revision": 6}), "context")
+    legacy = decision()
+    with pytest.raises(ChpmError, match="ambiguous"):
+        existing(legacy, observation(message_id=identifier), "context")
+    assert existing(legacy, next_turn, "context") is None
+
+
 @pytest.mark.parametrize("kind", ["duplicate", "unsupported", "false-quote"])
 def test_rejects_untrusted_goal_claims_and_duplicate_kinds(kind):
     supplied = proposal()

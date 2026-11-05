@@ -115,6 +115,8 @@ async def _repair(
     )
     inference.reserve(turn.initial.settings, turn.usage, len(system) + len(payload))
     turn.usage.repairs += 1
+    # Repair rewrites the full narrator response, including unaffected NPC voices.
+    # Keep the narrator's Complex role even when cognitive proposals use Small.
     llm = inference.model_for(manager, "complex", GameMasterLLM)
     llm.enable_thinking = False
     llm.max_tokens = min(llm.max_tokens, 4096)

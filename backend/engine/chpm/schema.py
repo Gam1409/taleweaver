@@ -18,7 +18,7 @@ class Settings(Contract):
     model_role: Literal["small", "complex"] = "complex"
     max_output_tokens: int = Field(default=1200, ge=512, le=2048, strict=True)
     max_input_chars: int = Field(default=24000, ge=8000, le=48000, strict=True)
-    max_calls_per_turn: int = Field(default=6, ge=1, le=8, strict=True)
+    max_calls_per_turn: int = Field(default=7, ge=1, le=8, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
 
     @model_validator(mode="after")
@@ -41,6 +41,8 @@ class Observation(Contract):
     revision_id: str | None = None
     content_hash: str
     sequence: int = Field(ge=0)
+    # Host turn order; old snapshots retain None and their timestamp fallback.
+    turn_revision: int | None = Field(default=None, ge=0, strict=True)
     scene_id: str
     source_scene_id: str | None = None
     minute: int = Field(ge=0)

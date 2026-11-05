@@ -8,6 +8,7 @@ from typing import Any
 from backend.core.game_modes import is_vn
 from backend.engine.chpm import (
     agenda,
+    capacity,
     cognition,
     context,
     host_adapter,
@@ -107,6 +108,7 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
         actor.id: str(actor.name) for actor in actors if context.available(actor, manager.state)
     }
     try:
+        await capacity.admit(manager, state, [actor.id for actor in selected])
         await _prepare(manager, turn, message, selected)
     except Exception as exc:
         turn.usage.status = "failed"

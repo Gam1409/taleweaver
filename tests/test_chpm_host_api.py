@@ -49,4 +49,6 @@ async def test_settings_never_copy_future_core_into_retry_baseline(auth_client, 
     response = await auth_client.get(PATH)
     assert response.json()["psychology"] == {}
     assert response.json()["psychology_counts"] == {"NPC_NEW": {"observations": 1, "beliefs": 0}}
+    assert response.json()["history_capacity"]["NPC_NEW"]["used"]["events"] == 1
+    assert response.json()["history_capacity"]["NPC_NEW"]["status"] == "ready"
     assert "Independent engineer" not in response.text

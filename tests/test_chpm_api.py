@@ -144,6 +144,16 @@ async def test_perception_requires_a_request_budget_and_mode_switch_clears_memor
     assert response.json()["memory"] == {}
 
 
+async def test_live_settings_require_space_for_repair_before_enabling(auth_client, chpm_world):
+    response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=4))
+    assert response.status_code == 422
+    assert "repair" in response.json()["detail"]
+    response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=5))
+    assert response.status_code == 200
+    assert response.json()["required_call_budget"] == 5
+    assert response.json()["history_capacity"] == {}
+
+
 async def test_agenda_survives_mode_switch_without_leaking_into_retry_baseline(
     auth_client, chpm_world
 ):

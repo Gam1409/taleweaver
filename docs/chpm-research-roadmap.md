@@ -91,8 +91,11 @@ by default. Off and shadow modes do not advance the new core.
   The owner receives counts; full private state is returned only to administrators
   in the existing CHPM inspection API. No new frontend inspection panel is added.
 - Limits remain explicit: 32 archived NPC identities and 512 events per observer.
-  Exhaustion fails visibly without dropping history. Long-running consolidation
-  is still required. Model context includes one current host frame and at most
+  [Capacity admission](chpm-memory-lifecycle.md) now checks a whole-turn reserve
+  before CHPM inference, warns in settings and requires an explicit pause/Standard
+  selection instead of failing midway or dropping history. Long-running consolidation
+  is still required. Verified replay prefixes are cached with bounded memory.
+  Model context includes one current host frame and at most
   eight existing subjective beliefs, not the full event journal. Existing input
   character/call limits still apply; more prompt text does not mean free tokens.
 
@@ -192,6 +195,9 @@ not a complete witnessed world-event vocabulary. This trajectory has only mock-b
 completed live run or proof of psychological development.
 
 ## Next implementation slices
+
+Before prolonged live use, implement the [archive and subjective-memory separation](chpm-memory-lifecycle.md).
+The current explicit pause is an interim policy, not automatic consolidation.
 
 1. Evaluate the new source-bound candidate motives with controlled counterfactual
    pairs and source ablations. Structural grounding is implemented; semantic goal

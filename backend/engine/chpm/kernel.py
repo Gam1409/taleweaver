@@ -28,8 +28,14 @@ def existing(
         if old != observation or previous.context_hash != context_hash:
             raise ChpmError("CHPM source changed. Replay the complete turn before retrying.")
         return previous.model_copy(deep=True)
-    if (observation.sequence, observation.message_id) <= (old.sequence, old.message_id):
+    if observation.turn_revision is not None and old.turn_revision is not None:
+        if observation.turn_revision <= old.turn_revision:
+            raise ChpmError("CHPM rejected an observation older than its current state.")
+        return None
+    if observation.sequence < old.sequence:
         raise ChpmError("CHPM rejected an observation older than its current state.")
+    if observation.sequence == old.sequence and observation.turn_revision is None:
+        raise ChpmError("CHPM observation order is ambiguous without a host turn revision.")
     return None
 
 

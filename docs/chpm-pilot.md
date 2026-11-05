@@ -200,7 +200,7 @@ output tokens. Real token cost depends on language and tokenizer; the limits bel
 still apply and fail visibly rather than silently dropping entries.
 
 Defaults are 1,200 output tokens per proposal/review, 24,000 input characters per
-request including instructions/schema, and six logical CHPM requests per turn.
+request including instructions/schema, and seven logical CHPM requests per turn.
 The configured role's lower output limit still applies. A repair is separately
 capped at 4,096 output tokens and uses the same request-count/input-size limits.
 No private decision is requested for absent selected NPCs.
@@ -214,9 +214,13 @@ No private decision is requested for absent selected NPCs.
 
 These counts assume at least one selected NPC is present in the input's scene.
 Cross-scene input is withheld without a perception request. For three NPCs, seven
-requests are needed to allow a repair; the default six permits the initial review
-but cannot cover that repair. The system checks that two requests remain before
-starting a repair. Exhaustion is visible, not a silent switch to standard mode.
+requests are needed to allow a repair; a legacy six-call budget permits the initial
+review but cannot cover that repair. New settings now default to seven, and live settings
+changes must reserve N + 4. Older budgets still load, but turn admission checks the
+present roster before CHPM inference and requests an explicit budget adjustment.
+The system also checks that two requests remain before starting a repair.
+Exhaustion is visible, not a silent switch to standard mode. See the
+[history and capacity policy](chpm-memory-lifecycle.md) for long-session limits.
 
 The normal narrator request is additional. The legacy social request may still
 be needed for other NPCs. Router/provider retries or configured fallback may add

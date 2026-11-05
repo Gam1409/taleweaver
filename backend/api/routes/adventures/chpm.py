@@ -12,6 +12,7 @@ from backend.api.routes.adventures.session_content_settings import _owned
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.chpm import capacity
 from backend.engine.chpm.schema import Contract, Settings, Usage
 from backend.engine.chpm.state import KEY, load
 from backend.engine.living_world.state import load as load_simulation
@@ -47,6 +48,10 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
         "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
+        "history_capacity": {
+            actor: capacity.inspect(mind) for actor, mind in current.minds.items()
+        },
+        "required_call_budget": capacity.required_calls(current.settings),
         "psychology_counts": {
             actor: {
                 "observations": len(mind.sources),
@@ -129,10 +134,12 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
         return
     if not await session_is_vn(db, state):
         raise HTTPException(409, "The CHPM dialogue pilot supports Visual Novel sessions only.")
-    required = len(settings.actor_ids) + 1 + (1 if settings.mode == "live" else 0)
+    required = capacity.required_calls(settings)
     if settings.max_calls_per_turn < required:
         raise HTTPException(
-            422, "The request budget must cover perception, selected NPCs, and live review."
+            422,
+            f"The request budget must be at least {required}: perception, selected NPCs, "
+            "and in live mode review plus one repair and repeat review.",
         )
     ids = {row["id"] for row in await _characters(db, state)}
     if not set(settings.actor_ids) <= ids:

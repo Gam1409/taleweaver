@@ -1,6 +1,7 @@
 """Pure, deterministic, observer-local evidence transitions with no state patches."""
 
 from .contracts import Belief, Event, Evidence, Genesis, Interpret, Observe, Snapshot, Transition
+from .limits import MAX_EVENTS
 
 
 class TransitionError(ValueError):
@@ -23,7 +24,7 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
         raise TransitionError("Stale state revision.")
     if event.sequence <= snapshot.cursor or event.sim_minute < snapshot.sim_minute:
         raise TransitionError("Event cursor or simulation time moved backwards.")
-    if len(snapshot.journal) >= 512:
+    if len(snapshot.journal) >= MAX_EVENTS:
         raise TransitionError("Journal capacity reached; no history was discarded.")
     evidence, beliefs, added = _project(snapshot, event)
     result = Snapshot(

@@ -22,6 +22,13 @@ export interface ChpmStatus {
   memory: Record<string, unknown[]>
   agenda_counts: { active: number; closed: number }
   agenda: unknown[]
+  history_capacity?: Record<string, {
+    status: 'ready' | 'warning' | 'pause_required'
+    used: { events: number; evidence: number; sources: number; beliefs: number }
+    limits: { events: number; evidence: number; sources: number; beliefs: number }
+    blocking_resources: string[]
+  }>
+  required_call_budget?: number
 }
 
 export function useChpmSettings(sessionId: () => string) {
@@ -30,7 +37,19 @@ export function useChpmSettings(sessionId: () => string) {
   const busy = ref(false)
   const error = ref('')
   const dirty = computed(() => !!status.value && JSON.stringify(draft.value) !== JSON.stringify(status.value.settings))
+  const minimumCalls = computed(() => !draft.value || draft.value.mode === 'off'
+    ? 0 : draft.value.actor_ids.length + (draft.value.mode === 'live' ? 4 : 1))
+  const budgetWarning = computed(() => !!draft.value && draft.value.max_calls_per_turn < minimumCalls.value)
+  const historyWarnings = computed(() => draft.value?.mode !== 'live' ? [] : draft.value.actor_ids.flatMap(id => {
+    const capacity = status.value?.history_capacity?.[id]
+    if (!capacity || capacity.status === 'ready') return []
+    return [{ id, name: status.value?.characters.find(actor => actor.id === id)?.name ?? id, ...capacity }]
+  }))
   let controller: AbortController | null = null
+
+  function selectStandard() {
+    if (draft.value) draft.value.mode = 'off'
+  }
 
   async function request(saving: boolean): Promise<boolean> {
     controller?.abort()
@@ -65,11 +84,15 @@ export function useChpmSettings(sessionId: () => string) {
 
   async function save(): Promise<boolean> {
     if (busy.value) return false
+    if (budgetWarning.value) {
+      error.value = `Use at least ${minimumCalls.value} requests per turn to cover perception and, in enabled mode, one repair and repeat review.`
+      return false
+    }
     if (!status.value || !dirty.value) return true
     return request(true)
   }
 
   watch(sessionId, () => { void load() }, { immediate: true })
   onScopeDispose(() => { controller?.abort(); controller = null })
-  return { status, draft, busy, error, dirty, load, save }
+  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, load, save }
 }

@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .limits import MAX_BELIEFS, MAX_EVENTS
+
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Sequence = Annotated[int, Field(ge=0, strict=True)]
@@ -122,9 +124,9 @@ class Snapshot(Contract):
     revision: Sequence = 0
     cursor: Sequence = 0
     sim_minute: Sequence
-    evidence: tuple[Evidence, ...] = Field(default=(), max_length=512)
-    beliefs: tuple[Belief, ...] = Field(default=(), max_length=256)
-    journal: tuple[Event, ...] = Field(default=(), max_length=512)
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVENTS)
+    beliefs: tuple[Belief, ...] = Field(default=(), max_length=MAX_BELIEFS)
+    journal: tuple[Event, ...] = Field(default=(), max_length=MAX_EVENTS)
 
 
 class Transition(Contract):

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from functools import lru_cache
 from typing import Any
 
 from .contracts import Event, Genesis, Snapshot
@@ -9,8 +10,17 @@ from .reducer import TransitionError, apply, initial
 
 
 def replay(genesis: Genesis, events: tuple[Event, ...]) -> Snapshot:
-    state = initial(genesis)
-    for event in events:
+    return _checkpoint(genesis, events)
+
+
+@lru_cache(maxsize=64)
+def _checkpoint(genesis: Genesis, events: tuple[Event, ...]) -> Snapshot:
+    # Keys and results are recursively frozen contracts. Cache exact content,
+    # including scope/identity; never trust a caller's supplied projection.
+    # Blocks bound recursion and reuse verified prefixes when a turn appends events.
+    prefix = ((len(events) - 1) // 32) * 32 if events else 0
+    state = _checkpoint(genesis, events[:prefix]) if prefix else initial(genesis)
+    for event in events[prefix:]:
         state = apply(state, event, expected_revision=state.revision).snapshot
     return state
 
