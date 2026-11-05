@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import agenda, inference, prompts
+from backend.engine.chpm import agenda, inference, passages, prompts
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.runtime import Turn, contract, current
 from backend.engine.chpm.schema import Verdict
@@ -44,7 +44,8 @@ async def validate(
 
 
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
-    verdict = await inference.request(
+    available = passages.index(text)
+    raw: passages.Review | Verdict = await inference.request(
         manager,
         turn.initial.settings,
         turn.usage,
@@ -54,14 +55,22 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             "host_resolution": resolution,
             "narration": text,
             "present_speakers": turn.present_names,
+            "controlled_actor_ids": sorted(turn.decisions),
+            "passages": available,
         },
-        Verdict,
+        passages.Review,
         "validation",
+        identifiers={
+            "actor_id": sorted(turn.decisions),
+            "speaker_id": sorted(turn.present_names),
+            "passage_id": list(available),
+        },
     )
-    if not verdict.matches:
-        if not verdict.issues:
+    if not raw.matches:
+        if not raw.issues:
             raise ChpmError("CHPM validator rejected the reply without feedback.")
-        return verdict
+        return Verdict(matches=False, issues=raw.issues)
+    verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
     ids = [entry.actor_id for entry in verdict.evidence]
     if set(ids) != set(turn.decisions) or len(ids) != len(set(ids)):
         raise ChpmError("CHPM validator did not identify every controlled NPC exactly once.")
@@ -106,7 +115,7 @@ async def _repair(
     )
     inference.reserve(turn.initial.settings, turn.usage, len(system) + len(payload))
     turn.usage.repairs += 1
-    llm = GameMasterLLM.for_role(manager.user, "complex")
+    llm = inference.model_for(manager, "complex", GameMasterLLM)
     llm.enable_thinking = False
     llm.max_tokens = min(llm.max_tokens, 4096)
     result = await asyncio.wait_for(
@@ -115,5 +124,7 @@ async def _repair(
         ),
         timeout=float(llm.request_timeout),
     )
+    if not isinstance(result, str):
+        raise ChpmError("CHPM repair returned a non-text response.")
     turn.usage.output_chars += len(result)
     return result

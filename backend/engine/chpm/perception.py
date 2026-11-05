@@ -17,6 +17,8 @@ Do not rewrite or complete quotations. Do not treat an attempted action as its
 successful outcome. Return every listed actor once, with 0-3 quotes (each <=600
 characters). If access or attribution is unclear, omit that excerpt and mark
 uncertain=true. No available quote means an empty list, not an invented event.
+actor_id must copy an exact KEY from present_observers. Values are display names,
+never IDs. Do not translate, replace, or invent an ID, even when a name is familiar.
 """
 
 
@@ -31,6 +33,7 @@ async def project(
         {"player_message_untrusted": message, "present_observers": names},
         Projection,
         "perception",
+        identifiers={"actor_id": sorted(names)},
     )
     return validate_projection(result, message, set(names))
 

@@ -6,15 +6,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.game_modes import is_vn
-from backend.engine.chpm import agenda, context, inference, memory, perception, prompts
-from backend.engine.chpm.kernel import ChpmError, digest, existing, fingerprint, select
+from backend.engine.chpm import agenda, cognition, context, memory, perception, prompts
+from backend.engine.chpm.kernel import ChpmError, digest
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
     KernelState,
     MemoryEntry,
     Perception,
-    Proposal,
     Usage,
     Verdict,
 )
@@ -136,27 +135,16 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
             }
         )
         supplied["observation"] = actor_observation.model_dump()
-        key = fingerprint(supplied)
-        decision = existing(previous, actor_observation, key)
-        if decision is None:
-            proposal = await inference.request(
-                manager,
-                turn.initial.settings,
-                turn.usage,
-                prompts.PROPOSE,
-                supplied,
-                Proposal,
-                "proposal",
-            )
-            decision = select(
-                actor.id,
-                actor_observation,
-                proposal,
-                goal=supplied["authored_goal"],
-                context_hash=key,
-            )
-            agenda.validate_proposal(proposal, turn.agendas[actor.id])
-        turn.decisions[actor.id] = decision
+        turn.decisions[actor.id] = await cognition.decide(
+            manager,
+            turn.initial.settings,
+            turn.usage,
+            actor.id,
+            actor_observation,
+            supplied,
+            turn.agendas[actor.id],
+            previous,
+        )
 
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:

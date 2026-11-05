@@ -123,7 +123,11 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
         absence_total=offline_total(game.living_world_presence if game else None),
     )
     await db.execute(
-        delete(ChatMessage).where(ChatMessage.session_id == session_id, after(snapshot["boundary"]))
+        delete(ChatMessage)
+        .where(ChatMessage.session_id == session_id, after(snapshot["boundary"]))
+        # SQLite reloads naive timestamps; the identity map can still contain UTC-
+        # aware values. Let SQL evaluate the boundary, not ORM Python comparisons.
+        .execution_options(synchronize_session=False)
     )
     for model in SCOPED:
         await db.execute(delete(model).where(model.session_id == session_id))

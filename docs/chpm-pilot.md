@@ -231,3 +231,26 @@ unnecessary clarifications, voice consistency, initiative, false review failures
 latency and actual token usage. No live-model quality claim follows from the
 mock-based regression suite. Extended psychology, long-term memory consolidation,
 all-mode support and a dedicated model configuration are later work.
+
+## Comparative evaluation (stage four)
+
+The explicit [dialogue evaluation tool](chpm-evaluation.md) compares a strong
+synthetic baseline and the shared CHPM dialogue pipeline across 41 cases, including RU/EN dialogue, 40-turn authored histories,
+six matched personality profiles and seven states of a fully authored adult NPC.
+It records actual provider usage where available, failures, repair counts and
+final-text latency, and produces a blind human-review pack. It never runs
+implicitly during play and does not alter session settings.
+
+Live endpoint testing exposed Markdown-wrapped JSON and display names returned in
+ID fields. CHPM now accepts only a complete outer JSON fence, explicitly enumerates
+allowed IDs in its model-facing schemas, and rejects duplicate JSON keys. It still
+rejects malformed bodies, wrong IDs, quotations absent from the source and
+unvalidated replies. A model can still misinterpret a correctly quoted passage;
+passing these gates is not proof of semantic fidelity.
+No semantic repair or implicit name-to-ID conversion is performed.
+
+Proposal responses now use unique action keys; stored decisions still contain the
+original candidate list. Review responses cite exact passage IDs which the host
+resolves into quotations before applying existing evidence and agenda checks.
+The evaluator records semantic false acceptances with a deliberate narrator
+counterexample probe. These protocol changes do not enable CHPM by default.

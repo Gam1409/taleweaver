@@ -20,7 +20,11 @@ DONE = "Я уже принесла обещанную карту."
 
 class AgendaRoles(ChpmRoles):
     async def simple(self, system, payload, model, **kwargs):
-        result = json.loads(await super().simple(system, payload, model, **kwargs))
+        result = (
+            {}
+            if kwargs.get("phase") == "validation"
+            else json.loads(await super().simple(system, payload, model, **kwargs))
+        )
         if kwargs.get("phase") == "proposal":
             supplied = self.proposal_inputs[-1]
             active = supplied["declared_agenda_not_world_facts"]
@@ -31,10 +35,15 @@ class AgendaRoles(ChpmRoles):
                     "text": active[0]["text"],
                     "entry_id": active[0]["id"],
                 }
-            result["candidates"][0]["agenda_change"] = change
+            result["candidates"]["CONTINUE"]["agenda_change"] = change
         if kwargs.get("phase") == "validation":
             speech = DONE if len(self.proposal_inputs) > 1 else PROMISE
-            evidence = {"actor_id": "LINA", "quote": speech}
+            reference = next(
+                key for key, quote in json.loads(payload)["passages"].items() if speech in quote
+            )
+            self.chpm_calls.append("validation")
+            result["matches"] = True
+            evidence = {"actor_id": "LINA", "passage_id": reference}
             result["evidence"] = [evidence]
             result["agenda_evidence"] = [evidence]
         return json.dumps(result, ensure_ascii=False)
@@ -74,7 +83,7 @@ async def test_declared_commitment_survives_zero_memory_without_world_effects(mo
             assert saved.agenda == []
             assert roles.chpm_calls == ["perception", "proposal"]
             return
-        assert len(saved.agenda) == 1 and saved.agenda[0].source.quote == PROMISE
+        assert len(saved.agenda) == 1 and PROMISE in saved.agenda[0].source.quote
         assert saved.agenda[0].closure is None
         manager = GameTurnManager(db, "session-1", user)
         second = [chunk async for chunk in manager.process_turn("Ты принесла карту?")]
@@ -85,6 +94,6 @@ async def test_declared_commitment_survives_zero_memory_without_world_effects(mo
         final = load(manager.state)
         assert len(final.agenda) == 1
         assert final.agenda[0].closure.reason == "report_done"
-        assert final.agenda[0].closure.source.quote == DONE
+        assert DONE in final.agenda[0].closure.source.quote
         assert manager.state.quests == original_quests
         assert roles.chpm_calls == ["perception", "proposal", "validation"] * 2

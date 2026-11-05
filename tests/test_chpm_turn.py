@@ -49,13 +49,13 @@ class ChpmRoles(TurnRoles):
                 }
             )
         if phase == "validation":
+            passages = json.loads(payload)["passages"]
+            reference = next(key for key, quote in passages.items() if "Теперь можно" in quote)
             return json.dumps(
                 {
                     "matches": not self.reject,
                     "issues": ["Unapproved promise"] if self.reject else [],
-                    "evidence": [
-                        {"actor_id": "LINA", "quote": "Спасибо. Теперь можно спокойно поговорить."}
-                    ],
+                    "evidence": [{"actor_id": "LINA", "passage_id": reference}],
                 },
                 ensure_ascii=False,
             )
@@ -67,22 +67,20 @@ class ChpmRoles(TurnRoles):
         return json.dumps(
             {
                 "appraisal": "A chance to talk.",
-                "candidates": [
-                    {
-                        "kind": "CONTINUE",
+                "candidates": {
+                    "CONTINUE": {
                         "intention": "Thank the player and continue talking.",
                         "goal_alignment": "supports",
                         "goal_quote": supplied["authored_goal"],
                         "reconsider_if": "The conversation ends",
                     },
-                    {
-                        "kind": "DEFER",
+                    "DEFER": {
                         "intention": "Remain silent",
                         "goal_alignment": "unknown",
                         "goal_quote": "",
                         "reconsider_if": "The player speaks",
                     },
-                ],
+                },
             }
         )
 

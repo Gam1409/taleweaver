@@ -107,8 +107,10 @@ class AgendaEntry(Contract):
         return self
 
 
-class Candidate(Contract):
-    kind: Literal["CONTINUE", "INITIATE", "ACCEPT", "REFUSE", "NEGOTIATE", "CLARIFY", "DEFER"]
+ActionKind = Literal["CONTINUE", "INITIATE", "ACCEPT", "REFUSE", "NEGOTIATE", "CLARIFY", "DEFER"]
+
+
+class CandidateBody(Contract):
     intention: str = Field(min_length=1, max_length=400)
     goal_alignment: Literal["supports", "neutral", "conflicts", "unknown"] = "unknown"
     goal_quote: str = Field(default="", max_length=300)
@@ -116,9 +118,27 @@ class Candidate(Contract):
     agenda_change: AgendaIntent | None = None
 
 
+class Candidate(CandidateBody):
+    kind: ActionKind
+
+
 class Proposal(Contract):
     candidates: list[Candidate] = Field(min_length=2, max_length=4)
     appraisal: str = Field(max_length=300)
+
+
+class ProposalOptions(Contract):
+    candidates: dict[ActionKind, CandidateBody] = Field(min_length=2, max_length=4)
+    appraisal: str = Field(max_length=300)
+
+    def canonical(self) -> Proposal:
+        return Proposal(
+            candidates=[
+                Candidate(kind=kind, **body.model_dump())
+                for kind, body in sorted(self.candidates.items())
+            ],
+            appraisal=self.appraisal,
+        )
 
 
 class Decision(Contract):

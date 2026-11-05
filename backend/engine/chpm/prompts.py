@@ -12,7 +12,8 @@ could hear. Remember who said each thing; a person's claim is not proof it is tr
 Do not turn an earlier intention into a completed act. If perception is uncertain,
 do not reconstruct omitted text or assume silence means consent. Continue from
 the character's own goals where appropriate instead of automatically asking a question.
-Return 2-4 feasible, meaningfully different dialogue candidates, one per kind.
+Return 2-4 feasible, meaningfully different dialogue candidates. candidates is a JSON
+OBJECT keyed by action kind, NOT an array. Each key appears once; its value omits kind.
 CONTINUE and INITIATE are valid when grounded; do not make every turn a question.
 CLARIFY is useful only if a missing detail materially changes the decision.
 REFUSE and NEGOTIATE are valid when relevant; never equate independence with refusal.
@@ -59,18 +60,25 @@ voluntary physical action or world outcome not authorized by the contract or hos
 resolution. Silence is acceptable only for DEFER. Do not require literal wording;
 stylistic variation and ordinary non-consequential expression are allowed.
 Do not infer consent, agreement or completed actions from the player's request.
-Return one evidence entry per named NPC: an exact contiguous quote of that NPC's
-own speech from narration, without other characters' words or narrator thoughts.
-Use an empty quote only for a silent DEFER. If attribution is uncertain, fail.
+Return one evidence entry per controlled NPC. actor_id must copy an ID from
+controlled_actor_ids, never a display name. Choose ONE representative passage_id
+from passages containing that NPC's own spoken words. Do not output a quote field. Passages
+are text references, not verified attribution. Do not select narration or thoughts.
+Do not concatenate separated speech or reconstruct a cleaned quotation. A short
+representative passage is enough; review the WHOLE narration for violations.
+For a silent DEFER, use passage_id=null. Evidence uses passage IDs only; the host
+resolves the actual quotation. Do not rewrite, shorten or concatenate passages.
+For speaker_id use an exact KEY from present_speakers, never a display name.
 You may also return heard entries: actor_id is a controlled observer; speaker_id
-must be a DIFFERENT NPC in present_speakers; quote is an exact spoken passage from
-narration that this observer could clearly hear. Omit private/inaudible speech,
+must be a DIFFERENT NPC in present_speakers; passage_id identifies spoken words
+that this observer could clearly hear. Omit private/inaudible speech,
 thoughts, narrator exposition, ambiguous attribution and player speech. Do not
 invent observations just to fill this optional list. Claims remain quotations.
 For each selected non-null agenda_change, return exactly one agenda_evidence entry:
-actor_id and a contiguous quote (1-600 characters) WITHIN that NPC's evidence.quote
-that explicitly expresses the selected undertaking, withdrawal or completion claim.
-No entry for NPCs without a selected change. On success all selected changes must
+actor_id and the same passage_id used in that NPC's evidence, explicitly expressing
+the selected undertaking, withdrawal or completion claim. Use only the passage ID;
+do not output a quote field.
+No entry for NPCs without a selected change. If every agenda_change is null, agenda_evidence MUST be []. On success all selected changes must
 be expressed, accurately attributed and covered by evidence. Reject mismatched or
 unrequested new goals/commitments/closures; do not infer them from player speech, a nod,
 silence, narrator exposition or another NPC's words. A report_done remains a claim.

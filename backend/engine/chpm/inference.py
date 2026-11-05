@@ -7,10 +7,17 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.chpm import json_contract
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def model_for(manager: Any, role: str, router: Any) -> Any:
+    """Allow an isolated evaluation host to supply an instrumented cognitive port."""
+    factory = getattr(manager, "_chpm_model_factory", None)
+    return factory(role) if callable(factory) else router.for_role(manager.user, role)
 
 
 async def request(
@@ -21,11 +28,17 @@ async def request(
     payload: dict,
     schema: type[T],
     phase: str,
+    *,
+    identifiers: dict[str, list[str]] | None = None,
 ) -> T:
-    prompt = instruction + "\nJSON schema:\n" + json.dumps(schema.model_json_schema())
+    prompt = (
+        instruction
+        + "\nReturn one JSON object only, without Markdown fences or commentary.\nJSON schema:\n"
+        + json.dumps(json_contract.response_schema(schema, identifiers))
+    )
     content = json.dumps(payload, ensure_ascii=False)
     reserve(settings, usage, len(prompt) + len(content))
-    llm = GameMasterLLM.for_role(manager.user, settings.model_role)
+    llm = model_for(manager, settings.model_role, GameMasterLLM)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens)
     llm.enable_thinking = False
     try:
@@ -41,7 +54,7 @@ async def request(
             timeout=float(llm.request_timeout),
         )
         usage.output_chars += len(result)
-        return schema.model_validate_json(result)
+        return json_contract.parse(schema, result)
     except Exception as exc:
         raise ChpmError(
             f"CHPM {phase} failed ({type(exc).__name__}). No decision was applied."
