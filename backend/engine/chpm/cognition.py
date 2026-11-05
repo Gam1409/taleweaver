@@ -5,7 +5,8 @@ from typing import Any
 from backend.engine.chpm import (
     agenda,
     appraisal,
-    appraisal_context,
+    cognitive_context,
+    experience,
     inference,
     initiative,
     motivation,
@@ -58,24 +59,10 @@ async def deliberate(
     mind: Mind,
     previous: Decision | None = None,
 ) -> tuple[Decision, Mind]:
-    # Only perceived speech can cue recall, never the player's unobserved narration.
-    cues = " ".join(
-        source.text
-        for source in mind.sources.values()
-        if source.message_id == observation.message_id and source.kind in {"speech", "world_event"}
+    instruction = prompts.PROPOSE + INSTRUCTIONS + motivation.INSTRUCTIONS + experience.INSTRUCTIONS
+    window, motives, payload, identifiers = cognitive_context.pack(
+        mind, observation, supplied, entries, settings, instruction
     )
-    window = appraisal_context.build(mind, query=cues)
-    motives = motivation.build(mind, entries, window)
-    identifiers = window.identifiers()
-    identifiers["motive_id"] = list(motives.sources)
-    goals = mind.genesis.identity.authored_goals
-    if all(len(goal) <= 300 for goal in goals):
-        identifiers["goal_quote"] = ["", *goals]
-    payload = {
-        **supplied,
-        "appraisal_context": window.payload,
-        "motivation_context": motives.payload(),
-    }
     key = fingerprint(payload)
     cached = existing(previous, observation, key)
     if cached is not None:
@@ -84,7 +71,7 @@ async def deliberate(
         manager,
         settings,
         usage,
-        prompts.PROPOSE + INSTRUCTIONS + motivation.INSTRUCTIONS,
+        instruction,
         payload,
         GroundedProposal,
         "proposal",
@@ -93,6 +80,9 @@ async def deliberate(
     resolved_motives = motivation.resolve(raw, motives)
     changed, accepted_ids = appraisal.accept(
         mind, raw.interpretations, window, message_id=observation.message_id
+    )
+    changed, experience_ids = experience.accept(
+        changed, raw.experiences, window, motives, message_id=observation.message_id
     )
     proposal = raw.canonical()
     agenda.validate_proposal(proposal, entries)
@@ -106,6 +96,7 @@ async def deliberate(
         motives=resolved_motives,
     )
     decision.interpretation_ids = accepted_ids
+    decision.experience_ids = experience_ids
     decision.motivation_policy = motivation.POLICY
     decision.candidate_motives = resolved_motives
     return decision, changed

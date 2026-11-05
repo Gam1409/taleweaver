@@ -28,6 +28,9 @@ class Catalogue:
 
 def _visible_source(source: MotiveSource) -> dict:
     value = source.model_dump(exclude={"provenance_id"})
+    if source.kind == "authored_character":
+        value.pop("text")
+        value["context_ref"] = "authored_character"
     # The speech/belief text is already in appraisal_context. Keep its resolved
     # copy in the trace, but do not spend the input budget on duplicate excerpts.
     if source.kind in {"report", "subjective_belief", "world_observation"}:
@@ -150,25 +153,17 @@ def _own_support(motive: ResolvedMotive, actor: str) -> bool:
 
 
 INSTRUCTIONS = """
-MOTIVES: For EACH candidate return motives (1-3), before any action is selected.
-Each motive contains motive_id from motivation_context.sources, effect (supports
-or tension), and one short relevance statement linking that source to this specific
-intention. These are fallible proposed reasons, not a private reasoning transcript.
-Sources with appraisal_ref refer to visible_evidence or existing_beliefs in
-appraisal_context; their text is not repeated in the motivation catalogue.
-At least one supports motive must be this NPC's authored character, trait, value,
-role, goal or active declared agenda. A player's request/report alone is not a
-personal motive; acceptance is valid when it also serves this character. Refusal
-is not automatically more independent. Do not invent a motive to justify compliance.
-Keep competing pressures visible: a conflicting authored goal needs a tension
-motive plus support from another character/agenda source. For goal_alignment
-supports/conflicts, cite the authored_goal source containing goal_quote with the
-corresponding supports/tension effect. Other sources do not prove goal alignment.
-Traits are contextual tendencies, not absolute bans or commands; do not force
-opposite personalities into the same response or require them always to disagree.
-Active commitments are declared intentions, not completed actions or immutable duties.
-Reports remain reports, challenged beliefs remain disputed, and neither rewrites
-identity. Newly proposed interpretations are tentative context, not new source IDs.
-Do not cite absent/closed agenda entries or another observer's private knowledge.
-Do not manufacture emotions, desires or memories merely to complete this schema.
+MOTIVES: Each candidate needs 1-3 proposed grounds BEFORE selection: motive_id from
+motivation_context.sources, supports/tension, and brief candidate-specific relevance.
+appraisal_ref points to appraisal_context evidence/beliefs; context_ref to the
+outer input field. These are source references, not unrestricted reasoning.
+At least one supports ground must be this NPC's authored character/trait/value/role/
+goal or active declared agenda. A player's demand alone is not a personal motive.
+Acceptance and refusal can both fit. Do not invent desire to justify compliance.
+A goal supports/conflicts claim must cite the matching authored_goal containing
+goal_quote with supports/tension respectively. Preserve conflicting motives;
+traits are contextual tendencies, not absolute commands. Reports stay reports,
+challenged beliefs remain disputed, commitments are intentions rather than outcomes.
+Do not cite absent/closed agenda, another observer's knowledge or newly proposed
+interpretations as existing source IDs. Do not manufacture feelings to fill fields.
 """

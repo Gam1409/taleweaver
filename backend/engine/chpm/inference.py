@@ -14,6 +14,21 @@ from backend.engine.chpm.schema import Settings, Usage
 T = TypeVar("T", bound=BaseModel)
 
 
+def compose(
+    instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict | None
+) -> tuple[str, str]:
+    prompt = (
+        instruction
+        + "\nReturn one JSON object only, without Markdown fences or commentary.\nJSON schema:\n"
+        + json.dumps(
+            json_contract.response_schema(schema, identifiers),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+    return prompt, json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
 def model_for(manager: Any, role: str, router: Any) -> Any:
     """Allow an isolated evaluation host to supply an instrumented cognitive port."""
     factory = getattr(manager, "_chpm_model_factory", None)
@@ -31,12 +46,7 @@ async def request(
     *,
     identifiers: dict[str, list[str]] | None = None,
 ) -> T:
-    prompt = (
-        instruction
-        + "\nReturn one JSON object only, without Markdown fences or commentary.\nJSON schema:\n"
-        + json.dumps(json_contract.response_schema(schema, identifiers))
-    )
-    content = json.dumps(payload, ensure_ascii=False)
+    prompt, content = compose(instruction, payload, schema, identifiers)
     reserve(settings, usage, len(prompt) + len(content))
     llm = model_for(manager, settings.model_role, GameMasterLLM)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens)
@@ -63,7 +73,9 @@ async def request(
 
 def reserve(settings: Settings, usage: Usage, size: int) -> None:
     if size > settings.max_input_chars:
-        raise ChpmError("CHPM input exceeds its configured size limit. No decision was applied.")
+        raise ChpmError(
+            f"CHPM input exceeds its configured size limit ({size} > {settings.max_input_chars} characters). No decision was applied."
+        )
     if usage.calls >= settings.max_calls_per_turn:
         raise ChpmError("CHPM request budget exhausted. No unvalidated response was published.")
     usage.calls += 1

@@ -172,6 +172,7 @@ class Decision(Contract):
     reply_hash: str | None = None
     spoken_evidence: str = ""
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
+    experience_ids: list[str] = Field(default_factory=list, max_length=2)
     selection_reasons: list[str] = Field(default_factory=list, max_length=4)
     question_gate: QuestionGate | None = None
     motive_dominance: dict[ActionKind, list[ActionKind]] = Field(default_factory=dict, max_length=4)

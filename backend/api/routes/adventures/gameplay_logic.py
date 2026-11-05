@@ -2033,6 +2033,8 @@ class GameTurnManager:
                     return
                 raise
 
+        if chpm_buffered:
+            yield f"event: status\ndata: {json.dumps({'content': 'Reviewing NPC reply...'})}\n\n"
         response_text = await chpm_rendering.validate(
             self,
             response_text,

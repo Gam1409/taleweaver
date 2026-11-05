@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .limits import ACTIVE_EVENTS, ARCHIVE_BLOCK, MAX_BELIEFS, MAX_EVENTS
+from .limits import ACTIVE_EVENTS, ARCHIVE_BLOCK, MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIENCES
 from .log_layout import split
 
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
@@ -82,7 +82,66 @@ class Advance(Contract):
     kind: Literal["advance"] = "advance"
 
 
-Payload = Annotated[Observe | Interpret | Advance, Field(discriminator="kind")]
+class ExperienceValue(Contract):
+    channel: Literal["affect", "need_satisfaction", "need_frustration"]
+    dimension: Literal[
+        "fear",
+        "anger",
+        "sadness",
+        "joy",
+        "shame",
+        "interest",
+        "arousal",
+        "autonomy",
+        "competence",
+        "relatedness",
+        "rest",
+        "safety",
+    ]
+    about_id: Identifier | None = None
+    level: Literal["absent", "low", "moderate", "high"]
+
+    @model_validator(mode="after")
+    def valid_dimension(self) -> "ExperienceValue":
+        affect = self.dimension in {
+            "fear",
+            "anger",
+            "sadness",
+            "joy",
+            "shame",
+            "interest",
+            "arousal",
+        }
+        if (self.channel == "affect") != affect:
+            raise ValueError("Experience dimension does not match its channel.")
+        if self.channel != "affect" and self.about_id is not None:
+            raise ValueError("Needs describe the observer, not another person's state.")
+        return self
+
+
+class PersonalBasis(Contract):
+    reference: Identifier
+    text: Text
+
+
+class Experience(ExperienceValue):
+    kind: Literal["experience"] = "experience"
+    policy: Literal["qualitative-experience-v1"] = "qualitative-experience-v1"
+    record_id: Identifier
+    identity_revision: Identifier
+    citations: tuple[Citation, ...] = Field(min_length=1, max_length=2)
+    personal_basis: tuple[PersonalBasis, ...] = Field(min_length=1, max_length=3)
+    explanation: Annotated[str, Field(min_length=1, max_length=180)]
+    alternatives: tuple[Text, ...] = Field(default=(), max_length=2)
+    unknowns: tuple[Text, ...] = Field(default=(), max_length=3)
+
+
+class ExperienceState(ExperienceValue):
+    record_id: Identifier
+    sim_minute: Sequence
+
+
+Payload = Annotated[Observe | Interpret | Experience | Advance, Field(discriminator="kind")]
 
 
 class Event(Contract):
@@ -131,6 +190,7 @@ class Snapshot(Contract):
     sim_minute: Sequence
     evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVENTS)
     beliefs: tuple[Belief, ...] = Field(default=(), max_length=MAX_BELIEFS)
+    experiences: tuple[ExperienceState, ...] = Field(default=(), max_length=MAX_EXPERIENCES)
     archive: tuple[EventArchive, ...] = Field(
         default=(), max_length=(MAX_EVENTS - ACTIVE_EVENTS) // ARCHIVE_BLOCK
     )

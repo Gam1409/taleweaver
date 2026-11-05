@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from backend.engine.chpm import host_observations, host_sources, identity_adapter
-from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
 from backend.engine.chpm.host_state import Mind, Source, record
@@ -83,12 +82,9 @@ def context(mind: Mind) -> dict:
         for entry in mind.snapshot.evidence
         if entry.event_id in mind.sources and mind.sources[entry.event_id].kind == "host_frame"
     ]
-    beliefs = relationships.recent(mind.snapshot)
     return {
         "current_host_observations": [item.model_dump() for item in frames[-1:]],
-        "subjective_beliefs_not_world_facts": [item.model_dump() for item in beliefs],
-        "beliefs_omitted": len(mind.snapshot.beliefs) - len(beliefs),
-        "relationship_interpretations": relationships.claims(mind.snapshot, beliefs),
+        "belief_context_ref": "appraisal_context.existing_beliefs",
     }
 
 

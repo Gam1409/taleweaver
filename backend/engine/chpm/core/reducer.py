@@ -1,23 +1,23 @@
 """Pure, deterministic, observer-local evidence transitions with no state patches."""
 
+from . import experience
 from .contracts import (
     Belief,
     Event,
     EventArchive,
     Evidence,
+    Experience,
+    ExperienceState,
     Genesis,
     Interpret,
     Observe,
     Snapshot,
     Transition,
 )
+from .errors import TransitionError
 from .history import count, events
-from .limits import MAX_EVENTS
+from .limits import MAX_BELIEFS, MAX_EVENTS
 from .log_layout import split
-
-
-class TransitionError(ValueError):
-    """Reject the whole transition; the caller retains the previous snapshot."""
 
 
 def initial(genesis: Genesis) -> Snapshot:
@@ -38,7 +38,7 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
         raise TransitionError("Event cursor or simulation time moved backwards.")
     if count(snapshot) >= MAX_EVENTS:
         raise TransitionError("Journal capacity reached; no history was discarded.")
-    evidence, beliefs, added = _project(snapshot, event)
+    evidence, beliefs, added, experiences = _project(snapshot, event)
     archived, journal = split((*snapshot.journal, event))
     result = Snapshot(
         genesis=snapshot.genesis,
@@ -47,6 +47,7 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
         sim_minute=event.sim_minute,
         evidence=evidence,
         beliefs=beliefs,
+        experiences=experiences,
         archive=(*snapshot.archive, *(EventArchive(events=block) for block in archived)),
         journal=journal,
     )
@@ -55,13 +56,18 @@ def apply(snapshot: Snapshot, event: Event, *, expected_revision: int) -> Transi
 
 def _project(
     snapshot: Snapshot, event: Event
-) -> tuple[tuple[Evidence, ...], tuple[Belief, ...], tuple[str, ...]]:
+) -> tuple[tuple[Evidence, ...], tuple[Belief, ...], tuple[str, ...], tuple[ExperienceState, ...]]:
     payload = event.payload
     if payload.kind == "advance":
         # No affect policy is installed yet. Time never heals trust or edits traits.
-        return snapshot.evidence, snapshot.beliefs, ()
+        return snapshot.evidence, snapshot.beliefs, (), snapshot.experiences
     if any(item.id == payload.record_id for item in snapshot.evidence):
         raise TransitionError("Evidence record ID already exists.")
+    if isinstance(payload, Experience):
+        evidence, states, roots = experience.project(
+            snapshot, payload, event_id=event.event_id, minute=event.sim_minute
+        )
+        return evidence, snapshot.beliefs, roots, states
     if isinstance(payload, Observe):
         item = Evidence(
             id=payload.record_id,
@@ -70,8 +76,9 @@ def _project(
             root_ids=tuple(sorted(set(payload.root_ids))),
             event_id=event.event_id,
         )
-        return (*snapshot.evidence, item), snapshot.beliefs, ()
-    return _interpret(snapshot, event, payload)
+        return (*snapshot.evidence, item), snapshot.beliefs, (), snapshot.experiences
+    evidence, beliefs, roots = _interpret(snapshot, event, payload)
+    return evidence, beliefs, roots, snapshot.experiences
 
 
 def _interpret(
@@ -85,6 +92,8 @@ def _interpret(
             raise TransitionError("Citation is unavailable to this observer or is not exact.")
         roots.update(source.root_ids)
     old = next((entry for entry in snapshot.beliefs if entry.id == payload.belief_id), None)
+    if old is None and len(snapshot.beliefs) >= MAX_BELIEFS:
+        raise TransitionError("Belief capacity reached; existing beliefs can still be revised.")
     if old and (old.statement, old.about_id, old.domain) != (
         payload.statement,
         payload.about_id,

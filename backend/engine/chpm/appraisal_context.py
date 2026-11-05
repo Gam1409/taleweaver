@@ -23,19 +23,41 @@ class Window:
         }
 
 
-def build(mind: Mind, *, query: str = "") -> Window:
+def build(
+    mind: Mind,
+    *,
+    query: str = "",
+    recent_limit: int = 6,
+    excerpt_chars: int = 1000,
+    recall_limit: int = 3,
+    belief_limit: int = 8,
+    current_message_id: str | None = None,
+) -> Window:
     available = [
         (entry.id, mind.sources[entry.event_id])
         for entry in mind.snapshot.evidence
         if entry.event_id in mind.sources
         and mind.sources[entry.event_id].kind in {"speech", "world_event"}
     ]
-    selected = available[-6:]
+    current = [
+        (key, source) for key, source in available if source.message_id == current_message_id
+    ]
+    older = [(key, source) for key, source in available if source.message_id != current_message_id]
+    old_limit = max(0, recent_limit - len(current))
+    selected = (older[-old_limit:] if old_limit else []) + current
     sources = {
-        f"e{index}": (record_id, source, source.text[:1000])
+        f"e{index}": (
+            record_id,
+            source,
+            source.text[: 1000 if source.message_id == current_message_id else excerpt_chars],
+        )
         for index, (record_id, source) in enumerate(selected, 1)
     }
     recalled, recall_status = episodic_memory.recall(mind, available, query)
+    selected_ids = {key for key, _ in selected}
+    recalled = [item for item in recalled if item.record_id not in selected_ids][:recall_limit]
+    recall_status["recalled_sources"] = len(recalled)
+    recall_status["omitted_matches"] = max(0, recall_status["matched_sources"] - len(recalled))
     sources.update(
         {
             f"r{index}": (item.record_id, item.source, item.fragment)
@@ -45,7 +67,7 @@ def build(mind: Mind, *, query: str = "") -> Window:
     # These are visible excerpts, not permission to cite the omitted remainder.
     beliefs = {
         f"b{index}": belief
-        for index, belief in enumerate(relationships.recent(mind.snapshot), 1)
+        for index, belief in enumerate(relationships.recent(mind.snapshot, belief_limit), 1)
         if belief.domain in relationships.DOMAINS
         and len(belief.statement) <= 240
         and belief.about_id != mind.genesis.scope.observer_id

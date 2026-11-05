@@ -16,9 +16,9 @@ IDs, changed sources, corrupt projections and wrong identities still fail.
 Rewind, source retraction and session copying cross archive boundaries. Archival
 commits with the reviewed turn; failed turns never publish a partial rollover.
 
-Before inference, admission reserves 20 events/evidence records, 18 source
-bindings and two potentially new beliefs: one frame, one aggregate world change,
-three perceived excerpts, two interpretations, own speech and twelve heard
+Before inference, admission reserves 22 events/evidence records, 18 source
+bindings, two potentially new beliefs and two affect/need dimensions: one frame, one aggregate world change,
+three perceived excerpts, two interpretations, two experience appraisals, own speech and twelve heard
 passages. At 80% of any total limit, settings warn. If the whole turn may not fit,
 CHPM pauses before requests. It neither deletes history nor silently switches
 behavior. Explicitly choosing Standard or deselecting affected NPCs preserves

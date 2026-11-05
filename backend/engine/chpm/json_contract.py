@@ -11,7 +11,24 @@ T = TypeVar("T", bound=BaseModel)
 def response_schema(schema: type[BaseModel], identifiers: dict[str, list[str]] | None) -> dict:
     contract = schema.model_json_schema()
     _bind_ids(contract, identifiers or {})
+    _strip_titles(contract)
     return contract
+
+
+def _strip_titles(node: Any) -> None:
+    """Remove generated display labels, never schema constraints or property names."""
+    if isinstance(node, list):
+        for child in node:
+            _strip_titles(child)
+        return
+    if not isinstance(node, dict):
+        return
+    node.pop("title", None)
+    for group in ("properties", "$defs"):
+        for child in node.get(group, {}).values():
+            _strip_titles(child)
+    for keyword in ("items", "anyOf", "allOf", "oneOf", "additionalProperties"):
+        _strip_titles(node.get(keyword))
 
 
 def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:

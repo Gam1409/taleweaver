@@ -87,6 +87,20 @@ def test_dynamic_id_enum_does_not_mutate_shared_schema():
     )
 
 
+def test_compact_schema_retains_a_real_title_field_and_its_constraints():
+    from pydantic import BaseModel, Field
+
+    from backend.engine.chpm.json_contract import response_schema
+
+    class Titled(BaseModel):
+        title: str = Field(min_length=2, max_length=10)
+
+    result = response_schema(Titled, None)
+    assert "title" not in result
+    assert result["properties"]["title"] == {"type": "string", "minLength": 2, "maxLength": 10}
+    assert result["required"] == ["title"]
+
+
 def test_candidate_map_normalizes_to_existing_stored_contract():
     from backend.engine.chpm.json_contract import parse
     from backend.engine.chpm.schema import Proposal, ProposalOptions

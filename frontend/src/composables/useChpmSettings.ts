@@ -24,8 +24,8 @@ export interface ChpmStatus {
   agenda: unknown[]
   history_capacity?: Record<string, {
     status: 'ready' | 'warning' | 'pause_required'
-    used: { events: number; evidence: number; sources: number; beliefs: number }
-    limits: { events: number; evidence: number; sources: number; beliefs: number }
+    used: { events: number; evidence: number; sources: number; beliefs: number; experiences?: number }
+    limits: { events: number; evidence: number; sources: number; beliefs: number; experiences?: number }
     blocking_resources: string[]
     active_events: number
     archived_events: number

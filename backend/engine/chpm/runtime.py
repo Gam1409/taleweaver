@@ -11,6 +11,7 @@ from backend.engine.chpm import (
     capacity,
     cognition,
     context,
+    experience,
     host_adapter,
     memory,
     perception,
@@ -74,6 +75,7 @@ def contract(turn: Turn) -> str:
                 for motive in decision.candidate_motives.get(decision.selected.kind, [])
             ]
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
+            data[actor]["subjective_experience_not_traits"] = experience.view(mind)
             changed = [
                 b
                 for b in mind.snapshot.beliefs

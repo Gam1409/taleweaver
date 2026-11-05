@@ -4,16 +4,17 @@ from typing import Any
 
 from backend.engine.chpm import host_sources
 from backend.engine.chpm.core.history import count
-from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS
+from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIENCES
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState, Settings
 
-# One frame, one aggregate world change, three excerpts, two interpretations, own speech,
+# One frame, one world change, three excerpts, two interpretations, two experiences, own speech,
 # and up to twelve heard passages. A single observer may receive all heard entries.
-EVENT_RESERVE = 20
+EVENT_RESERVE = 22
 SOURCE_RESERVE = 18
 BELIEF_RESERVE = 2
+EXPERIENCE_RESERVE = 2
 
 
 def required_calls(settings: Settings, count: int | None = None) -> int:
@@ -30,18 +31,21 @@ def inspect(mind: Mind) -> dict:
         "evidence": len(mind.snapshot.evidence),
         "sources": len(mind.sources),
         "beliefs": len(mind.snapshot.beliefs),
+        "experiences": len(mind.snapshot.experiences),
     }
     limits = {
         "events": MAX_EVENTS,
         "evidence": MAX_EVENTS,
         "sources": MAX_EVENTS,
         "beliefs": MAX_BELIEFS,
+        "experiences": MAX_EXPERIENCES,
     }
     reserve = {
         "events": EVENT_RESERVE,
         "evidence": EVENT_RESERVE,
         "sources": SOURCE_RESERVE,
         "beliefs": BELIEF_RESERVE,
+        "experiences": EXPERIENCE_RESERVE,
     }
     remaining = {key: limits[key] - size for key, size in used.items()}
     blocked = [key for key, free in remaining.items() if free < reserve[key]]

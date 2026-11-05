@@ -284,3 +284,19 @@ see [the appraisal guide](chpm-appraisal.md). Calibrated affect/relationship sco
 and independent psychological intent selection are still pending. Both supplied research
 source files are preserved with checksums. No psychological-accuracy claim follows
 from passing the kernel's program-invariant tests.
+
+## Contract versions and perception granularity
+
+`KernelState.schema_version=1` versions the host/session envelope;
+`Snapshot.schema_version=2` separately versions each observer's core history layout.
+They are different contracts and need not increment together.
+
+Perception uses one shared projection request for the selected present observers,
+with separate per-observer excerpts. Ambiguous private speech, including a whisper
+to another person, is conservatively omitted. Fine-grained acoustics/visibility
+are not simulated. Candidate kinds and motive-trace integrity are runtime checks;
+semantic distinctness of candidate intentions is an evaluation criterion.
+
+Live narration remains buffered until review and commit. The ordinary chat status
+shows `Reviewing NPC reply...` during validation, including any bounded repair.
+This progress message does not expose unvalidated story text or restore streaming.

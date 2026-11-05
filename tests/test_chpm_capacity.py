@@ -47,8 +47,37 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
         "maxItems"
     ]
     assert 2 + excerpts + 1 + heard == capacity.SOURCE_RESERVE
-    assert capacity.SOURCE_RESERVE + interpretations == capacity.EVENT_RESERVE
+    experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]
+    assert capacity.SOURCE_RESERVE + interpretations + experiences == capacity.EVENT_RESERVE
+    assert experiences == capacity.EXPERIENCE_RESERVE
     assert interpretations == capacity.BELIEF_RESERVE
+
+
+def test_full_beliefs_allow_revisions_but_reject_new_beliefs_with_transition_error(monkeypatch):
+    from backend.engine.chpm.core import reducer
+    from tests.test_chpm_appraisal import accept, heard, proposal
+
+    value = accept(heard(), [proposal()])
+    monkeypatch.setattr(reducer, "MAX_BELIEFS", 1)
+    revised = accept(value, [proposal(belief_id="b1", stance="challenge")], "revision")
+    assert revised.snapshot.beliefs[0].revision == 2
+    with pytest.raises(TransitionError, match="Belief capacity"):
+        accept(value, [proposal(statement="Different expectation")])
+
+
+def test_full_experience_dimensions_allow_reassessment_only(monkeypatch):
+    from backend.engine.chpm.core import experience as core_experience
+    from tests.test_chpm_appraisal import heard
+    from tests.test_chpm_experience import accept, proposed
+
+    value, _ = accept(heard(text="You must obey"), [proposed()])
+    monkeypatch.setattr(core_experience, "MAX_EXPERIENCES", 1)
+    value = heard(value, "m2", "You must obey again")
+    reference = [{"source_id": "e2", "quote": "You must obey again"}]
+    revised, _ = accept(value, [proposed(level="high", citations=reference)], "m2")
+    assert revised.snapshot.experiences[0].level == "high"
+    with pytest.raises(TransitionError, match="Experience capacity"):
+        accept(value, [proposed(dimension="anger", citations=reference)], "m2")
 
 
 def test_boundary_admits_a_whole_turn_then_requires_explicit_pause(monkeypatch):

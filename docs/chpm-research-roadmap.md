@@ -46,7 +46,7 @@ library. It provides:
   beliefs from the active projection. Session forks and host transaction integration
   are described below; this is not distributed exactly-once execution.
 - Explicit simulation minutes. Clock advancement does not automatically heal
-  relationships, change traits or invent events. No affect decay is installed yet.
+  relationships, change traits or invent events. No quantitative affect decay is installed; stale appraisals become current-unknown.
 
 The current categorical personality profile can be imported explicitly through
 `identity_adapter.from_actor`. It preserves the existing traits and goal; it does
@@ -126,8 +126,8 @@ unknown causes are stored on each interpretation. Revising an existing belief
 returns only its ID and new grounds; the host resolves its immutable subject,
 domain and proposition, avoiding model rephrasing of canonical text. Counterevidence adds a challenge
 without deleting earlier support. Original identity and unrelated relationships
-remain unchanged. There are no confidence numbers, automatic forgiveness, affect
-updates or consent inference in this schema.
+remain unchanged. There are no confidence numbers, automatic forgiveness or consent inference
+in relationship updates. Separate qualitative affect/need appraisals are described below.
 
 The narrator receives the current turn's accepted assessments as private,
 subjective context. The decision trace records their evidence IDs. Subsequent
@@ -147,7 +147,7 @@ Permission to continue speaking is excluded by the narrator/reviewer contract.
 Goal alignment and the meaning of the gap remain model proposals, not independently
 calibrated psychological utility or a formal proof of semantic necessity.
 This is a source-bound qualitative appraisal layer, not full EMA appraisal,
-emotion dynamics, or measured human-like relationship development.
+calibrated emotion dynamics, or measured human-like relationship development.
 
 ## Research matrix coverage
 
@@ -158,7 +158,16 @@ identity/agenda motive. The host checks reference availability and consistency
 with quoted goal alignment; it preserves competing tensions and reports/belief
 status. The existing prose review sees the selected reasons. This is a causal
 trace contract, not independent semantic verification or calibrated motive ranking.
-No extra call or numerical trait/relationship update is added.
+No extra call or numerical trait/relationship update is added. Qualitative
+`motive-frontier-v1` now removes strictly dominated personal-motive alternatives
+within the eligible goal tier. Incomparable ties remain deterministic, not calibrated
+psychological preferences.
+
+The [affect/needs layer](chpm-experience.md) separately records up to two current,
+source-bound subjective estimates per proposal. Needs satisfaction and frustration
+are distinct. Replay, rewind and fork preserve their roots; old estimates become
+current-unknown after an explicitly uncalibrated freshness horizon. This does not
+implement clinical diagnosis, numerical decay, physiology or enduring trait change.
 
 | Matrix reference | Implemented scope | Remaining limitation |
 |---|---|---|
@@ -212,11 +221,12 @@ are implemented. Total storage remains finite; semantic consolidation is future 
 2. Expand the host's observer-filtered world-event vocabulary and exercise it in
    the isolated trajectory evaluator. Keep fact, report, interpretation, intention
    and outcome distinct; do not promote arbitrary narration into observations.
-3. Integrate competing goals/commitments and causal intent selection on controlled
-   candidate sets. Record policy reasons; do not ask the LLM to retroactively invent
-   a motive for the chosen action or use player approval as reward.
-4. Add calibrated affect/needs transitions with simulation-time tests and ablations.
-   Numerical coefficients are engineering hypotheses until measured. General
+3. Calibrate the implemented qualitative motive frontier using fixed candidate
+   sets and ablations. Source-grounded reasons and dominance comparisons are now
+   recorded; calibrated utility and semantic motive validation remain open.
+4. Calibrate the implemented qualitative affect/need appraisals and extend them
+   with tested dynamics if warranted. Current freshness policy does not measure
+   recovery; numerical decay/physiological transitions remain open. General
    affective arousal is not automatically sexual desire or agreement.
 5. Consider relationship-specific attachment, habits and trait development only
    after the simpler mechanisms have independent benefit and identifiable effects.
