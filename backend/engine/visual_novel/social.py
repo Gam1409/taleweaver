@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.chpm.state import controls
 from backend.engine.memory_rag.prompts import recall_block
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
@@ -60,7 +61,11 @@ async def _present_npcs(manager: Any, social: SocialState, user_msg: str) -> lis
             WorldEntity.is_in_inventory.is_(False),
         )
     )
-    present = [npc for npc in rows.all() if _visible(npc, manager.state)]
+    present = [
+        npc
+        for npc in rows.all()
+        if _visible(npc, manager.state) and not controls(manager.state, npc.id)
+    ]
 
     def priority(npc: Any) -> tuple[bool, bool, str]:
         known = social.characters.get(npc.id)

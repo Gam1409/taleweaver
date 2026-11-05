@@ -8,6 +8,7 @@ from typing import Any
 
 from backend.core.game_modes import is_vn
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.chpm.state import controls
 from backend.engine.living_world import concordia_adapter
 from backend.engine.living_world.deliberation import require_enabled
 from backend.engine.living_world.dialogue_context import recent_context
@@ -71,6 +72,7 @@ def select_actor(state: Any, message: str, visible: list[Any]) -> Any | None:
         actor
         for actor in visible
         if actor.entity_type == "NPC"
+        and not controls(state, actor.id)
         and physically_present(actor, state)
         and not (state.entity_states or {}).get(actor.id, {}).get("is_defeated", False)
     ]

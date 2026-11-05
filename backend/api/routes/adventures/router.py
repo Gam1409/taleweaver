@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
 from backend.api.routes.adventures.checkpoint_policy import router as checkpoint_policy_router
+from backend.api.routes.adventures.chpm import router as chpm_router
 from backend.api.routes.adventures.cloning import router as cloning_router
 from backend.api.routes.adventures.dynamic_locations import router as dynamic_locations_router
 from backend.api.routes.adventures.editor import router as editor_router
@@ -91,6 +92,7 @@ router.include_router(dynamic_locations_router)
 
 router.include_router(vn_settings_router)
 router.include_router(content_settings_router)
+router.include_router(chpm_router)
 router.include_router(scene_illustrations_router)
 router.include_router(living_world_router)
 router.include_router(living_world_decisions_router)

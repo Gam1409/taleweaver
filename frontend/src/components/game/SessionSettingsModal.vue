@@ -6,6 +6,7 @@ import SessionContentSettings from './SessionContentSettings.vue'
 import DynamicLocationSettings from './DynamicLocationSettings.vue'
 import StoryVisualPresets from '../editor/StoryVisualPresets.vue'
 import LivingWorldSettings from './LivingWorldSettings.vue'
+import ChpmSettings from './ChpmSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -31,6 +32,7 @@ const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
 const visualPresets = ref<InstanceType<typeof StoryVisualPresets> | null>(null)
 const livingWorld = ref<InstanceType<typeof LivingWorldSettings> | null>(null)
+const chpm = ref<InstanceType<typeof ChpmSettings> | null>(null)
 const savingExploration = ref(false)
 async function saveAll(): Promise<void> {
   if (savingExploration.value || props.isSaving) return
@@ -40,6 +42,7 @@ async function saveAll(): Promise<void> {
     if (vnNarration.value && !await vnNarration.value.save()) return
     if (exploration.value && !await exploration.value.save()) return
     if (livingWorld.value && !await livingWorld.value.save()) return
+    if (chpm.value && !await chpm.value.save()) return
     if (visualPresets.value && !await visualPresets.value.save()) return
     emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
   } finally { savingExploration.value = false }
@@ -125,6 +128,7 @@ function handleInput(event: Event) {
         <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
         <StoryVisualPresets v-if="sessionId" ref="visualPresets" :adventure-id="sessionId" session embedded />
         <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
+        <ChpmSettings v-if="sessionId && mode === 'vn'" ref="chpm" :session-id="sessionId" />
         <!-- Memory Turns Slider Panel -->
         <div class="space-y-4">
           <div class="flex justify-between items-start gap-4">

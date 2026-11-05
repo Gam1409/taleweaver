@@ -1964,6 +1964,12 @@ class GameTurnManager:
             reminders.append(direction_reminder(self, game_event))
             reminders.append(PROGRESS_REMINDER)
 
+        from backend.engine.chpm import rendering as chpm_rendering
+        from backend.engine.chpm import runtime as chpm_runtime
+
+        reminders.append(await chpm_runtime.prepare(self, user_msg, all_entities))
+        chpm_buffered = chpm_runtime.buffered(self)
+
         turn_context = build_narration_turn_block(
             ctx.narration_state_block,
             draft_narration,
@@ -2005,7 +2011,8 @@ class GameTurnManager:
                 delta = choices[0].delta.content or ""
                 if delta:
                     response_text += delta
-                    yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
+                    if not chpm_buffered:
+                        yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
 
         except Exception as e:
             if (response_text or "").strip():
@@ -2025,6 +2032,14 @@ class GameTurnManager:
                     yield f"event: error\ndata: {json.dumps({'detail': user_safe_error})}\n\n"
                     return
                 raise
+
+        response_text = await chpm_rendering.validate(
+            self,
+            response_text,
+            completed=not narration_warning,
+            resolution=draft_narration + "\n" + outcome_json,
+            system_prompt=narration_prompt,
+        )
 
         token_usage = extract_usage_tokens(stream_usage) or {
             # Rough estimate when the provider reports no usage (avoids re-tokenizing the prompt).
@@ -2361,6 +2376,7 @@ class GameTurnManager:
             )
             await capture_completed_moment(self, assistant_chat)
             remember_completed(self, assistant_chat, completed=narration_completed)
+            chpm_runtime.finish(self, assistant_chat, completed=narration_completed)
         from backend.engine.memory_rag.worker import mark_dirty
 
         await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)
@@ -2428,6 +2444,8 @@ class GameTurnManager:
                 "status": "success",
             }
         )
+        if chpm_buffered:
+            yield f"event: chunk\ndata: {json.dumps({'content': response_text})}\n\n"
         yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
         if pending_generator_proposal:
             yield f"event: adventure_generator_proposal\ndata: {json.dumps(pending_generator_proposal)}\n\n"
