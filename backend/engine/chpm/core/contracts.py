@@ -182,8 +182,8 @@ class EventArchive(Contract):
 
 
 class Snapshot(Contract):
-    schema_version: Literal[2] = 2
-    transition_version: Literal["evidence-ledger-v1"] = "evidence-ledger-v1"
+    schema_version: Literal[3] = 3
+    transition_version: Literal["evidence-ledger-v2"] = "evidence-ledger-v2"
     genesis: Genesis
     revision: Sequence = 0
     cursor: Sequence = 0
@@ -198,22 +198,31 @@ class Snapshot(Contract):
 
     @model_validator(mode="before")
     @classmethod
-    def migrate_event_layout(cls, value: Any) -> Any:
-        if not isinstance(value, dict) or value.get("schema_version") != 1:
+    def migrate_pilot_snapshot(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or value.get("schema_version") not in (1, 2):
             return value
-        if (
-            value.get("archive")
-            or len(value.get("journal", ())) > 512
-            or len(value.get("evidence", ())) > 512
-            or len(value.get("beliefs", ())) > 256
-        ):
-            raise ValueError("Invalid legacy event layout.")
-        blocks, journal = split(tuple(value.get("journal", ())))
+        if value.get("transition_version", "evidence-ledger-v1") != "evidence-ledger-v1":
+            raise ValueError("Unsupported legacy transition version.")
+        if value["schema_version"] == 1:
+            if (
+                value.get("archive")
+                or len(value.get("journal", ())) > 512
+                or len(value.get("evidence", ())) > 512
+                or len(value.get("beliefs", ())) > 256
+            ):
+                raise ValueError("Invalid legacy event layout.")
+            blocks, journal = split(tuple(value.get("journal", ())))
+            value = {
+                **value,
+                "archive": [{"events": block} for block in blocks],
+                "journal": journal,
+            }
+        # The pilot shipped Experience before its version bump. Preserve those
+        # events and projections too; restore() still verifies them by exact replay.
         return {
             **value,
-            "schema_version": 2,
-            "archive": [{"events": block} for block in blocks],
-            "journal": journal,
+            "schema_version": 3,
+            "transition_version": "evidence-ledger-v2",
         }
 
 

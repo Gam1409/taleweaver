@@ -86,6 +86,7 @@ def test_legacy_snapshot_migrates_only_layout_and_preserves_hashes():
     original = filled(400)
     raw = original.model_dump()
     raw["snapshot"]["schema_version"] = 1
+    raw["snapshot"]["transition_version"] = "evidence-ledger-v1"
     raw["snapshot"]["journal"] = [event.model_dump() for event in events(original.snapshot)]
     del raw["snapshot"]["archive"]
     for value in raw["sources"].values():

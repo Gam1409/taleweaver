@@ -289,8 +289,19 @@ from passing the kernel's program-invariant tests.
 ## Contract versions and perception granularity
 
 `KernelState.schema_version=1` versions the host/session envelope;
-`Snapshot.schema_version=2` separately versions each observer's core history layout.
+`Snapshot.schema_version=3` separately versions each observer's core history layout,
+including `Experience` events and their derived `experiences` projection.
+`transition_version=evidence-ledger-v2` identifies the reducer contract with that
+additional event type.
 They are different contracts and need not increment together.
+
+The new reader migrates pilot snapshots 1/2 with `evidence-ledger-v1` without
+discarding events, source IDs, beliefs or experiences. It also accepts the earlier
+pilot's unversioned Experience addition to schema 2. Activation still requires
+exact replay to match the saved projection. Unknown versions are rejected; there
+is no automatic reset. Snapshot fingerprints change with the version envelope,
+while event/source identities remain unchanged. Older readers cannot load new
+snapshots: retain a backup before downgrading the pilot branch.
 
 Perception uses one shared projection request for the selected present observers,
 with separate per-observer excerpts. Ambiguous private speech, including a whisper
@@ -307,4 +318,4 @@ This progress message does not expose unvalidated story text or restore streamin
 [Slow developmental reflections](chpm-development.md) qualify behavior with dated
 source evidence while retaining original identity. [The cast/history matrix](chpm-matrix-evaluation.md)
 prepares live evaluation across 360 synthetic cases. Local mock success is not
-psychological validation; live evaluation remains pending.
+psychological validation; model-specific live results require separate review.
