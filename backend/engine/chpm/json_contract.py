@@ -54,9 +54,7 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
             properties[key]["enum"] = (
                 [None] if null_only else [*allowed, None] if nullable else allowed
             )
-            properties[key]["description"] = (
-                "Copy an exact value from this enum; do not paraphrase or substitute a display name."
-            )
+            properties[key]["description"] = "Use an exact enum value, not a display name."
     for child in node.values():
         _bind_ids(child, identifiers)
 

@@ -288,7 +288,7 @@ from passing the kernel's program-invariant tests.
 
 ## Contract versions and perception granularity
 
-`KernelState.schema_version=4` versions the host/session envelope;
+`KernelState.schema_version=5` versions the host/session envelope;
 `Snapshot.schema_version=4` separately versions each observer's core history layout,
 including `Experience` events and their derived `experiences` projection.
 `transition_version=evidence-ledger-v3` identifies the experience contract including
@@ -373,3 +373,29 @@ these revisions; repeat the same fixtures with each comparison model.
 ## Optional agent lookups
 
 See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, visible clothing, call budgets and trace semantics. The feature defaults to off; envelope versions 1/2/3 migrate to 4 without enabling it.
+
+
+## Explicit live preferences and continuity
+
+Live grounded cognition now uses `motivated-choice-v1`: the existing proposal call
+includes a preferred candidate, personal motive references and a concise situational
+reason. Source/goal/question eligibility and motive dominance are still enforced;
+incomparable eligible alternatives are chosen by the model, never a message-ID hash.
+Invalid preferences receive the existing single proposal repair, without a hidden
+fallback choice or an extra arbitration request. Historical decisions and the legacy
+shadow evaluator retain their recorded policies; loading does not reselect them.
+
+A previous intention is supplied only when its delivered own speech still exists
+in this observer/session with the exact content hash and revision. Maintaining a
+course is distinct from revising it; a revision needs an accessible exact citation.
+The narrator and reviewer receive this continuity contract. Semantic relevance,
+including whether the same action label conceals a changed intention, remains a
+fallible model judgment. Old intentions never establish completion or irrevocable
+consent. New input is allowed to change the course; this is not a personality lock.
+
+Host envelope 5 adds preference and previous-intention traces, migrating envelopes
+1–4 without altering core history (Snapshot 4, evidence-ledger-v3). Prompt wording
+was condensed and internal provenance hashes omitted from model-facing motive
+catalogues; full provenance remains in validation and saved traces. Saved input
+budgets are not increased. Explanations explicitly target 60–100 characters below
+existing hard field limits; meaningful text is not automatically truncated.

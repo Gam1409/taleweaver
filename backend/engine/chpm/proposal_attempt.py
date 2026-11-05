@@ -56,7 +56,10 @@ async def request(
             **payload,
             "proposal_feedback": {
                 "error": feedback,
-                "instruction": "Produce a complete corrected proposal from the original evidence. Preserve exact citations and identity. Do not invent facts to satisfy validation.",
+                "required_top_level_fields": [
+                    key for key, field in schema.model_fields.items() if field.is_required()
+                ],
+                "instruction": "Return the complete corrected object with all required fields. Keep explanations to one short clause below their character caps. Preserve exact citations, conditions and identity; do not invent facts or replace fields with obsolete appraisal.",
             },
         }
         prompt, content = inference.compose(instruction, payload, schema, identifiers)

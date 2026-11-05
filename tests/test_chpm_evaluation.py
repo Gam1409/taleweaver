@@ -14,7 +14,7 @@ from backend.engine.chpm.evaluation.contracts import Rating
 from backend.engine.chpm.evaluation.runner import run_arm
 from backend.engine.chpm.schema import Settings
 from tests.chpm_projection_fixture import public_projection
-from tests.test_chpm_kernel import motivated_candidates
+from tests.test_chpm_kernel import motivated_candidates, preferred_choice
 
 SPEECH = "Let us start with the joints."
 
@@ -51,7 +51,7 @@ class Models:
             return json.dumps(
                 {
                     **(
-                        {"interpretations": []}
+                        {"interpretations": [], "choice": preferred_choice(payload)}
                         if "appraisal_context" in payload
                         else {"appraisal": "A natural continuation"}
                     ),

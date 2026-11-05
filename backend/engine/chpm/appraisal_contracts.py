@@ -7,7 +7,14 @@ from pydantic import Field
 from backend.engine.chpm.core.contracts import Contract, ExperienceValue, Identifier
 from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.motivation_contracts import Motive
-from backend.engine.chpm.schema import ActionKind, Candidate, CandidateBody, Proposal, QuestionGate
+from backend.engine.chpm.schema import (
+    ActionKind,
+    Candidate,
+    CandidateBody,
+    ChoicePreference,
+    Proposal,
+    QuestionGate,
+)
 
 Explanation = Annotated[str, Field(min_length=1, max_length=160)]
 
@@ -48,6 +55,7 @@ class FeltExperience(ExperienceValue):
 
 
 class GroundedProposal(Contract):
+    choice: ChoicePreference | None = None
     # Required in live mode: a deliberate empty result is distinct from a model
     # silently ignoring this stage. Old saved Decisions retain their old schema.
     interpretations: list[Assessment | Revision] = Field(max_length=2)
@@ -66,33 +74,22 @@ class GroundedProposal(Contract):
 
 
 INSTRUCTIONS = """
-APPRAISAL: Return interpretations (0-2, [] when unwarranted), candidates and optional
-question_gate. Do not return the obsolete free-text appraisal. Assess expectations
-about a known subject in reliability, competence, benevolence, affection or
-boundaries; these domains are independent. Reports of feelings/consent are not
-proof of them; arousal, politeness, fear and demands cannot establish agreement.
-
-Cite a visible source_id and an exact contiguous quote inside its exposed excerpt.
-For NEW beliefs use about_id/domain/statement and belief_id=null. For revisions,
-return ONLY belief_id, stance, citations, alternatives and unknowns; the host keeps
-the original proposition. Support or challenge it rather than rewriting history.
-No duplicate propositions, probabilities, trait edits or world effects. Brief
-alternatives/unknowns retain ambiguity; empty lists do not establish certainty.
-
-Witnessed differences confirm only changed host state, not cause or intent.
-No longer visible does not prove departure/death. Unknown/omitted data do not mean
-none. Old recollections retain their source IDs and are historical fragments,
-not new confirmation. Never fill gaps or infer no event from a recall miss.
-Retrieval relevance is not truth. Current host facts override old observations.
-
-Choose intentions from character, goals and tentative interpretations; uncertainty
-does not require refusal or clarification. Independent progress is welcome.
-CLARIFY needs a concrete external fact or player's own undecided intention, plus
-two distinct answer branches referencing two other candidate keys whose choice
-actually depends on that answer. An equally useful independent option takes
-priority. Permission to speak/write, choose the NPC's wishes or express an already
-selected intention is never such a gap. Do not invent dependencies or relabel
-stalling as INITIATE. A contextual social question can be INITIATE/CONTINUE/NEGOTIATE
-when it advances curiosity, care, suspicion or another personal purpose; do not
-append questions habitually. Player choices still belong to the player.
+APPRAISAL: Return interpretations (0-2, [] if unwarranted), candidates, optional
+question_gate; omit obsolete appraisal. Known-subject reliability, competence,
+benevolence, affection and boundaries are distinct subjective domains.
+Cite visible source_id plus exact contiguous quote. NEW beliefs have about_id,
+domain, statement, belief_id=null. Revisions have ONLY belief_id, stance, citations,
+alternatives, unknowns: support/challenge the original proposition without rewriting
+it. No duplicate beliefs, probabilities, trait edits or world effects. Alternatives
+and unknowns preserve uncertainty; empty lists do not prove certainty.
+Witnessed state changes establish neither cause nor hidden intent. Not visible
+means neither dead nor departed. Missing recall/data establishes no absence.
+Old fragments remain historical, not fresh evidence; current host facts prevail.
+Reported feelings, arousal, fear, politeness and demands do not prove agreement.
+CLARIFY needs a decision-changing external fact or the player's undecided choice,
+with two distinct answers mapped to TWO OTHER candidate keys. Prefer an equally
+useful independent action. Do not invent dependencies to stall or ask the player
+to choose this NPC's wishes/permission to speak. Contextual social questions may
+instead express curiosity/care/suspicion/negotiation when they advance the selected
+intention; do not append them habitually. Uncertainty need not cause refusal.
 """

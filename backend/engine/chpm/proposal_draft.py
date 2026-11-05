@@ -14,7 +14,7 @@ from backend.engine.chpm.core.contracts import Contract
 from backend.engine.chpm.development_contracts import Development, DevelopmentProposal
 from backend.engine.chpm.motivation import Catalogue
 from backend.engine.chpm.motivation_contracts import Motive
-from backend.engine.chpm.schema import ActionKind, AgendaIntent, QuestionGate
+from backend.engine.chpm.schema import ActionKind, AgendaIntent, ChoicePreference, QuestionGate
 
 
 class Intent(Contract):
@@ -34,6 +34,7 @@ class Intent(Contract):
 
 
 class Draft(Contract):
+    choice: ChoicePreference
     interpretations: list[Assessment | Revision] = Field(max_length=2)
     experiences: list[FeltExperience] = Field(default_factory=list, max_length=2)
     candidates: dict[ActionKind, Intent] = Field(min_length=2, max_length=4)

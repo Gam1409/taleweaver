@@ -153,23 +153,15 @@ def _own_support(motive: ResolvedMotive, actor: str) -> bool:
 
 
 INSTRUCTIONS = """
-MOTIVES: Each candidate needs 1-3 proposed grounds BEFORE selection: motive_id from
-motivation_context.sources, supports/tension, and brief candidate-specific relevance.
-appraisal_ref points to appraisal_context evidence/beliefs; context_ref to the
-outer input field. These are source references, not unrestricted reasoning.
-At least one supports ground must be this NPC's authored character/trait/value/role/
-goal or active declared agenda. A player's demand alone is not a personal motive.
-Acceptance and refusal can both fit. Do not invent desire to justify compliance.
-Explain how each source supports or obstructs THIS candidate; the effect label
-must agree with that explanation. Reserved speech can make an answer brief without
-requiring refusal; trust does not imply unconditional compliance. Either response
-may be appropriate when supported by the actual context. Do not manufacture an
-obstacle just to make alternatives different. Do not infer player authority from
-the fact that the player asked. Keep relevance concise, not a narrated deliberation.
-The host derives goal alignment from authored_goal motives and their
-supports/tension effects; do not generate a second independent goal judgment. Preserve conflicting motives;
-traits are contextual tendencies, not absolute commands. Reports stay reports,
-challenged beliefs remain disputed, commitments are intentions rather than outcomes.
-Do not cite absent/closed agenda, another observer's knowledge or newly proposed
-interpretations as existing source IDs. Do not manufacture feelings to fill fields.
+MOTIVES: Give each candidate 1-3 distinct motive_id grounds from motivation_context,
+with supports/tension and concise candidate-specific relevance. appraisal_ref points
+to appraisal_context; context_ref to outer input. At least one supports ground must
+be this NPC's authored identity/trait/value/role/goal or active personal agenda.
+Player demands alone are not personal motives. Grounding is proposed, not certain.
+Traits are tendencies, not commands: reserve need not imply refusal, trust need not
+imply obedience. Acceptance and refusal may fit; invent neither desire nor obstacles.
+Preserve conflicting motives and uncertain/challenged evidence. Do not infer player
+authority, cite another observer's knowledge, absent/closed agenda, or newly proposed
+interpretations as existing sources. Never backfill feelings to justify compliance.
+The host derives goal alignment/quote from goal motives; omit redundant judgments.
 """

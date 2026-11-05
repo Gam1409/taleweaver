@@ -86,9 +86,9 @@ source retraction, old/new serialization and real VN rollback after an invalid
 unselected alternative. Different trait profiles produce different source inputs;
 this data invariant is not a claim that their actions must always differ.
 
-## Qualitative arbitration: motive-frontier-v1
+## Historical arbitration: motive-frontier-v1
 
-Live selection now compares eligible, equally goal-aligned alternatives after the
+The earlier live policy compares eligible, equally goal-aligned alternatives after the
 existing clarification/independence gate. A candidate dominates another only when
 its supported personal sources are a superset and its personal tensions a subset,
 with at least one strict improvement. Source identity and exact source text form
@@ -110,3 +110,12 @@ choice changes. Separate tests cover genuine tradeoffs, duplicated aliases,
 reported pressure, question gates, and persisted trace validation. These establish
 algorithmic sensitivity, not the truth of model-generated reasons or psychological
 validity. A valid source reference alone cannot establish the meaning of a motive.
+
+
+## Current live arbitration: motivated-choice-v1
+
+The same eligibility/frontier checks now validate an explicit model preference in
+the original proposal request. The remaining metadata-hash tie-break applies only
+to historical/legacy policies, not new live grounded decisions. See the continuity
+contract in `chpm-pilot.md`. A valid citation proves provenance, not psychological
+truth; there is still no calibrated human utility function or guaranteed realism.

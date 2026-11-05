@@ -101,3 +101,12 @@ historical/current status and report/witness distinction are retained. The host
 rechecks these excerpts against the same observer's saved sources before rendering;
 missing/retracted/altered sources fail visibly. A model reviewer can still miss
 semantic contradictions; this handoff fixes missing input, not model infallibility.
+
+
+A completed but malformed optional lookup plan (invalid enum, oversized argument,
+excess request count, invalid JSON or exhausted output) is skipped as one whole
+batch. No partial plan executes. `agent_audit.stop=invalid_plan` and
+`lookup_performed=false` record the degradation; the subsequent proposal receives
+`agent_plan_status`. This is not a zero-hit memory search and authorizes no invented
+knowledge. Transport errors and session-scope violations still stop the turn; no
+transport retry was added.
