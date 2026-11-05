@@ -26,7 +26,12 @@ from backend.engine.chpm.state import KEY, load
 
 
 async def run(
-    case: MatrixCase, factory: Any, *, all_present: bool = False, timeout: float = 120
+    case: MatrixCase,
+    factory: Any,
+    *,
+    all_present: bool = False,
+    timeout: float = 120,
+    max_output_tokens: int | None = None,
 ) -> dict:
     cast = actors(case)
     active = case.population if all_present else case.active
@@ -36,7 +41,9 @@ async def run(
         max_active_npcs=active,
         max_calls_per_turn=active + 5,
         max_input_chars=96000 if active > 3 else 24000,
-        max_output_tokens=8192 if case.population > 3 else 2048,
+        max_output_tokens=max_output_tokens
+        if max_output_tokens is not None
+        else (8192 if case.population > 3 else 2048),
     )
     session = "matrix-" + case.id
     before = KernelState(settings=settings, minds={a.id: seed(case, a, session) for a in cast})

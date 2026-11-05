@@ -160,6 +160,12 @@ outer input field. These are source references, not unrestricted reasoning.
 At least one supports ground must be this NPC's authored character/trait/value/role/
 goal or active declared agenda. A player's demand alone is not a personal motive.
 Acceptance and refusal can both fit. Do not invent desire to justify compliance.
+Explain how each source supports or obstructs THIS candidate; the effect label
+must agree with that explanation. Reserved speech can make an answer brief without
+requiring refusal; trust does not imply unconditional compliance. Either response
+may be appropriate when supported by the actual context. Do not manufacture an
+obstacle just to make alternatives different. Do not infer player authority from
+the fact that the player asked. Keep relevance concise, not a narrated deliberation.
 The host derives goal alignment from authored_goal motives and their
 supports/tension effects; do not generate a second independent goal judgment. Preserve conflicting motives;
 traits are contextual tendencies, not absolute commands. Reports stay reports,

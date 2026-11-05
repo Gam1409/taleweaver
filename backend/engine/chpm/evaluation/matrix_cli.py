@@ -8,12 +8,18 @@ from dataclasses import asdict
 from backend.engine.chpm.evaluation import matrix_cases
 
 
-def manifest(cases: list[matrix_cases.MatrixCase], *, all_present: bool = False) -> dict:
+def manifest(
+    cases: list[matrix_cases.MatrixCase],
+    *,
+    all_present: bool = False,
+    max_output_tokens: int | None = None,
+) -> dict:
     return {
-        "suite": "chpm-cast-matrix-v3",
+        "suite": "chpm-cast-matrix-v4",
         "scope": "Synthetic source histories; production perception, cognition, scheduling, narration, review and commit. No game DB or image generation.",
         "cases": [asdict(case) for case in cases],
         "all_present": all_present,
+        "output_token_override": max_output_tokens,
         "max_logical_calls": sum(
             (case.population if all_present else case.active) + 6 for case in cases
         ),
@@ -33,7 +39,8 @@ def manifest(cases: list[matrix_cases.MatrixCase], *, all_present: bool = False)
 
 
 async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]) -> None:
-    plan = manifest(cases, all_present=args.all_present)
+    output_limit = getattr(args, "output_tokens", None)
+    plan = manifest(cases, all_present=args.all_present, max_output_tokens=output_limit)
     if plan["max_logical_calls"] > args.max_total_calls:
         raise ValueError(
             f"Plan needs up to {plan['max_logical_calls']} logical calls; quota is {args.max_total_calls}."
@@ -45,11 +52,19 @@ async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]
     from backend.engine.chpm.evaluation.configuration import factory_for
     from backend.engine.chpm.evaluation.matrix_runner import run
 
-    factory = await factory_for(args.user, args.endpoint, args.model)
+    factory = await factory_for(
+        args.user, args.endpoint, args.model, max_output_tokens=output_limit
+    )
     completed = 0
     calls = 0
     for case in cases:
-        result = await run(case, factory, all_present=args.all_present, timeout=args.timeout)
+        result = await run(
+            case,
+            factory,
+            all_present=args.all_present,
+            timeout=args.timeout,
+            max_output_tokens=output_limit,
+        )
         calls += len(result["calls"])
         target = storage.path(folder, "results.jsonl")
         line = json.dumps(result, ensure_ascii=False) + "\n"
@@ -59,6 +74,12 @@ async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]
             handle.write(line)
         completed += 1
         print(f"{case.id}: {result['status']}; cumulative calls={calls}", flush=True)
+        if any(call["status"] != "ok" for call in result["calls"]):
+            print(
+                "Stopped after an incomplete request. Verify remote completion before another run.",
+                flush=True,
+            )
+            break
     storage.path(folder, "summary.json").write_text(
         json.dumps(
             {
@@ -76,7 +97,15 @@ async def execute(args: argparse.Namespace, cases: list[matrix_cases.MatrixCase]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "run"))
-    parser.add_argument("--suite", choices=("smoke", "large", "full", "stress"), default="smoke")
+    parser.add_argument(
+        "--suite", choices=("smoke", "large", "full", "stress", "continuity"), default="smoke"
+    )
+    parser.add_argument(
+        "--output-tokens",
+        type=int,
+        choices=range(512, 8193),
+        help="Explicit CHPM output limit; also sets temporary endpoint role limits. Saved role limits still apply with --user.",
+    )
     parser.add_argument("--case", action="append", default=[], dest="cases")
     parser.add_argument("--all-present", action="store_true")
     parser.add_argument("--max-total-calls", type=int, default=0)
@@ -90,7 +119,11 @@ def main() -> None:
     cases = matrix_cases.choose(args.suite, args.cases)
     if args.action == "plan":
         print(
-            json.dumps(manifest(cases, all_present=args.all_present), ensure_ascii=False, indent=2)
+            json.dumps(
+                manifest(cases, all_present=args.all_present, max_output_tokens=args.output_tokens),
+                ensure_ascii=False,
+                indent=2,
+            )
         )
         return
     if not args.run_id or not (args.endpoint or args.user) or args.max_total_calls < 1:

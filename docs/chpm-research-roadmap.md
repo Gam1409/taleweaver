@@ -210,6 +210,12 @@ completed live run or proof of psychological development.
 
 ## Implemented pilot slices and next validation
 
+The post-probe implementation and bounded pre-merge acceptance plan are tracked in
+[final pilot validation](chpm-final-validation.md). Output exhaustion is now distinct
+from repairable malformed JSON. Matched personality-context fixtures are implemented;
+their semantic ratings remain pending live evaluation. These changes do not complete
+semantic forgetting, attachment dynamics or evolving self-narrative.
+
 The [exact archive and lexical subjective-memory view](chpm-memory-lifecycle.md)
 are implemented. Total storage remains finite; semantic consolidation is future work.
 

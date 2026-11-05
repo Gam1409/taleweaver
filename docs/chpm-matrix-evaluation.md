@@ -102,4 +102,21 @@ Automated tests use mock models only. Live results are model- and configuration-
 specific; inspect their artifacts and behavioral ratings before treating the
 pilot as validated. Technical completion alone does not validate NPC psychology.
 
-Matrix v3 uses complete-fragment perception, explicit source freshness, derived goal alignment and a shared proposal-repair reserve. Compare models using the same v3 fixtures; v2 live measurements used different contracts. The actual repair payload, feedback and turn usage are retained in artifacts.
+Matrix v3 introduced complete-fragment perception, explicit source freshness, derived goal alignment and a shared proposal-repair reserve. Matrix v4 adds completion metadata, output-budget rejection and contextual motive guidance. Compare models using the same version and budgets; the previous v3 live results are a diagnostic baseline, not a controlled v4 comparison. Saved kernel/snapshot schemas are unchanged by these evaluation and transport diagnostics.
+
+## Matched personality contexts and output limits
+
+`--suite continuity` plans fifteen fixtures: three fully specified profiles, each
+with routine, familiar, breach, urgent and pressure variants. Authored identity and
+goal are constant within each profile. These are counterfactual one-turn runs with
+authored reported history, not longitudinal generated personality trajectories.
+Neither agreement nor refusal is an expected golden action. See the
+[final validation rubric](chpm-final-validation.md) for tie handling and manual review.
+
+`--output-tokens 4096` explicitly changes the cognitive limit and temporary endpoint
+role limits. It is recorded in the manifest; each call records its actual cap.
+The default budgets remain unchanged. With `--user`, saved model-role caps still
+apply, so inspect the effective call limit. Increasing tokens can exceed a proxy's
+deadline even with a larger client timeout. An output-budget rejection does not
+spend another identical retry. Incomplete transport calls stop the batch until
+the operator verifies remote completion.

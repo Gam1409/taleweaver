@@ -10,10 +10,16 @@ from backend.models.user import User
 
 
 async def factory_for(
-    user_name: str | None, endpoint: str | None, model: str | None
+    user_name: str | None,
+    endpoint: str | None,
+    model: str | None,
+    *,
+    max_output_tokens: int | None = None,
 ) -> Callable[[str], GameMasterLLM]:
+    if max_output_tokens is not None and not 512 <= max_output_tokens <= 8192:
+        raise ValueError("Evaluation output limit must be between 512 and 8192 tokens.")
     if endpoint:
-        user = await _temporary_user(endpoint, model)
+        user = await _temporary_user(endpoint, model, max_output_tokens or 4096)
     else:
         async with AsyncSessionLocal() as db:
             saved_user = await db.scalar(select(User).where(User.username == user_name))
@@ -23,7 +29,7 @@ async def factory_for(
     return lambda role: GameMasterLLM.for_role(user, role)
 
 
-async def _temporary_user(endpoint: str, model: str | None) -> User:
+async def _temporary_user(endpoint: str, model: str | None, output_limit: int = 4096) -> User:
     from backend.core.custom_openai import discover_models
 
     if not model:
@@ -45,7 +51,7 @@ async def _temporary_user(endpoint: str, model: str | None) -> User:
             "complex_model_provider": "custom_openai",
             "small_model": model,
             "complex_model": model,
-            "small_max_tokens": 4096,
-            "complex_max_tokens": 4096,
+            "small_max_tokens": output_limit,
+            "complex_max_tokens": output_limit,
         },
     )

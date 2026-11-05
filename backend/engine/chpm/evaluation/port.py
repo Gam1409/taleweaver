@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_usage_capture import capture_usage
 from backend.engine.chpm.evaluation.contracts import Call
 
@@ -43,6 +44,7 @@ class MeasuredModel:
             model=self.model,
             provider=self.provider,
             input_chars=len(system) + len(content),
+            output_limit=self.max_tokens,
         )
         self.owner.calls.append(call)
         if call.phase in {"proposal", "proposal_repair"}:
@@ -55,7 +57,7 @@ class MeasuredModel:
         self.inner.max_tokens = self.max_tokens
         self.inner.enable_thinking = self.enable_thinking
         started = time.perf_counter()
-        with capture_usage() as usage:
+        with capture_usage() as usage, capture_completions() as completions:
             try:
                 result = await asyncio.wait_for(
                     self.inner.aexecute_simple_task(system, content, model, **kwargs),
@@ -70,6 +72,9 @@ class MeasuredModel:
                 return result
             finally:
                 call.elapsed_ms = (time.perf_counter() - started) * 1000
+                call.completion_records = len(completions)
+                if len(completions) == 1:
+                    call.finish_reason = completions[0].finish_reason
                 # Multiple reported responses may represent retries. Do not pretend
                 # one reported completion covers all physical attempts or billing.
                 if len(usage) == 1:

@@ -70,6 +70,10 @@ class MatrixCase:
     daily: bool
 
     @property
+    def profile_offset(self) -> int:
+        return list(SITUATIONS).index(self.situation)
+
+    @property
     def scene(self) -> str:
         return f"At the {WORLDS[self.world][0]}. {SITUATIONS[self.situation][0]}"
 
@@ -124,12 +128,16 @@ def choose(suite: str, ids: list[str]) -> list[MatrixCase]:
         from backend.engine.chpm.evaluation import memory_stress
 
         all_cases = list(memory_stress.catalogue())
+    if suite == "continuity":
+        from backend.engine.chpm.evaluation import continuity_cases
+
+        all_cases = list(continuity_cases.catalogue())
     if ids:
         indexed = {case.id: case for case in all_cases}
         if len(set(ids)) != len(ids) or set(ids) - set(indexed):
             raise ValueError("Choose unique case IDs from the matrix plan.")
         return [indexed[key] for key in ids]
-    if suite in {"full", "stress"}:
+    if suite in {"full", "stress", "continuity"}:
         return all_cases
     if suite == "large":
         return [c for c in all_cases if c.population == 20 and c.history_turns == 40]
@@ -142,7 +150,7 @@ def choose(suite: str, ids: list[str]) -> list[MatrixCase]:
 
 def actors(case: MatrixCase) -> list[SimpleNamespace]:
     result = []
-    offset = list(SITUATIONS).index(case.situation)
+    offset = case.profile_offset
     for number in range(case.population):
         profile = PersonalityProfile(
             **dict(zip(FIELDS, PROFILES[(number + offset) % len(PROFILES)], strict=True))

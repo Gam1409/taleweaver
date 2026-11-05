@@ -57,6 +57,9 @@ class Call(Contract):
     text_truncated: bool = False
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    finish_reason: str | None = None
+    completion_records: int = 0
+    output_limit: int | None = None
     status: Literal["ok", "failed"] = "failed"
     context_audit: dict = Field(default_factory=dict)
 
