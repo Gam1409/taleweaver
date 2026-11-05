@@ -13,6 +13,7 @@ from backend.engine.chpm.evaluation.cases import cases, choose
 from backend.engine.chpm.evaluation.contracts import Rating
 from backend.engine.chpm.evaluation.runner import run_arm
 from backend.engine.chpm.schema import Settings
+from tests.test_chpm_kernel import motivated_candidates
 
 SPEECH = "Let us start with the joints."
 
@@ -55,15 +56,18 @@ class Models:
                         if "appraisal_context" in payload
                         else {"appraisal": "A natural continuation"}
                     ),
-                    "candidates": {
-                        "CONTINUE": {
-                            "intention": "Discuss the first inspection step",
-                            "goal_alignment": "supports",
-                            "goal_quote": payload["authored_goal"],
-                            "reconsider_if": "Bridge is closed",
+                    "candidates": motivated_candidates(
+                        {
+                            "CONTINUE": {
+                                "intention": "Discuss the first inspection step",
+                                "goal_alignment": "supports",
+                                "goal_quote": payload["authored_goal"],
+                                "reconsider_if": "Bridge is closed",
+                            },
+                            "DEFER": {"intention": "Wait", "reconsider_if": "Asked a question"},
                         },
-                        "DEFER": {"intention": "Wait", "reconsider_if": "Asked a question"},
-                    },
+                        enabled="motivation_context" in payload,
+                    ),
                 }
             )
         assert phase == "validation"

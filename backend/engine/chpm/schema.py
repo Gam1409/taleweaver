@@ -1,10 +1,11 @@
 """Versioned pilot contracts. No transport, database, or Concordia dependencies."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.motivation_contracts import ResolvedMotive
 
 
 class Contract(BaseModel):
@@ -169,6 +170,22 @@ class Decision(Contract):
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
     selection_reasons: list[str] = Field(default_factory=list, max_length=4)
     question_gate: QuestionGate | None = None
+
+    motivation_policy: Literal["source-grounded-v1"] | None = None
+    candidate_motives: dict[
+        ActionKind, Annotated[list[ResolvedMotive], Field(min_length=1, max_length=3)]
+    ] = Field(default_factory=dict, max_length=4)
+
+    @model_validator(mode="after")
+    def complete_motive_trace(self) -> "Decision":
+        if self.motivation_policy is None:
+            if self.candidate_motives:
+                raise ValueError("Candidate motives require their policy version.")
+            return self
+        offered = {candidate.kind for candidate in self.proposal.candidates}
+        if set(self.candidate_motives) != offered or self.selected.kind not in offered:
+            raise ValueError("Motivation trace must cover every offered candidate.")
+        return self
 
 
 class Usage(Contract):

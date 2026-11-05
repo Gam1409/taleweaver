@@ -67,6 +67,11 @@ def contract(turn: Turn) -> str:
     }
     for actor, mind in turn.minds.items():
         if actor in data:
+            decision = turn.decisions[actor]
+            data[actor]["selected_motives_not_world_facts"] = [
+                motive.model_dump()
+                for motive in decision.candidate_motives.get(decision.selected.kind, [])
+            ]
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
             changed = [
                 b

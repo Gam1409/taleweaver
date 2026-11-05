@@ -16,6 +16,7 @@ class AppraisalRoles(ChpmRoles):
     def __init__(self):
         super().__init__()
         self.invalid = False
+        self.invalid_motive = False
 
     async def simple(self, system, payload, model, **kwargs):
         result = await super().simple(system, payload, model, **kwargs)
@@ -42,6 +43,8 @@ class AppraisalRoles(ChpmRoles):
             proposed["citations"][0]["quote"] = "NEVER_SAID_THIS"
         body = json.loads(result)
         body["interpretations"] = [proposed]
+        if self.invalid_motive:
+            body["candidates"]["DEFER"]["motives"][0]["motive_id"] = "another-npc-secret"
         return json.dumps(body)
 
 
@@ -68,6 +71,13 @@ async def test_interpretations_reach_narrator_and_commit_with_reply_without_extr
         assert decision.interpretation_ids[0] in {e.id for e in mind.snapshot.evidence}
         assert mind.snapshot.beliefs[0].probability is None
         assert "May fail to keep a promise" in str(roles.prompts[-1])
+        assert decision.motivation_policy == "source-grounded-v1"
+        assert set(decision.candidate_motives) == {"CONTINUE", "DEFER"}
+        assert "selected_motives_not_world_facts" in str(roles.prompts[-1])
+        assert (
+            decision.candidate_motives["CONTINUE"][0].source.text
+            == mind.genesis.identity.authored_goals[0]
+        )
         assert roles.chpm_calls == ["perception", "proposal", "validation"]
         manager, chunks = await run(db, user, "Меня задержала авария, могу показать справку.")
         assert any(c.startswith("event: final") for c in chunks), "".join(chunks)
@@ -77,7 +87,7 @@ async def test_interpretations_reach_narrator_and_commit_with_reply_without_extr
         assert updated.genesis == mind.genesis
 
 
-@pytest.mark.parametrize("failure", ["invalid_citation", "rejected_narration"])
+@pytest.mark.parametrize("failure", ["invalid_citation", "invalid_motive", "rejected_narration"])
 async def test_failed_turn_never_commits_proposed_beliefs(monkeypatch, failure):
     roles = install(monkeypatch)
     async with TestSessionLocal() as db:
@@ -85,6 +95,7 @@ async def test_failed_turn_never_commits_proposed_beliefs(monkeypatch, failure):
         await run(db, user, "Я не выполнил обещание.")
         before = load(state)
         roles.invalid = failure == "invalid_citation"
+        roles.invalid_motive = failure == "invalid_motive"
         roles.reject = failure == "rejected_narration"
         _, chunks = await run(db, user, "Причина была другой.")
         assert any(c.startswith("event: error") for c in chunks)

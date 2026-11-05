@@ -2,7 +2,15 @@
 
 from typing import Any
 
-from backend.engine.chpm import agenda, appraisal, appraisal_context, inference, initiative, prompts
+from backend.engine.chpm import (
+    agenda,
+    appraisal,
+    appraisal_context,
+    inference,
+    initiative,
+    motivation,
+    prompts,
+)
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS, GroundedProposal
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import existing, fingerprint, select
@@ -51,10 +59,17 @@ async def deliberate(
     previous: Decision | None = None,
 ) -> tuple[Decision, Mind]:
     window = appraisal_context.build(mind)
+    motives = motivation.build(mind, entries, window)
     identifiers = window.identifiers()
-    if len(supplied["authored_goal"]) <= 300:
-        identifiers["goal_quote"] = ["", supplied["authored_goal"]]
-    payload = {**supplied, "appraisal_context": window.payload}
+    identifiers["motive_id"] = list(motives.sources)
+    goals = mind.genesis.identity.authored_goals
+    if all(len(goal) <= 300 for goal in goals):
+        identifiers["goal_quote"] = ["", *goals]
+    payload = {
+        **supplied,
+        "appraisal_context": window.payload,
+        "motivation_context": motives.payload(),
+    }
     key = fingerprint(payload)
     cached = existing(previous, observation, key)
     if cached is not None:
@@ -63,12 +78,13 @@ async def deliberate(
         manager,
         settings,
         usage,
-        prompts.PROPOSE + INSTRUCTIONS,
+        prompts.PROPOSE + INSTRUCTIONS + motivation.INSTRUCTIONS,
         payload,
         GroundedProposal,
         "proposal",
         identifiers=identifiers,
     )
+    resolved_motives = motivation.resolve(raw, motives)
     changed, accepted_ids = appraisal.accept(
         mind, raw.interpretations, window, message_id=observation.message_id
     )
@@ -83,4 +99,6 @@ async def deliberate(
         context_hash=key,
     )
     decision.interpretation_ids = accepted_ids
+    decision.motivation_policy = motivation.POLICY
+    decision.candidate_motives = resolved_motives
     return decision, changed

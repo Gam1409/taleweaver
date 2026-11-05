@@ -53,11 +53,30 @@ def decision(**changes):
 def grounded_proposal():
     value = proposal()
     return GroundedProposal(
-        candidates={
-            candidate.kind: candidate.model_dump(exclude={"kind"}) for candidate in value.candidates
-        },
+        candidates=motivated_candidates(
+            {
+                candidate.kind: candidate.model_dump(exclude={"kind"})
+                for candidate in value.candidates
+            }
+        ),
         interpretations=[],
     )
+
+
+def motivated_candidates(candidates, *, enabled=True):
+    """Synthetic test motives; production must obtain them from the proposal model."""
+    if not enabled:
+        return candidates
+    for candidate in candidates.values():
+        alignment = candidate.get("goal_alignment", "unknown")
+        candidate["motives"] = [
+            {
+                "motive_id": "goal1" if alignment == "supports" else "character",
+                "effect": "supports",
+                "relevance": "Continue this character's established purpose.",
+            }
+        ]
+    return candidates
 
 
 def test_deterministic_choice_does_not_depend_on_candidate_order():

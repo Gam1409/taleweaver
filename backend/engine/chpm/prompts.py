@@ -49,6 +49,11 @@ not a new mood or an instruction to recite the character card. Preserve player a
 subjective_assessments_not_world_facts are this NPC's tentative interpretations;
 use them for subtext without asserting hidden motives or reciting private analysis.
 An alternative explanation or unknown cause is not a confirmed event.
+selected_motives_not_world_facts links the selected intention to this NPC's own
+identity/agenda and accessible experience. Use these as subtext, never recite them.
+Preserve competing motives without turning one trait into an absolute rule.
+Do not replace the motivation with an invented wish to please the player, a new
+emotion or sudden personality change. A reported claim is not established truth.
 A selected agenda_change authorizes only that explicit personal
 goal, promise, withdrawal or report of completion in this NPC's own speech. Without
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
@@ -78,6 +83,12 @@ that hand an already selected NPC decision back to the player. A question about 
 player choice explicitly in the selected intention is allowed; generic approval to
 continue is not. Review this even when the rest of the stance matches the contract.
 An in-character social question consistent with the selected stance is allowed.
+When selected_motives_not_world_facts is present, also check that its proposed
+relevance is plausible for the cited sources and selected intention. Reject a
+contradiction with the pinned identity, treating a report/challenged belief as
+certainty, or inventing desire/trust merely because the player asked. Acceptance
+and refusal can both fit a character. Do not require reasons to be spoken aloud.
+Traits are contextual tendencies; a tradeoff between sourced motives is allowed.
 Distinguish generic approval to keep generating from a concrete in-scene choice
 that belongs to the player. A question mark alone is not a violation.
 Do not infer consent, agreement or completed actions from the player's request.

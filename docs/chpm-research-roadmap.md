@@ -143,6 +143,15 @@ emotion dynamics, or measured human-like relationship development.
 
 ## Research matrix coverage
 
+Live proposals additionally require [source-bound candidate motives](chpm-motivation.md).
+Before selection, each alternative references this observer's pinned identity,
+active agenda and/or accessible experience, including at least one supporting
+identity/agenda motive. The host checks reference availability and consistency
+with quoted goal alignment; it preserves competing tensions and reports/belief
+status. The existing prose review sees the selected reasons. This is a causal
+trace contract, not independent semantic verification or calibrated motive ranking.
+No extra call or numerical trait/relationship update is added.
+
 | Matrix reference | Implemented scope | Remaining limitation |
 |---|---|---|
 | V07, V50–V52; architecture §4, personality development | Preserved authored identity, labelled trait model and source revision | Big Five/HEXACO measurement and evolving self-narrative not implemented |
@@ -184,9 +193,11 @@ completed live run or proof of psychological development.
 
 ## Next implementation slices
 
-1. Extend qualitative appraisal with explicit goal relevance and evidence quality
-   policies. Distinguish fear, desire, attraction, consent, trust, affection and
-   displayed expression; calibrate before introducing numerical transition weights.
+1. Evaluate the new source-bound candidate motives with controlled counterfactual
+   pairs and source ablations. Structural grounding is implemented; semantic goal
+   relevance and evidence quality still need calibration. Distinguish fear, desire,
+   attraction, consent, trust, affection and displayed expression before introducing
+   numerical transition weights.
 2. Expand the host's observer-filtered world-event vocabulary and exercise it in
    the isolated trajectory evaluator. Keep fact, report, interpretation, intention
    and outcome distinct; do not promote arbitrary narration into observations.

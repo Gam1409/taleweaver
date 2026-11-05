@@ -12,6 +12,7 @@ from backend.engine.chpm.state import KEY, load
 from backend.models.chat import ChatMessage
 from backend.models.turn_replay import TurnReplay
 from tests.conftest import TestSessionLocal
+from tests.test_chpm_kernel import motivated_candidates
 from tests.test_vn_turn_integration import ACTION, NARRATION, TurnRoles, install_roles, seed_vn
 
 
@@ -71,20 +72,23 @@ class ChpmRoles(TurnRoles):
                     if "appraisal_context" in supplied
                     else {"appraisal": "A chance to talk."}
                 ),
-                "candidates": {
-                    "CONTINUE": {
-                        "intention": "Thank the player and continue talking.",
-                        "goal_alignment": "supports",
-                        "goal_quote": supplied["authored_goal"],
-                        "reconsider_if": "The conversation ends",
+                "candidates": motivated_candidates(
+                    {
+                        "CONTINUE": {
+                            "intention": "Thank the player and continue talking.",
+                            "goal_alignment": "supports",
+                            "goal_quote": supplied["authored_goal"],
+                            "reconsider_if": "The conversation ends",
+                        },
+                        "DEFER": {
+                            "intention": "Remain silent",
+                            "goal_alignment": "unknown",
+                            "goal_quote": "",
+                            "reconsider_if": "The player speaks",
+                        },
                     },
-                    "DEFER": {
-                        "intention": "Remain silent",
-                        "goal_alignment": "unknown",
-                        "goal_quote": "",
-                        "reconsider_if": "The player speaks",
-                    },
-                },
+                    enabled="motivation_context" in supplied,
+                ),
             }
         )
 

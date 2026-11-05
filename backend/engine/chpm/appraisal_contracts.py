@@ -6,6 +6,7 @@ from pydantic import Field
 
 from backend.engine.chpm.core.contracts import Contract
 from backend.engine.chpm.core.relationships import Domain
+from backend.engine.chpm.motivation_contracts import Motive
 from backend.engine.chpm.schema import ActionKind, Candidate, CandidateBody, Proposal, QuestionGate
 
 Explanation = Annotated[str, Field(min_length=1, max_length=160)]
@@ -34,17 +35,21 @@ class Revision(Grounds):
     belief_id: str = Field(min_length=1, max_length=100)
 
 
+class MotivatedCandidate(CandidateBody):
+    motives: list[Motive] = Field(min_length=1, max_length=3)
+
+
 class GroundedProposal(Contract):
     # Required in live mode: a deliberate empty result is distinct from a model
     # silently ignoring this stage. Old saved Decisions retain their old schema.
     interpretations: list[Assessment | Revision] = Field(max_length=2)
-    candidates: dict[ActionKind, CandidateBody] = Field(min_length=2, max_length=4)
+    candidates: dict[ActionKind, MotivatedCandidate] = Field(min_length=2, max_length=4)
     question_gate: QuestionGate | None = None
 
     def canonical(self) -> Proposal:
         return Proposal(
             candidates=[
-                Candidate(kind=kind, **body.model_dump())
+                Candidate(kind=kind, **body.model_dump(exclude={"motives"}))
                 for kind, body in sorted(self.candidates.items())
             ],
             appraisal=f"Source-bound interpretations proposed: {len(self.interpretations)}.",
