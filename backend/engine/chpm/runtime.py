@@ -15,6 +15,7 @@ from backend.engine.chpm import (
     perception,
     prompts,
 )
+from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
 from backend.engine.chpm.host_state import Mind, removed_messages
 from backend.engine.chpm.kernel import ChpmError, digest
@@ -67,6 +68,14 @@ def contract(turn: Turn) -> str:
     for actor, mind in turn.minds.items():
         if actor in data:
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
+            changed = [
+                b
+                for b in mind.snapshot.beliefs
+                if set(b.interpretation_ids) & set(turn.decisions[actor].interpretation_ids)
+            ]
+            data[actor]["subjective_assessments_not_world_facts"] = relationships.claims(
+                mind.snapshot, tuple(changed)
+            )
     return prompts.NARRATE + json.dumps(data, ensure_ascii=False)
 
 
@@ -174,6 +183,19 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     # Recall and core-source reconciliation opened a read transaction after the
     # initial release. The session lease protects the snapshot while inference runs.
     await release_for_model(manager)
+    if actor.id in turn.minds:
+        turn.decisions[actor.id], turn.minds[actor.id] = await cognition.deliberate(
+            manager,
+            turn.initial.settings,
+            turn.usage,
+            actor.id,
+            actor_observation,
+            supplied,
+            turn.agendas[actor.id],
+            turn.minds[actor.id],
+            previous,
+        )
+        return
     turn.decisions[actor.id] = await cognition.decide(
         manager,
         turn.initial.settings,

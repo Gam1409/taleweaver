@@ -96,37 +96,80 @@ by default. Off and shadow modes do not advance the new core.
   eight existing subjective beliefs, not the full event journal. Existing input
   character/call limits still apply; more prompt text does not mean free tokens.
 
-The host does **not** yet produce psychological interpretations automatically.
-Beliefs can be represented/replayed by the core, but new live turns currently add
-only the allowlisted observations. Appraisal, affect, needs and relationship
-transition policies are the next slice, not claimed behavior of this integration.
+## Live cognitive interpretations and local relationship expectations
+
+Live VN proposals now include an explicit `interpretations` array (zero to two).
+The same model call proposes candidates and subjective assessments. The host
+validates the complete assessment batch **before** intent selection; the reviewed
+reply still commits the batch atomically. Shadow retains the older comparison
+path. No additional LLM calls are added, and CHPM remains off by default.
+
+`appraisal_context` exposes at most six recent speech sources with excerpts of up
+to 1,000 characters, eight recent beliefs and known subject IDs. Excerpts and
+omitted counts are labelled. Citations must match the actual visible excerpt,
+not a hidden remainder. Beliefs are selected by last accepted interpretation,
+not lexicographical ID. The existing input/output limits still apply; this adds
+prompt/output tokens despite keeping the number of requests unchanged.
+
+The `local-beliefs-v1` projection keeps separate expectations about **reliability,
+competence, benevolence, affection and boundaries**, directed to one known person.
+It does not maintain a single relationship score. Alternative explanations and
+unknown causes are stored on each interpretation. Revising an existing belief
+returns only its ID and new grounds; the host resolves its immutable subject,
+domain and proposition, avoiding model rephrasing of canonical text. Counterevidence adds a challenge
+without deleting earlier support. Original identity and unrelated relationships
+remain unchanged. There are no confidence numbers, automatic forgiveness, affect
+updates or consent inference in this schema.
+
+The narrator receives the current turn's accepted assessments as private,
+subjective context. The decision trace records their evidence IDs. Subsequent
+turns can refer to those beliefs. Rewind, edited-source invalidation, copy and
+import retain the same provenance rules, including alternative/unknown metadata.
+Old snapshots without the additive fields continue to load.
+
+Limits of this stage are deliberate: a correct citation does not prove that the
+model interpreted it correctly. Exact duplicate propositions share an ID, but
+semantic paraphrases are not automatically merged. Repeated source roots are not
+new evidence; distinct messages repeating a claim can still have distinct host
+roots. Their count is **never** treated as independent corroboration or calibrated
+confidence. Live selection now adds `initiative-gated-v1`: independent intentions
+take priority over unsupported clarification. A question requires a specific gap
+with two available conditional actions, and no equally useful independent option.
+Permission to continue speaking is excluded by the narrator/reviewer contract.
+Goal alignment and the meaning of the gap remain model proposals, not independently
+calibrated psychological utility or a formal proof of semantic necessity.
+This is a source-bound qualitative appraisal layer, not full EMA appraisal,
+emotion dynamics, or measured human-like relationship development.
 
 ## Research matrix coverage
 
 | Matrix reference | Implemented scope | Remaining limitation |
 |---|---|---|
 | V07, V50–V52; architecture §4, personality development | Preserved authored identity, labelled trait model and source revision | Big Five/HEXACO measurement and evolving self-narrative not implemented |
-| V30–V31, V34; TR03–TR04 | Source-bound subjective propositions, roots and retained challenges | No calibrated posterior or reliability estimation; not complete TR04 |
-| V42–V45; T13 | Subject/domain-local belief records; tests preserve unrelated records | Numerical relationship dynamics and affection are not implemented |
+| V30–V31, V34; TR03–TR04 | Live source-bound interpretations, roots, alternatives, unknowns and retained challenges | Citation correctness does not certify meaning; no calibrated posterior; not complete TR04 |
+| V42–V45; T13 | Directed qualitative relationship expectations; tests preserve other people/domains | Numerical relationship/affect dynamics are not implemented |
 | V57, V59; T08, T12, T22 | Observations versus inference/reflection; root deduplication | Retrieval/consolidation policies are not complete |
 | V65–V69; T01, T03, T23–T25 | Revision/cursor/event checks, atomic host persistence, replay, validated restore, rewind and session copy | Distributed branch merge and accepted RNG tape are later work |
 | T02, T06 | Other observers' unavailable citations are rejected; live host frame exposes only own scene | Speech perception/review still depends on model interpretation |
 | T04, T27–T28 | No wall-clock transitions, model failure event, or model dependency | Catch-up scheduler/pending barrier integration not implemented |
 | T09 | Independent conflicting evidence produces a tracked challenged belief | No claim of empirical accuracy of belief revision |
 
-Tests in `tests/test_chpm_core.py` and `tests/test_chpm_host_*.py` establish only
+Tests in `tests/test_chpm_core.py`, `tests/test_chpm_host_*.py` and
+`tests/test_chpm_appraisal*.py` establish only
 those stated program invariants, including real VN transactions with mock models,
-source edits, failed turns, settings, snapshot restore and session copy/import.
+source edits, failed turns, settings, snapshot restore, session copy/import,
+invalid interpretation batches and a 40-turn history with all seven authored traits.
 They do not establish all Gate 0/1 requirements or psychological validity. In
 particular, T20 remains probabilistic for unrestricted prose: a valid source
 reference does not prove correct interpretation of a speech act.
 
-## Evaluation status after live testing was stopped
+## Evaluation scope
 
 The earlier comparison harness has 41 authored scenarios and records failures,
 cost and accepted text separately. After the owner stopped the model, the endpoint
 became unavailable during the run; later transport failures are not psychological
-test failures. No new live calls are authorized by the offline work described here.
+test failures. The owner later supplied a new endpoint for the bounded appraisal
+probe described in [the appraisal evaluation guide](chpm-appraisal.md).
 
 The new 12-step trajectory fixture covers pressure, apology, earned cooperation,
 breach, attempted identity rewrite, a trauma reminder, repair and an invitation.
@@ -141,9 +184,9 @@ completed live run or proof of psychological development.
 
 ## Next implementation slices
 
-1. Introduce versioned, explicit subjective appraisal and relationship policies.
-   Keep alternatives/unknown, subject and domain locality, and distinguish fear,
-   desire, attraction, consent, trust, affection and displayed expression.
+1. Extend qualitative appraisal with explicit goal relevance and evidence quality
+   policies. Distinguish fear, desire, attraction, consent, trust, affection and
+   displayed expression; calibrate before introducing numerical transition weights.
 2. Expand the host's observer-filtered world-event vocabulary and exercise it in
    the isolated trajectory evaluator. Keep fact, report, interpretation, intention
    and outcome distinct; do not promote arbitrary narration into observations.

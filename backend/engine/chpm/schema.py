@@ -112,6 +112,17 @@ class AgendaEntry(Contract):
 ActionKind = Literal["CONTINUE", "INITIATE", "ACCEPT", "REFUSE", "NEGOTIATE", "CLARIFY", "DEFER"]
 
 
+class QuestionBranch(Contract):
+    answer: str = Field(min_length=1, max_length=160)
+    action: ActionKind
+
+
+class QuestionGate(Contract):
+    kind: Literal["external_fact", "player_intention"]
+    missing_fact: str = Field(min_length=1, max_length=200)
+    branches: tuple[QuestionBranch, QuestionBranch]
+
+
 class CandidateBody(Contract):
     intention: str = Field(min_length=1, max_length=400)
     goal_alignment: Literal["supports", "neutral", "conflicts", "unknown"] = "unknown"
@@ -149,12 +160,15 @@ class Decision(Contract):
     context_hash: str
     proposal: Proposal
     selected: Candidate
-    policy_version: Literal["goal-first-v1"] = "goal-first-v1"
+    policy_version: Literal["goal-first-v1", "initiative-gated-v1"] = "goal-first-v1"
     status: Literal["selected", "delivered", "shadow"] = "selected"
     reply_id: str | None = None
     reply_revision: str | None = None
     reply_hash: str | None = None
     spoken_evidence: str = ""
+    interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
+    selection_reasons: list[str] = Field(default_factory=list, max_length=4)
+    question_gate: QuestionGate | None = None
 
 
 class Usage(Contract):

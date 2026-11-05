@@ -71,6 +71,8 @@ class Interpret(Contract):
     stance: Literal["support", "challenge"]
     source_kind: Literal["inference", "reflection"] = "inference"
     citations: tuple[Citation, ...] = Field(min_length=1, max_length=16)
+    alternatives: tuple[Text, ...] = Field(default=(), max_length=2)
+    unknowns: tuple[Text, ...] = Field(default=(), max_length=3)
 
 
 class Advance(Contract):
@@ -95,6 +97,8 @@ class Evidence(Contract):
     root_ids: tuple[Identifier, ...]
     citations: tuple[Citation, ...] = ()
     event_id: Identifier
+    alternatives: tuple[Text, ...] = ()
+    unknowns: tuple[Text, ...] = ()
 
 
 class Belief(Contract):

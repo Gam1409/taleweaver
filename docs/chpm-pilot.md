@@ -51,12 +51,23 @@ private notes and shared RAG. Restricted input can miss conversational context.
 Deceptive or instructional text remains untrusted; provenance is not a formal
 semantic guarantee against model mistakes.
 
-The policy `goal-first-v1` ranks supported goal alignment ahead of neutral/unknown,
+The older comparison policy `goal-first-v1` ranks supported goal alignment ahead of neutral/unknown,
 then conflict. Support/conflict requires a literal authored-goal quote, but the
 meaning of the relation is still a model proposal. Unknown is never converted to
 zero. Equal-rank alternatives use a stable hash of session, input-message ID and
 action kind. Candidate ordering and repeated paraphrases cannot increase a kind's
 weight. This is an explicit engineering policy, not a calibrated human model.
+
+Live VN now uses `initiative-gated-v1`. A clarification cannot win merely because
+the LLM labels it goal-supporting. It needs a concrete external fact or player's
+own intention, with two distinct proposed conditional actions. Equally useful
+independent progress wins over that question. Without a valid gate, an independent
+intention is selected; the policy fails rather than forcing goal-conflicting
+compliance to avoid asking. Acceptance, refusal, negotiation, initiative and chosen
+silence remain possible. Reasons and the proposed gate are retained in the trace.
+The narrator/reviewer contract rejects generic permission to continue talking or
+writing, while preserving relevant decisions that belong to the player. Semantic
+classification remains fallible; see [the appraisal guide](chpm-appraisal.md).
 
 ## Publication and failure
 
@@ -263,7 +274,9 @@ tracked in [the research roadmap](chpm-research-roadmap.md). The live VN pilot n
 uses its pinned authored identity and observer-scoped location/speech records,
 committed with the reviewed reply. Off/shadow modes do not advance it; no extra
 LLM calls are added. Source edits, rollback, session copy and import preserve or
-explicitly invalidate the corresponding causal state. Automatic appraisal,
-affect and relationship transitions are still pending. Both supplied research
+explicitly invalidate the corresponding causal state. Live proposals now include
+bounded source-bound relationship interpretations, alternatives and unknowns;
+see [the appraisal guide](chpm-appraisal.md). Calibrated affect/relationship scores
+and independent psychological intent selection are still pending. Both supplied research
 source files are preserved with checksums. No psychological-accuracy claim follows
 from passing the kernel's program-invariant tests.

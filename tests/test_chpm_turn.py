@@ -66,7 +66,11 @@ class ChpmRoles(TurnRoles):
         assert "HIDDEN_RING" not in payload
         return json.dumps(
             {
-                "appraisal": "A chance to talk.",
+                **(
+                    {"interpretations": []}
+                    if "appraisal_context" in supplied
+                    else {"appraisal": "A chance to talk."}
+                ),
                 "candidates": {
                     "CONTINUE": {
                         "intention": "Thank the player and continue talking.",

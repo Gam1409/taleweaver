@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from backend.engine.chpm import host_sources, identity_adapter
+from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
 from backend.engine.chpm.host_state import Mind, Source, record
@@ -66,11 +67,12 @@ def actor_view(actor: Any, mind: Mind) -> Any:
 
 def context(mind: Mind) -> dict:
     frames = [entry for entry in mind.snapshot.evidence if entry.source_kind == "witnessed"]
-    beliefs = mind.snapshot.beliefs[-8:]
+    beliefs = relationships.recent(mind.snapshot)
     return {
         "current_host_observations": [item.model_dump() for item in frames[-1:]],
         "subjective_beliefs_not_world_facts": [item.model_dump() for item in beliefs],
         "beliefs_omitted": len(mind.snapshot.beliefs) - len(beliefs),
+        "relationship_interpretations": relationships.claims(mind.snapshot, beliefs),
     }
 
 

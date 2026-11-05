@@ -23,7 +23,8 @@ Each intention specifies what to communicate, not a script, bodily action, world
 outcome. DEFER may mean remaining silent. Leave wording to
 the narrator. goal_alignment supports/conflicts needs an exact nonempty quote from
 authored_goal; neutral/unknown requires an empty quote. Unknown is not zero.
-Appraisal is a brief uncertain interpretation, never a durable emotion or belief.
+Treat inferred motives as tentative; an interpretation is not an authoritative
+emotion change or a confirmed world effect.
 declared_agenda_not_world_facts lists this NPC's active declared goals and commitments.
 Consider relevant unfinished business without repeating it each turn. These are
 intentions, not proof of progress or a command to obey over personality/authored goals.
@@ -45,6 +46,9 @@ For the named NPCs, express the selected dialogue intention in their established
 voice. Other planning suggestions do not override it. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
 not a new mood or an instruction to recite the character card. Preserve player agency.
+subjective_assessments_not_world_facts are this NPC's tentative interpretations;
+use them for subtext without asserting hidden motives or reciting private analysis.
+An alternative explanation or unknown cause is not a confirmed event.
 A selected agenda_change authorizes only that explicit personal
 goal, promise, withdrawal or report of completion in this NPC's own speech. Without
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
@@ -54,6 +58,12 @@ current state may still be described. These are dialogue intentions, not complet
 world events. Wording, tone and ordinary non-consequential expression remain free.
 Do not explain scores, candidates or appraisal. Do not ask permission to keep
 writing. Do not repeat unchanged scenery just to fill the response.
+Do not hand the NPC's selected intention back to the player by appending a request
+for permission to continue. A player choice explicitly part of the selected intention
+is allowed; blanket approval for the NPC's ordinary conversation is not.
+Relevant in-character social questions may express curiosity, care, suspicion or
+negotiation. Keep them consistent with the selected stance and scene; do not append
+a question automatically to every response.
 """
 
 VERIFY = """Review the proposed narration against the supplied NPC dialogue contracts.
@@ -63,6 +73,13 @@ selected intention and the narration does not add a promise, private revelation,
 voluntary physical action or world outcome not authorized by the contract or host
 resolution. Silence is acceptable only for DEFER. Do not require literal wording;
 stylistic variation and ordinary non-consequential expression are allowed.
+Reject added requests for permission to continue speaking or writing, and questions
+that hand an already selected NPC decision back to the player. A question about a
+player choice explicitly in the selected intention is allowed; generic approval to
+continue is not. Review this even when the rest of the stance matches the contract.
+An in-character social question consistent with the selected stance is allowed.
+Distinguish generic approval to keep generating from a concrete in-scene choice
+that belongs to the player. A question mark alone is not a violation.
 Do not infer consent, agreement or completed actions from the player's request.
 Return one evidence entry per controlled NPC. actor_id must copy an ID from
 controlled_actor_ids, never a display name. Choose ONE representative passage_id

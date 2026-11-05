@@ -24,12 +24,15 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
     properties = node.get("properties", {})
     for key, allowed in identifiers.items():
         if key in properties:
-            nullable = any(
+            null_only = properties[key].get("type") == "null"
+            nullable = null_only or any(
                 option.get("type") == "null" for option in properties[key].get("anyOf", [])
             )
-            properties[key]["enum"] = [*allowed, None] if nullable else allowed
+            properties[key]["enum"] = (
+                [None] if null_only else [*allowed, None] if nullable else allowed
+            )
             properties[key]["description"] = (
-                "Copy an exact machine ID from this enum, never a display name."
+                "Copy an exact value from this enum; do not paraphrase or substitute a display name."
             )
     for child in node.values():
         _bind_ids(child, identifiers)

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.kernel import ChpmError, existing, select
 from backend.engine.chpm.schema import Candidate, KernelState, Observation, Proposal, Settings
 from backend.engine.chpm.state import controls, load, retract, save
@@ -46,6 +47,16 @@ def proposal():
 def decision(**changes):
     return select(
         "npc", observation(**changes), proposal(), goal="Repair the bridge", context_hash="context"
+    )
+
+
+def grounded_proposal():
+    value = proposal()
+    return GroundedProposal(
+        candidates={
+            candidate.kind: candidate.model_dump(exclude={"kind"}) for candidate in value.candidates
+        },
+        interpretations=[],
     )
 
 

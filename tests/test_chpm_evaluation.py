@@ -50,7 +50,11 @@ class Models:
         if phase == "proposal":
             return json.dumps(
                 {
-                    "appraisal": "A natural continuation",
+                    **(
+                        {"interpretations": []}
+                        if "appraisal_context" in payload
+                        else {"appraisal": "A natural continuation"}
+                    ),
                     "candidates": {
                         "CONTINUE": {
                             "intention": "Discuss the first inspection step",

@@ -101,6 +101,8 @@ def _interpret(
         root_ids=tuple(sorted(roots)),
         citations=payload.citations,
         event_id=event.event_id,
+        alternatives=payload.alternatives,
+        unknowns=payload.unknowns,
     )
     beliefs = tuple(entry for entry in snapshot.beliefs if entry.id != belief.id) + (belief,)
     return (*snapshot.evidence, record), tuple(sorted(beliefs, key=lambda entry: entry.id)), added
