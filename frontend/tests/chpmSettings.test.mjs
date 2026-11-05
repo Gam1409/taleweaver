@@ -1,3 +1,4 @@
+/* eslint-env es2021 */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'

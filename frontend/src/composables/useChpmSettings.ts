@@ -8,6 +8,7 @@ export interface ChpmSettings {
   max_output_tokens: number
   max_input_chars: number
   max_calls_per_turn: number
+  memory_limit: number
 }
 
 export interface ChpmStatus {
@@ -15,8 +16,10 @@ export interface ChpmStatus {
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; status: string; detail: string }
+  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; status: string; detail: string; memory_evictions: number }
   trace: unknown[]
+  memory_counts: Record<string, number>
+  memory: Record<string, unknown[]>
 }
 
 export function useChpmSettings(sessionId: () => string) {

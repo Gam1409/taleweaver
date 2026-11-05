@@ -4,7 +4,7 @@ from datetime import timezone
 from typing import Any
 
 from backend.engine.chpm.kernel import ChpmError, digest
-from backend.engine.chpm.schema import Decision, Observation
+from backend.engine.chpm.schema import Decision, MemoryEntry, Observation
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
 from backend.models.chat import ChatMessage
@@ -21,7 +21,7 @@ def available(actor: Any, state: Any) -> bool:
     )
 
 
-async def observation(manager: Any, request: str) -> Observation:
+async def observation(manager: Any, _request: str) -> Observation:
     source = await manager.db.get(ChatMessage, manager._vn_player_message_id)
     if source is None or source.session_id != manager.game_id or source.role != "user":
         raise ChpmError("CHPM requires a saved player input in this session.")
@@ -35,12 +35,18 @@ async def observation(manager: Any, request: str) -> Observation:
         content_hash=digest(source.content),
         sequence=int(created.timestamp() * 1_000_000),
         scene_id=manager.state.current_scene_id,
+        source_scene_id=source.scene_id,
         minute=max(0, int(manager.state.in_game_time or 0)),
-        player_request=request,
+        player_request=source.content,
     )
 
 
-async def actor_context(manager: Any, actor: Any, previous: Decision | None) -> dict:
+async def actor_context(
+    manager: Any,
+    actor: Any,
+    previous: Decision | None,
+    memories: list[MemoryEntry] | None = None,
+) -> dict:
     speech = ""
     if previous and previous.status == "delivered" and previous.reply_id:
         reply = await manager.db.get(ChatMessage, previous.reply_id)
@@ -59,4 +65,5 @@ async def actor_context(manager: Any, actor: Any, previous: Decision | None) -> 
         "authored_goal": str(getattr(actor, "goal", "") or ""),
         "personality": personality_context(actor),
         "own_previous_words": speech,
+        "witnessed_utterances_not_world_facts": [entry.model_dump() for entry in memories or []],
     }

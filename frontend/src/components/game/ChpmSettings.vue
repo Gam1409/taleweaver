@@ -42,8 +42,10 @@ defineExpose({ save })
             <label>Requests per turn<input v-model.number="draft.max_calls_per_turn" type="number" min="1" max="8" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label>Decision/review output tokens<input v-model.number="draft.max_output_tokens" type="number" min="512" max="2048" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label class="col-span-2">Input size per request (characters, including instructions)<input v-model.number="draft.max_input_chars" type="number" min="8000" max="48000" step="1000" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label class="col-span-2">Remembered observations per NPC<input v-model.number="draft.memory_limit" type="number" min="0" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
           </div>
-          <p class="mt-2 text-xs text-slate-400">One proposal per present selected NPC; enabled mode adds a review. At most one repair and another review. A repair uses the Complex model with up to 4,096 output tokens. These are logical requests; provider retries may add cost.</p>
+          <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review. At most one repair and another review. A repair uses the Complex model with up to 4,096 output tokens. These are logical requests; provider retries may add cost.</p>
+          <p class="mt-2 text-xs text-slate-400">Memory retains source-checked quotations, not assumed beliefs. Oldest quotations leave the bounded window; edited or removed sources are excluded. Set the window to 0 to stop recalling previous quotations.</p>
         </details>
       </template>
       <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Existing story events remain. Save between turns.</p>
@@ -51,11 +53,13 @@ defineExpose({ save })
     <div v-if="status && status.usage.status !== 'idle'" class="mt-4 text-xs text-slate-400" aria-live="polite">
       Last completed turn: {{ status.usage.status }} · {{ status.usage.calls }} requests · {{ status.usage.repairs }} repairs.<br />
       {{ status.usage.input_chars }} input / {{ status.usage.output_chars }} output characters (not token counts).
+      <p v-if="status.usage.memory_evictions">{{ status.usage.memory_evictions }} older quotations left the memory window this turn.</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
     <details v-if="status?.trace.length" class="mt-3 text-xs text-slate-400">
       <summary class="cursor-pointer">Administrator decision trace</summary>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.trace, null, 2) }}</pre>
+      <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.memory, null, 2) }}</pre>
     </details>
   </details>
 </template>

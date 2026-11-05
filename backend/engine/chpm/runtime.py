@@ -6,9 +6,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.game_modes import is_vn
-from backend.engine.chpm import context, inference, prompts
+from backend.engine.chpm import context, inference, memory, perception, prompts
 from backend.engine.chpm.kernel import ChpmError, digest, existing, fingerprint, select
-from backend.engine.chpm.schema import Decision, KernelState, Proposal, Usage, Verdict
+from backend.engine.chpm.schema import (
+    Decision,
+    KernelState,
+    MemoryEntry,
+    Perception,
+    Proposal,
+    Usage,
+    Verdict,
+)
 from backend.engine.chpm.state import load, save
 from backend.engine.turn_replay.transactions import release_for_model
 
@@ -23,6 +31,9 @@ class Turn:
     usage: Usage = field(default_factory=Usage)
     verdict: Verdict | None = None
     names: dict[str, str] = field(default_factory=dict)
+    present_names: dict[str, str] = field(default_factory=dict)
+    perceptions: dict[str, Perception] = field(default_factory=dict)
+    memories: dict[str, list[MemoryEntry]] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -62,6 +73,9 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     ]
     if not selected:
         return ""
+    turn.present_names = {
+        actor.id: str(actor.name) for actor in actors if context.available(actor, manager.state)
+    }
     try:
         await _prepare(manager, turn, message, selected)
     except Exception as exc:
@@ -86,13 +100,36 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
         raise ChpmError("CHPM needs a recoverable turn snapshot.")
     observed = await context.observation(manager, message)
     await release_for_model(manager)
+    turn.names = {actor.id: str(actor.name) for actor in actors}
+    if observed.source_scene_id and observed.source_scene_id != observed.scene_id:
+        turn.perceptions = {
+            actor.id: Perception(actor_id=actor.id, uncertain=True) for actor in actors
+        }
+    else:
+        turn.perceptions = await perception.project(
+            manager, turn.initial.settings, turn.usage, observed.player_request, turn.names
+        )
     for actor in sorted(actors, key=lambda item: item.id):
-        turn.names[actor.id] = str(actor.name)
         previous = turn.initial.actors.get(actor.id)
-        supplied = await context.actor_context(manager, actor, previous)
-        supplied["observation"] = observed.model_dump()
+        retained = await memory.recall(
+            manager,
+            actor.id,
+            turn.initial.memories.get(actor.id, []),
+            turn.initial.settings.memory_limit,
+        )
+        turn.memories[actor.id] = retained
+        legacy = previous if not retained and turn.initial.settings.memory_limit else None
+        supplied = await context.actor_context(manager, actor, legacy, retained)
+        perceived = turn.perceptions[actor.id]
+        actor_observation = observed.model_copy(
+            update={
+                "player_request": "\n".join(perceived.quotes),
+                "perception_uncertain": perceived.uncertain,
+            }
+        )
+        supplied["observation"] = actor_observation.model_dump()
         key = fingerprint(supplied)
-        decision = existing(previous, observed, key)
+        decision = existing(previous, actor_observation, key)
         if decision is None:
             proposal = await inference.request(
                 manager,
@@ -104,7 +141,11 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
                 "proposal",
             )
             decision = select(
-                actor.id, observed, proposal, goal=supplied["authored_goal"], context_hash=key
+                actor.id,
+                actor_observation,
+                proposal,
+                goal=supplied["authored_goal"],
+                context_hash=key,
             )
         turn.decisions[actor.id] = decision
 
@@ -118,6 +159,8 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
     for actor, decision in turn.decisions.items():
         _finish_decision(turn, decision, reply)
         result.actors[actor] = decision
+        result.memories[actor] = turn.memories.get(actor, [])
+        memory.append(result, actor, _new_memories(turn, decision, reply))
     save(manager.state, result, expected_revision=turn.initial.revision)
     manager._chpm_turn = None
 
@@ -137,3 +180,35 @@ def _finish_decision(turn: Turn, decision: Decision, reply: Any) -> None:
         for evidence in turn.verdict.evidence
         if evidence.actor_id == decision.actor_id
     )
+
+
+def _new_memories(turn: Turn, decision: Decision, reply: Any) -> list[MemoryEntry]:
+    actor = decision.actor_id
+    source = decision.observation
+    perceived = turn.perceptions.get(actor, Perception(actor_id=actor))
+    additions = [
+        MemoryEntry(
+            source_message_id=source.message_id,
+            source_revision_id=source.revision_id,
+            source_hash=source.content_hash,
+            source_role="user",
+            scene_id=source.source_scene_id or source.scene_id,
+            observer_id=actor,
+            speaker_id="@player",
+            kind="player_observation",
+            quote=quote,
+        )
+        for quote in perceived.quotes
+    ]
+    if turn.verdict is None:
+        return additions
+    if decision.spoken_evidence:
+        additions.append(
+            memory.from_source(reply, actor, actor, decision.spoken_evidence, "own_speech")
+        )
+    additions.extend(
+        memory.from_source(reply, actor, heard.speaker_id, heard.quote, "heard_speech")
+        for heard in turn.verdict.heard
+        if heard.actor_id == actor
+    )
+    return additions

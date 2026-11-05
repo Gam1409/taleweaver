@@ -36,13 +36,18 @@ relationship, attachment, needs, or mood scales, background reflection, new
 physical actions, or automatic promises.
 
 The cognitive input contains the selected NPC's authored character/goal/profile,
-the current player request explicitly marked as unverified, and their own last
-validated speech where the source still matches. It deliberately excludes global
-history, the player's NPC journal, other NPCs' private notes, and shared RAG.
-This restricted view can miss conversational context; observer-specific memory
-is future work. The player request can itself contain deceptive or instructional
-text. Provenance and prompts constrain its interpretation but do not provide a
-formal semantic guarantee against model mistakes.
+projected observable excerpts from the player request, and a bounded window of
+source-checked witnessed quotations. A separate perception request sees the raw
+player message and projects access for each selected present NPC. Individual NPC
+cognition receives only the approved excerpts. The host checks observer IDs and
+exact quotations; classification of what was publicly observable still depends
+on a fallible model. When the player's saved input belongs to a different scene,
+incoming NPCs receive no excerpts from it.
+
+This deliberately excludes global history, the player's NPC journal, other NPCs'
+private notes and shared RAG. Restricted input can miss conversational context.
+Deceptive or instructional text remains untrusted; provenance is not a formal
+semantic guarantee against model mistakes.
 
 The policy `goal-first-v1` ranks supported goal alignment ahead of neutral/unknown,
 then conflict. Support/conflict requires a literal authored-goal quote, but the
@@ -87,7 +92,37 @@ conservatively instead of assuming indirect dependencies remain valid.
 The production session writer uses the existing single-worker mutation lease.
 CHPM does not add a distributed locking guarantee beyond that host contract.
 
+## Observer memory
+
+The default window keeps 12 quotations per selected NPC (configurable 0–24).
+Each entry identifies its observer, speaker, source message, revision, content
+hash, scene and kind. The kinds distinguish projected player observations, the
+NPC's own speech, and speech heard from another present NPC. Quotations remain
+claims or attempted actions, never independent proof that a world event happened.
+
+Before every use, the adapter checks the source session, role, revision, hash,
+exact quote and observer. Deleted or edited sources are excluded. Regeneration
+removes quotations from that message and invalidates dependent current decisions;
+full turn replay and checkpoints restore the saved memory state. Accepted later
+utterances with unchanged sources remain their own historical observations.
+
+The live reviewer may extract additional heard speech only for controlled observers
+and other physically present speakers. Attribution or audibility uncertainty must
+produce omission. Actor IDs and quotes are checked in code; the interpretation of
+audibility is still model-assisted. Observe mode retains only projected player
+observations because its ordinary narration is not reviewed by CHPM.
+
+Old quotations leave the configured window with an explicit eviction count.
+This is a bounded transcript, not an obligation ledger or long-term belief graph.
+Setting the window to zero stops recalling previous quotations. The CHPM settings
+endpoint exposes memory contents only in the administrator trace; ordinary owners
+see counts. Existing explicitly enabled raw session debug and save exports retain
+their established access to the complete session state.
+
 ## Requests and cost
+
+Stage two adds up to one shared perception request before individual proposals.
+Memory increases proposal input size, bounded by the same per-request limit.
 
 Defaults are 1,200 output tokens per proposal/review, 24,000 input characters per
 request including instructions/schema, and six logical CHPM requests per turn.
@@ -98,9 +133,15 @@ No private decision is requested for absent selected NPCs.
 | Mode | Logical requests for N present selected NPCs |
 |---|---:|
 | Standard | 0 |
-| Observe, successful | N |
-| Enabled, first review passes | N + 1 |
-| Enabled, one repair and second review | N + 3 |
+| Observe, successful | N + 1 |
+| Enabled, first review passes | N + 2 |
+| Enabled, one repair and second review | N + 4 |
+
+These counts assume at least one selected NPC is present in the input's scene.
+Cross-scene input is withheld without a perception request. For three NPCs, seven
+requests are needed to allow a repair; the default six permits the initial review
+but cannot cover that repair. The system checks that two requests remain before
+starting a repair. Exhaustion is visible, not a silent switch to standard mode.
 
 The normal narrator request is additional. The legacy social request may still
 be needed for other NPCs. Router/provider retries or configured fallback may add
@@ -108,7 +149,7 @@ physical attempts; the pilot counts logical requests, not transport attempts.
 
 The settings panel reports the last completed turn's calls, repairs, and input/
 output **characters**, not token estimates. Existing LLM telemetry uses
-`operation=chpm` with proposal/validation/repair phases and records provider usage
+`operation=chpm` with perception/proposal/validation/repair phases and records provider usage
 when supplied. Character limits are operational bounds, not token guarantees.
 Live failures appear in the turn error and normal inference diagnostics; their
 rolled-back state is not presented as a successfully completed usage record.
@@ -124,5 +165,5 @@ Start with Observe and one character. Compare accepted alternatives with a stron
 standard baseline, then enable the dialogue pilot in a test session. Measure
 unnecessary clarifications, voice consistency, initiative, false review failures,
 latency and actual token usage. No live-model quality claim follows from the
-mock-based regression suite. Extended psychology, observer-specific long-term
-memory, all-mode support and a dedicated model configuration are later work.
+mock-based regression suite. Extended psychology, long-term memory consolidation,
+all-mode support and a dedicated model configuration are later work.

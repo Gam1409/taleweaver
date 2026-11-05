@@ -16,6 +16,7 @@ class Settings(Contract):
     max_output_tokens: int = Field(default=1200, ge=512, le=2048, strict=True)
     max_input_chars: int = Field(default=24000, ge=8000, le=48000, strict=True)
     max_calls_per_turn: int = Field(default=6, ge=1, le=8, strict=True)
+    memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
 
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
@@ -38,9 +39,33 @@ class Observation(Contract):
     content_hash: str
     sequence: int = Field(ge=0)
     scene_id: str
+    source_scene_id: str | None = None
     minute: int = Field(ge=0)
     # This is an unverified request, never a world fact or a belief update.
     player_request: str = Field(max_length=6000)
+    perception_uncertain: bool = False
+
+
+class Perception(Contract):
+    actor_id: str
+    quotes: list[str] = Field(default_factory=list, max_length=3)
+    uncertain: StrictBool = False
+
+
+class Projection(Contract):
+    audience: list[Perception] = Field(max_length=3)
+
+
+class MemoryEntry(Contract):
+    source_message_id: str
+    source_revision_id: str | None = None
+    source_hash: str
+    source_role: Literal["user", "assistant"]
+    scene_id: str
+    observer_id: str
+    speaker_id: str
+    kind: Literal["player_observation", "own_speech", "heard_speech"]
+    quote: str = Field(min_length=1, max_length=2000)
 
 
 class Candidate(Contract):
@@ -77,6 +102,7 @@ class Usage(Contract):
     repairs: int = 0
     status: Literal["idle", "prepared", "validated", "shadow", "failed"] = "idle"
     detail: str = ""
+    memory_evictions: int = 0
 
 
 class KernelState(Contract):
@@ -85,7 +111,15 @@ class KernelState(Contract):
     settings: Settings = Field(default_factory=Settings)
     # A high-water record per actor rejects old events without an unbounded journal.
     actors: dict[str, Decision] = Field(default_factory=dict, max_length=3)
+    memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=3)
     usage: Usage = Field(default_factory=Usage)
+
+    @model_validator(mode="after")
+    def bounded_observer_memory(self) -> "KernelState":
+        for actor, entries in self.memories.items():
+            if len(entries) > 24 or any(entry.observer_id != actor for entry in entries):
+                raise ValueError("Invalid CHPM observer memory window.")
+        return self
 
 
 class SpokenEvidence(Contract):
@@ -93,7 +127,12 @@ class SpokenEvidence(Contract):
     quote: str = Field(max_length=2000)
 
 
+class HeardSpeech(SpokenEvidence):
+    speaker_id: str
+
+
 class Verdict(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
     evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=3)
+    heard: list[HeardSpeech] = Field(default_factory=list, max_length=12)

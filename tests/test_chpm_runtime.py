@@ -5,9 +5,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.engine.chpm import context, inference, rendering, runtime
+from backend.engine.chpm import context, inference, perception, rendering, runtime
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.schema import KernelState, Settings, SpokenEvidence, Usage, Verdict
+from backend.engine.chpm.schema import (
+    KernelState,
+    Perception,
+    Settings,
+    SpokenEvidence,
+    Usage,
+    Verdict,
+)
 from backend.engine.chpm.state import KEY, load
 from backend.engine.turn_replay import stream
 from tests.test_chpm_kernel import decision, observation, proposal
@@ -57,6 +64,11 @@ async def test_preparation_is_once_and_shadow_does_not_direct_narration(monkeypa
         context, "actor_context", AsyncMock(return_value={"authored_goal": "Repair the bridge"})
     )
     monkeypatch.setattr(runtime, "release_for_model", AsyncMock())
+    monkeypatch.setattr(
+        perception,
+        "project",
+        AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello"])}),
+    )
     mocked = AsyncMock(return_value=proposal())
     monkeypatch.setattr(inference, "request", mocked)
     result = await runtime.prepare(host, "Hello", [actor])
@@ -99,7 +111,9 @@ async def test_matching_reply_commits_source_and_own_speech(monkeypatch):
         )
         == text
     )
-    reply = SimpleNamespace(id="reply", revision_id="v1", content=text)
+    reply = SimpleNamespace(
+        id="reply", revision_id="v1", content=text, role="assistant", scene_id="room"
+    )
     runtime.finish(host, reply, completed=True)
     saved = load(host.state)
     assert saved.actors["npc"].reply_id == "reply"

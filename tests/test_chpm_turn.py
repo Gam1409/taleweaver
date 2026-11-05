@@ -20,6 +20,7 @@ class ChpmRoles(TurnRoles):
         super().__init__()
         self.reject = reject
         self.chpm_calls = []
+        self.proposal_inputs = []
 
     def for_role(self, user, role, **kwargs):
         model = super().for_role(user, role, **kwargs)
@@ -33,6 +34,20 @@ class ChpmRoles(TurnRoles):
         self.chpm_calls.append(phase)
         if phase == "repair":
             return NARRATION
+        if phase == "perception":
+            supplied = json.loads(payload)
+            return json.dumps(
+                {
+                    "audience": [
+                        {
+                            "actor_id": actor,
+                            "quotes": [supplied["player_message_untrusted"]],
+                            "uncertain": False,
+                        }
+                        for actor in supplied["present_observers"]
+                    ]
+                }
+            )
         if phase == "validation":
             return json.dumps(
                 {
@@ -46,6 +61,7 @@ class ChpmRoles(TurnRoles):
             )
         assert phase == "proposal"
         supplied = json.loads(payload)
+        self.proposal_inputs.append(supplied)
         assert "recent_dialogue" not in supplied
         assert "HIDDEN_RING" not in payload
         return json.dumps(
@@ -93,7 +109,11 @@ async def test_real_turn_preserves_opt_out_and_commits_before_live_text(monkeypa
                 assert (await db.get(TurnReplay, "session-1")).status == "ready"
         assert not any(chunk.startswith("event: error") for chunk in chunks), "".join(chunks)
         assert any(chunk.startswith("event: final") for chunk in chunks)
-        expected = {"off": [], "shadow": ["proposal"], "live": ["proposal", "validation"]}
+        expected = {
+            "off": [],
+            "shadow": ["perception", "proposal"],
+            "live": ["perception", "proposal", "validation"],
+        }
         assert roles.chpm_calls == expected[mode]
         assert ("InteractionPlan" in [call[0] for call in roles.calls]) == (mode != "live")
         prompt = json.dumps(roles.prompts[-1], ensure_ascii=False)
@@ -125,3 +145,27 @@ async def test_rejected_live_reply_rolls_back_and_retry_is_fresh(monkeypatch):
         assert any(chunk.startswith("event: final") for chunk in chunks), "".join(chunks)
         assert roles.chpm_calls.count("proposal") == 2
         assert load(manager.state).actors["LINA"].status == "delivered"
+
+
+async def test_second_turn_recalls_only_source_bound_witnessed_quotes(monkeypatch):
+    roles = ChpmRoles()
+    install_roles(monkeypatch, roles)
+    monkeypatch.setattr(inference, "GameMasterLLM", roles)
+    monkeypatch.setattr(rendering, "GameMasterLLM", roles)
+    async with TestSessionLocal() as db:
+        user, _, state, _ = await seed_vn(db)
+        state.entity_states = {
+            **state.entity_states,
+            KEY: KernelState(settings=Settings(mode="live", actor_ids=["LINA"])).model_dump(),
+        }
+        await db.commit()
+        for text in (ACTION, "Я продолжаю разговор."):
+            manager = GameTurnManager(db, "session-1", user)
+            chunks = [chunk async for chunk in manager.process_turn(text)]
+            assert any(chunk.startswith("event: final") for chunk in chunks), "".join(chunks)
+        assert roles.proposal_inputs[0]["witnessed_utterances_not_world_facts"] == []
+        memories = roles.proposal_inputs[1]["witnessed_utterances_not_world_facts"]
+        assert {entry["kind"] for entry in memories} == {"player_observation", "own_speech"}
+        assert all(entry["observer_id"] == "LINA" for entry in memories)
+        assert all(entry["source_message_id"] and entry["source_hash"] for entry in memories)
+        assert roles.proposal_inputs[1]["own_previous_words"] == ""

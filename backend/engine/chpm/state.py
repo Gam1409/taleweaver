@@ -29,9 +29,13 @@ def controls(state: Any, actor_id: str) -> bool:
 
 def retract(state: Any, message_id: str) -> None:
     current = load(state)
-    if not current.actors:
+    if not current.actors and not current.memories:
         return
     # Later decisions can depend on earlier speech. Clear all derived pilot
     # decisions on a source change rather than pretending they were recomputed.
     current.actors = {}
+    current.memories = {
+        actor: [entry for entry in entries if entry.source_message_id != message_id]
+        for actor, entries in current.memories.items()
+    }
     save(state, current, expected_revision=current.revision)

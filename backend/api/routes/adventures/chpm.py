@@ -46,6 +46,13 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "available": await session_is_vn(db, state),
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
+        "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
+        "memory": {
+            actor: [entry.model_dump() for entry in entries]
+            for actor, entries in current.memories.items()
+        }
+        if user.role == "admin"
+        else {},
         "trace": [value.model_dump() for value in current.actors.values()]
         if user.role == "admin"
         else [],
@@ -82,6 +89,7 @@ async def patch(
         payload.settings.actor_ids,
     ):
         current.actors = {}
+        current.memories = {}
         current.usage = Usage()
     current.settings = payload.settings
     current.revision += 1
@@ -106,6 +114,11 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
         return
     if not await session_is_vn(db, state):
         raise HTTPException(409, "The CHPM dialogue pilot supports Visual Novel sessions only.")
+    required = len(settings.actor_ids) + 1 + (1 if settings.mode == "live" else 0)
+    if settings.max_calls_per_turn < required:
+        raise HTTPException(
+            422, "The request budget must cover perception, selected NPCs, and live review."
+        )
     ids = {row["id"] for row in await _characters(db, state)}
     if not set(settings.actor_ids) <= ids:
         raise HTTPException(422, "Choose known NPCs from this session.")
@@ -131,6 +144,7 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
     restored = {
         **value,
         "actors": prior.get("actors", {}) if same_mode and same_actors else {},
+        "memories": prior.get("memories", {}) if same_mode and same_actors else {},
         "usage": Usage().model_dump(),
     }
     state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}

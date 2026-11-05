@@ -99,6 +99,7 @@ async def test_snapshot_restore_includes_chpm_and_settings_update_fences_replay(
 
 async def test_private_trace_is_admin_only(auth_client, chpm_world):
     from tests.test_chpm_kernel import decision
+    from tests.test_chpm_memory import entry
 
     assert (await auth_client.patch(PATH, json=update())).status_code == 200
     async with TestSessionLocal() as db:
@@ -107,11 +108,37 @@ async def test_private_trace_is_admin_only(auth_client, chpm_world):
         )
         value = deepcopy(state.entity_states)
         value[KEY]["actors"] = {"NPC_NEW": decision().model_dump()}
+        value[KEY]["memories"] = {"NPC_NEW": [entry(observer="NPC_NEW").model_dump()]}
         state.entity_states = value
         await db.commit()
     assert len((await auth_client.get(PATH)).json()["trace"]) == 1
+    assert len((await auth_client.get(PATH)).json()["memory"]["NPC_NEW"]) == 1
     async with TestSessionLocal() as db:
         user = await db.scalar(select(User).where(User.username == "test_user"))
         user.role = "user"
         await db.commit()
-    assert (await auth_client.get(PATH)).json()["trace"] == []
+    public = (await auth_client.get(PATH)).json()
+    assert public["trace"] == []
+    assert public["memory"] == {}
+    assert public["memory_counts"] == {"NPC_NEW": 1}
+
+
+async def test_perception_requires_a_request_budget_and_mode_switch_clears_memory(
+    auth_client, chpm_world
+):
+    from tests.test_chpm_memory import entry
+
+    response = await auth_client.patch(PATH, json=update("live", max_calls_per_turn=2))
+    assert response.status_code == 422
+    assert (await auth_client.patch(PATH, json=update())).status_code == 200
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        value = deepcopy(state.entity_states)
+        value[KEY]["memories"] = {"NPC_NEW": [entry(observer="NPC_NEW").model_dump()]}
+        state.entity_states = value
+        await db.commit()
+    response = await auth_client.patch(PATH, json=update("live", revision=1))
+    assert response.status_code == 200
+    assert response.json()["memory"] == {}

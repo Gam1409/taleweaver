@@ -21,6 +21,10 @@ async def validate(
         raise ChpmError("CHPM received an incomplete narration. No response was published.")
     verdict = await _review(manager, turn, text, resolution)
     if not verdict.matches:
+        if turn.usage.calls + 2 > turn.initial.settings.max_calls_per_turn:
+            raise ChpmError(
+                "CHPM needs two remaining requests for a repair and another review. Increase the turn budget."
+            )
         try:
             text = await _repair(manager, turn, text, resolution, verdict.issues, system_prompt)
         except ChpmError:
@@ -45,7 +49,12 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         turn.initial.settings,
         turn.usage,
         prompts.VERIFY,
-        {"contract": contract(turn), "host_resolution": resolution, "narration": text},
+        {
+            "contract": contract(turn),
+            "host_resolution": resolution,
+            "narration": text,
+            "present_speakers": turn.present_names,
+        },
         Verdict,
         "validation",
     )
@@ -62,7 +71,20 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             raise ChpmError("CHPM validator supplied no exact speech evidence.")
     if verdict.matches and verdict.issues:
         raise ChpmError("CHPM validator returned a contradictory verdict.")
+    _validate_hearing(turn, verdict, text)
     return verdict
+
+
+def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
+    for entry in verdict.heard:
+        if (
+            entry.actor_id not in turn.decisions
+            or entry.speaker_id not in turn.present_names
+            or entry.speaker_id == entry.actor_id
+            or not entry.quote
+            or entry.quote not in text
+        ):
+            raise ChpmError("CHPM hearing evidence has an invalid observer, speaker, or quote.")
 
 
 async def _repair(
