@@ -166,6 +166,9 @@ const emit = defineEmits<{ command: [value: string] }>()
         v-if="preview.rejected_entries?.length"
         :entries="preview.rejected_entries"
         :sources="preview.rejected_sources"
+        :token="preview.token"
+        :busy="busy"
+        @command="emit('command', $event)"
       />
       <p
         v-for="(error, index) in preview.rejected_entries?.length ? [] : preview.errors"

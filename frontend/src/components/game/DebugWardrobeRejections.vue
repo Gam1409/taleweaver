@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DebugWardrobeCorrection from './DebugWardrobeCorrection.vue'
 export interface WardrobeRejection {
   index: number
   label: string
@@ -11,7 +12,13 @@ export interface WardrobeRejection {
   uncovered_regions: string[]
   reasons: string[]
 }
-defineProps<{ entries: WardrobeRejection[]; sources?: Record<string, string> | null }>()
+defineProps<{
+  entries: WardrobeRejection[]
+  sources?: Record<string, string> | null
+  token?: string
+  busy?: boolean
+}>()
+const emit = defineEmits<{ command: [value: string] }>()
 </script>
 <template>
   <section class="space-y-3">
@@ -54,6 +61,15 @@ defineProps<{ entries: WardrobeRejection[]; sources?: Record<string, string> | n
       <p v-else class="text-amber-200">
         The cited assistant message was not found in the reviewed history.
       </p>
+      <DebugWardrobeCorrection
+        v-if="token && sources?.[entry.source_message_id] && entry.coverage.length"
+        :key="`${token}:${entry.index}`"
+        :entry="entry"
+        :source="sources[entry.source_message_id]!"
+        :token="token"
+        :busy="!!busy"
+        @command="emit('command', $event)"
+      />
     </article>
   </section>
 </template>

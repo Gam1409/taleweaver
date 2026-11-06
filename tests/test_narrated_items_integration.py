@@ -92,6 +92,72 @@ async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch, pending_ca
 
 
 @pytest.mark.asyncio
+async def test_rejected_item_does_not_discard_narrator_thoughts_or_emotions(monkeypatch):
+    from backend.engine.npc_presentation.settings import KEY as PORTRAIT_KEY
+
+    body = "Лина оставила шарф у себя."
+    cue = {
+        "npc_id": "LINA",
+        "emotion": "determination",
+        "intensity": 73,
+        "thought": "Я его сохраню.",
+    }
+    footer = "<npc-state>" + json.dumps({"npcs": [cue]}) + "</npc-state>"
+    monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", body + footer)
+
+    class RejectedGiftRoles(TurnRoles):
+        async def structured(self, *args, **kwargs):
+            schema = kwargs.get("response_model") or args[2]
+            if schema is ItemExtraction:
+                return ItemExtraction(
+                    actions=[
+                        ItemAction(
+                            item_id="UNREGISTERED_SCARF",
+                            source_owner="LINA",
+                            destination_owner=PLAYER,
+                            disposition="carried",
+                            evidence=body,
+                            basis="completed",
+                        )
+                    ]
+                )
+            return await super().structured(*args, **kwargs)
+
+    install_roles(monkeypatch, RejectedGiftRoles())
+    async with TestSessionLocal() as db:
+        user, avatar, state, _ = await seed_vn(db)
+        state.entity_states = {
+            **state.entity_states,
+            PORTRAIT_KEY: {
+                "emotion_palette": True,
+                "character_thoughts": True,
+                "brightness": 40,
+            },
+        }
+        await db.commit()
+        inventory = list(avatar.inventory)
+        manager = GameTurnManager(db, "session-1", user)
+        events = [event async for event in manager.process_turn("Можно взять шарф?")]
+        assert not any(event.startswith("event: error") for event in events), events
+        assert any("need review" in event for event in events if event.startswith("event: system"))
+        await db.refresh(state)
+        assert state.entity_states[KEY]["rejected"] and not state.entity_states[KEY]["accepted"]
+        assert avatar.inventory == inventory
+        message = await db.scalar(
+            select(ChatMessage)
+            .where(
+                ChatMessage.session_id == state.session_id,
+                ChatMessage.role == "assistant",
+            )
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        )
+        assert message.content == body
+        assert message.to_client_dict()["portrait_state"]["npcs"]["LINA"] == {
+            key: value for key, value in cue.items() if key != "npc_id"
+        }
+
+
+@pytest.mark.asyncio
 async def test_current_wear_description_registers_garment_without_dressing_action(monkeypatch):
     narration = "Лина стоит у окна в синем хлопковом халате."
     monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", narration)
