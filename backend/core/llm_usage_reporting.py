@@ -4,7 +4,7 @@ from typing import Any
 
 
 def _count(value: Any) -> int:
-    return value if type(value) is int and 0 <= value <= 10**12 else 0
+    return int(value) if type(value) is int and 0 <= value <= 10**12 else 0
 
 
 def print_token_usage(usage: Any, model: str, system: str, user: str, response: str) -> None:

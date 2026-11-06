@@ -6,7 +6,17 @@ on:
     branches: [main]
   push:
     branches: [main]
-    paths: [pyproject.toml, poetry.lock, frontend/package.json, frontend/package-lock.json, .github/workflows/security.yml]
+    paths:
+      - backend/**
+      - desktop/**
+      - scripts/**
+      - frontend/src/**
+      - frontend/tests/**
+      - pyproject.toml
+      - poetry.lock
+      - frontend/package.json
+      - frontend/package-lock.json
+      - .github/workflows/security.yml
   schedule:
     - cron: '23 5 * * 1'
 
