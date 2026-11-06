@@ -13,6 +13,7 @@ from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items.apply import apply_actions
+from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_snapshot
@@ -20,6 +21,7 @@ from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_sna
 logger = logging.getLogger(__name__)
 KEY = "__narrated_items__"
 MAX_NARRATION = 16000
+MAX_CONTEXT = 64000
 
 
 def _status(manager: Any, message_id: str, narration: str, status: str, **details: Any) -> None:
@@ -75,15 +77,6 @@ async def reconcile_items(
     for identifier, actor in actors.items():
         actor.update(identity_facts(identities[identifier]))
     snapshot = possession_snapshot(manager, rows)
-    if len(snapshot.items) > 100 or len(actors) > 13:
-        _status(
-            manager,
-            message_id,
-            narration,
-            "needs_review",
-            reason="Item context exceeds reconciliation bounds.",
-        )
-        return ["Item reconciliation needs review; the available item context is too large."]
     detailed = detail_settings(manager)["detailed"]
     payload = json.dumps(
         {
@@ -91,23 +84,23 @@ async def reconcile_items(
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
-            "actors": [
-                {key: actor.get(key) for key in ("id", "name", "age_years", "visual_profile")}
-                for actor in actors.values()
-            ],
-            "items": snapshot.items,
+            "actors": actor_context(actors),
+            "items": item_context(snapshot.items),
             "owners": snapshot.owners,
             "detailed_clothing": detailed,
         },
         ensure_ascii=False,
     )
-    if len(payload) > 64000:
+    if len(payload) > MAX_CONTEXT:
         _status(
             manager,
             message_id,
             narration,
             "needs_review",
             reason="Item context exceeds text budget.",
+            actor_count=len(actors),
+            item_count=len(snapshot.items),
+            context_characters=len(payload),
         )
         return ["Item reconciliation needs review; the available item context is too large."]
     await release_for_model(manager)

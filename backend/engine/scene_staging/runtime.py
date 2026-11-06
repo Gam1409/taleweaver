@@ -11,12 +11,13 @@ from backend.core.reliability_metrics import record_staging
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.schema import INSTRUCTIONS, SceneExtraction
-from backend.engine.scene_staging.state import KEY, MAX_CAST, digest, project, reconcile
+from backend.engine.scene_staging.state import KEY, digest, project, reconcile
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.config import read_settings
 
 logger = logging.getLogger(__name__)
 MAX_NARRATION = 16000
+MAX_CONTEXT = 64000
 
 
 async def reconcile_narration(manager: Any, narration: str, *, completed: bool) -> None:
@@ -46,20 +47,12 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         for entity in entities
         if entity.get("entity_type") == "NPC" and not entity.get("is_defeated")
     )
-    if len(cast) > MAX_CAST:
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
-        props.invalidate(state)
-        return  # Never silently drop a character or truncate the completed narrative.
     rows = await session_objects(manager.db, state.session_id)
     valid_items = props.candidates(
         manager.avatar, rows, state, {row.id for row in rows if row.entity_type == "NPC"}
     )
     present = {person["id"] for person in cast}
     items = [item for item in valid_items if item["owner_id"] in present]
-    if len(items) > 100:
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
-        props.invalidate(state)
-        return
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
@@ -70,6 +63,11 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         },
         ensure_ascii=False,
     )
+    if len(payload) > MAX_CONTEXT:
+        result.update(reason="Staging context exceeds the text budget.", cast_size=len(cast))
+        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        props.invalidate(state)
+        return
     # The turn's mutation lease and recovery record protect this short commit.
     await release_for_model(manager)
     try:

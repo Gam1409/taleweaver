@@ -9,7 +9,6 @@ from backend.engine.scene_staging.schema import SceneDelta, SceneExtraction
 from backend.engine.visual_novel.config import read_settings
 
 KEY = "__scene_staging__"
-MAX_CAST = 12
 
 
 def digest(text: str) -> str:
