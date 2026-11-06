@@ -65,8 +65,7 @@ async def generate_image(
         target_dir = _resolve_output_dir(target_dir)
 
     logger.info(
-        "Generating image with model %s (provider: %s, prompt_%s)",
-        model,
+        "Generating image (provider: %s, prompt_%s)",
         provider_key,
         _safe_prompt_summary(prompt),
     )
@@ -212,9 +211,8 @@ async def _generate_with_litellm(
         kwargs["api_base"] = ollama_url
 
     logger.info(
-        "Final image generation config: provider=%s model=%s prompt=%s controls=%s",
+        "Final image generation config: provider=%s prompt=%s controls=%s",
         provider_key,
-        model,
         _safe_prompt_summary(prompt),
         {
             "width": "width" in kwargs,

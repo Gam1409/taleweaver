@@ -32,5 +32,5 @@ test('session load error offers retry and library navigation and escapes its mes
   assert.match(html, /Try again/)
   assert.match(html, /Back to library/)
   assert.match(html, /&lt;script&gt;/)
-  assert.doesNotMatch(html, /<script>/)
+  assert.doesNotMatch(html, /<script\b/i)
 })

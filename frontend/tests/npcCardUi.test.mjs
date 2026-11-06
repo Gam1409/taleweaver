@@ -25,7 +25,7 @@ test('emotion-only estimates do not fabricate relationship scores; text is escap
   const ui = await component('NpcNarrativeInsights')
   const html = await render(ui, { insights: { available: true, relationship: null, emotion: '<script>alarm</script>', evidence: '<img onerror=alert(1)>' } })
   assert.match(html, /No confirmed relationship estimate/)
-  assert.doesNotMatch(html, /<dt|<script>|<img /)
+  assert.doesNotMatch(html, /<dt|<script\b|<img\b/i)
   assert.match(html, /&lt;script&gt;/)
   const scores = await render(ui, { insights: { available: true, relationship: { trust: 12, affinity: -3, respect: 4, tension: 2 }, emotion: null } })
   assert.match(scores, /\+12/)

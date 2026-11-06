@@ -34,6 +34,6 @@ test('session UUID is small, selectable and only rendered when system diagnostic
 test('empty IDs stay hidden and displayed values are escaped', async () => {
   assert.doesNotMatch(await render({ enabled: true }), /Session UUID/)
   const rendered = await render({ enabled: true, sessionId: '<script>bad</script>' })
-  assert.doesNotMatch(rendered, /<script>/)
+  assert.doesNotMatch(rendered, /<script\b/i)
   assert.match(rendered, /&lt;script&gt;/)
 })

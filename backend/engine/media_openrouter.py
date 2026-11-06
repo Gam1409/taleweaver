@@ -54,10 +54,7 @@ async def _generate_image_openrouter_direct(
     elif provider_options.get("aspect_ratio"):
         payload["aspect_ratio"] = provider_options["aspect_ratio"]
 
-    logger.info(
-        "Calling OpenRouter image endpoint (https://openrouter.ai/api/v1/images) for model %s",
-        clean_model,
-    )
+    logger.info("Calling OpenRouter image endpoint")
 
     response = await asyncio.to_thread(
         requests.post,
@@ -74,9 +71,7 @@ async def _generate_image_openrouter_direct(
         if response.status_code != 200:
             # If OpenRouter explicitly informs that it's a chat model or cannot be used with /images, try chat fallback
             if "chat/completions" in error_msg.lower() or "modalities" in error_msg.lower():
-                logger.info(
-                    "Falling back to chat/completions with modalities=['image'] for %s", clean_model
-                )
+                logger.info("Falling back to chat/completions with image modality")
                 return await engine._generate_image_openrouter_chat_fallback(
                     prompt=prompt,
                     model=model,
@@ -159,17 +154,13 @@ async def _retry_rejected_dimensions(
         error_msg = response.text[:300]
 
     logger.warning(
-        "OpenRouter /api/v1/images endpoint returned error (%s): %s",
+        "OpenRouter /api/v1/images endpoint returned HTTP %s",
         response.status_code,
-        error_msg,
     )
 
     # If parameter error with size/aspect_ratio, retry with minimal payload (model + prompt)
     if response.status_code == 400 and ("size" in payload or "aspect_ratio" in payload):
-        logger.info(
-            "Retrying OpenRouter /api/v1/images with minimal payload due to parameter rejection: %s",
-            error_msg,
-        )
+        logger.info("Retrying OpenRouter /api/v1/images after dimension parameter rejection")
         retry_payload = {"model": clean_model, "prompt": prompt}
         retry_resp = await asyncio.to_thread(
             requests.post,
@@ -205,7 +196,7 @@ async def _save_openrouter_result(
     result = response.json()
     data_list = result.get("data", [])
     if not data_list or not isinstance(data_list, list):
-        logger.error("OpenRouter response missing 'data' list: %s", result)
+        logger.error("OpenRouter response missing 'data' list")
         raise RuntimeError("OpenRouter response did not contain image data.")
 
     first_img = data_list[0]

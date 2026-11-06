@@ -50,7 +50,7 @@ test('long outfits collapse and garment text is escaped', async () => {
   const html = await render(clothing, { clothing: { appearance: { age_years: null }, worn: Array.from({ length: 8 }, (_, i) => garment(`g${i}`, i % 5, { name: '<script>alert(1)</script>', description: '<img onerror=evil()>' })) } })
   assert.match(html, /<details/)
   assert.match(html, /Worn clothing · 8/)
-  assert.doesNotMatch(html, /<details[^>]*open|<script>|<img /)
+  assert.doesNotMatch(html, /<details[^>]*open|<script\b|<img\b/i)
   assert.match(html, /&lt;script&gt;/)
 })
 
