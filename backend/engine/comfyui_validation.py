@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.core.comfyui_config import ComfyWorkflow
+from backend.core.comfyui_schema import combo_choices
 
 
 def _input_errors(node_id: str, inputs: dict, schema: dict) -> list[str]:
@@ -11,8 +12,8 @@ def _input_errors(node_id: str, inputs: dict, schema: dict) -> list[str]:
         if name not in inputs or not isinstance(definition, (list, tuple)) or not definition:
             continue
         value = inputs[name]
-        choices = definition[0]
-        if isinstance(choices, list) and not isinstance(value, list) and value not in choices:
+        choices = combo_choices(definition)
+        if choices is not None and not isinstance(value, list) and value not in choices:
             errors.append(f"{node_id}.{name}: selected value is not available on the server.")
     return errors
 
@@ -23,9 +24,9 @@ def _input_kind(spec: Any) -> str:
         if len(spec) > 1 and isinstance(spec[1], dict) and spec[1].get("forceInput") is True:
             return "socket"
         first = spec[0]
-        if isinstance(first, (list, tuple)):
+        if isinstance(first, (list, tuple)) or first == "COMBO":
             return "combo"
-        if first in {"STRING", "INT", "FLOAT", "BOOLEAN"}:
+        if isinstance(first, str) and first in {"STRING", "INT", "FLOAT", "BOOLEAN"}:
             return str(first).lower()
     return "socket"
 

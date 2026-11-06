@@ -1,6 +1,7 @@
 """Small, editable ComfyUI starter graphs with explicit architecture choices."""
 
 from backend.core.comfyui_config import ComfyWorkflow
+from backend.core.comfyui_schema import combo_choices
 from backend.core.comfyui_starter_models import (
     FAMILIES,
     LoaderRecipe,
@@ -151,13 +152,7 @@ def _node_choices(key: str, entry: dict, schema: dict) -> list[dict]:
         if field not in CHOICE_FIELDS or not isinstance(value, str):
             continue
         definition = schema.get(field, [])
-        choices = (
-            definition[0]
-            if isinstance(definition, (list, tuple))
-            and definition
-            and isinstance(definition[0], list)
-            else []
-        )
+        choices = combo_choices(definition) or []
         result.append(
             {
                 "node_id": key,
