@@ -18,9 +18,10 @@
     "preview": "vite preview",
     "csp:test": "vite build && vite preview --host 127.0.0.1 --port 4173",
     "csp:test:prod-mode": "vite build --mode production && vite preview --mode production --host 127.0.0.1 --port 4173",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix --ignore-path .gitignore",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --ignore-path .gitignore --max-warnings 0",
     "format": "prettier --write src/",
-    "test:presets": "node tests/comfyPresetDraft.test.mjs && node tests/comfyPresetWorkspace.test.mjs && node tests/comfyWorkflowGraph.test.mjs && node tests/comfyEditorImport.test.mjs && node tests/comfyAsyncEditing.test.mjs"
+    "test:presets": "node tests/comfyPresetDraft.test.mjs && node tests/comfyPresetWorkspace.test.mjs && node tests/comfyWorkflowGraph.test.mjs && node tests/comfyEditorImport.test.mjs && node tests/comfyAsyncEditing.test.mjs",
+    "lint:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix --ignore-path .gitignore"
   },
   "dependencies": {
     "@fontsource/acme": "^5.2.7",

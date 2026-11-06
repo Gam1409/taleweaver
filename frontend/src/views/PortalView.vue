@@ -276,7 +276,9 @@ onMounted(() => {
   if (newId) {
     trackNewAdventure(newId, newTitle)
     // Remove tracking params from URL but keep the section so the library stays visible
-    const { new_id: _a, new_title: _b, ...remainingQuery } = route.query
+    const remainingQuery = { ...route.query }
+    delete remainingQuery.new_id
+    delete remainingQuery.new_title
     router.replace({ name: 'portal', query: remainingQuery })
   }
 })

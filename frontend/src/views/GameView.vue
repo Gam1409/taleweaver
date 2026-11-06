@@ -1431,7 +1431,6 @@ const {
   handleMenuSelect,
 } = useGameInteractionState({
   isActionInputBlocked,
-  ruleMode: computed(() => sheet.value?.rule_enforcement_mode),
   npcMetadata,
   npcEntities: npcs,
   playerSheet: sheet,

@@ -12,6 +12,9 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 'latest'
   },
+  overrides: [
+    { files: ['tests/**/*.mjs', 'tests/**/*.js'], env: { node: true, browser: true, es2020: true } }
+  ],
   rules: {
     'vue/multi-word-component-names': 'off',
     'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',

@@ -11,7 +11,6 @@ type ContextMenuState = {
 
 type UseGameInteractionStateOptions = {
   isActionInputBlocked: Ref<boolean>
-  ruleMode: Ref<string | undefined>
   npcMetadata: Ref<Record<string, any>>
   npcEntities?: Ref<any[]>
   playerSheet?: Ref<any>
@@ -23,7 +22,6 @@ type UseGameInteractionStateOptions = {
 export function useGameInteractionState(options: UseGameInteractionStateOptions) {
   const {
     isActionInputBlocked,
-    ruleMode,
     npcMetadata,
     npcEntities,
     playerSheet,
@@ -150,7 +148,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
   const openContextMenu = (entity: any, event: MouseEvent) => {
     if (isActionInputBlocked.value) return
 
-    const menu = gameCommandService.buildContextMenu(entity, ruleMode.value)
+    const menu = gameCommandService.buildContextMenu(entity)
     if (!menu) return
 
     contextMenu.value = {
@@ -166,7 +164,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
   const openInventoryContextMenu = (item: any, event: MouseEvent) => {
     if (isActionInputBlocked.value) return
 
-    const menu = gameCommandService.buildInventoryContextMenu(item, ruleMode.value)
+    const menu = gameCommandService.buildInventoryContextMenu(item)
     if (!menu) return
 
     contextMenu.value = {

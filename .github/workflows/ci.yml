@@ -110,6 +110,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - check: lint
+            command: npm run lint
           - check: tests
             command: node --test tests/*.test.mjs
           - check: build

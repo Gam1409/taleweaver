@@ -55,7 +55,7 @@ function toggleMenu(id: string, ev: MouseEvent) {
   activeMenuId.value = activeMenuId.value === id ? null : id
 }
 
-function handleGlobalClick(_ev: MouseEvent) {
+function handleGlobalClick() {
   activeMenuId.value = null
 }
 

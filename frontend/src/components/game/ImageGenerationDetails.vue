@@ -4,6 +4,10 @@ import { Info, X } from 'lucide-vue-next'
 import VisualPlanDetails from './VisualPlanDetails.vue'
 
 const props = defineProps<{ details?: Record<string, unknown> | null }>()
+const visualPlan = computed(() => {
+  const value = props.details?.visual_plan
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+})
 const activeTab = ref<'image' | 'query'>('image')
 const queries = computed(() => Array.isArray(props.details?.queries) ? props.details.queries.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object') : [])
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -55,7 +59,7 @@ const fields = computed(() => [
             <dt class="text-slate-400">{{ label }}</dt><dd class="break-words">{{ details[key] }}</dd>
           </template>
         </dl>
-        <VisualPlanDetails :plan="details.visual_plan as Record<string, unknown> | undefined" :positive="details.positive_prompt" />
+        <VisualPlanDetails :plan="visualPlan" :positive="details.positive_prompt" />
         <h3 class="mb-2 text-sm font-semibold">Positive prompt</h3>
         <pre class="mb-4 select-text whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-sans text-sm">{{ details.positive_prompt ?? 'Not recorded.' }}</pre>
         <h3 class="mb-2 text-sm font-semibold">Negative prompt</h3>
