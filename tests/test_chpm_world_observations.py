@@ -72,7 +72,16 @@ def test_large_frame_is_valid_bounded_json_with_explicit_omissions():
 def test_old_source_hashes_survive_and_new_frames_are_bound_to_full_facts():
     value = mind()
     old = source()
-    raw = old.model_dump(exclude={"facts"})
+    # The original serialized source had neither optional facts nor graph metadata.
+    raw = {
+        "message_id": old.message_id,
+        "revision_id": old.revision_id,
+        "content_hash": old.content_hash,
+        "role": old.role,
+        "speaker_id": old.speaker_id,
+        "kind": old.kind,
+        "text": old.text,
+    }
     assert identifier(old, value.genesis) == fingerprint(
         {"scope": value.genesis.scope.model_dump(), "source": raw}
     )

@@ -16,6 +16,11 @@ def compact_motives(decision: Decision, contract: dict) -> list[dict]:
             "/subjective_assessments_not_world_facts",
         )
     )
+    references.update(
+        _strings(
+            contract.get("ongoing_agenda_not_world_facts", []), "/ongoing_agenda_not_world_facts"
+        )
+    )
     result = []
     for motive in decision.candidate_motives.get(decision.selected.kind, []):
         entry = motive.model_dump()

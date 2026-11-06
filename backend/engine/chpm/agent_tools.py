@@ -60,7 +60,7 @@ class Tools:
             item.id: (index, self.mind.sources[item.event_id])
             for index, item in enumerate(self.mind.snapshot.evidence)
             if item.event_id in self.mind.sources
-            and self.mind.sources[item.event_id].kind in {"speech", "world_event"}
+            and self.mind.sources[item.event_id].kind in {"speech", "narration", "world_event"}
             and self.mind.sources[item.event_id].message_id != self.observation.message_id
         }
         documents = [
@@ -135,7 +135,7 @@ class Tools:
             "source_id": alias,
             "source_message_id": source.message_id,
             "speaker_id": source.speaker_id,
-            "kind": "reported" if source.kind == "speech" else "witnessed",
+            "kind": "reported" if source.reported else "witnessed",
             "current_turn": source.message_id == self.observation.message_id,
             "text": text,
             "excerpted": text != source.text,

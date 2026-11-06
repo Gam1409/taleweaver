@@ -19,6 +19,7 @@ async def reconcile(manager: Any, mind: Mind) -> Mind:
         )
     )
     messages = {row.id: row for row in rows}
+    hashes = {key: digest(row.content) for key, row in messages.items()}
     invalid = set()
     for source in mind.sources.values():
         row = messages.get(source.message_id)
@@ -26,8 +27,8 @@ async def reconcile(manager: Any, mind: Mind) -> Mind:
             row is None
             or row.role != source.role
             or row.revision_id != source.revision_id
-            or digest(row.content) != source.content_hash
-            or (source.kind == "speech" and source.text not in row.content)
+            or hashes[source.message_id] != source.content_hash
+            or (source.reported and source.evidence_quote not in row.content)
         ):
             invalid.add(source.message_id)
     return before_messages(mind, invalid)

@@ -43,6 +43,12 @@ def context(entries: list[AgendaEntry]) -> list[dict]:
     ]
 
 
+def narrator_context(entries: list[AgendaEntry], actor_id: str) -> list[dict]:
+    """Keep every open owned purpose without repeating source quotations in prose input."""
+    owned = context([entry for entry in entries if entry.actor_id == actor_id])
+    return [{key: entry[key] for key in ("id", "kind", "text")} for entry in owned]
+
+
 def validate_intent(intent: AgendaIntent | None, entries: list[AgendaEntry]) -> None:
     if intent is None:
         return

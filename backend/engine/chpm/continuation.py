@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from backend.engine.chpm import experience, host_adapter, host_observations
+from backend.engine.chpm import agenda, experience, host_adapter, host_observations
 from backend.engine.chpm.core.contracts import Experience
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.errors import ChpmError
@@ -28,6 +28,13 @@ do not fill the turn with unchanged scenery, a technical apology or permission t
 keep writing. Preserve each NPC's own motives, values, voice and player agency.
 Earlier intentions and feelings may have changed during unreviewed turns. Do not
 present old psychological estimates as current facts or invent shared history.
+ongoing_agenda_not_world_facts contains source-checked undertakings with no recorded
+closure. Keep them available through conversational detours; they are not completed
+world actions or proof of an unchanged current plan after unreviewed events. Do not
+invent completion or abandonment, and do not recite the list in the story.
+Keep the concrete causal_continuity_not_world_facts circumstances as historical
+context, not only their abstract purpose. Do not silently invent their resolution.
+Unreviewed intervening events may qualify current status; newer host facts prevail.
 The recovery marker is private host data, never prose to repeat. Content policy
 and the story's existing tone remain unchanged.
 """
@@ -66,6 +73,17 @@ def identities(manager: Any, state: KernelState, actors: list[Any]) -> dict:
                 manager.state, actor, names
             ).model_dump(),
         }
+    return result
+
+
+async def recalled_identities(manager: Any, state: KernelState, actors: list[Any]) -> dict:
+    """Fallback keeps unfinished business only while its original sources still match."""
+    result = identities(manager, state, actors)
+    for actor in actors:
+        entries = await agenda.recall(manager, actor.id, state.agenda)
+        result[actor.id]["ongoing_agenda_not_world_facts"] = agenda.narrator_context(
+            entries, actor.id
+        )
     return result
 
 

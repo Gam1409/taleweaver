@@ -1,6 +1,9 @@
 # NPC Personality — optional CHPM dialogue module
 
-Module release **1.0.0**: start with [the player and recovery guide](chpm-continuation.md).
+Module release **1.1.0**: start with [the player and recovery guide](chpm-continuation.md).
+
+The [causal continuity guide](chpm-causal-memory.md) explains how unfinished
+purposes retain their initiating events, concrete consequences and remaining steps.
 See [release history](chpm-changelog.md) for module versions independent of data contracts.
 
 CHPM is an opt-in Visual Novel session feature. Existing sessions default to
@@ -163,6 +166,19 @@ transcript window. It does not require reciting every goal every turn or treatin
 promises as orders above personality. The deterministic authored-goal ranking is
 unchanged; dynamic agenda entries inform the proposed alternatives, not a new
 fixed numerical priority. Authored character/goal fields are never rewritten.
+
+The narrator and its reviewer also receive every source-checked open entry for
+each active NPC, even when that turn's selected motives do not cite it. This
+compact view includes IDs, kinds and texts without duplicating evidence quotes;
+exact repeated motive text uses an internal reference when shorter. Unfinished
+business survives unrelated conversations and a zero-length transcript window.
+Ordinary fallback narration also rechecks and receives these undertakings,
+including during cooldown, as historical commitments without recorded closure.
+It does not assume that unreviewed events left the current plan unchanged.
+No additional model calls are introduced. An unrelated reply need not mention or
+advance every goal. Only an explicitly selected, reviewed closure closes a ledger
+entry; changing the subject does not. Unspoken plans and intentions expressed
+only by the narrator are not automatically registered by this speech-bound ledger.
 
 `report_done` means **the NPC said it was done**. It closes the dialogue agenda,
 not a world quest. It cannot transfer items, award rewards, move an actor, or

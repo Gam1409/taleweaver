@@ -1,6 +1,7 @@
 """Resolve reviewer citations without asking a model to reproduce long quotations."""
 
 import re
+from typing import Any
 
 from pydantic import Field, StrictBool
 
@@ -23,6 +24,7 @@ class Review(Contract):
     evidence: list[Reference] = Field(default_factory=list, max_length=20)
     heard: list[HeardReference] = Field(default_factory=list, max_length=12)
     agenda_evidence: list[Reference] = Field(default_factory=list, max_length=20)
+    causal_updates: list[Any] = Field(default_factory=list, max_length=20)
 
 
 def index(text: str) -> dict[str, str]:
@@ -41,6 +43,7 @@ def resolve(review: Review, available: dict[str, str]) -> Verdict:
         {
             "matches": review.matches,
             "issues": review.issues,
+            "causal_updates": review.causal_updates,
             **{
                 field: [_resolve_entry(entry, available) for entry in getattr(review, field)]
                 for field in ("evidence", "heard", "agenda_evidence")

@@ -5,6 +5,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
+from backend.engine.chpm.causal_audit import MAX_NOTES
+from backend.engine.chpm.causal_contracts import Memory as CausalMemory
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 from backend.engine.chpm.recovery_contracts import RecoveryState
@@ -292,6 +294,8 @@ class Usage(Contract):
     simplified: bool = False
     fallback_reason: str = Field(default="", max_length=80)
     fallback_requests: int = Field(default=0, ge=0, le=1)
+    causal_notes: list[str] = Field(default_factory=list, max_length=MAX_NOTES)
+    causal_notes_omitted: int = Field(default=0, ge=0)
 
 
 def migrate_kernel_envelope(value: Any) -> Any:
@@ -315,6 +319,7 @@ class KernelState(Contract):
     memories: dict[str, list[MemoryEntry]] = Field(default_factory=dict, max_length=32)
     last_active: dict[str, int] = Field(default_factory=dict, max_length=32)
     agenda: list[AgendaEntry] = Field(default_factory=list, max_length=256)
+    causal_memory: CausalMemory = Field(default_factory=CausalMemory)
     minds: dict[str, Mind] = Field(default_factory=dict, max_length=32)
     usage: Usage = Field(default_factory=Usage)
     recovery: RecoveryState = Field(default_factory=RecoveryState)
@@ -350,3 +355,4 @@ class Verdict(Contract):
     evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=20)
     heard: list[HeardSpeech] = Field(default_factory=list, max_length=12)
     agenda_evidence: list[AgendaEvidence] = Field(default_factory=list, max_length=20)
+    causal_updates: list[Any] = Field(default_factory=list, max_length=20)

@@ -11,6 +11,7 @@ from backend.engine.chpm import (
     agent_context,
     agent_views,
     capacity,
+    causal_memory,
     cognition,
     context,
     continuation,
@@ -18,10 +19,12 @@ from backend.engine.chpm import (
     host_adapter,
     memory,
     narrative_context,
+    passages,
     perception,
     prompts,
     roster,
 )
+from backend.engine.chpm.causal_contracts import Thread
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -65,6 +68,8 @@ class Turn:
     simplified_text: str | None = None
     player_request: str = ""
     gap_cursors: dict[str, int] = field(default_factory=dict)
+    causal_threads: dict[str, list[Thread]] = field(default_factory=dict)
+    reconciled_minds: dict[str, Mind] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -85,7 +90,16 @@ def buffered(manager: Any) -> bool:
 
 def contract_data(turn: Turn) -> dict:
     data = {
-        actor: {"name": turn.names.get(actor, actor), **decision.selected.model_dump()}
+        actor: {
+            "name": turn.names.get(actor, actor),
+            **decision.selected.model_dump(),
+            "ongoing_agenda_not_world_facts": agenda.narrator_context(
+                turn.agendas.get(actor, []), actor
+            ),
+            "causal_continuity_not_world_facts": causal_memory.view(
+                turn.causal_threads.get(actor, []), turn.minds.get(actor)
+            ),
+        }
         for actor, decision in turn.decisions.items()
     }
     for actor, mind in turn.minds.items():
@@ -156,7 +170,8 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     ]
     if not selected:
         return ""
-    turn.fallback_identities = continuation.identities(manager, state, selected)
+    turn.fallback_identities = await continuation.recalled_identities(manager, state, selected)
+    await causal_memory.prepare(manager, turn, {actor.id for actor in selected})
     manager._chpm_publish_after_commit = state.settings.mode == "live"
     turn.present_names = {
         actor.id: str(actor.name) for actor in actors if context.available(actor, manager.state)
@@ -257,6 +272,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     retained = [entry for entry in retained if entry.source_message_id not in invalid]
     for message_id in sorted(invalid):
         entries = agenda.retract(entries, message_id)
+    causal_memory.invalidate(turn, actor.id, invalid)
     turn.memories[actor.id] = retained
     turn.agendas[actor.id] = entries
     legacy = (
@@ -266,6 +282,9 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     if actor.id in turn.minds:
         supplied["psychological_state"] = host_adapter.context(turn.minds[actor.id])
     supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
+    supplied["causal_continuity_not_world_facts"] = causal_memory.view(
+        turn.causal_threads.get(actor.id, []), turn.minds.get(actor.id)
+    )
     supplied["agenda_creation_available"] = (
         len(turn.initial.agenda) < agenda.MAX_RECORDS
         and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
@@ -341,6 +360,7 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         retained_agenda = [entry for entry in result.agenda if entry.actor_id not in turn.agendas]
         retained_agenda.extend(entry for entries in turn.agendas.values() for entry in entries)
         result.agenda = agenda.apply(retained_agenda, turn.decisions, turn.verdict, reply)
+        causal_memory.apply(turn, result, reply, passages.index(reply.content))
         result.recovery.gap_cursors = turn.gap_cursors
         continuation.mark_verified(result)
     save(manager.state, result, expected_revision=turn.initial.revision)

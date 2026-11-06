@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+from collections.abc import Iterable
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.engine.chpm.causal_graph_contracts import Binding
 from backend.engine.chpm.core.contracts import Event, Genesis, Observe, Snapshot
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.limits import MAX_EVENTS
@@ -21,14 +23,41 @@ class Source(BaseModel):
     content_hash: str = Field(min_length=1, max_length=100)
     role: Literal["user", "assistant"]
     speaker_id: str = Field(min_length=1, max_length=100)
-    kind: Literal["speech", "host_frame", "world_event"]
+    kind: Literal[
+        "speech",
+        "narration",
+        "causal_fact",
+        "causal_link",
+        "causal_state",
+        "host_frame",
+        "world_event",
+    ]
     text: str = Field(min_length=1, max_length=2000)
     facts: HostFacts | None = None
+    graph: Binding | None = None
+
+    @property
+    def reported(self) -> bool:
+        return self.kind in {"speech", "narration", "causal_fact", "causal_link", "causal_state"}
+
+    @property
+    def evidence_quote(self) -> str:
+        return self.graph.quote if self.graph else self.text
 
     @model_validator(mode="after")
     def frame_facts_only(self) -> "Source":
         if self.facts is not None and self.kind != "host_frame":
             raise ValueError("Only a host frame can carry authoritative state.")
+        if (self.kind in {"causal_fact", "causal_link", "causal_state"}) != (
+            self.graph is not None
+        ):
+            raise ValueError("Causal records require an explicit graph binding.")
+        if self.graph and (
+            self.role != "assistant"
+            or (self.kind == "causal_fact") != (self.graph.field is not None)
+            or (self.kind == "causal_state") != (self.graph.action is not None)
+        ):
+            raise ValueError("Causal records must have matching assistant fact/link bindings.")
         return self
 
 
@@ -48,12 +77,15 @@ class Mind(BaseModel):
         }
         if set(observations) != set(self.sources):
             raise ValueError("Core observations must have exactly one host source binding each.")
+        transitions: dict[str, str] = {}
         for key, event in observations.items():
             source = self.sources[key]
             if event.payload != payload(source, self.genesis) or key != identifier(
                 source, self.genesis
             ):
                 raise ValueError("Core observation does not match its host source.")
+            _validate_graph_source(source, event, self, observations)
+            _validate_graph_transition(key, source, self, transitions)
         return self
 
 
@@ -62,6 +94,8 @@ def identifier(source: Source, genesis: Genesis) -> str:
     # Legacy hashes included revision_id=None. Omit only the new optional field.
     if source.facts is None:
         body.pop("facts")
+    if source.graph is None:
+        body.pop("graph")
     return fingerprint({"scope": genesis.scope.model_dump(), "source": body})
 
 
@@ -81,24 +115,87 @@ def payload(source: Source, genesis: Genesis) -> Observe:
     return Observe(
         record_id=identifier(source, genesis),
         text=source.text,
-        source_kind="reported" if source.kind == "speech" else "witnessed",
+        source_kind="reported" if source.reported else "witnessed",
         root_ids=(fingerprint(root),),
     )
 
 
 def record(mind: Mind, source: Source, *, minute: int) -> Mind:
-    key = identifier(source, mind.genesis)
-    if key in mind.sources:
+    return record_many(mind, [source], minute=minute)
+
+
+def record_many(mind: Mind, additions: Iterable[Source], *, minute: int) -> Mind:
+    """Validate the complete binding graph once after the atomic batch, never per node."""
+    sources = dict(mind.sources)
+    changed = mind.snapshot
+    for source in additions:
+        key = identifier(source, mind.genesis)
+        if key in sources:
+            continue
+        event = Event(
+            scope=mind.genesis.scope,
+            event_id=key,
+            sequence=changed.cursor + 1,
+            sim_minute=minute,
+            payload=payload(source, mind.genesis),
+        )
+        changed = apply(changed, event, expected_revision=changed.revision).snapshot
+        sources[key] = source
+    if changed is mind.snapshot:
         return mind
-    event = Event(
-        scope=mind.genesis.scope,
-        event_id=key,
-        sequence=mind.snapshot.cursor + 1,
-        sim_minute=minute,
-        payload=payload(source, mind.genesis),
-    )
-    changed = apply(mind.snapshot, event, expected_revision=mind.snapshot.revision).snapshot
-    return Mind(genesis=mind.genesis, snapshot=changed, sources={**mind.sources, key: source})
+    return Mind(genesis=mind.genesis, snapshot=changed, sources=sources)
+
+
+def _validate_graph_source(
+    source: Source, event: Event, mind: Mind, observed: dict[str, Event]
+) -> None:
+    binding = source.graph
+    if binding is None:
+        return
+    if source.speaker_id != mind.genesis.scope.observer_id:
+        raise ValueError("Causal records belong to another observer.")
+    for parent_id in binding.parents:
+        parent = mind.sources.get(parent_id)
+        if (
+            parent is None
+            or parent_id not in observed
+            or observed[parent_id].sequence >= event.sequence
+        ):
+            raise ValueError("Causal dependencies must refer to retained earlier evidence.")
+        if parent.speaker_id != source.speaker_id:
+            raise ValueError("Causal dependencies belong to another NPC.")
+        if source.kind == "causal_fact" and (
+            parent.kind != "narration"
+            or parent.text != binding.quote
+            or (parent.message_id, parent.revision_id, parent.content_hash, parent.role)
+            != (source.message_id, source.revision_id, source.content_hash, source.role)
+        ):
+            raise ValueError("A causal statement differs from its original narration.")
+        if source.kind in {"causal_link", "causal_state"} and (
+            parent.kind != "causal_fact"
+            or parent.graph is None
+            or parent.graph.thread_id != binding.thread_id
+        ):
+            raise ValueError("Influence endpoints must be retained facts from the same thread.")
+
+
+def _validate_graph_transition(
+    key: str, source: Source, mind: Mind, latest: dict[str, str]
+) -> None:
+    binding = source.graph
+    if source.kind != "causal_state" or binding is None:
+        return
+    parents = [mind.sources[parent].graph for parent in binding.parents]
+    fields = {parent.field for parent in parents if parent is not None}
+    if "purpose" not in fields or len(fields) != len(binding.parents):
+        raise ValueError("A causal transition needs its purpose and distinct fields.")
+    previous = latest.get(binding.thread_id)
+    if binding.previous != previous or (binding.action == "open") != (previous is None):
+        raise ValueError("Causal transitions must extend the latest retained owned thread state.")
+    prior_binding = mind.sources[previous].graph if previous else None
+    if prior_binding and prior_binding.action == "close":
+        raise ValueError("Closed causal threads cannot silently reopen.")
+    latest[binding.thread_id] = key
 
 
 def before_messages(mind: Mind, message_ids: set[str]) -> Mind:

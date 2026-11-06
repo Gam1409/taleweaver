@@ -11,9 +11,11 @@ from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
 # up to twelve heard passages, four tool observations and two developmental reflections. A single
-# observer may receive all heard entries even in a twenty-character scene.
-EVENT_RESERVE = 57
-SOURCE_RESERVE = 51
+# observer may receive all heard entries even in a twenty-character scene. Up to five
+# newly cited causal passages, five statement nodes, three influence edges and
+# one transition can be recorded by the existing narration reviewer.
+EVENT_RESERVE = 71
+SOURCE_RESERVE = 65
 BELIEF_RESERVE = 3
 EXPERIENCE_RESERVE = 2
 

@@ -8,6 +8,7 @@ from backend.engine.chpm import (
     agent_context,
     appraisal,
     belief_recall,
+    causal_memory,
     development,
     development_request,
     experience,
@@ -84,12 +85,19 @@ async def deliberate(
         "appraisal_contract": "split-beliefs-v1",
         "previous_intention": prior.model_dump() if prior else None,
     }
-    pinned = {}
+    turn = getattr(manager, "_chpm_turn", None)
+    pinned = causal_memory.pins(mind, getattr(turn, "causal_threads", {}).get(actor_id, []))
     pinned_beliefs = {}
     audit: list[dict] = []
     if settings.agent_steps and settings.mode == "live":
         tools, audit = await agent.investigate(
-            manager, settings, usage, mind, observation, supplied
+            manager,
+            settings,
+            usage,
+            mind,
+            observation,
+            supplied,
+            **({"pinned": pinned} if pinned else {}),
         )
         mind, pinned = tools.mind, tools.pins
         pinned_beliefs = tools.beliefs

@@ -19,7 +19,7 @@ def collect(pins: dict[str, tuple[str, Source, str]], observed: Observation) -> 
             source_revision_id=source.revision_id,
             source_hash=source.content_hash,
             speaker_id=source.speaker_id,
-            kind="reported" if source.kind == "speech" else "witnessed",
+            kind="reported" if source.reported else "witnessed",
             text=text,
             current_turn=source.message_id == observed.message_id,
         )
@@ -55,6 +55,6 @@ def _matches(entry: AgentEvidence, source: Source, observed: Observation) -> boo
         and entry.source_hash == source.content_hash
         and entry.speaker_id == source.speaker_id
         and entry.text in source.text
-        and entry.kind == ("reported" if source.kind == "speech" else "witnessed")
+        and entry.kind == ("reported" if source.reported else "witnessed")
         and entry.current_turn == (source.message_id == observed.message_id)
     )

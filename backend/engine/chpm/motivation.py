@@ -76,11 +76,11 @@ def build(mind: Mind, entries: list[AgendaEntry], window: Window) -> Catalogue:
     sources.extend(
         MotiveSource(
             id=f"report-{alias}",
-            kind="report" if source.kind == "speech" else "world_observation",
+            kind="report" if source.reported else "world_observation",
             text=text,
             provenance_id=record_id,
             subject_id=source.speaker_id,
-            status="reported" if source.kind == "speech" else "witnessed",
+            status="reported" if source.reported else "witnessed",
         )
         for alias, (record_id, source, text) in window.sources.items()
     )

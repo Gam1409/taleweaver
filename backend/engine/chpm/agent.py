@@ -5,7 +5,7 @@ from typing import Any
 from backend.engine.chpm import agent_beliefs, host_observations, inference
 from backend.engine.chpm.agent_contracts import INSTRUCTIONS, Step
 from backend.engine.chpm.agent_tools import Tools
-from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation, Settings, Usage
 
@@ -17,6 +17,8 @@ async def investigate(
     mind: Mind,
     observation: Observation,
     supplied: dict,
+    *,
+    pinned: dict[str, tuple[str, Source, str]] | None = None,
 ) -> tuple[Tools, list[dict]]:
     if (
         mind.genesis.scope.world_id != observation.session_id
@@ -29,7 +31,7 @@ async def investigate(
         if getattr(turn, "input_id", None) == observation.message_id
         else {}
     )
-    tools = Tools(mind, observation, clothing)
+    tools = Tools(mind, observation, clothing, pins=dict(pinned or {}))
     facts = host_observations.previous(mind)
     transcript: list[dict] = []
     audit: list[dict] = []
@@ -53,6 +55,15 @@ async def investigate(
                     },
                     **agent_beliefs.subject_view(tools.mind),
                     "agenda": supplied.get("declared_agenda_not_world_facts", []),
+                    **(
+                        {
+                            "causal_continuity_not_world_facts": supplied[
+                                "causal_continuity_not_world_facts"
+                            ]
+                        }
+                        if supplied.get("causal_continuity_not_world_facts")
+                        else {}
+                    ),
                     "visible_clothing_actors": {
                         key: value["name"]
                         for key, value in tools.clothing.items()

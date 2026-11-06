@@ -6,7 +6,7 @@ from typing import Any
 from backend.engine.chpm import host_observations, host_sources, identity_adapter
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
-from backend.engine.chpm.host_state import Mind, Source, record
+from backend.engine.chpm.host_state import Mind, Source, record_many
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.personality.profile import personality_context
 
@@ -28,7 +28,9 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
         mind = Mind(genesis=genesis, snapshot=initial(genesis))
     if mind.genesis.scope != scope:
         raise ChpmError("CHPM psychological state belongs to another session or NPC.")
-    mind = await host_sources.reconcile(manager, mind)
+    # Causal recall already checked this exact observer during the same preparation.
+    checked = getattr(turn, "reconciled_minds", {}).get(actor.id)
+    mind = checked if checked is not None else await host_sources.reconcile(manager, mind)
     facts = host_observations.capture(manager.state, actor, turn.present_names)
     change = host_observations.difference(host_observations.previous(mind), facts)
     anchor = {
@@ -37,30 +39,22 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
         "content_hash": observed.content_hash,
         "role": "user",
     }
-    mind = record(
-        mind,
+    additions = [
         Source(
             **anchor,
             speaker_id=actor.id,
             kind="host_frame",
             text=host_observations.frame(facts),
             facts=facts,
-        ),
-        minute=observed.minute,
-    )
+        )
+    ]
     if change:
-        mind = record(
-            mind,
-            Source(**anchor, speaker_id=actor.id, kind="world_event", text=change),
-            minute=observed.minute,
-        )
-    for quote in turn.perceptions[actor.id].quotes:
-        mind = record(
-            mind,
-            Source(**anchor, speaker_id="@player", kind="speech", text=quote),
-            minute=observed.minute,
-        )
-    return mind
+        additions.append(Source(**anchor, speaker_id=actor.id, kind="world_event", text=change))
+    additions.extend(
+        Source(**anchor, speaker_id="@player", kind="speech", text=quote)
+        for quote in turn.perceptions[actor.id].quotes
+    )
+    return record_many(mind, additions, minute=observed.minute)
 
 
 def actor_view(actor: Any, mind: Mind) -> Any:
@@ -99,6 +93,7 @@ def narrative_identity(mind: Mind) -> dict:
 
 def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute: int) -> Mind:
     mind: Mind = turn.minds[actor_id]
+    sources = []
     for entry in additions:
         # Player observations were already ingested at prepare. Only reviewed speech
         # is added here; narration never becomes a witnessed world outcome.
@@ -106,8 +101,7 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
             continue
         if entry.source_message_id != reply.id or entry.quote not in reply.content:
             raise ChpmError("CHPM speech source differs from the completed reply.")
-        mind = record(
-            mind,
+        sources.append(
             Source(
                 message_id=entry.source_message_id,
                 revision_id=entry.source_revision_id,
@@ -116,7 +110,6 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
                 speaker_id=entry.speaker_id,
                 kind="speech",
                 text=entry.quote,
-            ),
-            minute=minute,
+            )
         )
-    return mind
+    return record_many(mind, sources, minute=minute)

@@ -1,8 +1,26 @@
 # NPC Personality release history
 
 NPC Personality (technical module name: CHPM) has its own release version, independent of TaleWeaver's app
-version and persisted data contracts. The current version is **1.0.0**, defined
+version and persisted data contracts. The current version is **1.1.0**, defined
 in `backend/engine/chpm/version.py` and exposed in session settings and status.
+
+## 1.1.0
+
+- Keep source-bound causal continuity: why an unfinished task began, what already
+  happened, which concrete consequences persist and what remains to be done.
+- Preserve statement history and explicitly attributed influence links in the
+  observer's evidence graph. Narration order alone does not establish causation.
+- Pass open declared goals to narration/review even when they were not selected
+  as the current motive; retain verified context during ordinary fallback.
+- Reuse the existing live narration review without an additional model request.
+  Bounded current views and pinned original passages share the agent's evidence
+  budget. Invalid optional annotations are audited without rejecting valid RP.
+- Rebind complete evidence graphs on session copies and rebuild prior thread
+  states after source retraction. Original authored personality is unchanged.
+
+This additive release keeps the existing saved schema and reducer versions.
+Old conversations are not automatically reconstructed; extraction starts with
+newly reviewed replies. See [causal continuity](chpm-causal-memory.md).
 
 ## 1.0.0
 

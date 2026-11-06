@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from backend.engine.chpm import agenda
+from backend.engine.chpm import agenda, causal_memory
 from backend.engine.chpm.core.contracts import Event, Experience, Genesis, Interpret, Observe
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import apply, initial
@@ -26,6 +26,13 @@ def validate(entity_states: dict | None, session_id: str) -> dict:
     value = KernelState.model_validate(raw)
     if any(mind.genesis.scope.world_id != session_id for mind in value.minds.values()):
         raise ValueError("CHPM snapshot belongs to another session; use an explicit session copy.")
+    if any(
+        ref.session_id != session_id
+        for threads in value.causal_memory.actors.values()
+        for thread in threads
+        for ref in causal_memory.anchors(thread)
+    ):
+        raise ValueError("Causal continuity belongs to another session; use an explicit copy.")
     return entity_states or {}
 
 
@@ -70,6 +77,13 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
             ]
         retained_agenda.append(retained_entry)
     value.agenda = retained_agenda
+    for actor, rejected in invalid.items():
+        for message_id in rejected:
+            value.causal_memory = causal_memory.retract(
+                value.causal_memory, message_id, actor_id=actor
+            )
+    value.causal_memory = causal_memory.fork(value.causal_memory, message_ids, session_id)
+    value.causal_memory = causal_memory.rebuild(value.causal_memory, value.minds)
     # Cached decisions belong to the old input/session. Persistent identity and
     # declared goals survive; the next turn must choose its own intention anew.
     value.actors = {}
@@ -113,6 +127,21 @@ def _fork_mind(mind: Mind, message_ids: dict[str, str], session_id: str) -> Mind
         if isinstance(body, Observe):
             source = mind.sources[event.event_id]
             source = source.model_copy(update={"message_id": message_ids[source.message_id]})
+            if source.graph:
+                source = source.model_copy(
+                    update={
+                        "graph": source.graph.model_copy(
+                            update={
+                                "parents": tuple(
+                                    record_ids[parent] for parent in source.graph.parents
+                                ),
+                                "previous": record_ids[source.graph.previous]
+                                if source.graph.previous
+                                else None,
+                            }
+                        )
+                    }
+                )
             event_id = identifier(source, genesis)
             changed = payload(source, genesis)
             record_ids[body.record_id] = changed.record_id

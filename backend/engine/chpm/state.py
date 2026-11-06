@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from backend.engine.chpm import agenda
+from backend.engine.chpm import agenda, causal_memory
 from backend.engine.chpm.control_settings import read as control_settings
 from backend.engine.chpm.host_state import before_messages, removed_messages
 from backend.engine.chpm.kernel import ChpmError
@@ -48,6 +48,7 @@ def retract(state: Any, message_id: str) -> None:
         and not current.agenda
         and not current.minds
         and not current.recovery.recent
+        and not current.causal_memory.actors
     ):
         return
     # Later decisions can depend on earlier speech. Clear all derived pilot
@@ -55,7 +56,10 @@ def retract(state: Any, message_id: str) -> None:
     current.actors = {}
     current.last_active = {}
     actors = (
-        set(current.memories) | set(current.minds) | {entry.actor_id for entry in current.agenda}
+        set(current.memories)
+        | set(current.minds)
+        | {entry.actor_id for entry in current.agenda}
+        | set(current.causal_memory.actors)
     )
     retained_agenda = []
     for actor in sorted(actors):
@@ -72,8 +76,12 @@ def retract(state: Any, message_id: str) -> None:
         entries = [entry for entry in current.agenda if entry.actor_id == actor]
         for invalid_id in sorted(invalid):
             entries = agenda.retract(entries, invalid_id)
+            current.causal_memory = causal_memory.retract(
+                current.causal_memory, invalid_id, actor_id=actor
+            )
         retained_agenda.extend(entries)
     current.agenda = retained_agenda
+    current.causal_memory = causal_memory.rebuild(current.causal_memory, current.minds)
     current.recovery.recent = [
         entry
         for entry in current.recovery.recent

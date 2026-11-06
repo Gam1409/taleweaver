@@ -52,7 +52,14 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
         Settings.model_json_schema()["properties"]["agent_steps"]["maximum"]
         * Step.model_json_schema()["properties"]["requests"]["maxItems"]
     )
-    assert 2 + excerpts + 1 + heard + lookups == capacity.SOURCE_RESERVE
+    from backend.engine.chpm.causal_contracts import Update
+
+    causal_passages = Update.model_json_schema()["properties"]["facts"]["maxProperties"]
+    influences = Update.model_json_schema()["properties"]["links"]["maxItems"]
+    assert (
+        2 + excerpts + 1 + heard + lookups + causal_passages * 2 + influences + 1
+        == capacity.SOURCE_RESERVE
+    )
     experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]
     assert capacity.SOURCE_RESERVE + interpretations + experiences + 2 == capacity.EVENT_RESERVE
     assert experiences == capacity.EXPERIENCE_RESERVE

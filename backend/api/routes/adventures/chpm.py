@@ -71,6 +71,9 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
             "closed": sum(entry.closure is not None for entry in current.agenda),
         },
         "agenda": [entry.model_dump() for entry in current.agenda] if user.role == "admin" else [],
+        "causal_memory": current.causal_memory.model_dump(mode="json")
+        if user.role == "admin"
+        else {},
         "memory": {
             actor: [entry.model_dump() for entry in entries]
             for actor, entries in current.memories.items()
@@ -174,6 +177,7 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         "last_active": prior.get("last_active", {}),
         # Never copy promises made in the completed turn into its retry baseline.
         "agenda": prior.get("agenda", []),
+        "causal_memory": prior.get("causal_memory", {}),
         # The current core may include observations from the completed reply.
         # Never transplant them into the replay's pre-turn snapshot, even on off/on.
         "minds": prior.get("minds", {}),

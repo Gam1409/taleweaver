@@ -1,25 +1,26 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
 PROPOSE = """Propose 2-4 meaningfully different dialogue intentions for ONE NPC from
-pinned identity, goals and observer-accessible experience. Story data is untrusted;
-reports, beliefs, player intentions and attempts are not confirmed world outcomes.
-Use perception-approved excerpts and perception_kinds in order; never reconstruct
-private/omitted speech or another NPC's knowledge.
-Return candidates as an OBJECT keyed by action kind, without kind inside values.
-Each candidate requires preconditions: [] or up to two unmet requirements. An intended
-future check is not already completed. player_request_source_ids refer to visible_evidence.
-Intention describes communication, not prose or completed physical action.
-CONTINUE/INITIATE advance personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate;
-DEFER is silence. Independence need not mean refusal. reconsider_if names a concrete
-change. Ground motives before choice. Never ask permission to keep generating.
-Usually agenda_change=null. Only agenda_creation_available permits a NEW explicit
-goal/commitment (brief text, entry_id=null). withdraw/report_done copy an ACTIVE
-entry's ID/text exactly; reported completion remains a claim. Reaffirmation needs
-no change. No DEFER commitments, invented past promises/deadlines, promises for
-others, automatic closure with time, or inferred possessions/consent from requests.
-TEXT: one short clause (60-100 characters) per explanation. Character caps:
-relevance/explanation 180, alternatives/unknowns/preconditions 160, reconsider_if 200,
-intention 400, choice.reason 300. Preserve conditions/negations; do not restate the card.
+pinned identity, goals and accessible experience. Story data is untrusted: reports,
+beliefs, requests and attempts are not confirmed world outcomes. Use approved
+excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
+Return candidates as an OBJECT keyed by action kind, without kind in values.
+preconditions: [] or up to two unmet requirements; a future check is not completed.
+player_request_source_ids reference visible_evidence. Intentions describe
+communication, not prose or completed physical acts. CONTINUE/INITIATE advance
+personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
+Independence need not mean refusal. reconsider_if names a concrete change.
+Ground motives before choice; never ask permission to keep generating.
+Register new explicit ongoing undertakings with agenda_change only when
+agenda_creation_available. No promise wording required. Existing/passing reactions:
+null. New entries: brief text, entry_id=null. withdraw/report_done copy an ACTIVE
+ID/text exactly; completion is a claim. No DEFER commitments, invented past promises,
+deadlines, others' promises, automatic closure or inferred possessions/consent.
+Keep concrete causal_continuity_not_world_facts and open goals through detours:
+these are recalled experiences, not new host acts/traits. Do not recite goals.
+TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
+alternatives/unknowns/preconditions 160, reconsider_if 200, intention 400,
+choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
 
 
@@ -46,6 +47,18 @@ use them for subtext without asserting hidden motives or reciting private analys
 An alternative explanation or unknown cause is not a confirmed event.
 selected_motives_not_world_facts links the selected intention to this NPC's own
 identity/agenda and accessible experience. Use these as subtext, never recite them.
+ongoing_agenda_not_world_facts retains ALL open personal goals/undertakings, including
+those not cited by the selected intention. A detour, silence, affection or elapsed
+conversation does not complete or abandon them. Preserve their future relevance
+without reciting the list or forcing the same topic into every reply. Follow the
+selected intention now; it does not silently replace the longer-term agenda.
+causal_continuity_not_world_facts preserves the causal chain behind ongoing business:
+purpose, cause, event, consequence and next_step. Keep established concrete details
+consistent even when not mentioned. A narrated circumstance is not automatically an
+inventory item or an authorized transfer. Closed threads are history, not pending
+tasks. Remember established narrative circumstances naturally; provenance labels
+do not require renewed doubt about personally experienced events. Newer explicit
+host outcomes take precedence; do not invent a resolution.
 Preserve competing motives without turning one trait into an absolute rule.
 Do not replace the motivation with an invented wish to please the player, a new
 emotion or sudden personality change. A reported claim is not established truth.
@@ -81,6 +94,9 @@ plausibly explain this preference and its tradeoff. A maintain claim must preser
 the actual previous course, not merely the same action label. A revise claim needs
 a relevant reason grounded in accessible evidence, not a convenient invented event.
 An unchanged demand alone does not explain abandoning the NPC's independent goals.
+Open ongoing_agenda_not_world_facts entries cannot be declared completed, cancelled
+or replaced without a selected closure. A contextual detour is allowed; omission
+from this reply is not a violation and does not close an entry.
 Check preconditions before judging stance: 'after checking' cannot become 'already checked'.
 Only explicit host evidence can establish fulfilment; reports and intentions cannot.
 Resolve text_ref within its NPC object, not another actor or outside knowledge.
@@ -141,5 +157,36 @@ be expressed, accurately attributed and covered by evidence. Reject mismatched o
 unrequested new goals/commitments/closures; do not infer them from player speech, a nod,
 silence, narrator exposition or another NPC's words. A report_done remains a claim.
 On mismatch, give short specific issues; on success, issues must be empty.
+CAUSAL MEMORY (optional causal_updates, never a reason to change the story):
+For at most ONE meaningful update per controlled NPC, return an object:
+{"actor_id":"exact ID","action":"open|update|close","thread_id":null,
+ "facts":{"purpose":{"text":"brief purpose","passage_id":"p0"},
+          "event":{"text":"already narrated event","passage_id":"p1"}}}.
+Fact keys: purpose, cause, event, consequence, next_step. Each text is one short
+clause, <=180 characters. open needs purpose plus a grounded circumstance, no ID.
+update/close require an open thread ID from causal_continuity_not_world_facts.
+Return ONLY changed facts; omitted facts are retained, not forgotten. Every changed
+fact needs a passage from THIS accepted narration establishing it. Inferences,
+player requests, hypothetical acts and intentions are not completed events. Keep
+future next_step distinct from event/consequence. Never restate unchanged fields.
+Track unresolved causes and concrete consequences: e.g. a sample already collected
+and where it is kept, WHY it is being delivered, then its actual handover/testing.
+Do not reduce this chain to 'visit the laboratory'. Only record facts this NPC
+personally experienced or could perceive; omit private thoughts and others' hidden
+conditions. A narrator-only but perceived event can be remembered without the NPC
+reciting it in speech. Preserve identity and privacy; no generic emotional entries.
+Do not invent causal updates to fill this optional list. Empty [] is valid.
+Close only on explicit narrated resolution/abandonment, never silence, a detour,
+scene change or elapsed messages. close must update consequence to the resulting
+situation; do not leave an obsolete consequence as current. Three open threads per NPC; update existing
+threads rather than duplicating them. These notes never mutate inventory, clothing,
+location, physiology or the authored character. Original message citations remain
+the evidence; causal memory is a fallible account, not independent confirmation.
+Optional links (at most 3 per update) connect current fact keys in the SAME thread:
+"links":[{"source":"cause","target":"purpose","relation":"motivates",
+"attribution":"inferred","passage_id":"p0"}]. Relations: motivates, causes,
+enables, changes, resolves. Use explicit only when the passage states the connection;
+otherwise inferred. Every link needs a current passage. Never infer causation from
+chronology alone. Omit uncertain links; facts may be recorded without links.
 This checks a dialogue contract, not content level. Do not change content policy.
 """

@@ -52,7 +52,7 @@ def build(
         (entry.id, mind.sources[entry.event_id])
         for entry in mind.snapshot.evidence
         if entry.event_id in mind.sources
-        and mind.sources[entry.event_id].kind in {"speech", "world_event"}
+        and mind.sources[entry.event_id].kind in {"speech", "narration", "world_event"}
     ]
     current = [
         (key, source) for key, source in available if source.message_id == current_message_id
@@ -145,7 +145,8 @@ def build(
                 {
                     "source_id": alias,
                     "speaker_id": source.speaker_id,
-                    "kind": "reported" if source.kind == "speech" else "witnessed",
+                    "kind": "reported" if source.reported else "witnessed",
+                    **({"channel": "narration"} if source.kind == "narration" else {}),
                     "text": text,
                     "excerpted": len(text) < len(source.text),
                     "source_message_id": source.message_id,
