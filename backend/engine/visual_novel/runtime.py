@@ -67,7 +67,7 @@ def _npc_facts(entity: dict, rows: dict, state: Any, detailed: bool) -> dict:
 
 async def capture_completed_moment(manager: Any, message: Any) -> None:
     """Freeze the public cast at completion; never include hidden possessions or goals."""
-    from backend.api.routes.adventures.logic import AdventureLogic
+    from backend.engine.gameplay.world import AdventureLogic
 
     # ChatMessage's insert hook stamps scene_id from the session on flush.
     await manager.db.flush([message])

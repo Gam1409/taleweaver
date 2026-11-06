@@ -9,10 +9,10 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.api.routes.adventures.logic import AdventureLogic
-from backend.api.routes.adventures.turn_suggestions import PROMPT_SUGGESTIONS_LANGUAGE_KEY
 from backend.core.config import settings
+from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.gameplay.turn_suggestions import PROMPT_SUGGESTIONS_LANGUAGE_KEY
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.map_engine import MapEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar

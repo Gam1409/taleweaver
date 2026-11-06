@@ -156,7 +156,7 @@ class AdventureTemplateImporter:
     @staticmethod
     async def delete_template_for_overwrite(db: AsyncSession, template_id: str) -> None:
         """Helper to cleanly delete a template, decoupling sessions and cleaning assets before overwrite import."""
-        from backend.api.routes.adventures.logic import AdventureLogic
+        from backend.engine.gameplay.world import AdventureLogic
 
         if not defer_replacement(db, template_id):
             await AdventureLogic.delete_adventure(db, template_id)

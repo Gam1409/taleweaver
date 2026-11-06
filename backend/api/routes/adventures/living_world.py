@@ -1,8 +1,6 @@
 """Owner-scoped experimental controls; private event details are administrator-only."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
@@ -17,53 +15,18 @@ from backend.engine.living_world import (
     presence,
     runner,
 )
-from backend.engine.living_world.conflicts import SimulationConflict
+from backend.engine.living_world.access import check_revision, game_row, owned, read_simulation
 from backend.engine.living_world.schema import (
     Command,
     Event,
     PresenceUpdate,
     SettingsUpdate,
-    Simulation,
 )
-from backend.engine.living_world.state import load, public_status, reconcile, save
-from backend.models.game_session import GameSession
-from backend.models.session_state import SessionState
+from backend.engine.living_world.state import public_status, reconcile, save
 from backend.models.user import User
 
 router = APIRouter(tags=["Living World"])
 mutation = [Depends(session_mutation_lease)]
-
-
-async def owned(db: AsyncSession, game_id: str, user: User) -> SessionState:
-    state = await db.scalar(
-        select(SessionState)
-        .join(GameSession, GameSession.id == SessionState.session_id)
-        .where(GameSession.id == game_id, GameSession.user_id == user.id)
-    )
-    if state is None:
-        raise HTTPException(404, "Session not found.")
-    return state
-
-
-def read_simulation(state: SessionState) -> Simulation:
-    try:
-        return load(state)
-    except ValidationError:
-        raise HTTPException(
-            409, "Living World data could not be validated. Restore a compatible backup."
-        ) from None
-
-
-def check_revision(simulation: Simulation, expected: int) -> None:
-    if simulation.revision != expected:
-        raise SimulationConflict("Living World changed. Reload its status before retrying.")
-
-
-async def game_row(db: AsyncSession, game_id: str) -> GameSession:
-    game = await db.get(GameSession, game_id)
-    if game is None:
-        raise HTTPException(404, "Session not found.")
-    return game
 
 
 @router.get("/{game_id}/living-world")
@@ -246,3 +209,19 @@ async def renew_budget(
     save(state, simulation)
     await db.commit()
     return public_status(simulation)
+
+
+__all__ = [
+    "check_revision",
+    "configure",
+    "events",
+    "game_row",
+    "heartbeat",
+    "owned",
+    "read_simulation",
+    "renew_budget",
+    "resume",
+    "schedule",
+    "status",
+    "stop",
+]

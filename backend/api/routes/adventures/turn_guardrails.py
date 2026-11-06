@@ -1,5 +1,6 @@
-"""Backward-compatible import path for the guardrails (see ``backend.api.routes.adventures.guardrails``)."""
+"""Compatibility module; implementation lives in the engine layer."""
 
-from backend.api.routes.adventures.guardrails import TurnGuardrailEnforcer, TurnGuardrailsManager
+import importlib
+import sys
 
-__all__ = ["TurnGuardrailEnforcer", "TurnGuardrailsManager"]
+sys.modules[__name__] = importlib.import_module("backend.engine.gameplay.turn_guardrails")

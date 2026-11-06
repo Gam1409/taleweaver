@@ -12,7 +12,6 @@ from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import CreateAdventureTemplatePayload
 from backend.api.routes.adventures.session_materializer import (
     copy_data_asset_to_session,
@@ -22,6 +21,7 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.chpm.template_settings import initial_states as personality_initial_states
 from backend.engine.clothing.settings import with_clothing_settings
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.generation_bounds import GenerationBounds
 from backend.engine.generation_control import (
     assert_generation_current,

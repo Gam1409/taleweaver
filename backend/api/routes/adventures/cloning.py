@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import AdventureTemplateResponse
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.adventure_cloner import AdventureCloner
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.user import User
 
 logger = logging.getLogger(__name__)

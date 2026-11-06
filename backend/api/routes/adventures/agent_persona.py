@@ -1,24 +1,6 @@
-"""Protagonist persona context for the autonomous PlayAgent."""
+"""Compatibility module; implementation lives in the engine layer."""
 
-from typing import Any
+import importlib
+import sys
 
-_PROFILE_FIELDS = (
-    ("description", "Biography"),
-    ("character", "Personality & Traits"),
-    ("goal", "Personal Goal"),
-)
-
-
-def format_protagonist_profile(avatar: Any) -> str:
-    """Renders the protagonist's bio, character traits and goal for role-play.
-
-    Empty fields are skipped; returns a short fallback when no profile exists.
-    """
-    lines = []
-    for attr, label in _PROFILE_FIELDS:
-        value = " ".join(str(getattr(avatar, attr, "") or "").split())
-        if value:
-            lines.append(f"{label}: {value}")
-    if not lines:
-        return "No biography provided. Infer a fitting persona from your name, role, and the adventure premise."
-    return "\n".join(lines)
+sys.modules[__name__] = importlib.import_module("backend.engine.gameplay.agent_persona")

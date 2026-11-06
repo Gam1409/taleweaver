@@ -1,8 +1,5 @@
-"""Pass 1.5 guardrails: deterministic validation and reversion of GM turn results."""
+"""Compatibility exports; new code imports backend.engine.gameplay."""
 
-from backend.api.routes.adventures.guardrails.manager import (
-    TurnGuardrailEnforcer,
-    TurnGuardrailsManager,
-)
+from backend.engine.gameplay.guardrails import TurnGuardrailEnforcer, TurnGuardrailsManager
 
 __all__ = ["TurnGuardrailEnforcer", "TurnGuardrailsManager"]

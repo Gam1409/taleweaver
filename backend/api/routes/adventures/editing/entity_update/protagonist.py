@@ -19,8 +19,8 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     template_rows,
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.engine.character_identity import update_identity
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar

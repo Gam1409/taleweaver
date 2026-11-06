@@ -20,7 +20,7 @@ from backend.api.routes.adventures.agent_combat_math import (
     expected_special_effect,
     expected_weapon_damage,
 )
-from backend.api.routes.adventures.agent_logic import AgentDecision
+from backend.engine.gameplay.agent_logic import AgentDecision
 
 HEAL_HP_RATIO = 0.4
 FLEE_HP_RATIO = 0.15

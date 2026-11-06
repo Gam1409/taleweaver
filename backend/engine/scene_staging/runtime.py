@@ -34,7 +34,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         state.entity_states = {**(state.entity_states or {}), KEY: result}
         props.invalidate(state)
         return
-    from backend.api.routes.adventures.logic import AdventureLogic
+    from backend.engine.gameplay.world import AdventureLogic
 
     entities = await AdventureLogic.build_session_entities(manager.db, state)
     cast = [{"id": manager.avatar.id, "name": manager.avatar.name}]

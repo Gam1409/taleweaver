@@ -22,7 +22,6 @@ from sqlalchemy.sql.elements import KeyedColumnElement
 
 from backend.api.routes.adventures.assets import _build_uploaded_visual_path
 from backend.api.routes.adventures.editor import _get_template_avatar
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.config import settings
 from backend.engine.entity_bundle import (
     IMAGE_EXTENSIONS,
@@ -30,6 +29,7 @@ from backend.engine.entity_bundle import (
     EntityBundleError,
     pack_entity_bundle,
 )
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene

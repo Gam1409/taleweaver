@@ -6,11 +6,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.api.routes.adventures.logic import AdventureLogic
-from backend.api.routes.adventures.turn_suggestions import SuggestionGenerationError
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.gameplay.turn_suggestions import SuggestionGenerationError
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.user import User
 
 router = APIRouter(tags=["Gameplay"])

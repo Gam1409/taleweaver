@@ -8,7 +8,7 @@ from typing import Any, Optional
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.comfyui_api import router as comfyui_router
@@ -40,6 +40,12 @@ from backend.core.custom_openai_roles import resolve_url as custom_role_url
 from backend.core.custom_openai_roles import validate_urls as validate_custom_role_urls
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
+from backend.core.global_settings import (
+    normalize_game_settings as _normalize_game_settings,
+)
+from backend.core.global_settings import (
+    resolve_global_settings_owner as _resolve_global_settings_owner,
+)
 from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
 from backend.core.llm_router import GameMasterLLM
 from backend.core.models_config import (
@@ -84,20 +90,6 @@ _CATALOG_EXT_BY_CONTENT_TYPE = {
     "image/jpeg": "jpg",
     "image/webp": "webp",
 }
-
-
-async def _resolve_global_settings_owner(
-    db: AsyncSession, fallback_user: User, *, for_update: bool = False
-) -> User:
-    """Return the global settings owner, optionally locking JSON merges against stale reads."""
-    admin_res = await db.execute(select(User).where(User.role == "admin").limit(1))
-    owner = admin_res.scalars().first() or fallback_user
-    if for_update:
-        # SQLite has no SELECT FOR UPDATE. Own the write lock before re-reading the
-        # shared JSON columns; the caller commits immediately after its settings save.
-        await db.execute(update(User).where(User.id == owner.id).values(id=owner.id))
-        await db.refresh(owner, attribute_names=["llm_settings", "encrypted_api_keys"])
-    return owner
 
 
 async def _broadcast_global_settings(
@@ -425,24 +417,6 @@ async def _build_available_constants(
         "predefined_llm_models": predefined_llm_models,
         "predefined_image_models": predefined_image_models,
     }
-
-
-def _normalize_game_settings(game_settings: Optional[dict]) -> dict:
-    fallback = {
-        "clock_24h": False,
-        "date_format": "DD.MM.YY",
-        "whisper_model": "tiny",
-    }
-    if not game_settings:
-        return fallback
-    normalized = dict(game_settings)
-    if "clock_24h" not in normalized:
-        normalized["clock_24h"] = False
-    if "date_format" not in normalized:
-        normalized["date_format"] = "DD.MM.YY"
-    if "whisper_model" not in normalized:
-        normalized["whisper_model"] = "tiny"
-    return normalized
 
 
 def _is_llm_configured(user: User, db_keys: dict | None) -> bool:
@@ -1384,3 +1358,38 @@ async def get_elevenlabs_models() -> list[dict[str, Any]]:
     models = PREDEFINED_TTS_MODELS.get("elevenlabs", [])
     # Return in the format expected by frontend: {model_id, name}
     return [{"model_id": m["id"], "name": m["name"]} for m in models]
+
+
+__all__ = [
+    "ApiKeyPayload",
+    "CatalogGeneratePayload",
+    "CatalogTilePayload",
+    "CatalogUpdatePayload",
+    "GameSettingsPayload",
+    "SettingsPayload",
+    "T2ISettingsPayload",
+    "TTSSettingsPayload",
+    "TestLLMPayload",
+    "TestVisionPayload",
+    "_normalize_game_settings",
+    "_resolve_global_settings_owner",
+    "delete_api_key",
+    "generate_catalog_image",
+    "get_elevenlabs_models",
+    "get_llm_models",
+    "get_minimax_models",
+    "get_ollama_models",
+    "get_settings",
+    "get_stable_diffusion_models",
+    "test_llm_connection",
+    "test_tts_connection",
+    "test_vision_connection",
+    "update_api_key",
+    "update_game_settings",
+    "update_image_styles_catalog",
+    "update_llm_settings",
+    "update_t2i_settings",
+    "update_tone_catalog",
+    "update_tts_settings",
+    "upload_catalog_image",
+]

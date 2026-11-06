@@ -97,13 +97,13 @@ async def get_stt_status(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Gets the load status of the configured Whisper model."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     with _state_lock:
@@ -119,13 +119,13 @@ async def preload_stt_model(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Starts preloading the configured Whisper model in a background thread."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     with _state_lock:
@@ -181,13 +181,13 @@ async def transcribe_audio(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Transcribes an uploaded WAV file using OpenAI Whisper."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     content = await file.read()

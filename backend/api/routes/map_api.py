@@ -18,9 +18,9 @@ from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.map_access import authorize_map
 from backend.core.database import get_db
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.map_engine import MapEngine
 from backend.models.world_entity import WorldExit
 from backend.models.world_map import WorldMap

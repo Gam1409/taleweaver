@@ -15,9 +15,9 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.session_start import ensure_generated_session_scene
 from backend.core.config import settings
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar

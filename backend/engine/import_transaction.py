@@ -62,7 +62,7 @@ def atomic_import(
             success = await function(db, *args, **kwargs)
             if not success:
                 return False
-            from backend.api.routes.adventures.logic import AdventureLogic
+            from backend.engine.gameplay.world import AdventureLogic
 
             for template_id in transaction.replaced:
                 await AdventureLogic.delete_adventure(db, template_id, commit=False)

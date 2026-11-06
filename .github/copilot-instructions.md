@@ -199,7 +199,7 @@ To prevent terminal commands executed by AI agents (like the Gemini agent in Ant
 
 ## 9. Game Turn Loop & Mechanics Pipeline
 
-TaleWeaver processes each gameplay turn through a structured pipeline in [GameTurnManager](../backend/api/routes/adventures/gameplay_logic.py):
+TaleWeaver processes each gameplay turn through a structured pipeline in [GameTurnManager](../backend/engine/gameplay/manager.py):
 
 * **Pass 1 (Mechanics Check)**:
   * The LLM mechanics model processes the user prompt and suggests state changes (e.g. changing exit locks, switch states, opening containers, updating inventories).

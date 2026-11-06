@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from backend.engine.dynamic_locations.schema import LocationPolicy
 
 if TYPE_CHECKING:
-    from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+    from backend.engine.gameplay.manager import GameTurnManager
 
 import asyncio
 import json

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from backend.engine.rule_engine import GameEvent
 
 if TYPE_CHECKING:
-    from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+    from backend.engine.gameplay.manager import GameTurnManager
 
 import logging
 from collections import defaultdict

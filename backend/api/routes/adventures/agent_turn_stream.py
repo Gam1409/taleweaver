@@ -13,13 +13,13 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.agent_actions import execute_agent_action
 from backend.api.routes.adventures.agent_combat import decide_combat_turn
-from backend.api.routes.adventures.agent_logic import AgentDecision, AgentService
-from backend.api.routes.adventures.agent_settings import build_agent_snapshot
-from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import database as core_database
+from backend.engine.gameplay.agent_actions import execute_agent_action
+from backend.engine.gameplay.agent_logic import AgentDecision, AgentService
+from backend.engine.gameplay.agent_settings import build_agent_snapshot
+from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.chat import ChatMessage
 from backend.models.user import User
 

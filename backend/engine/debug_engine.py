@@ -2,7 +2,6 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
 from backend.engine import (
     debug_inspection,
     debug_movement,
@@ -12,6 +11,7 @@ from backend.engine import (
 )
 from backend.engine.clothing.recovery import debug_wardrobe_apply, debug_wardrobe_preview
 from backend.engine.clothing.wardrobe_preferences import debug_wardrobe_settings
+from backend.engine.gameplay.snapshot import AdventureSnapshot
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from backend.models.user import User

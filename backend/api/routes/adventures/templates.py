@@ -18,7 +18,6 @@ from backend.api.routes.adventures.adventure_creation import (
 )
 from backend.api.routes.adventures.editing.clothing_settings import apply_clothing_update
 from backend.api.routes.adventures.generation_resume import can_resume_generation
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.manifest_export import (
     backfill_item_start_scenes,
     backfill_manifest_metadata,
@@ -46,6 +45,7 @@ from backend.core.prompts import (
     TEMPLATE_FIELD_GENERATION_SYSTEM_PROMPT,
     TEMPLATE_FIELD_GENERATION_USER_PROMPT_TEMPLATE,
 )
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.generation_control import cancel_local_generation
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.world_generator import WorldGenerator

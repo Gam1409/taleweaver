@@ -113,8 +113,8 @@ def notify(game_id: str, user_id: str, simulation: Simulation) -> None:
 
 
 async def _tick(game_id: str, user_id: str, runtime: Runtime) -> None:
-    from backend.api.routes.adventures.living_world import owned
-    from backend.api.routes.adventures.living_world_decisions import cycle
+    from backend.engine.living_world.access import owned
+    from backend.engine.living_world.orchestration import cycle
 
     try:
         async with AsyncSessionLocal() as db:

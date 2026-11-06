@@ -2,7 +2,6 @@
 
 from fastapi import HTTPException
 
-from backend.api.routes.adventures.schemas import SuggestPromptRequest
 from backend.core import prompts
 from backend.core.comfyui_config import prompt_rules, select_profile
 from backend.core.llm_router import GameMasterLLM
@@ -13,6 +12,7 @@ from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
+from backend.schemas.adventure_visuals import SuggestPromptRequest
 
 
 async def suggest_image_prompt(

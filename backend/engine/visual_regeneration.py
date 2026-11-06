@@ -12,7 +12,7 @@ from backend.engine.character_identity import identity_text
 from backend.models.user import User
 
 if TYPE_CHECKING:
-    from backend.api.routes.adventures.assets import RegenerateVisualRequest
+    from backend.schemas.adventure_visuals import RegenerateVisualRequest
 
 from fastapi import HTTPException
 from sqlalchemy import inspect, select, update
@@ -84,7 +84,7 @@ def _reference_options(
 async def regenerate_owned_visual(
     db: AsyncSession, adventure: AdventureTemplate, user: User, payload: RegenerateVisualRequest
 ) -> dict:
-    from backend.api.routes.adventures.assets import _build_visual_prompt
+    from backend.engine.visual_prompts import build_visual_prompt as _build_visual_prompt
 
     target, field = await _target(db, adventure, payload)
     t2i = story_t2i(user.t2i_settings, adventure)

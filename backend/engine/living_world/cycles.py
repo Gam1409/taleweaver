@@ -24,7 +24,7 @@ async def run(
     stop: asyncio.Event,
 ) -> dict:
     # Import lazily to keep the route's authorization policy in one place.
-    from backend.api.routes.adventures.living_world import check_revision, game_row, owned
+    from backend.engine.living_world.access import check_revision, game_row, owned
 
     result: dict = {}
     budget: runner.Budget | None = None

@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldScene
 from backend.models.world_map import WorldMap

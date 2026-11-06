@@ -17,7 +17,6 @@ from backend.api.routes.adventures.editing.common import (
     _resolve_library_image_url,
     _restore_missing_template_avatar,
 )
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import (
     AdventureTemplateDebugResponse,
 )
@@ -25,6 +24,7 @@ from backend.api.routes.adventures.sessions import _backfill_avatar_items_from_t
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.character_identity import identity_facts
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar

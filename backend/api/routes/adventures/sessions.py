@@ -13,13 +13,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures import legacy_session_mutations
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import GameSessionResponse
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.engine.adventure_updates import is_legacy_session
 from backend.engine.chpm.lifecycle import fork as fork_chpm
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.memory_rag.lifecycle import (
     copy_session_summaries,

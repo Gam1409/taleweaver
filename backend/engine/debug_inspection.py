@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.adventure_snapshot import AdventureSnapshot
+from backend.engine.gameplay.snapshot import AdventureSnapshot
 from backend.engine.map_engine import MapEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -323,7 +323,7 @@ async def debug_reveal_map(
                 exits.append(te)
 
     # 3. Get or create the TEMPLATE-LEVEL map — this is what the frontend always reads
-    from backend.api.routes.adventures.logic import AdventureLogic
+    from backend.engine.gameplay.world import AdventureLogic
 
     world_map = await AdventureLogic.get_or_create_map(db, state.template_id)
 

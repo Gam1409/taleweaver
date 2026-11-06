@@ -9,6 +9,7 @@ from backend.engine.chpm.template_settings import ensure_compatible
 from backend.engine.living_world.schema import Settings as LivingWorldSettings
 from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
+from backend.schemas.adventure_visuals import SuggestPromptRequest
 
 
 class CreateAdventureTemplatePayload(BaseModel):
@@ -621,12 +622,6 @@ class AdventureTemplateImportPayload(BaseModel):
     rule_enforcement_mode: Optional[str] = None
 
 
-class SuggestPromptRequest(BaseModel):
-    target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
-    target_id: str
-    use_advanced_model: Optional[bool] = None
-
-
 class SuggestPromptResponse(BaseModel):
     suggested_prompt: str
 
@@ -973,3 +968,47 @@ class ScriptValidateResponse(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+__all__ = [
+    "AISuggestFixProposal",
+    "AISuggestFixProposalPatch",
+    "AISuggestFixWrapperResponse",
+    "AIValidationFindingItem",
+    "AIValidationResponse",
+    "AdventureTemplateImportPayload",
+    "AdventureTemplateResponse",
+    "AdventureTemplateSummaryResponse",
+    "AdventureTemplateUpdate",
+    "BiographyGenerationRequest",
+    "BiographyGenerationResponse",
+    "ChatRequest",
+    "ChatResponse",
+    "ContentLanguageRequest",
+    "CreateAdventureTemplatePayload",
+    "DecorativeItemsGenerationRequest",
+    "DecorativeItemsGenerationResponse",
+    "GameSessionResponse",
+    "ImportCheckItem",
+    "ImportCheckResponse",
+    "QuestDescriptionGenerationRequest",
+    "QuestDescriptionGenerationResponse",
+    "QuestGenerationRequest",
+    "QuestGenerationResponse",
+    "SceneDescriptionGenerationRequest",
+    "SceneDescriptionGenerationResponse",
+    "ScriptValidateRequest",
+    "ScriptValidateResponse",
+    "StoryIdeaSuggestionRequest",
+    "StoryIdeaSuggestionResponse",
+    "SuggestPromptRequest",
+    "SuggestPromptResponse",
+    "TemplateFieldGenerationRequest",
+    "TemplateFieldGenerationResponse",
+    "TerminalEpilogueRequest",
+    "TerminalEpilogueResponse",
+    "TraitGenerationRequest",
+    "TraitGenerationResponse",
+    "TranslateTextRequest",
+    "TranslateTextResponse",
+]

@@ -14,11 +14,11 @@ from packaging.version import parse as parse_semver
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
 from backend.core.game_modes import is_vn
 from backend.engine.adventure_importer import AdventureTemplateImporter
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState

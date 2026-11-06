@@ -9,16 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.agent_settings import (
+from backend.api.routes.adventures.agent_turn_stream import ensure_agent_active, stream_agent_turn
+from backend.api.routes.adventures.stream_transport import heartbeat_stream
+from backend.core.auth import get_current_user
+from backend.core.database import get_db
+from backend.engine.gameplay.agent_settings import (
     AgentSettingsUpdate,
     apply_settings_update,
     build_agent_snapshot,
 )
-from backend.api.routes.adventures.agent_turn_stream import ensure_agent_active, stream_agent_turn
-from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.api.routes.adventures.stream_transport import heartbeat_stream
-from backend.core.auth import get_current_user
-from backend.core.database import get_db
+from backend.engine.gameplay.manager import GameTurnManager
 from backend.models.user import User
 
 router = APIRouter(tags=["Play-Agent"])
