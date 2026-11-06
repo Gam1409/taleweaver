@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from backend.engine.chpm import agenda
+from backend.engine.chpm.control_settings import read as control_settings
 from backend.engine.chpm.host_state import before_messages, removed_messages
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState
@@ -33,7 +34,9 @@ def save(state: Any, value: KernelState, *, expected_revision: int) -> None:
 
 
 def controls(state: Any, actor_id: str) -> bool:
-    settings = load(state).settings
+    # Selection is a settings predicate. Turn admission still calls load() to
+    # validate the complete kernel before using any psychological state.
+    settings = control_settings((getattr(state, "entity_states", None) or {}).get(KEY))
     return settings.mode == "live" and actor_id in settings.actor_ids
 
 

@@ -294,15 +294,19 @@ class Usage(Contract):
     fallback_requests: int = Field(default=0, ge=0, le=1)
 
 
+def migrate_kernel_envelope(value: Any) -> Any:
+    if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3, 4, 5}:
+        return {**value, "schema_version": 6}
+    return value
+
+
 class KernelState(Contract):
     schema_version: Literal[6] = 6
 
     @model_validator(mode="before")
     @classmethod
     def migrate_pilot_envelope(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("schema_version") in {1, 2, 3, 4, 5}:
-            return {**value, "schema_version": 6}
-        return value
+        return migrate_kernel_envelope(value)
 
     revision: int = Field(default=0, ge=0)
     settings: Settings = Field(default_factory=Settings)
