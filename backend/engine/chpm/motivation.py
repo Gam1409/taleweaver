@@ -163,5 +163,4 @@ imply obedience. Acceptance and refusal may fit; invent neither desire nor obsta
 Preserve conflicting motives and uncertain/challenged evidence. Do not infer player
 authority, cite another observer's knowledge, absent/closed agenda, or newly proposed
 interpretations as existing sources. Never backfill feelings to justify compliance.
-The host derives goal alignment/quote from goal motives; omit redundant judgments.
 """
