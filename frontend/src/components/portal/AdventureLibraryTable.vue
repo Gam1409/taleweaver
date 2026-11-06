@@ -29,6 +29,7 @@ const emit = defineEmits<{
   (e: 'import-samples'): void
   (e: 'remove-failed-pending', adventureId: string, kind: 'creation' | 'import'): void
   (e: 'cancel-pending', adventureId: string): void
+  (e: 'retry-pending', adventureId: string): void
   (e: 'start-session', templateId: string): void
   (e: 'resume', gameId: string): void
   (e: 'update-adventure', templateId: string): void
@@ -167,6 +168,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
         @remove-failed="(id, kind) => $emit('remove-failed-pending', id, kind)"
         @cancel="(id) => $emit('cancel-pending', id)"
         @click="$emit('click-pending', pending)"
+        @retry-status="id => $emit('retry-pending', id)"
       />
     </div>
 

@@ -9,6 +9,7 @@ const props = defineProps<{
     title: string
     status: string
     hasError: boolean
+    connectionPaused?: boolean
     kind: 'creation' | 'import'
   }
   loadingWordIndex: number
@@ -17,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'removeFailed', adventureId: string, kind: 'creation' | 'import'): void
   (e: 'cancel', adventureId: string): void
+  (e: 'retryStatus', adventureId: string): void
   (e: 'click'): void
 }>()
 
@@ -55,7 +57,7 @@ onUnmounted(() => {
         <i
           :class="[
             'ra text-sm sm:text-lg',
-            props.pending.hasError ? 'ra-burning-embers text-red-400' : 'ra-cog text-aether-primary animate-spin',
+            props.pending.connectionPaused ? 'ra-cog text-amber-400' : props.pending.hasError ? 'ra-burning-embers text-red-400' : 'ra-cog text-aether-primary animate-spin',
           ]"
         ></i>
       </div>
@@ -68,7 +70,7 @@ onUnmounted(() => {
             : 'bg-aether-primary/15 border-aether-primary/30 text-aether-primary',
         ]"
       >
-        {{ props.pending.hasError ? (props.pending.status === 'Cancelled' ? 'Cancelled' : 'Failed') : (props.pending.kind === 'import' ? 'Import' : 'Generating') }}
+        {{ props.pending.connectionPaused ? 'Status offline' : props.pending.hasError ? (props.pending.status === 'Cancelled' ? 'Cancelled' : 'Failed') : (props.pending.kind === 'import' ? 'Import' : 'Generating') }}
       </span>
 
       <!-- Cancel Button -->
@@ -118,6 +120,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mt-auto pt-2 sm:pt-4">
+        <button v-if="props.pending.connectionPaused" type="button" class="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/20" @click.stop="emit('retryStatus', props.pending.adventureId)">Retry connection</button>
         <button
           v-if="props.pending.hasError"
           class="w-full py-2 sm:py-3.5 rounded-lg sm:rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-red-500/25 transition-colors cursor-pointer"

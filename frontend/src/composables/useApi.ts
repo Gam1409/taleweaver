@@ -616,13 +616,13 @@ export const api = {
   },
 
   /** Retrieves the generation status and potential errors for an adventure. */
-  getAdventureStatus(adventureId: string): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any; can_resume?: boolean; completed_stages?: number }> {
-    return request(`/adventures/${adventureId}/status`)
+  getAdventureStatus(adventureId: string, signal?: AbortSignal): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any; can_resume?: boolean; completed_stages?: number }> {
+    return request(`/adventures/${encodeURIComponent(adventureId)}/status`, { signal })
   },
 
   /** Retrieves the live detailed generation logs (history) for an adventure template. */
-  getAdventureGenerationLogs(adventureId: string): Promise<{ logs: any[] }> {
-    return request(`/adventures/${adventureId}/generation-logs`)
+  getAdventureGenerationLogs(adventureId: string, signal?: AbortSignal): Promise<{ logs: any[] }> {
+    return request(`/adventures/${encodeURIComponent(adventureId)}/generation-logs`, { signal })
   },
 
   async getAdventureGenerationSayings(): Promise<string[]> {

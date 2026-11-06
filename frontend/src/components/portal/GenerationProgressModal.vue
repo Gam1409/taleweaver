@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { api, GENERATION_SAYINGS } from '@/composables/useApi'
+import { createStatusPoller } from '@/services/statusPoller'
 import { ChevronDown, ChevronUp, Image as ImageIcon, Brain, BarChart3 } from 'lucide-vue-next'
 import GeneratorValidationCard, { type ValidationLogDetails } from '@/components/game/generator/GeneratorValidationCard.vue'
 
@@ -27,25 +28,6 @@ const isLoading = ref(true)
 const isExpandedMap = ref<Record<string, boolean>>({}) // For collapsing/expanding thoughts
 const chatContainer = ref<HTMLDivElement | null>(null)
 
-let pollTimer: number | null = null
-
-async function fetchLogs() {
-  try {
-    const data = await api.getAdventureGenerationLogs(props.adventureId)
-    logs.value = data.logs || []
-    
-    // Auto scroll to bottom
-    await nextTick()
-    if (chatContainer.value) {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-    }
-  } catch (error) {
-    console.error('Error fetching generation logs:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
 // Check if generation is still active
 const isReady = ref(false)
 const hasError = ref(false)
@@ -56,13 +38,12 @@ const resumeError = ref('')
 const statusDescription = ref('Preparing generation...')
 const generationError = ref('')
 
+const connectionPaused = ref(false)
 function startPolling() {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = window.setInterval(() => {
-    void fetchLogs()
-    void checkStatus()
-  }, 1500)
+  connectionPaused.value = false
+  return poller.start()
 }
+function stopPolling() { poller.stop() }
 
 async function resumeGeneration() {
   if (isResuming.value) return
@@ -76,9 +57,8 @@ async function resumeGeneration() {
     generationError.value = ''
     statusDescription.value = 'Resuming saved generation...'
     emit('resumed')
-    startPolling()
-    await fetchLogs()
-    await checkStatus()
+    stopPolling()
+    await startPolling()
   } catch (error) {
     resumeError.value = error instanceof Error ? error.message : 'Could not resume generation.'
   } finally {
@@ -87,32 +67,42 @@ async function resumeGeneration() {
 }
 
 const backendStats = ref<Record<string, { generated: number; reused: number }> | null>(null)
-async function checkStatus() {
-  try {
-    const statusData = await api.getAdventureStatus(props.adventureId)
-    isReady.value = statusData.is_ready
-    canResume.value = Boolean(statusData.can_resume)
-    completedStages.value = statusData.completed_stages || 0
-    statusDescription.value = statusData.status || 'Preparing generation...'
-    generationError.value = statusData.error || ''
-    hasError.value = false
-    if ((statusData.error && !statusData.error.startsWith('Notice:')) || statusData.status === 'Failed' || statusData.status === 'Cancelled') {
-      hasError.value = true
-    }
-    if (statusData.stats) {
-      backendStats.value = statusData.stats
-    }
-    
-    if (isReady.value || hasError.value) {
-      if (pollTimer) {
-        clearInterval(pollTimer)
-        pollTimer = null
-      }
-    }
-  } catch (error) {
-    console.error('Error checking status:', error)
-  }
+function applyStatus(statusData: Awaited<ReturnType<typeof api.getAdventureStatus>>) {
+  isReady.value = statusData.is_ready
+  canResume.value = Boolean(statusData.can_resume)
+  completedStages.value = statusData.completed_stages || 0
+  statusDescription.value = statusData.status || 'Preparing generation...'
+  generationError.value = statusData.error || ''
+  hasError.value = Boolean((statusData.error && !statusData.error.startsWith('Notice:')) || statusData.status === 'Failed' || statusData.status === 'Cancelled')
+  if (statusData.stats) backendStats.value = statusData.stats
 }
+
+const poller = createStatusPoller(async signal => {
+  const [status, detail] = await Promise.all([
+    api.getAdventureStatus(props.adventureId, signal),
+    api.getAdventureGenerationLogs(props.adventureId, signal).catch(() => null),
+  ])
+  return { status, detail }
+}, {
+  onData({ status, detail }) {
+    applyStatus(status)
+    isLoading.value = false
+    connectionPaused.value = false
+    if (detail) logs.value = detail.logs || []
+    void nextTick(() => { if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight })
+    return !isReady.value && !hasError.value
+  },
+  onPaused() {
+    isLoading.value = false
+    connectionPaused.value = true
+    statusDescription.value = 'Status checks are paused. Generation may still be running. Retry the connection.'
+  },
+  onMissing() {
+    isLoading.value = false
+    connectionPaused.value = true
+    statusDescription.value = 'Adventure not found. Return to the library or retry the connection.'
+  },
+})
 
 function toggleExpand(timestamp: string) {
   isExpandedMap.value[timestamp] = !isExpandedMap.value[timestamp]
@@ -224,18 +214,13 @@ function updateSaying() {
 }
 
 onMounted(() => {
-  void fetchLogs()
-  void checkStatus()
-  
-  startPolling()
+  void startPolling()
 
   sayingTimer = window.setInterval(updateSaying, 5000)
 })
 
 onUnmounted(() => {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-  }
+  stopPolling()
   if (sayingTimer) {
     clearInterval(sayingTimer)
   }
@@ -437,6 +422,7 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-if="connectionPaused" class="px-6 py-3 text-sm text-amber-200" role="status">{{ statusDescription }}</div>
       <div v-if="hasError || completedStages" class="px-6 py-3 border-t border-white/10 text-sm">
         <p v-if="generationError" class="text-red-300 break-words" role="alert">{{ generationError }}</p>
         <p v-if="completedStages" class="text-slate-300">{{ completedStages }} completed steps saved.</p>
@@ -453,11 +439,13 @@ onUnmounted(() => {
           <span v-else-if="hasError" class="text-red-400 flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-red-400"></span> Failed / Cancelled
           </span>
+          <span v-else-if="connectionPaused" class="text-amber-300">Status offline</span>
           <span v-else class="text-sky-400 flex items-center gap-1.5 max-w-[450px] line-clamp-1">
             <span class="w-2 h-2 border-2 border-sky-400/20 border-t-sky-400 rounded-full animate-spin shrink-0"></span>
             <span>{{ statusDescription }}</span>
           </span>
         </div>
+        <button v-if="connectionPaused" type="button" class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-200" @click="startPolling">Retry connection</button>
         <button
           v-if="hasError && canResume"
           type="button"

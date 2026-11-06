@@ -65,6 +65,7 @@ export interface UsePortalDataResult {
   exportAdventureAdv: (adventureId: string, title: string) => Promise<void>
   removeFailedPendingCard: (adventureId: string, kind: 'creation' | 'import') => Promise<void>
   cancelAdventure: (adventureId: string) => Promise<void>
+  retryPendingAdventure: (adventureId: string) => void
   trackNewAdventure: (adventureId: string, title: string) => void
   startLoadingWords: () => void
   stopLoadingWords: () => void
@@ -170,6 +171,7 @@ export function usePortalData(): UsePortalDataResult {
     syncPendingFromTemplates,
     removeFailedPendingCard,
     cancelAdventure,
+    retryPendingAdventure: retryPendingStatus,
     trackNewAdventure: trackPendingNewAdventure,
     startLoadingWords,
     stopLoadingWords,
@@ -894,6 +896,10 @@ export function usePortalData(): UsePortalDataResult {
     }
   }
 
+  function retryPendingAdventure(adventureId: string) {
+    retryPendingStatus(adventureId, fetchPortalData)
+  }
+
   /** Tracks a newly created adventure in pending state until completion. */
   function trackNewAdventure(adventureId: string, title: string) {
     trackPendingNewAdventure(adventureId, title, fetchPortalData)
@@ -960,6 +966,7 @@ export function usePortalData(): UsePortalDataResult {
     exportAdventureAdv,
     removeFailedPendingCard,
     cancelAdventure,
+    retryPendingAdventure,
     trackNewAdventure,
     startLoadingWords,
     stopLoadingWords,

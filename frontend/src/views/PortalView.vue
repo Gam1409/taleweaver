@@ -114,6 +114,7 @@ const {
   exportAdventureAdv,
   removeFailedPendingCard,
   cancelAdventure,
+  retryPendingAdventure,
   trackNewAdventure,
   startLoadingWords,
   stopLoadingWords,
@@ -409,6 +410,7 @@ onUnmounted(() => {
               @import-samples="handleImportSamplesClick"
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
+              @retry-pending="retryPendingAdventure"
               @start-session="startSession"
               @resume="playSession"
               @update-adventure="updateAdventure"
@@ -442,6 +444,7 @@ onUnmounted(() => {
               @import-samples="handleImportSamplesClick"
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
+              @retry-pending="retryPendingAdventure"
               @start-session="startSession"
               @resume="playSession"
               @update-adventure="updateAdventure"

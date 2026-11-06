@@ -1,14 +1,16 @@
+/* eslint-env node, es2020 */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
+import { statusPollerModule } from './statusPollerModule.mjs'
 
 let sequence = 0
 async function fixture(t, api) {
   const key = `__generationResume${sequence++}`
   const events = []
-  globalThis[key] = { api, events }
+  globalThis[key] = { api: { getAdventureGenerationLogs: async () => ({logs: []}), ...api }, events }
   t.after(() => { delete globalThis[key] })
   let source = readFileSync(new URL('../src/components/portal/GenerationProgressModal.vue', import.meta.url), 'utf8')
     .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
@@ -16,6 +18,7 @@ async function fixture(t, api) {
     .replace(/const props = defineProps<[\s\S]*?>\(\)/, "const props = {adventureId: 'saved-world', adventureTitle: 'Saved world'}")
     .replace(/const emit = defineEmits<[\s\S]*?>\(\)/, `const emit = event => globalThis['${key}'].events.push(event)`)
   source = `import {ref, computed, nextTick} from '${import.meta.resolve('vue')}';
+import {createStatusPoller} from '${statusPollerModule}';
 const api = globalThis['${key}'].api;
 const GENERATION_SAYINGS = ['Preparing'];
 const onMounted = () => {};
@@ -23,9 +26,12 @@ const onUnmounted = () => {};
 const window = {setInterval: () => 1};
 const clearInterval = () => {};
 ${source}
-export {checkStatus, resumeGeneration, hasError, canResume, completedStages, resumeError, statusDescription, isResuming};`
+const checkStatus = () => poller.checkNow();
+export {checkStatus, startPolling, stopPolling, connectionPaused, resumeGeneration, hasError, canResume, completedStages, resumeError, statusDescription, isResuming};`
   const compiled = ts.transpileModule(source, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
-  return {...await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`), events}
+  const result = {...await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`), events}
+  t.after(() => result.stopPolling())
+  return result
 }
 
 test('failed generation exposes saved progress and can resume', async t => {
@@ -67,5 +73,32 @@ test('failed resume remains visible and duplicate clicks do not create requests'
   assert.match(f.resumeError.value, /already resuming/)
   assert.equal(f.hasError.value, true)
   assert.equal(f.isResuming.value, false)
+  assert.deepEqual(f.events, [])
+})
+
+test('progress monitoring pauses on connection failures and retries reads without resuming generation', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']})
+  let calls = 0, available = false
+  const f = await fixture(t, {
+    getAdventureStatus: async () => {
+      calls++
+      if (!available) throw new TypeError('Offline')
+      return {status: 'Ready', is_ready: true}
+    },
+    resumeAdventureGeneration: async () => { throw new Error('A status retry must never restart generation') }
+  })
+  await f.startPolling()
+  for (let index = 0; index < 12; index++) {
+    t.mock.timers.tick(30_000)
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.equal(calls, 6)
+  assert.equal(f.hasError.value, false)
+  assert.equal(f.connectionPaused.value, true)
+  assert.match(f.statusDescription.value, /may still be running/)
+  available = true
+  await f.startPolling()
+  assert.equal(calls, 7)
+  assert.equal(f.connectionPaused.value, false)
   assert.deepEqual(f.events, [])
 })
