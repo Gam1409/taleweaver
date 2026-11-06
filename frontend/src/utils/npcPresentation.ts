@@ -72,8 +72,9 @@ export function portraitStyle(cue: PortraitCue | undefined, prefs: PortraitPrefe
   const color = EMOTION_PALETTE[cue.emotion!]!
   const power = cue.intensity / 100 * prefs.brightness / 100
   return {
-    borderColor: `rgba(${color.rim || color.rgb},${0.2 + power * 0.7})`,
-    boxShadow: `0 0 ${8 + power * 26}px rgba(${color.rgb},${power * 0.75}), inset 0 0 ${6 + power * 14}px rgba(${color.rim || color.rgb},${power * 0.3})`,
+    borderColor: `rgba(${color.rim || color.rgb},${Math.min(1, 0.4 + power * 1.4)})`,
+    boxShadow: `0 0 ${8 + power * 26}px rgba(${color.rgb},${Math.min(1, power * 1.5)})`,
+    '--portrait-inner-glow': `inset 0 0 ${6 + power * 14}px rgba(${color.rim || color.rgb},${power * 0.6})`,
   }
 }
 

@@ -136,7 +136,7 @@ function isNpcSpeaking(npc: any): boolean {
       <div
         v-for="npc in props.npcs"
         :key="npc.id"
-        class="relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-14 sm:w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
+        class="emotion-portrait relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-14 sm:w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
         :class="[
           isNpcSpeaking(npc) && !emotionLabel(props.portraitCues?.[npc.id], preferences)
             ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.6)] ring-2 ring-amber-400/60'
@@ -216,6 +216,17 @@ function isNpcSpeaking(npc: any): boolean {
 </template>
 
 <style scoped>
+/* Keep the inner glow above the image, below names and controls. */
+.emotion-portrait::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: var(--portrait-inner-glow, none);
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 4px; }
