@@ -227,13 +227,23 @@ class AdventureLogic:
 
     @staticmethod
     async def resolve_session_state(
-        db: AsyncSession, session_or_template_id: str, user_id: Optional[str] = None
+        db: AsyncSession, session_or_template_id: str, *, user_id: str
     ) -> Optional[SessionState]:
-        """Resolve a session state by session id first, then by template/adventure id."""
+        """Resolve only the caller's session, including legacy template IDs and healing.
+
+        GameSession owns the access decision; denormalized state.user_id may be
+        missing or stale in older saves. Administrators do not bypass ownership
+        through this gameplay resolver.
+        """
+        if not user_id:
+            return None
         direct_res = await db.execute(
             select(SessionState)
             .options(selectinload(SessionState.session))
-            .where(SessionState.session_id == session_or_template_id)
+            .where(
+                SessionState.session_id == session_or_template_id,
+                SessionState.session.has(GameSession.user_id == user_id),
+            )
         )
         direct_state = direct_res.scalars().first()
         if direct_state:
@@ -248,19 +258,17 @@ class AdventureLogic:
         if not session_candidate:
             template_session_res = await db.execute(
                 select(GameSession)
-                .where(GameSession.template_id == session_or_template_id)
-                .order_by(GameSession.updated_at.desc())
-            )
-            template_sessions = template_session_res.scalars().all()
-            if user_id:
-                session_candidate = next(
-                    (s for s in template_sessions if s.user_id == user_id), None
+                .where(
+                    GameSession.template_id == session_or_template_id,
+                    GameSession.user_id == user_id,
                 )
-            else:
-                session_candidate = template_sessions[0] if template_sessions else None
+                .order_by(GameSession.updated_at.desc())
+                .limit(1)
+            )
+            session_candidate = template_session_res.scalars().first()
 
         if session_candidate:
-            if user_id and session_candidate.user_id != user_id:
+            if session_candidate.user_id != user_id:
                 return None
             existing_for_candidate_res = await db.execute(
                 select(SessionState)

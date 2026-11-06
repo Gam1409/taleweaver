@@ -341,21 +341,29 @@ class AdventureExporter:
 
         # 1. Fetch World State
         scene_res = await db.execute(
-            select(WorldScene).where(WorldScene.template_id == template_id)
+            select(WorldScene).where(
+                WorldScene.template_id == template_id, WorldScene.session_id.is_(None)
+            )
         )
         scenes = scene_res.scalars().all()
 
-        exit_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id))
+        exit_res = await db.execute(
+            select(WorldExit).where(
+                WorldExit.template_id == template_id, WorldExit.session_id.is_(None)
+            )
+        )
         exits = exit_res.scalars().all()
 
         entity_res = await db.execute(
-            select(WorldEntity).where(WorldEntity.template_id == template_id)
+            select(WorldEntity).where(
+                WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)
+            )
         )
         entities = entity_res.scalars().all()
 
         avatar_res = await db.execute(
             select(Avatar)
-            .where(Avatar.template_id == template_id)
+            .where(Avatar.template_id == template_id, Avatar.user_id == adv.owner_id)
             .order_by(Avatar.created_at.asc(), Avatar.id.asc())
             .limit(1)
         )

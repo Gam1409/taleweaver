@@ -6,6 +6,7 @@ from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.core.auth import get_password_hash
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -25,8 +26,10 @@ async def _seed_prompt_context(db):
             "preferred_provider": "openai",
         },
     )
-    adv = AdventureTemplate(id="adv-suggest", title="Suggestion Adventure", owner_id="owner")
-    db.add_all([user, adv])
+    db.add(user)
+    await db.flush()
+    adv = AdventureTemplate(id="adv-suggest", title="Suggestion Adventure", owner_id=user.id)
+    db.add(adv)
     await db.flush()
 
     avatar = Avatar(
@@ -36,6 +39,12 @@ async def _seed_prompt_context(db):
         name="Hero",
         inventory=[{"id": "ROPE", "name": "Rope", "item_type": "TOOL"}],
     )
+    db.add(avatar)
+    await db.flush()
+    db.add(
+        GameSession(id="session-suggest", user_id=user.id, template_id=adv.id, avatar_id=avatar.id)
+    )
+    await db.flush()
     state = SessionState(
         session_id="session-suggest",
         template_id=adv.id,
@@ -43,7 +52,7 @@ async def _seed_prompt_context(db):
         user_id=user.id,
         current_scene_id="START",
     )
-    db.add_all([avatar, state])
+    db.add(state)
     db.add_all(
         [
             WorldScene(

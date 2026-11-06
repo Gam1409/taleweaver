@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.access import require_owned_template
 from backend.api.routes.adventures.adventure_creation import (
     GenerationJob,
     create_adventure_records,
@@ -1111,6 +1112,7 @@ async def export_adventure_adv(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Exports the adventure as a pure .adv JSON manifest."""
+    await require_owned_template(db, template_id, current_user.id)
     from backend.engine.adventure_exporter import AdventureExporter
 
     try:
@@ -1130,6 +1132,7 @@ async def export_adventure_adz(
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Exports the adventure as a portable .adz (ZIP) bundle including assets."""
+    await require_owned_template(db, template_id, current_user.id)
     import io
 
     from backend.engine.adventure_exporter import AdventureExporter
@@ -1156,10 +1159,11 @@ async def export_adventure_session(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Exports a minimal session payload for the template (useful for import/preview)."""
+    await require_owned_template(db, template_id, current_user.id)
     # Find template-level avatar if present
     av_res = await db.execute(
         select(Avatar)
-        .where(Avatar.template_id == template_id)
+        .where(Avatar.template_id == template_id, Avatar.user_id == current_user.id)
         .order_by(Avatar.created_at.asc(), Avatar.id.asc())
         .limit(1)
     )

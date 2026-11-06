@@ -1,19 +1,24 @@
+import asyncio
 import io
 import json
 import os
 import zipfile
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from PIL import Image
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.config import settings
 from backend.engine.adventure_exporter import AdventureExporter
 from backend.engine.adventure_importer import AdventureTemplateImporter
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldScene
+from backend.utils.path_security import data_url_to_local_path
 
 pytestmark = pytest.mark.asyncio
 
@@ -149,38 +154,16 @@ async def test_export_adv_objects_omit_null_and_npc_fields(auth_client, setup_te
         assert "mana_change" not in exported_obj.get("metadata_json", {})
 
 
-def _mock_archive_export_files(monkeypatch):
-    # Mock file system to avoid actual disk writes/reads
-    # We'll mock os.path.exists and open to simulate presence of image files
-    original_exists = os.path.exists
-
-    def fake_exists(path):
-        if "cover.jpg" in path or "hero.jpg" in path or "scene1.jpg" in path or "npc1.jpg" in path:
-            return True
-        return original_exists(path)
-
-    monkeypatch.setattr("os.path.exists", fake_exists)
-
-    # Mock zipfile.write to avoid actual file access
-    def fake_zip_write(self, filename, arcname=None, compress_type=None):
-        pass  # Just simulate adding to zip
-
-    monkeypatch.setattr("zipfile.ZipFile.write", fake_zip_write)
-
-    # We also need to mock os.walk to find our fake files
-    original_walk = os.walk
-
-    def fake_walk(top, topdown=True, onerror=None, followlinks=False):
-        if "test-adv-123" in top:
-            yield (top, [], ["cover.jpg", "hero.jpg", "scene1.jpg", "npc1.jpg"])
-        else:
-            yield from original_walk(top, topdown, onerror, followlinks)
-
-    monkeypatch.setattr("os.walk", fake_walk)
-    monkeypatch.setattr("os.makedirs", lambda *args, **kwargs: None)
+def _real_archive_export_images(monkeypatch, data_root):
+    monkeypatch.setattr(settings, "DATA_DIR", str(data_root))
+    for name in ["cover.jpg", "hero.jpg", "scenes/scene1.jpg", "entities/npc1.jpg"]:
+        path = data_root / "adventures/test-adv-123" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (8, 8), "blue").save(path)
+    monkeypatch.setattr("backend.engine.media_engine.MediaEngine.ensure_thumbnails", AsyncMock())
 
 
-async def test_adventure_adz_export_import_cycle(auth_client, setup_test_db, monkeypatch):
+async def test_adventure_adz_export_import_cycle(auth_client, setup_test_db, monkeypatch, tmp_path):
     """Verifies that an adventure can be exported to ADZ and imported back with all data intact."""
     from tests.conftest import TestSessionLocal
 
@@ -189,7 +172,7 @@ async def test_adventure_adz_export_import_cycle(auth_client, setup_test_db, mon
         user = user_res.scalars().first()
         adventure_id = await _seed_adventure(db, user.id)
 
-        _mock_archive_export_files(monkeypatch)
+        _real_archive_export_images(monkeypatch, tmp_path)
 
         # Mock MediaEngine to avoid placeholder generation errors
         monkeypatch.setattr(
@@ -224,43 +207,6 @@ async def test_adventure_adz_export_import_cycle(auth_client, setup_test_db, mon
             assert len(manifest["scenes"]) == 1
             assert manifest["scenes"][0]["image_url"] == "assets/scene1.jpg"
 
-        # 2. Import
-        # Mock zip_file.read for assets to return dummy bytes
-        original_zip_read = zipfile.ZipFile.read
-
-        def fake_zip_read(self, name):
-            if name == "adventure.adv":
-                return original_zip_read(self, name)
-            return b"fake_image_data"
-
-        monkeypatch.setattr("zipfile.ZipFile.read", fake_zip_read)
-
-        # Mock open() for writing extracted assets
-        import builtins
-
-        original_open = builtins.open
-        mock_files = {}
-
-        class MockFile:
-            def __init__(self, name):
-                self.name = name
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                pass
-
-            def write(self, data):
-                mock_files[self.name] = data
-
-        def fake_open(name, mode="r", *args, **kwargs):
-            if "wb" in mode or "xb" in mode:
-                return MockFile(name)
-            return original_open(name, mode, *args, **kwargs)
-
-        monkeypatch.setattr("builtins.open", fake_open)
-
         # Delete adventure before import to avoid duplicate title conflict
         from backend.models.world_entity import WorldEntity, WorldScene
 
@@ -274,15 +220,19 @@ async def test_adventure_adz_export_import_cycle(auth_client, setup_test_db, mon
         success = await AdventureTemplateImporter.import_adz(db, adz_bytes, owner_id=user.id)
         assert success is True
 
-        # Verify imported data
-        # Title might have changed if we don't allow duplicates, but here we'll check by title in seeded DB
-        # Actually, import_adz skips if title exists, so we should delete the old one first or use a new user
-
-    # Start a fresh session to check results
     async with TestSessionLocal() as db:
-        # Check if a second adventure exists (import should have worked if we used a different title or deleted the old one)
-        # For simplicity in this test, let's delete the old one before import or use a different title in manifest
-        pass
+        restored = await db.scalar(
+            select(AdventureTemplate).where(AdventureTemplate.title == "Lifecycle Test")
+        )
+        assert restored is not None
+        assert restored.plot == "Test plot" and restored.rules == "Test rules"
+        avatar = await db.scalar(select(Avatar).where(Avatar.template_id == restored.id))
+        assert avatar is not None and avatar.name == "Test Hero"
+        path = data_url_to_local_path(avatar.profile_image)
+        assert path is not None
+        assert await asyncio.to_thread(Path(path).read_bytes) == await asyncio.to_thread(
+            (tmp_path / "adventures/test-adv-123/hero.jpg").read_bytes
+        )
 
 
 async def test_adventure_import_restores_protagonist(auth_client, setup_test_db, monkeypatch):

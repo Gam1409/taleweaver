@@ -8,6 +8,7 @@ import zipfile
 from fastapi.encoders import jsonable_encoder
 
 from backend.engine.adventure_export_assets import localize_archive_asset
+from backend.engine.export_asset_policy import read_archive_image
 from backend.utils.path_security import ensure_within_data_dir as _ensure_within_data_dir
 from backend.utils.path_security import safe_data_path as _safe_data_path
 
@@ -21,7 +22,7 @@ def pack_export_adz(manifest: dict, template_id: str) -> bytes:
     asset_mapping: dict[str, str] = {}  # local_path -> zip_path
 
     def localize_path(path: str | None) -> str | None:
-        return localize_archive_asset(path, adventure_dir, asset_mapping)
+        return localize_archive_asset(path, adventure_dir, asset_mapping, template_id=template_id)
 
     # Localize all image fields
     manifest["adventure"]["image_url"] = localize_path(manifest["adventure"].get("image_url"))
@@ -48,7 +49,7 @@ def pack_export_adz(manifest: dict, template_id: str) -> bytes:
         for local_full, zip_rel in asset_mapping.items():
             if os.path.exists(local_full):
                 safe_local_full = _ensure_within_data_dir(local_full)
-                zip_file.write(safe_local_full, zip_rel)
+                zip_file.writestr(zip_rel, read_archive_image(safe_local_full, template_id))
 
     return zip_buffer.getvalue()
 

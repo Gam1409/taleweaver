@@ -1,12 +1,13 @@
 import io
 import json
-import os
 import zipfile
 from unittest.mock import AsyncMock
 
 import pytest
+from PIL import Image
 from sqlalchemy import select
 
+from backend.core.config import settings
 from backend.engine.adventure_exporter import AdventureExporter
 from backend.engine.adventure_importer import AdventureTemplateImporter
 from backend.models.adventure_template import AdventureTemplate
@@ -16,7 +17,7 @@ from backend.models.world_entity import WorldScene
 
 
 @pytest.mark.asyncio
-async def test_full_portability_cycle(setup_test_db, monkeypatch):
+async def test_full_portability_cycle(setup_test_db, monkeypatch, tmp_path):
     """
     Verifies that an adventure can be exported to ADZ and imported back
     with 100% field parity and correct asset re-mapping.
@@ -93,7 +94,7 @@ async def test_full_portability_cycle(setup_test_db, monkeypatch):
         db.add(scene)
         await db.commit()
 
-        _mock_export_files(monkeypatch)
+        _real_export_images(monkeypatch, tmp_path)
 
         # 4. Export to ADZ
         adz_bytes = await AdventureExporter.export_adz(db, adv.id)
@@ -118,7 +119,9 @@ async def test_full_portability_cycle(setup_test_db, monkeypatch):
         await db.execute(delete(AdventureTemplate).where(AdventureTemplate.id == adv.id))
         await db.commit()
 
-        _mock_import_files(monkeypatch)
+        monkeypatch.setattr(
+            "backend.engine.media_engine.MediaEngine.ensure_thumbnails", AsyncMock()
+        )
 
         # 8. Perform Import
         success = await AdventureTemplateImporter.import_adz(db, adz_bytes, owner_id=user.id)
@@ -145,75 +148,9 @@ async def test_full_portability_cycle(setup_test_db, monkeypatch):
         assert "hero.jpg" in restored_avatar.profile_image
 
 
-def _mock_import_files(monkeypatch):
-    # 7. Mock filesystem for Import
-    original_zip_read = zipfile.ZipFile.read
-
-    def fake_zip_read(self, name):
-        if name == "adventure.adv":
-            return original_zip_read(self, name)
-        return b"restored_asset_data"
-
-    monkeypatch.setattr("zipfile.ZipFile.read", fake_zip_read)
-
-    import builtins
-
-    original_open = builtins.open
-
-    class MockFile:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def write(self, d):
-            pass
-
-        def read(self, *a):
-            return b"fake"
-
-    # Only mock 'wb' opens (asset extraction)
-    monkeypatch.setattr(
-        "builtins.open",
-        lambda *a, **k: (
-            MockFile() if (len(a) > 1 and a[1] in {"wb", "xb"}) else original_open(*a, **k)
-        ),
-    )
-
-    original_isfile = os.path.isfile
-    monkeypatch.setattr(
-        "os.path.isfile",
-        lambda p: (
-            True
-            if "portability-test-999" in p
-            or "library" in p
-            or "cover.jpg" in p
-            or "hero.jpg" in p
-            or "start.jpg" in p
-            else original_isfile(p)
-        ),
-    )
-
-    # Mock MediaEngine to avoid actual thumbnail generation
-    monkeypatch.setattr("backend.engine.media_engine.MediaEngine.ensure_thumbnails", AsyncMock())
-    monkeypatch.setattr(
-        "backend.engine.media_engine.MediaEngine.generate_placeholder",
-        AsyncMock(return_value="/data/placeholder.jpg"),
-    )
-
-
-def _mock_export_files(monkeypatch):
-    # 3. Mock filesystem for Export
-    # We need os.path.exists to return True for our fake data paths
-    monkeypatch.setattr("os.path.exists", lambda p: True)
-
-    # Mock zipfile.ZipFile.write to simulate writing to ZIP without real files
-    def fake_zip_write(self, filename, arcname=None, compress_type=None):
-        self.writestr(arcname or filename, b"fake_binary_data")
-
-    monkeypatch.setattr("zipfile.ZipFile.write", fake_zip_write)
-
-    # Mock os.walk to find our fake files
-    monkeypatch.setattr("os.walk", lambda t, **k: [(t, [], ["cover.jpg", "hero.jpg", "start.jpg"])])
-    monkeypatch.setattr("os.makedirs", lambda *a, **k: None)
+def _real_export_images(monkeypatch, data_root):
+    monkeypatch.setattr(settings, "DATA_DIR", str(data_root))
+    for name in ["cover.jpg", "hero.jpg", "scenes/start.jpg"]:
+        path = data_root / "adventures/library/portability-test-999" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (8, 8), "blue").save(path)

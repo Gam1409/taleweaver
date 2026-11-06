@@ -1,10 +1,12 @@
 """Read-only inventory normalization and archive asset localization for export."""
 
+import hashlib
 import logging
 import os
 from collections.abc import Sequence
 from typing import Any
 
+from backend.engine.export_asset_policy import checked_asset_path
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.utils.path_security import data_url_to_local_path
@@ -75,35 +77,35 @@ def serialize_world_location(obj: WorldScene | WorldExit | None) -> dict[str, An
     return data
 
 
-def localize_archive_asset(
-    path: str | None, adventure_dir: str, asset_mapping: dict[str, str]
-) -> str | None:
-    from backend.engine.adventure_exporter import _ensure_within_data_dir, _safe_zip_asset_name
+def _register_asset(path: str, template_id: str, asset_mapping: dict[str, str]) -> str:
+    path = checked_asset_path(path, template_id)
+    if path in asset_mapping:
+        return asset_mapping[path]
+    name = os.path.basename(path)
+    destination = f"assets/{name}"
+    if destination in asset_mapping.values():
+        suffix = hashlib.sha256(path.encode()).hexdigest()[:16]
+        destination = f"assets/{suffix}-{name}"
+    asset_mapping[path] = destination
+    return destination
 
+
+def localize_archive_asset(
+    path: str | None, adventure_dir: str, asset_mapping: dict[str, str], *, template_id: str
+) -> str | None:
     if not path or not path.startswith("/data/"):
         return path
-
     local_full = data_url_to_local_path(path)
     if not local_full:
-        logger.warning("Skipping unsafe asset path during ADZ export: %s", path)
-        return path
-
+        raise ValueError("Archive image reference is invalid.")
+    local_full = checked_asset_path(local_full, template_id)
     if os.path.exists(local_full):
-        fname = _safe_zip_asset_name(local_full)
-        zip_rel = f"assets/{fname}"
-        asset_mapping[local_full] = zip_rel
-        return zip_rel
-
-    # Fallback: search in adventure_dir if not found directly
-    # (handles cases where path might be different but file exists there)
-    fname = _safe_zip_asset_name(path)
+        return _register_asset(local_full, template_id, asset_mapping)
+    # Legacy stale links may resolve only within this adventure's own directory.
+    name = os.path.basename(path)
     for root, _dirs, files in os.walk(adventure_dir):
-        if fname in files:
-            local_full = _ensure_within_data_dir(os.path.join(root, fname))
-            zip_rel = f"assets/{fname}"
-            asset_mapping[local_full] = zip_rel
-            return zip_rel
-
+        if name in files:
+            return _register_asset(os.path.join(root, name), template_id, asset_mapping)
     return path
 
 
