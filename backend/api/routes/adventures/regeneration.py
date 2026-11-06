@@ -24,6 +24,7 @@ from backend.engine.message_versions import archive
 from backend.engine.narration_correction import NarrationCorrection, append_correction
 from backend.engine.npc_journal.worker import schedule
 from backend.engine.npc_presentation.rewrites import clean_rewrite, prepare_rewrite
+from backend.engine.turn_replay.control import story_message_filter
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.user import User
@@ -108,7 +109,7 @@ async def regenerate_latest_message(
         raise HTTPException(409, "This session cannot regenerate narration.")
     result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.session_id == game_id, ChatMessage.role.in_(["user", "assistant"]))
+        .where(ChatMessage.session_id == game_id, story_message_filter())
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(12)
     )
@@ -141,7 +142,7 @@ async def regenerate_latest_message(
         raise HTTPException(502, "Regeneration failed. The original response was kept.") from None
     latest = (
         select(ChatMessage.id)
-        .where(ChatMessage.session_id == game_id, ChatMessage.role.in_(["user", "assistant"]))
+        .where(ChatMessage.session_id == game_id, story_message_filter())
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(1)
         .scalar_subquery()
@@ -224,7 +225,7 @@ async def restore_version(
     session, message = await _owned_message(db, game_id, message_id, current_user)
     latest = await db.scalar(
         select(ChatMessage.id)
-        .where(ChatMessage.session_id == game_id, ChatMessage.role.in_(["user", "assistant"]))
+        .where(ChatMessage.session_id == game_id, story_message_filter())
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(1)
     )

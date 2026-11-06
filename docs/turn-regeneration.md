@@ -9,6 +9,8 @@ Full regeneration uses the normal LLM timeout settings and streaming route. It d
 
 A pre-turn snapshot must exist. Old replies, imported sessions and copied sessions become eligible after a new supported turn. Normal player messages and `/say` are supported; direct mechanical commands and adventure-generator sessions are excluded. Legacy sessions sharing one avatar with another session cannot be independently rewound.
 
+The display toggles `/debug on`, `/debug off`, `/debug log on` and `/debug log off` preserve the last story reply and its pre-turn snapshot. Rewriting, version restoration and full-turn regeneration ignore these toggles when selecting the latest story message; full regeneration keeps the current debug visibility setting. Other commands that can change game state still replace the replay boundary. If an older application version already replaced a snapshot with a debug command, play a new story turn to capture a usable boundary again.
+
 ## Recovery and memory
 
 One durable snapshot is retained per session. It includes the session-owned world, avatar, inventory, NPC state and journal, map discovery, checkpoints, canonical memory summaries and this session's user awards/history. Real playtime is not rewound. Generated assets remain on disk; their saved references are restored with state.

@@ -4,6 +4,7 @@ import type { ChatMessage } from '@/types'
 import { apiFetch } from '@/services/http'
 import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
+import { isStoryMessage } from '@/utils/storyMessages'
 
 /** Replace prose in place; never resend the player's committed action. */
 export function useNarrationRegeneration(gameId: () => string | undefined, socket: UseGameSocket) {
@@ -12,7 +13,7 @@ export function useNarrationRegeneration(gameId: () => string | undefined, socke
   onScopeDispose(() => { disposed = true })
   const { addNotification } = useNotifications()
   const latest = computed(() => [...socket.messages.value].reverse()
-    .find(message => message.role === 'assistant' || message.role === 'user'))
+    .find(isStoryMessage))
   const canRegenerate = computed(() => Boolean(
     gameId() && latest.value?.role === 'assistant' && latest.value.id && !busy.value &&
     !socket.inputLocked.value && !socket.sheet.value?.agent_active &&

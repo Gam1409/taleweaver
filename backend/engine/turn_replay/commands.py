@@ -4,12 +4,15 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.turn_replay.control import is_debug_toggle
 from backend.engine.turn_replay.snapshot import capture
 from backend.models.game_session import GameSession
 from backend.models.turn_replay import TurnReplay
 
 
 async def prepare_command(manager: Any, text: str) -> None:
+    if is_debug_toggle(text):
+        return
     if not text.startswith("/") or text.lower().startswith("/say "):
         return
     if getattr(manager, "_replaying", False):

@@ -4,10 +4,11 @@ import { RotateCcw } from 'lucide-vue-next'
 import { apiFetch } from '@/services/http'
 import { useGameSocket } from '@/composables/useGameSocket'
 import RegenerateMessageButton from './RegenerateMessageButton.vue'
+import { isStoryMessage } from '@/utils/storyMessages'
 
 const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean }>()
 const socket = useGameSocket()
-const latest = computed(() => [...socket.messages.value].reverse().find(m => m.role === 'user' || m.role === 'assistant'))
+const latest = computed(() => [...socket.messages.value].reverse().find(isStoryMessage))
 const busy = computed(() => ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
 const available = ref(false)
 const reason = ref('Checking whether this turn can be regenerated…')
@@ -33,7 +34,7 @@ async function replay() {
   if (!available.value || busy.value || !latest.value?.id) return
   if (!window.confirm('Regenerate the entire last turn? This restores the world before your last message and replaces its consequences and reply. If generation fails, the previous result is restored.')) return
   const id = latest.value.id
-  const user = [...socket.messages.value].reverse().find(m => m.role === 'user')
+  const user = [...socket.messages.value].reverse().find(m => m.role === 'user' && isStoryMessage(m))
   if (user) await socket.sendMessage(user.content, true, id)
 }
 </script>

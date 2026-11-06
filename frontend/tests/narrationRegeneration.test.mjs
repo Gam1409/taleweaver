@@ -5,11 +5,13 @@ import { Buffer } from 'node:buffer'
 import { effectScope, ref } from 'vue'
 import ts from 'typescript'
 import { correctionModuleUrl, corrections } from './correctionModule.mjs'
+import { storyMessageModule } from './storyMessageModule.mjs'
 
 const source = readFileSync(new URL('../src/composables/useNarrationRegeneration.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/utils/storyMessages'", `from '${storyMessageModule}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace(/import .* from '@\/services\/http';/, 'const apiFetch = (...args) => globalThis.fetch(...args);')
   .replace(/import .* from '@\/composables\/useNotifications';/, 'export const notices = []; const useNotifications = () => ({ addNotification: (...args) => notices.push(args) });')
@@ -54,6 +56,23 @@ test('failed regeneration keeps the original and displays an error', async t => 
 test('a pending player message disables regeneration', t => {
   const f = fixture(t)
   f.socket.messages.value.push({ id: 'action', role: 'user', content: 'Open gate' })
+  assert.equal(f.canRegenerate.value, false)
+})
+
+test('debug toggles keep the original narration selected and other commands still invalidate it', async t => {
+  const f = fixture(t)
+  f.socket.messages.value.push({ id: 'debug-on', role: 'user', content: '/debug on' })
+  f.socket.messages.value.push({ id: 'debug-result', role: 'system', content: 'Enabled.', is_debug: true })
+  f.socket.messages.value.push({ id: 'debug-off', role: 'user', content: '/debug off' })
+  assert.equal(f.canRegenerate.value, true)
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.equal(JSON.parse(options.body).message_id, 'reply')
+    return new Response(JSON.stringify({ id: 'reply', role: 'assistant', content: 'Replacement' }))
+  })
+  await f.regenerate()
+  assert.equal(f.socket.messages.value[0].content, 'Replacement')
+  assert.equal(f.socket.messages.value.length, 4)
+  f.socket.messages.value.push({ id: 'debug-heal', role: 'user', content: '/debug heal' })
   assert.equal(f.canRegenerate.value, false)
 })
 

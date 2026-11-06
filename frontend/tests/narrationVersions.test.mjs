@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { effectScope, reactive, ref, nextTick } from 'vue'
 import ts from 'typescript'
+import { storyMessageModule } from './storyMessageModule.mjs'
 
 let sequence = 0
 async function fixture(t, fetch) {
@@ -18,6 +19,7 @@ async function fixture(t, fetch) {
     .replace(/import[\s\S]*?from ['"][^'"]+['"];?/g, '')
     .replace(/defineProps<[\s\S]*?>\(\)/, `globalThis['${key}'].props`)
   source = `import {computed,ref,watch,onScopeDispose} from '${import.meta.resolve('vue')}';
+import {isStoryMessage} from '${storyMessageModule}';
 const useGameSocket = () => globalThis['${key}'].socket;
 const useNotifications = () => ({addNotification: (...args) => globalThis['${key}'].notices.push(args)});
 const apiFetch = (...args) => globalThis['${key}'].fetch(...args);
@@ -46,6 +48,19 @@ test('restoring a version sends its revision fence and updates the same reply', 
   await f.request(true)
   assert.deepEqual(JSON.parse(calls[1].options.body), { version_id: 'r1', expected_revision_id: 'r2' })
   assert.equal(f.socket.messages.value[0].content, 'Original')
+})
+
+test('debug toggles do not change the narration whose versions are restored', async t => {
+  const f = await fixture(t, async (url, options) => {
+    assert.match(url, /\/chat\/reply\/versions/)
+    return response(options.method === 'POST' ? {id: 'reply', role: 'assistant', content: 'Original'} : history)
+  })
+  f.socket.messages.value.push({id: 'debug', role: 'user', content: '/debug on'})
+  await f.request()
+  f.selected.value = 'r1'
+  await f.request(true)
+  assert.equal(f.socket.messages.value[0].content, 'Original')
+  assert.equal(f.socket.messages.value[1].content, '/debug on')
 })
 
 test('stale restore keeps the current text and shows the server error', async t => {
