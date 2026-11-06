@@ -6,6 +6,8 @@ reports, beliefs, player intentions and attempts are not confirmed world outcome
 Use perception-approved excerpts and perception_kinds in order; never reconstruct
 private/omitted speech or another NPC's knowledge.
 Return candidates as an OBJECT keyed by action kind, without kind inside values.
+Each candidate requires preconditions: [] or up to two unmet requirements. An intended
+future check is not already completed. player_request_source_ids refer to visible_evidence.
 Intention describes communication, not prose or completed physical action.
 CONTINUE/INITIATE advance personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate;
 DEFER is silence. Independence need not mean refusal. reconsider_if names a concrete
@@ -15,11 +17,9 @@ goal/commitment (brief text, entry_id=null). withdraw/report_done copy an ACTIVE
 entry's ID/text exactly; reported completion remains a claim. Reaffirmation needs
 no change. No DEFER commitments, invented past promises/deadlines, promises for
 others, automatic closure with time, or inferred possessions/consent from requests.
-TEXT BUDGETS count characters including spaces, not tokens. Motive relevance and
-experience explanation: <=180 each; alternatives/unknowns: <=160 each;
-reconsider_if: <=200; intention: <=400; choice.reason: <=300. Aim for ONE short
-clause (60-100 characters) per explanation, well below the cap. Do not restate
-the scene, character card or instructions. Keep required conditions/negations.
+TEXT: one short clause (60-100 characters) per explanation. Character caps:
+relevance/explanation 180, alternatives/unknowns/preconditions 160, reconsider_if 200,
+intention 400, choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
 
 
@@ -29,6 +29,9 @@ selected intention. Preserve concrete locations, item identities and access code
 do not invent replacements or claim another NPC knows these sources. Historical
 reports are not current world facts; current host state overrides them.
 CHPM DIALOGUE CONTRACT (private data, not prose to repeat):
+Within each NPC object, text_ref is a JSON pointer to exact text in that SAME object.
+preconditions are unmet requirements, not completed checks. Keep the intention conditional
+unless supplied host facts establish fulfilment; a report or promise is not confirmation.
 choice_preference_not_prose explains the NPC's preference, never wording to recite.
 previous_intention_not_world_completion is a previously expressed intention, not
 proof of an action or continuing consent. For maintain, preserve its actual course,
@@ -55,12 +58,8 @@ current state may still be described. These are dialogue intentions, not complet
 world events. Wording, tone and ordinary non-consequential expression remain free.
 Do not explain scores, candidates or appraisal. Do not ask permission to keep
 writing. Do not repeat unchanged scenery just to fill the response.
-Do not hand the NPC's selected intention back to the player by appending a request
-for permission to continue. A player choice explicitly part of the selected intention
-is allowed; blanket approval for the NPC's ordinary conversation is not.
-Relevant in-character social questions may express curiosity, care, suspicion or
-negotiation. Keep them consistent with the selected stance and scene; do not append
-a question automatically to every response.
+Do not hand an already selected NPC decision back to the player. Concrete player
+choices and contextual social questions are allowed; do not append questions habitually.
 subjective_experience_not_traits is private, fallible context, not a list to narrate.
 Recent feelings need not match outward expression; historical_current_unknown is
 not a current emotion. Never turn arousal into desire/consent, or a temporary state
@@ -76,7 +75,9 @@ plausibly explain this preference and its tradeoff. A maintain claim must preser
 the actual previous course, not merely the same action label. A revise claim needs
 a relevant reason grounded in accessible evidence, not a convenient invented event.
 An unchanged demand alone does not explain abandoning the NPC's independent goals.
-Preserve selected conditions: 'after checking' cannot become 'already checked'.
+Check preconditions before judging stance: 'after checking' cannot become 'already checked'.
+Only explicit host evidence can establish fulfilment; reports and intentions cannot.
+Resolve text_ref within its NPC object, not another actor or outside knowledge.
 The passages map contains the entire narration in reading order, exactly once.
 Review every passage, including narration between dialogue; keys are citation IDs.
 Inactive controlled actors remain present but cannot acquire new speech, decisions,

@@ -81,15 +81,14 @@ Both: stance, citations, alternatives, unknowns. Cite visible source_id + exact 
 Support/challenge the STATEMENT, not the person/request; never rewrite it on revision.
 Reconsider relevant existing beliefs rather than duplicating them. An explanation
 can challenge suspicion without proving completion. Repeated grounds add no independent
-confirmation. Domains stay distinct and subjective. No probabilities, trait edits
+confirmation. basis_for labels support/challenge of a belief, not truth of a report.
+Domains stay distinct and subjective. No probabilities, trait edits
 or world effects; empty alternatives/unknowns do not establish certainty.
 Observed changes prove neither cause nor hidden intent. Not visible means neither
 dead nor departed; missing recall proves no absence. Old fragments remain historical;
 current host facts prevail. Feelings, arousal, fear, politeness and demands prove no agreement.
-CLARIFY requires a decision-changing external fact or undecided player choice:
-two distinct answers mapped to TWO OTHER candidate keys. Prefer an equally useful
-independent action. Never invent dependencies to stall or ask the player to choose
-this NPC's wishes/permission to speak. Contextual questions may express curiosity,
-care, suspicion or negotiation when advancing the intention, not as habitual endings.
-Uncertainty need not cause refusal.
+CLARIFY needs a decision-changing fact/player choice and two distinct answers mapped
+to TWO OTHER keys; prefer useful independent action. Never invent stalling dependencies,
+ask permission to speak or outsource this NPC's wishes. Contextual questions may express
+care/curiosity/suspicion/negotiation, not habitual endings. Uncertainty need not cause refusal.
 """
