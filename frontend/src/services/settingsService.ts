@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import { audioService } from '@/services/audioService'
 import { catalogService } from '@/services/catalogService'
+import { createEndpointModelCache } from '@/services/endpointModelCache'
 import type { OllamaRole } from '@/services/ollamaRoleSettings'
 import { refreshConfig } from '@/store/config'
 
@@ -82,6 +83,12 @@ class SettingsService {
     ollama_api_mode: 'generate',
     minimax_url: 'https://api.minimax.chat/v1',
     custom_openai_url: '',
+    small_custom_openai_url: '',
+    complex_custom_openai_url: '',
+    generator_custom_openai_url: '',
+    compression_custom_openai_url: '',
+    play_agent_custom_openai_url: '',
+
     custom_openai_timeout: 300,
     custom_openai_response_format: 'prompt',
   })
@@ -285,7 +292,22 @@ class SettingsService {
     }
   }
 
+  private customApiModels = createEndpointModelCache(async url => {
+    const data = await api.getLlmModels('custom_openai', url)
+    return Array.isArray(data.models) ? data.models.filter((model: unknown): model is string => typeof model === 'string') : []
+  })
+  customOpenAIModelsByUrl = this.customApiModels.models
+  customOpenAILoadingByUrl = this.customApiModels.loading
+
   async fetchLlmModels(provider: string, apiBase?: string) {
+    if (provider === 'custom_openai') {
+      try { return await this.customApiModels.load(apiBase ?? this.llmForm.value.custom_openai_url) }
+      catch (error) {
+        this.statusMessage.value = { type: 'error', text: error instanceof Error ? error.message : 'Model detection failed for this API URL.' }
+        return []
+      }
+    }
+
     this.isLoadingLlmModels.value = { ...this.isLoadingLlmModels.value, [provider]: true }
     try {
       const data = await api.getLlmModels(provider, apiBase)

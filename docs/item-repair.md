@@ -21,6 +21,10 @@ requirements. Correctly spelling a name does not change the item's stable ID.
 Descriptions use connected literary prose and the source language, within the
 existing 1,000-character storage limit. Unknown history, powers and hidden
 properties should not be invented to make the prose longer.
+The description concerns the object itself: design, fabric, cut, texture and
+construction. Acquisition, wearing, placement and temporary damage or dirt are
+not part of that prose. Existing evidence/action fields retain those facts;
+a separate condition editor is deferred.
 
 Requests can incur model/provider cost. They are sent only when the corresponding
 button is clicked. A failed preview does not modify the saved item; a failed image

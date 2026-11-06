@@ -7,6 +7,7 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
 const requests = []
+let contentSettings = { enabled: false, level: 'soft' }
 const root = process.env.FRONTEND_URL || 'http://127.0.0.1:5187'
 const output = process.env.SCREENSHOT_DIR || '/tmp/npc-settings-screenshots'
 await mkdir(output, { recursive: true })
@@ -31,7 +32,14 @@ await page.route('**/api/**', async route => {
   else if (path.endsWith('/suggest-fix')) data = { finding_signature: 'signature', proposals: [{ title: 'Restore the personality profile', summary: 'Fill authored traits.', rationale: 'Preserve individual voice.', patches: [{ target_type: 'npc', target_id: 'NPC_0', field_updates: { character: 'Independent physician.' } }] }] }
   else if (path.endsWith('/living-world')) data = { settings: world, revision: 0, status: 'PAUSED', cursor: 59, target: 59, pending_events: 0, last_run_events: 0, llm_calls: 0, recap: [], concordia_available: true }
   else if (path.endsWith('/chpm')) data = { module_version: '1.0.0', settings: prefs, revision: 0, available: true, characters: [{ id: 'NPC_0', name: 'Dr. Rin Aoyama' }], usage: { status: 'idle', calls: 0 }, trace: [], memory_counts: {}, agenda_counts: { active: 0, closed: 0 }, agenda: [] }
-  else if (path.endsWith('/content-settings')) data = { enabled: false, level: 'soft' }
+  else if (path.endsWith('/content-settings')) {
+    if (route.request().method() === 'PATCH') {
+      const update = route.request().postDataJSON()
+      assert.deepEqual(update.expected, contentSettings)
+      contentSettings = update.settings
+    }
+    data = contentSettings
+  }
   else if (path.endsWith('/vn-settings')) data = { settings: { narration_pace: 'balanced' }, available: true }
   else if (path.endsWith('/dynamic-locations')) data = { policy: { enabled: false, scale: 'auto', generate_images: false } }
   else if (path.endsWith('/session-visual-presets') || path.endsWith('/visual-presets')) data = { source: 'current', selection: {}, presets: [] }
@@ -60,6 +68,13 @@ try {
   await page.getByRole('dialog').getByText('White laboratory coat', { exact: true }).waitFor()
   const layers = await page.getByRole('dialog').locator('[data-clothing-layer]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().x))
   assert.equal(new Set(layers).size, 5)
+  const repair = page.getByRole('dialog').getByRole('button', { name: 'Repair White laboratory coat', exact: true })
+  const edit = repair.locator('..').getByRole('button', { name: 'Edit', exact: true })
+  const repairBox = await repair.boundingBox()
+  const editBox = await edit.boundingBox()
+  assert.equal(repairBox.x, editBox.x)
+  assert.ok(repairBox.y < editBox.y)
+  assert.equal(await repair.evaluate(node => getComputedStyle(node).borderRadius), await edit.evaluate(node => getComputedStyle(node).borderRadius))
   await page.screenshot({ path: output + '/debug-clothing.png' })
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByRole('button', { name: /^Items/ }).first().click()
@@ -83,6 +98,16 @@ try {
   await page.getByRole('button', { name: 'VN Settings', exact: true }).click()
   await page.getByRole('heading', { name: 'VN Settings & Diagnostics' }).waitFor()
   await page.getByRole('heading', { name: 'NPC Personality', exact: true }).waitFor()
+  await page.getByRole('dialog').locator('summary').filter({ hasText: /^Mature content$/ }).click()
+  await page.getByRole('checkbox', { name: 'Mature content', exact: true }).click()
+  const confirmation = page.getByRole('dialog', { name: 'Enable mature content', exact: true })
+  await confirmation.getByRole('textbox').fill('NSFW')
+  await confirmation.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await page.getByRole('button', { name: 'medium', exact: true }).click()
+  await page.getByRole('button', { name: 'Save content settings', exact: true }).click()
+  await page.getByText('Saved for future replies and supported images.', { exact: true }).waitFor()
+  assert.equal(contentSettings.enabled, true)
+  assert.equal(contentSettings.level, 'medium')
   await page.screenshot({ path: output + '/debug-vn-settings.png' })
   await page.goto(root + '/tests/browser/npcSettings.html?view=session')
   const columns = await page.locator('[aria-labelledby="session-story-settings"], [aria-labelledby="session-memory-settings"], [aria-labelledby="session-npc-settings"]').evaluateAll(nodes => nodes.map(node => ({ x: node.getBoundingClientRect().x, width: node.getBoundingClientRect().width })))
@@ -92,5 +117,5 @@ try {
   await page.screenshot({ path: output + '/session-settings-mobile.png' })
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   assert.deepEqual(errors, [])
-  console.log('PASS: AI-Fix request and viewport dialog; debug actions and VN diagnostics; three desktop columns and mobile bounds.')
+  console.log('PASS: AI-Fix request and viewport dialog; unified debug toolbar, stacked repair/edit and layers; VN diagnostics and content save; three desktop columns and mobile bounds.')
 } finally { await browser.close() }

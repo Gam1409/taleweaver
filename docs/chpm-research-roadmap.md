@@ -91,7 +91,8 @@ by default. Off and shadow modes do not advance the new core.
 - Settings changes preserve the current core while keeping the pre-turn replay
   baseline separate: observations from a completed reply cannot leak into retry.
   The owner receives counts; full private state is returned only to administrators
-  in the existing CHPM inspection API. No new frontend inspection panel is added.
+  in the CHPM inspection API. **Debug → VN Settings** also exposes those technical
+  diagnostics to the authorized account, separately from ordinary NPC cards.
 - Limits remain explicit: 32 psychological identities, 256 active events and
   8,192 total archived/active events per observer, with 2,048 beliefs.
   [Capacity admission](chpm-memory-lifecycle.md) now checks a whole-turn reserve

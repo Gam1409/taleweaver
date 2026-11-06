@@ -25,6 +25,8 @@ First optional release for Visual Novel sessions:
   started sessions keep their own settings. Session settings have three columns.
 - Inspect content controls and Concordia/Personality diagnostics from debug, and
   repair individual item text, visual metadata and images with a reviewable draft.
+- Enter multiline player actions, scroll and page NPC history, and route the five
+  OpenAI-compatible model roles to one shared server or separate endpoints.
 
 The first release remains experimental: it is a character consistency tool, not
 a validated simulation of human psychology. Quality and speed depend on the

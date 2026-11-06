@@ -11,6 +11,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from backend.core.custom_openai_roles import resolve_url
 from backend.core.inference.admission import timeout_for
 from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
@@ -56,10 +57,10 @@ def validate_custom_url(url: str) -> str:
     return normalized
 
 
-def configure_custom_router(router: Any, llm_settings: dict) -> None:
+def configure_custom_router(router: Any, llm_settings: dict, role: str = "") -> None:
     """Require an explicit validated base and use the existing encrypted provider vault."""
     # Full network validation runs in a worker before each transport request.
-    base = str(llm_settings.get("custom_openai_url") or "").strip().rstrip("/")
+    base = resolve_url(llm_settings, role)
     if not base:
         raise HTTPException(400, "URL must be a non-empty string.")
     parsed = urlsplit(base)

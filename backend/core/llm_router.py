@@ -744,7 +744,7 @@ class GameMasterLLM:
         if self.provider == "custom_openai":
             from backend.core.custom_openai import configure_custom_router
 
-            configure_custom_router(self, llm_settings)
+            configure_custom_router(self, llm_settings, model_category if use_role_settings else "")
         elif self.provider == "ollama":
             from backend.core.ollama_role_config import resolve_ollama_role_settings
 

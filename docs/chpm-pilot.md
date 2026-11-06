@@ -288,8 +288,10 @@ committed with the reviewed reply. Off/shadow modes do not advance it; no extra
 LLM calls are added. Source edits, rollback, session copy and import preserve or
 explicitly invalidate the corresponding causal state. Live proposals now include
 bounded source-bound relationship interpretations, alternatives and unknowns;
-see [the appraisal guide](chpm-appraisal.md). Calibrated affect/relationship scores
-and independent psychological intent selection are still pending. Both supplied research
+see [the appraisal guide](chpm-appraisal.md). Personal motives now participate in
+[host-side intent selection](chpm-motivation.md), and source-bound qualitative
+[experience estimates](chpm-experience.md) are recorded separately. Calibrated
+affect/relationship scores remain outside this release. Both supplied research
 source files are preserved with checksums. No psychological-accuracy claim follows
 from passing the kernel's program-invariant tests.
 

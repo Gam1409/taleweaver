@@ -35,6 +35,9 @@ from backend.core.catalog_ids import legacy_catalog_id
 from backend.core.comfyui_config import ComfySettings, select_workflow, validate_comfy_settings
 from backend.core.config import settings
 from backend.core.custom_openai_diagnostics import connection_test_diagnostic
+from backend.core.custom_openai_roles import CustomOpenAIRoleSettings
+from backend.core.custom_openai_roles import resolve_url as custom_role_url
+from backend.core.custom_openai_roles import validate_urls as validate_custom_role_urls
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
 from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
@@ -449,15 +452,20 @@ def _is_llm_configured(user: User, db_keys: dict | None) -> bool:
     small_model = llm.get("small_model")
     complex_model = llm.get("complex_model")
 
-    def has_key(provider: str) -> bool:
+    def has_key(provider: str, role: str) -> bool:
         if provider == "custom_openai":
-            return bool(llm.get("custom_openai_url"))
+            return bool(custom_role_url(llm, role))
         if provider == "ollama":
             return True
         return bool(settings.get_env_api_key(provider)) or bool(db_keys and provider in db_keys)
 
     return all(
-        [has_key(small_provider), bool(small_model), has_key(complex_provider), bool(complex_model)]
+        [
+            has_key(small_provider, "small"),
+            bool(small_model),
+            has_key(complex_provider, "complex"),
+            bool(complex_model),
+        ]
     )
 
 
@@ -501,7 +509,7 @@ class ApiKeyPayload(BaseModel):
     api_key: str
 
 
-class SettingsPayload(OllamaRoleSettings):
+class SettingsPayload(OllamaRoleSettings, CustomOpenAIRoleSettings):
     small_model: str
     small_model_provider: str
     small_max_tokens: int = DEFAULT_SMALL_MAX_TOKENS
@@ -908,6 +916,7 @@ async def update_llm_settings(
     from backend.core.custom_openai import validate_custom_url
 
     validate_role_urls(payload, _safe_provider_url)
+    validate_custom_role_urls(payload, validate_custom_url)
     if payload.custom_openai_url:
         payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
     user = await _resolve_global_settings_owner(db, current_user, for_update=True)
@@ -957,6 +966,7 @@ async def update_tts_settings(
 
 
 class TestLLMPayload(OllamaConnectionSettings):
+    custom_openai_url: Optional[str] = None
     model: str
     provider: str
     ollama_url: Optional[str] = None
@@ -978,6 +988,12 @@ async def test_llm_connection(
     if payload.provider == "ollama":
         temp_settings = temporary_ollama_settings(
             old_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
+        )
+    if payload.provider == "custom_openai" and "custom_openai_url" in payload.model_fields_set:
+        from backend.core.custom_openai import validate_custom_url
+
+        temp_settings[f"{payload.role}_custom_openai_url"] = validate_custom_url(
+            payload.custom_openai_url or ""
         )
     if payload.provider == "openrouter" and payload.openrouter_provider is not None:
         temp_settings["small_openrouter_provider"] = payload.openrouter_provider

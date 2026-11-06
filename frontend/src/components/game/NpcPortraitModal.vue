@@ -149,10 +149,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .npc-card-scroll {
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b transparent;
   overscroll-behavior: contain;
 }
 .npc-card-scroll::-webkit-scrollbar {
-  display: none;
+  width: 8px;
 }
+.npc-card-scroll::-webkit-scrollbar-thumb { background: #64748b; border-radius: 999px; }
 </style>

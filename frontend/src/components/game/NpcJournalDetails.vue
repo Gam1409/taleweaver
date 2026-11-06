@@ -8,6 +8,8 @@ import NpcNarrativeInsights from './NpcNarrativeInsights.vue'
 
 const props = defineProps<{ sessionId: string; npcId: string }>()
 const history = ref<NpcHistoryKind>('general')
+const historyPanel = ref<HTMLElement | null>(null)
+watch(history, () => { if (historyPanel.value) historyPanel.value.scrollTop = 0 }, { flush: 'post' })
 watch(() => [props.sessionId, props.npcId], () => { history.value = 'general' }, { flush: 'sync' })
 const settings = useNpcCardSettings(toRef(props, 'sessionId'))
 const { details, loading, error, load } = useNpcJournal(toRef(props, 'sessionId'), toRef(props, 'npcId'), settings.showState, history)
@@ -54,7 +56,7 @@ const categories: Record<string, string> = { appearance: 'Appearance', backgroun
             <span v-if="details.history_counts" class="ml-1 text-xs opacity-70">{{ details.history_counts[tab] }}</span>
           </button>
         </div>
-        <section :id="`${tabId}-panel`" role="tabpanel" :aria-labelledby="`${tabId}-${history}`" :aria-busy="loading" tabindex="0" class="mt-4 focus-visible:outline-amber-300">
+        <section ref="historyPanel" :id="`${tabId}-panel`" role="tabpanel" :aria-labelledby="`${tabId}-${history}`" :aria-busy="loading" tabindex="0" class="npc-history-scroll mt-4 max-h-[50dvh] min-h-28 overflow-y-auto overscroll-contain rounded-lg pr-2 pb-2 focus-visible:outline-amber-300">
           <section v-if="history === 'shared'" class="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4" aria-label="Shared history summary">
             <h3 class="font-semibold text-amber-100">Your shared history</h3>
             <p class="mt-1 text-xs text-slate-400">A few remembered moments you shared with this character.</p>
@@ -88,3 +90,9 @@ const categories: Record<string, string> = { appearance: 'Appearance', backgroun
     <NpcCardPreferences :settings="settings" />
   </section>
 </template>
+
+<style scoped>
+.npc-history-scroll { scrollbar-width: thin; scrollbar-color: #64748b transparent; scrollbar-gutter: stable; }
+.npc-history-scroll::-webkit-scrollbar { width: 8px; }
+.npc-history-scroll::-webkit-scrollbar-thumb { background: #64748b; border-radius: 999px; }
+</style>
