@@ -5,6 +5,9 @@ import os
 
 
 def run() -> None:
+    from desktop.win_stdio import restore
+
+    restore()
     import uvicorn
     from fastapi import APIRouter, HTTPException, Request
 

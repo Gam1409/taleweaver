@@ -186,3 +186,14 @@ def test_browser_opens_once_and_only_after_both_services_are_ready(controller, m
     for state in ("running", "error", "running"):
         browser.update(state)
     assert calls == [f"http://127.0.0.1:{value.port}"]
+
+
+def test_service_startup_failure_returns_status_without_a_native_crash_dialog(monkeypatch):
+    from desktop import entrypoint, server
+
+    def fail():
+        raise RuntimeError("controlled startup failure")
+
+    monkeypatch.setattr("sys.argv", ["TaleWeaver", "--server"])
+    monkeypatch.setattr(server, "run", fail)
+    assert entrypoint.main() == 1

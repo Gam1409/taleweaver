@@ -61,8 +61,12 @@ def main() -> int:
     if args.server:
         from desktop.server import run
 
-        run()
-        return 0
+        try:
+            run()
+            return 0
+        except Exception:
+            logging.exception("Desktop backend startup failed.")
+            return 1
     root = args.data_dir.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
