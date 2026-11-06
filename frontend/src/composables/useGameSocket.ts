@@ -12,6 +12,7 @@ import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
 import { createFailedTurnDrafts, savedActionIndex } from '@/services/failedTurnDrafts'
 import { createSnapshotPoller } from '@/services/snapshotPoller'
+import { readSessionSnapshot, snapshotErrorMessage } from '@/services/sessionSnapshot'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -84,6 +85,7 @@ export interface UseGameSocket {
   isSceneTransitioning: Ref<boolean>
   generatorProposal: Ref<any | null>
   showGeneratorModal: Ref<boolean>
+  sessionLoadError: Ref<string | null>
   turnError: Ref<TurnErrorState | null>
   openGeneratorModal: (proposal?: any) => void
   closeGeneratorModal: () => void
@@ -145,6 +147,7 @@ export function useGameSocket(): UseGameSocket {
   const inventoryGlow = ref(false)
   const mapGlow = ref(false)
   const questGlow = ref(false)
+  let sessionLoadController: AbortController | null = null
   let currentGameId = ''
   let snapshotRevision = 0
   const { language, languageSaving, setLanguage } = useSessionContentLanguage(
@@ -168,6 +171,7 @@ export function useGameSocket(): UseGameSocket {
   let checkpointPulseTimer: number | null = null
   const generatorProposal = ref<any | null>(null)
   const showGeneratorModal = ref(false)
+  const sessionLoadError = ref<string | null>(null)
   const turnError = ref<TurnErrorState | null>(null)
   const lastUserAction = ref<string>('')
 
@@ -249,20 +253,11 @@ export function useGameSocket(): UseGameSocket {
     return headers
   }
 
-  async function fetchSessionSnapshot(gameId: string, signal?: AbortSignal): Promise<any | null> {
+  async function fetchSessionSnapshot(gameId: string, signal?: AbortSignal, strict = false): Promise<any | null> {
     try {
-      const res = await fetch(`${BASE}/adventures/${gameId}/chat`, {
-        headers: authHeaders(false),
-        signal
-      })
-      if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        return null
-      }
-      if (!res.ok) return null
-      return await res.json()
-    } catch (err) {
-      if (!(err instanceof Error && err.name === 'AbortError')) console.error('[Session] Snapshot load error:', err)
+      return await readSessionSnapshot(gameId, signal)
+    } catch (error) {
+      if (strict) throw error
       return null
     }
   }
@@ -367,6 +362,10 @@ export function useGameSocket(): UseGameSocket {
    * If history is empty, triggers the initial world description.
    */
   async function connect(gameId: string): Promise<void> {
+    sessionLoadController?.abort()
+    const controller = new AbortController()
+    sessionLoadController = controller
+    sessionLoadError.value = null
     failedTurnDrafts.clear()
     haltActiveOperations()
     const revision = ++snapshotRevision
@@ -380,7 +379,7 @@ export function useGameSocket(): UseGameSocket {
     stopSyncTimer()
     
     try {
-      const data = await fetchSessionSnapshot(gameId)
+      const data = await fetchSessionSnapshot(gameId, controller.signal, true)
       if (currentGameId !== gameId || revision !== snapshotRevision) return
       if (data) {
         language.value = data.language || 'English'
@@ -400,12 +399,18 @@ export function useGameSocket(): UseGameSocket {
         status.value = 'error'
       }
     } catch (err) {
-      console.error('[Session] Load error:', err)
+      if (currentGameId !== gameId || revision !== snapshotRevision || controller.signal.aborted) return
+      sessionLoadError.value = snapshotErrorMessage(err)
       status.value = 'error'
+    } finally {
+      if (sessionLoadController === controller) sessionLoadController = null
     }
   }
 
   function disconnect(): void {
+    sessionLoadController?.abort()
+    sessionLoadController = null
+    sessionLoadError.value = null
     failedTurnDrafts.clear()
     haltActiveOperations()
     snapshotRevision += 1
@@ -1101,6 +1106,7 @@ export function useGameSocket(): UseGameSocket {
     isSceneTransitioning,
     generatorProposal,
     showGeneratorModal,
+    sessionLoadError,
     turnError,
     openGeneratorModal,
     closeGeneratorModal,

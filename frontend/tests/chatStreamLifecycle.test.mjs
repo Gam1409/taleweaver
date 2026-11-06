@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
 import { correctionModuleUrl, corrections } from './correctionModule.mjs'
+import { sessionSnapshotModule } from './sessionSnapshotModule.mjs'
 
 const draftSource = readFileSync(new URL('../src/services/failedTurnDrafts.ts', import.meta.url), 'utf8')
 const draftModule = ts.transpileModule(draftSource, {
@@ -24,6 +25,7 @@ const compiled = ts.transpileModule(source, {
   .replace("from '@/composables/useNpcBehaviorStatus'", `from '${npcStatusUrl}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace("from '@/services/snapshotPoller'", `from '${pollerUrl}'`)
+  .replace("from '@/services/sessionSnapshot'", `from '${sessionSnapshotModule}'`)
   .replace("from '@/services/failedTurnDrafts'", `from '${draftModuleUrl}'`)
   .replace(/import .* from '@\/composables\/usePromptSuggestions';/, `const usePromptSuggestions = () => ({ suggestionsLoading: ref(false), suggestionsError: ref(''), suggestionsNotice: ref(''), refreshSuggestions: async () => {}, resetSuggestionsRequest: () => {} });`)
   .replace(/import .* from '@\/composables\/useSessionContentLanguage';/, `const useSessionContentLanguage = () => ({ language: ref('English'), languageSaving: ref(false), setLanguage: async () => true });`)
@@ -66,6 +68,59 @@ function stream(signal) {
   return { response: new Response(body), send: text => controller.enqueue(new TextEncoder().encode(text)), end: () => controller.close() }
 }
 const completed = (final = {}) => new Response(frame('chunk', { content: 'A complete answer.' }) + frame('final', final))
+
+test('initial load failures expose a separate retryable error and successful retry clears it', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response('{}', { status: 503 }))
+  await f.game.connect('session-b')
+  assert.equal(f.game.status.value, 'error')
+  assert.ok(f.game.sessionLoadError.value)
+  assert.equal(f.game.turnError.value, null)
+  f.route(async () => new Response(JSON.stringify(snapshot())))
+  await f.game.connect('session-b')
+  assert.equal(f.game.status.value, 'connected')
+  assert.equal(f.game.sessionLoadError.value, null)
+})
+
+test('initial snapshot deadline covers a response body that never completes', async t => {
+  const f = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let signal
+  f.route(async (_url, options) => {
+    signal = options.signal
+    return stream(signal).response
+  })
+  const loading = f.game.connect('slow-session')
+  await tick()
+  t.mock.timers.tick(15_001)
+  await tick()
+  assert.ok(signal?.aborted)
+  await loading
+  assert.match(f.game.sessionLoadError.value, /timed out/i)
+})
+
+test('navigation cancels the old initial load and an ignored late response cannot replace the new session', async t => {
+  const f = await fixture(t)
+  const gate = deferred()
+  let oldSignal
+  f.route(async (url, options) => {
+    if (url.includes('/old-session/')) {
+      oldSignal = options.signal
+      return gate.promise
+    }
+    return new Response(JSON.stringify(snapshot([{ id: 'new-message', role: 'assistant', content: 'New session' }])))
+  })
+  const oldLoad = f.game.connect('old-session')
+  await tick()
+  await f.game.connect('new-session')
+  assert.ok(oldSignal.aborted)
+  await oldLoad
+  gate.resolve(new Response(JSON.stringify(snapshot())))
+  await tick()
+  assert.equal(f.game.messages.value[0].id, 'new-message')
+  assert.equal(f.game.sessionLoadError.value, null)
+  assert.equal(f.game.status.value, 'connected')
+})
 
 test('normal turns and full replay carry correction outside the player message', async t => {
   for (const replay of [false, true]) {

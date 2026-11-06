@@ -17,6 +17,7 @@ import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
 import WalkthroughModal from '@/components/game/WalkthroughModal.vue'
 import GameOverScreen from '@/components/game/GameOverScreen.vue'
+import SessionLoadError from '@/components/game/SessionLoadError.vue'
 import SuccessScreen from '@/components/game/SuccessScreen.vue'
 import ImmersiveGameView from '@/components/game/ImmersiveGameView.vue'
 import { usePlayAgentAutoLoop } from '@/composables/usePlayAgent'
@@ -186,6 +187,7 @@ const gameSettings = ref<GameSettings>({
 const {
   sheet,
   status,
+  sessionLoadError,
   messages,
   gameOverReason,
   statusNote,
@@ -1955,6 +1957,10 @@ usePlayAgentAutoLoop()
         @close="contextMenu = null"
         @select="handleMenuSelect"
       />
+    </Teleport>
+
+    <Teleport to="body">
+      <SessionLoadError v-if="sessionLoadError" :message="sessionLoadError" @retry="connect(props.id)" @exit="goBack" />
     </Teleport>
 
     <!-- RESUMING/LOADING OVERLAY -->
