@@ -19,12 +19,7 @@ def main() -> None:
         raise SystemExit("Build the frontend first: cd frontend && npm ci && npm run build")
     assets = ROOT / "desktop/assets"
     assets.mkdir(exist_ok=True)
-    logo = args.logo or assets / "logo-source.png"
-    if not logo.is_file():
-        logo = ROOT / "docs/screenshots/taleweaver_logo_with_title.jpg"
-        print(
-            "Custom logo-source.png absent; using the repository logo. Pass --logo to supply the original."
-        )
+    logo = args.logo or ROOT / "docs/branding/visualnovel.png"
     with Image.open(logo) as source:
         image = source.convert("RGBA")
     image.thumbnail((1024, 1024), Image.Resampling.LANCZOS)

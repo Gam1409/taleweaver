@@ -3,6 +3,7 @@
 import argparse
 import logging
 import logging.handlers
+import os
 import sys
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from filelock import FileLock, Timeout
 from platformdirs import user_data_path
 
 from desktop.controller import Controller
+from desktop.paths import child_environment, prepare
 
 
 def bundle_root() -> Path:
@@ -53,6 +55,7 @@ def main() -> int:
     parser.add_argument("--server", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-test", action="store_true")
     parser.add_argument("--tray-smoke-test", action="store_true")
+    parser.add_argument("--storage-probe", action="store_true")
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument(
         "--data-dir", type=Path, default=user_data_path("TaleWeaver", appauthor=False)
@@ -82,6 +85,14 @@ def main() -> int:
 
 def run_locked(args: argparse.Namespace, root: Path) -> int:
     log_path = setup_logging(root)
+    if args.storage_probe:
+        config, _ = prepare(root)
+        os.environ.update(child_environment(root, config, "storage-probe"))
+        from desktop.storage_probe import verify
+
+        verify(root)
+        logging.info("SQLite and RAG persistence/isolation probes passed.")
+        return 0
     controller = Controller(root, root / "server.env", 8000, lambda _: None)
     if args.smoke_test:
         return smoke(controller, args.timeout)

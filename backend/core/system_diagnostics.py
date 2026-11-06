@@ -193,4 +193,6 @@ class DiagnosticService:
                 self.write_failed = True
 
 
-service = DiagnosticService(Path(__file__).resolve().parents[2] / "log")
+service = DiagnosticService(
+    Path(os.environ.get("TALEWEAVER_LOG_DIR") or Path(__file__).resolve().parents[2] / "log")
+)

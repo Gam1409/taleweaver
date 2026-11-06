@@ -16,6 +16,7 @@ def main() -> None:
     parser.add_argument("executable", type=Path, nargs="?")
     parser.add_argument("--source", action="store_true")
     parser.add_argument("--tray", action="store_true")
+    parser.add_argument("--storage", action="store_true")
     args = parser.parse_args()
     if args.executable is None and not args.source:
         parser.error("Provide an executable or select --source.")
@@ -27,7 +28,11 @@ def main() -> None:
         child = subprocess.Popen(
             command
             + [
-                "--tray-smoke-test" if args.tray else "--smoke-test",
+                "--storage-probe"
+                if args.storage
+                else "--tray-smoke-test"
+                if args.tray
+                else "--smoke-test",
                 "--data-dir",
                 folder,
                 "--timeout",
@@ -54,9 +59,13 @@ def main() -> None:
             child.wait()
         result = {
             "exit_code": child.returncode,
-            "launcher_peak_rss_mib": round(peak_launcher / 1048576, 1),
-            "services_peak_rss_mib": round(peak_services / 1048576, 1),
+            "mode": "storage" if args.storage else "tray" if args.tray else "headless",
         }
+        if args.storage:
+            result["storage_probe_peak_rss_mib"] = round(peak_launcher / 1048576, 1)
+        else:
+            result["launcher_peak_rss_mib"] = round(peak_launcher / 1048576, 1)
+            result["services_peak_rss_mib"] = round(peak_services / 1048576, 1)
         print(json.dumps(result))
         if child.returncode != 0:
             log = Path(folder) / "logs/desktop.log"

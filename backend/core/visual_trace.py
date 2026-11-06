@@ -17,7 +17,10 @@ from backend.core.config import settings
 P = ParamSpec("P")
 T = TypeVar("T")
 
-DIRECTORY = Path(__file__).resolve().parents[2] / "log" / "visual-traces"
+DIRECTORY = (
+    Path(os.environ.get("TALEWEAVER_LOG_DIR") or Path(__file__).resolve().parents[2] / "log")
+    / "visual-traces"
+)
 MAX_FILES = 30
 MAX_BYTES = 1024 * 1024
 MAX_CONTENT = 100000

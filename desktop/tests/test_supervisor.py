@@ -44,6 +44,8 @@ def test_keys_survive_restart_and_are_not_inside_served_data(tmp_path):
     env = child_environment(tmp_path, config, "instance-token")
     assert config.parent == Path(env["DATA_DIR"]).parent
     assert not config.is_relative_to(Path(env["DATA_DIR"]))
+    assert Path(env["TALEWEAVER_LOG_DIR"]).is_relative_to(tmp_path / "logs")
+    assert not Path(env["TALEWEAVER_LOG_DIR"]).is_relative_to(Path(env["DATA_DIR"]))
     assert env["TALEWEAVER_RELOAD"] == "0"
     assert "instance-token" not in original.decode()
 
@@ -253,3 +255,14 @@ def test_native_menu_smoke_waits_for_tray_setup_and_never_opens_browser(monkeypa
     assert app.run(Owner(), logo, tmp_path / "desktop.log", smoke_timeout=5)
     assert calls.index("tray initialized") < calls.index("service started")
     assert "menu updated" in calls
+
+
+def test_storage_probe_refuses_an_existing_profile_without_touching_it(tmp_path):
+    from desktop.storage_probe import verify
+
+    (tmp_path / "data").mkdir()
+    database = tmp_path / "data/taleweaver.db"
+    database.write_bytes(b"existing user database")
+    with pytest.raises(ValueError, match="fresh disposable profile"):
+        verify(tmp_path)
+    assert database.read_bytes() == b"existing user database"

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/branding/visualnovel.jpg" alt="VisualNovel — an open golden book and an eye-shaped feather" width="420" />
+<img src="docs/branding/visualnovel.png" alt="VisualNovel — an open golden book and an eye-shaped feather" width="420" />
 
 # TaleWeaver
 

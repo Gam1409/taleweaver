@@ -52,6 +52,7 @@ def child_environment(root: Path, config: Path, token: str) -> dict[str, str]:
         "DATA_DIR": str(root / "data"),
         "DATABASE_URL": "sqlite+aiosqlite:///" + (root / "data/taleweaver.db").as_posix(),
         "MEMORY_DB_DIR": str(root / "memory"),
+        "TALEWEAVER_LOG_DIR": str(root / "logs/diagnostics"),
         "TALEWEAVER_DESKTOP_TOKEN": token,
         "TALEWEAVER_RELOAD": "0",
         "LITELLM_LOCAL_MODEL_COST_MAP": "True",

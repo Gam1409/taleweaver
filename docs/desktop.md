@@ -59,6 +59,9 @@ then runs the actual executable against a disposable profile. A second smoke
 test initializes the native tray and menu and waits for readiness without opening
 a browser. Linux uses a private D-Bus session and Xvfb for that check. No LLM
 requests are made. Failed startup, migrations, API or missing frontend fail the job.
+An independent storage probe verifies the migration head, SQLite integrity,
+LanceDB write/reopen/search, cross-user isolation and cleanup using fixed test
+vectors. It runs only in a fresh disposable profile and contacts no model provider.
 Archives are uploaded as Actions artifacts, rather than committed into Git.
 
 For a local build with Python 3.12 and Node 22:
@@ -74,7 +77,8 @@ poetry run python scripts/smoke_desktop.py dist/TaleWeaver/TaleWeaver
 ```
 
 Use `.exe` on Windows or `dist/TaleWeaver.app/Contents/MacOS/TaleWeaver` on macOS.
-The checked-in original is `docs/branding/visualnovel.jpg`; it is the default logo.
+The default logo is the transparent `docs/branding/visualnovel.png`. The original
+black-background JPEG is retained beside it.
 Linux builds need GTK, GObject introspection and Ayatana AppIndicator development
 packages (the workflow lists exact packages). A desktop panel supporting status
 icons is required; for example GNOME may need its AppIndicator extension. A

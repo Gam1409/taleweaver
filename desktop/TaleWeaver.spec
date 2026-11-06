@@ -23,6 +23,8 @@ datas = [
     (str(root / "version.json"), "."),
     (str(root / "frontend/dist"), "frontend_dist"),
     (str(root / "backend/static"), "backend/static"),
+    (str(root / "backend/core/generation_sayings.json"), "backend/core"),
+    (str(root / "frontend/src/assets/svg"), "frontend/src/assets/svg"),
     (str(root / "adventures"), "adventures"),
     (str(root / "desktop/assets"), "desktop/assets"),
 ]

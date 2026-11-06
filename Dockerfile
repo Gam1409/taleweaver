@@ -54,6 +54,7 @@ COPY adventures/ ./adventures/
 
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend_dist
+COPY frontend/src/assets/svg/ ./frontend/src/assets/svg/
 
 # Expose backend port
 EXPOSE 8000

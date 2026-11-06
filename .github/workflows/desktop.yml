@@ -84,6 +84,8 @@ jobs:
       - name: Verify Windows or macOS native tray and menu initialization
         if: runner.os != 'Linux'
         run: poetry run python scripts/smoke_desktop.py --tray '${{ matrix.executable }}'
+      - name: Verify bundled SQLite and RAG persistence without external models
+        run: poetry run python scripts/smoke_desktop.py --storage '${{ matrix.executable }}'
       - name: Archive distribution (preserve executable permissions and macOS symlinks)
         if: runner.os != 'Windows'
         shell: bash
