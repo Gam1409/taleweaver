@@ -56,8 +56,13 @@ remain historical; current host facts take precedence.
 - `agent_steps`: 0–2; only Enabled/live mode uses the loop.
 - Each round: one logical model call, at most 768 output tokens (also limited by
   the selected role and the saved CHPM output budget), up to two local reads.
-- Pinned source excerpts: at most 6,000 characters per NPC. Exceeding this returns
-  an explicit tool status; sources are not silently discarded to make room.
+- Pinned source excerpts: at most eight distinct sources and 6,000 characters per
+  NPC, shared by search, belief-basis, self and clothing reads. A ninth source
+  returns `evidence_source_limit_reached` without evicting earlier reads. Expanding
+  an existing handle remains possible within the character budget. A partially
+  available search/basis response reports `partial`; the proposal receives that
+  status and the audit retains individual refusal reasons. Canonical history is
+  never removed to fit the tool view.
 - All planner/proposal inputs obey the configured character limit. Existing
   historical-view packing may reduce optional old context, never pinned reads.
   For fuller lookups, 32,000 input characters is a practical starting setting;
@@ -71,6 +76,11 @@ remain historical; current host facts take precedence.
 - Psychological updates, looked-up clothing observations and audit records commit
   only with the successfully reviewed reply. Failure leaves saved state unchanged.
   Rewind/regeneration invalidate their source-bound causal history as before.
+- Tool exposure, source handoff and persisted decisions use the same source bounds.
+  The complete decision is validated after handoff. Save validates serialized state
+  before replacing session JSON, including nested models mutated after construction.
+  An invalid update leaves the previous state and revision unchanged. These checks
+  use no model requests and do not increase limits or alter the saved-state schema.
 - `Decision.agent_audit` records short purposes, requests, result statuses, original
   source/message IDs, and stop reason. Full model deliberation is not requested.
   A long optional purpose label is shortened to 180 characters with an explicit
