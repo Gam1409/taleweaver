@@ -60,3 +60,12 @@ jobs:
           languages: '${{ matrix.language }}'
           build-mode: none
       - uses: github/codeql-action/analyze@v3
+        with:
+          output: codeql-results
+      - name: Preserve detailed CodeQL findings for review
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codeql-results-${{ matrix.language }}
+          path: codeql-results/*.sarif
+          retention-days: 14
