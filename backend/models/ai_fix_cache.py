@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Any
 
 import uuid6
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin
@@ -25,6 +25,14 @@ from backend.models.base import Base, TimestampMixin
 
 class AIFixCache(Base, TimestampMixin):
     __tablename__ = "ai_fix_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id",
+            "user_id",
+            "finding_signature",
+            name="uq_ai_fix_cache_user_template_finding",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36),
