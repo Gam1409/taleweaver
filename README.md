@@ -1,183 +1,63 @@
 <div align="center">
 
-<img src="docs/branding/visualnovel.png" alt="VisualNovel — an open golden book and an eye-shaped feather" width="420" />
+<img src="docs/branding/visualnovel.png" alt="VisualNovel — a golden book and an eye-shaped feather" width="420" />
 
-# TaleWeaver
+# TaleWeaver · Visual Novel Fork
 
-**Weave Infinite Adventures. Direct and Star in Your Own Playable Audiobook.**
+**Your story. Their personalities. A world worth returning to.**
 
-A self-hosted storytelling studio for RPG adventures, open-ended conversations, and visual novels.
-Create worlds, meet memorable characters, and bring your stories to life with illustrated scenes and cinematic voices.
+A self-hosted storytelling studio for character-driven roleplay, visual novels, and RPG adventures.<br />
+Build a world, give its characters a history, and bring each moment to life with illustrations and voices.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-0ea5e9.svg)](LICENSE)
-![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white)
+[![CI](https://github.com/Gam1409/taleweaver/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gam1409/taleweaver/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.7.0--beta-f59e0b)](version.json)
+[![Code: MIT](https://img.shields.io/badge/code-MIT-0ea5e9.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
-![Vue 3](https://img.shields.io/badge/Vue%203-SPA-42b883?logo=vue.js&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-local%20data-003b57?logo=sqlite&logoColor=white)
+![Vue 3](https://img.shields.io/badge/Vue%203-interface-42b883?logo=vue.js&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white)
 
-[Features](#-features) · [Supported AI](#-supported-ai-ecosystem) · [Quick Start](#-quick-start) · [Docker](#-running-with-docker) · [Configuration](#%EF%B8%8F-configuration) · [Editor & Scripting](#-adventure-editor--scripting)
+[Why this fork](#-why-this-fork) · [Characters](#-characters-with-a-point-of-view) · [Visuals](#-art-that-fits-the-scene) · [AI providers](#-your-models-your-setup) · [Get started](#-get-started) · [Guides](#-guides)
 
 </div>
 
 <br />
 
 > [!NOTE]
-> **This is a fork of [TaleWeaver by jschm42](https://github.com/jschm42/taleweaver).** The original project was created by [jschm42](https://github.com/jschm42). This fork is maintained by [Gam1409](https://github.com/Gam1409) and extends the original with additional storytelling, character, image-generation, and local-model features.
+> Built on **[TaleWeaver by jschm42](https://github.com/jschm42/taleweaver)** and maintained by **[Gam1409](https://github.com/Gam1409)**. This fork expands character continuity, Visual Novel play, memory, local inference, and ComfyUI authoring while retaining the original adventure-building foundation.
 
-![Adventure Gameplay](docs/screenshots/gameplay.jpg)
-
-<table>
-  <tr>
-    <td width="50%"><a href="docs/screenshots/generator.jpg"><img src="docs/screenshots/generator.jpg" alt="World Generator" /></a></td>
-    <td width="50%"><a href="docs/screenshots/editor-map.jpg"><img src="docs/screenshots/editor-map.jpg" alt="Interactive Directed Map" /></a></td>
-  </tr>
-  <tr>
-    <td align="center"><sub><b>World Generator</b> – synthesize complete adventures, lore, and Python scripts from a prompt</sub></td>
-    <td align="center"><sub><b>Directed Cartography</b> – interactive topological maps with real-time pathfinding</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><a href="docs/screenshots/editor-scenes.jpg"><img src="docs/screenshots/editor-scenes.jpg" alt="World Workbench" /></a></td>
-    <td width="50%"><a href="docs/screenshots/editor-validation.jpg"><img src="docs/screenshots/editor-validation.jpg" alt="Dual-Tier AI Validation" /></a></td>
-  </tr>
-  <tr>
-    <td align="center"><sub><b>Adventure Workbench</b> – full visual CRUD for scenes, NPCs, items, containers, and switches</sub></td>
-    <td align="center"><sub><b>Dual-Tier Validation</b> – structural graph audits paired with semantic AI story critiques</sub></td>
-  </tr>
-</table>
-
-<p align="center">
-  <em>For detailed descriptions and feature breakdowns of each screen, see the <a href="docs/SCREENSHOTS.md">Screenshot Guide</a>.</em>
-</p>
-
-## 1. The Vision
-
-Create a world, choose your character, and discover where your decisions take you. TaleWeaver combines an AI storyteller with persistent adventures, expressive dialogue, illustrations, and voice narration. Play a quest-driven RPG, explore through conversation, or slow down for a character-focused visual novel.
-
-This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver), with expanded local-model support, ComfyUI integration, character continuity, and optional long-term memory.
-
-## 2. Core Features
-
-### 🧠 Choose Your Story
-
-* **RPG, Chat & Visual Novel:** Choose the experience that fits your story. RPG provides quests, encounters, and progression; Chat emphasizes conversation and exploration; experimental VN focuses on characters and relationships without quests or XP.
-* **Your Own Worlds:** Generate adventures from an idea, including places, characters, items, and story hooks. Staged generation lets you resume supported interrupted generation jobs.
-* **Narration at Your Pace:** In VN, choose leisurely, balanced, or brisk narration. Characters have their own personalities, motivations, and reactions to the story.
-* **Cover Mode:** Create sequels, spin-offs, or variations of an existing adventure, with optional reuse of its artwork.
-* **Action Ideas & Play Agent:** Refresh suggested actions without advancing the story, or let a play agent take turns automatically or step by step, with a personality of your choice.
-* **Your Story Language:** Save a language for each session and use it for new narration, dialogue, and action ideas. Existing world descriptions and interface labels remain unchanged.
-
-### 🎭 Characters That Become Part of the Story
-
-* **Meet & Remember:** NPCs who introduce themselves by name can gain their own persistent character cards and portraits during play.
-* **Character Cards:** View a portrait, description, general background, and a separate history of shared experiences. Known attitudes toward your character can appear when supported by the story.
-* **Appearance & Clothing:** VN tracks individual outfits and changes such as gifts, dressing, and removing items. Visible clothing helps guide both narration and illustrations; more detailed clothing is optional.
-* **Private Knowledge:** A character card shows what your protagonist has learned. It does not reveal an NPC's hidden inventory or private thoughts.
-* **NPC Personality · Optional · v1.0.0:** In VN sessions, give selected NPCs their own evidence-backed intentions, remembered experiences and promises. Choose to keep playing through analysis failures or stop for inspection. Off by default; more active NPCs require extra model requests and waiting. See the [NPC Personality guide](docs/chpm-continuation.md).
-
-### 🌍 A World Beyond Your Turn
-
-* **Living World · Experimental:** Let NPCs follow small routines, move between connected locations, and speak to one another. Choose **VN → Living World** when creating or editing an adventure to configure Concordia defaults, or adjust each saved session separately.
-* **Pause or Catch Up:** Keep the world paused while you are away, or process a limited amount of activity when you return. You control the pace and the number of AI requests.
-* **Private Motivations:** Characters keep their own short goals, beliefs, and observations. Intentions do not become facts until an action succeeds, and private thoughts stay out of player-facing memories.
-* **Automatic NPC Activity:** Enable bounded background routines while playing, or private NPC choices at important conversation branches. Parallel model requests are optional and off by default.
-* **Choose the Engine:** Use TaleWeaver's built-in decisions or the optional **Concordia** integration. Both use your configured Utility model and the same world rules and request limits.
-* **Inspect & Recover:** Administrators can inspect the private simulation journal. Chronicles restore the world and its character memories together. See the [Living World guide](docs/living-world-usage.md) for setup and experimental limits.
-
-### 🗺️ Explore, Save & Return
-
-* **Local Discoveries:** Optional dynamic exploration can add nearby places when your character actually arrives, such as a tavern in the current town. Mentioning a distant place alone does not create it.
-* **Interactive World Map:** Follow connected locations, inspect places, and navigate the adventure visually.
-* **Resume from Library:** Return to an existing saved session directly from an adventure card, or start a separate playthrough.
-* **Chronicles Timeline:** Automatic milestone checkpoints let you return to a recent point in the story. Each session retains its five most recent checkpoints.
-* **Portable Adventures:** Copy, export, and import adventures and saves to keep backups or share your creations.
-
-### 🧠 Memory That Matters
-
-* **Meaningful Character History:** Journals focus on significant facts, promises, boundaries, decisions, and relationship changes rather than every movement or glance.
-* **Optional Relevant Recall:** Connect an embedding model to help retrieve older events that matter to the current conversation, with summaries organized around characters, places, and the wider story.
-* **Background Updates:** Memory maintenance waits for idle opportunities so it does not continuously take priority over play.
-* **Simple Controls:** Enable recall under **Admin → Memory & recall**. Clear or rebuild an adventure's search index from its Library menu without deleting the story or saved progress. See the [memory guide](docs/memory-rag.md).
-
-### 🎨 Illustration & Cinematic Audio
-
-* **Comic-Style Story Feed:** Narration, character dialogue, portraits, and expressive speech bubbles bring each turn to life.
-* **ComfyUI Workflows:** Use **ComfyUI (Local)** for covers, backgrounds, portraits, items, and scene illustrations. Choose a starter workflow or import your own API workflow JSON.
-* **Ready-to-Edit Presets:** Starters cover SDXL, Illustrious XL, Animagine XL, FLUX.1, and Anima / Prefect Anima. Adjust common settings in the interface and expand advanced controls when needed.
-* **Style & Image References:** Choose a visual style, adapt prompts to supported model families, and optionally use a previous image as a reference with a compatible workflow. Portraits can be generated or regenerated during a session.
-* **Illustrate a Moment:** VN offers manual scene illustrations alongside the story. Visual results depend on the chosen model and workflow.
-* **Playable Audiobook:** Add expressive text-to-speech narration and local push-to-talk speech input.
-
-### 🔌 Bring Your Own Models
-
-* **Cloud or Self-Hosted:** Connect supported cloud providers, Ollama, or an **OpenAI-Compatible API** such as a compatible KoboldCpp, llama.cpp, LM Studio, or vLLM server.
-* **Models by Role:** Choose different models for mechanics, narration, worldbuilding, the play agent, and history compression. Ollama roles can also use different server URLs.
-* **Optional API Keys:** Custom OpenAI-compatible servers can use a saved key or run without one when the server allows it.
-* **Local Data:** Saves and assets are stored on your TaleWeaver host. Requests are sent to the AI providers you select; local inference is available when you want to keep those requests on your own hardware.
-
-> [!NOTE]
-> Local-model support and VN remain experimental. Story interpretation, memory selection, and image consistency depend on your models. Start with a small adventure and a setup that fits your hardware.
-
-### 🛠️ Build & Share Your Worlds
-
-* **Adventure Editor:** Refine locations, routes, NPCs, objects, quests, tone, and visuals in the browser.
-* **World Validation:** Check connections and story consistency, review generation reports, and apply suggested improvements.
-* **Event Scripting:** Add custom events and outcomes through the editor's scripting tools.
-* **Reusable Characters & Items:** Export and import protagonists, NPCs, and items with their portraits to reuse them in other adventures.
-* **Items from Descriptions:** In the Adventure Workbench, choose a scene → items → **+ Create**, select an item type, and describe what to create. **Generate item draft** fills an editable card; review it and click **Create Object** to save. Wearable drafts include equipment slots and clothing properties (category, layer and body regions); readable drafts include their text. For existing wearables, use **Prepare missing clothing data**, review the result, and save. Accessories do not hide lower clothing. Images and advanced rules are configured separately.
-* **NPC Personality:** Open **Details · Personality** beside an NPC biography to choose seven behavioral tendencies. New-world generation fills these automatically; **Fill from description** suggests choices for existing NPCs. Review with **Use traits**, then save the NPC. Traits guide dialogue and Living World decisions while allowing behavior to develop through events and relationships.
-* **Community Adventures:** Browse and install shared adventures, then make your own variations.
-
----
-
-## ✨ Features
+## ✨ Why This Fork?
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-### 🧠 Stories & Characters
+### 🎭 A Character Has Reasons
 
-- **Three Ways to Play** – RPG adventures, open-ended Chat, and character-focused Visual Novels
-- **Dynamic Living NPCs** – expressive multi-turn dialogue, autonomous scene movements, and individual motives
-- **Persistent Character Cards** – portraits, known background, and shared history
-- **Cover Mode** – generate sequels, alternate timelines, or spinoffs from existing adventure blueprints
-- **Tactical Encounters & Loot** – dedicated combat modal, locked container mechanics, item passcodes, and consumable handling
+Optional **NPC Personality** gives selected characters intentions grounded in their traits, values, goals, and experiences. A proud character can negotiate, refuse, or take the initiative; relationships have a history to draw on.
 
 </td>
 <td width="50%" valign="top">
 
-### 🎭 Comic Feed & Cinematic Audio
+### 🧠 A Story Has a Memory
 
-- **Comic-Style Turn Feed** – dynamic speech bubbles, speaker avatars, action markers, and character staging
-- **Playable Audiobook** – cinematic AI narration with emotional depth powered by Google Gemini TTS & ElevenLabs
-- **Push-to-Talk Speech Input** – hands-free roleplaying with local background Whisper speech-to-text
-- **In-Character Speech Shortcuts** – hold `B`, `T`, or `Shift` to automatically speak in-character (`/say `) to NPCs
-- **Chronicles Timeline** – milestone-based auto-save checkpoints with instant one-click timeline rewinds
+Character journals, historical summaries, and optional **RAG recall** help earlier events remain relevant. Remember a promise, return to a shared experience, or pick up a story after a long break.
 
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
 
-### 🛠️ World-Builder & Scripting
+### 🎨 Every Image Has a Purpose
 
-- **In-Browser Adventure Studio** – comprehensive visual authoring for scenes, directed routes, NPCs, and loot tables
-- **Sandboxed Python Event Scripts** – author deterministic event logic (`on_enter_scene`, `on_interact`, `on_turn_start`, `on_turn_end`) in an isolated AST sandbox
-- **Dual-Tier Validation Suite** – graph connectivity audits combined with semantic LLM plot-hole detection
-- **One-Click AI Diagnostics** – intelligent AI repairs for broken exits, missing keys, or narrative inconsistencies
-- **Dynamic Cartography** – explore connected places on a hand-drawn-style map
+Give portraits, locations, items, and story illustrations their own **ComfyUI presets and workflows**. Organize styles, edit node graphs, and choose a compatible reference workflow when the task needs one.
 
 </td>
 <td width="50%" valign="top">
 
-### 🔐 Private & Local-First
+### 🔌 Your Setup Has Room to Grow
 
-- **Bring Your Own Models** – choose cloud providers, Ollama, or an OpenAI-compatible server
-- **Zero Lock-In Blueprints** – export and share complete adventure blueprints as standalone `.adv` or `.adz` packages
-- **Optional Long-Term Recall** – find relevant earlier events with a separate embedding model
-- **Protected Credentials** – provider keys are stored encrypted
-- **Self-Hosted Setup** – install locally or run with Docker
+Start with one model, or assign different models and endpoints to different jobs. Run from the terminal, use a **native tray application**, or host the same browser interface with **Docker**.
 
 </td>
 </tr>
@@ -185,40 +65,187 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 
 ---
 
-## 🔌 Supported AI Ecosystem
+## 📖 Play the Story Your Way
 
-TaleWeaver uses an adapter layer ([LiteLLM](https://github.com/BerriAI/litellm)) to connect supported AI services. You can choose different models for story logic and narration:
+| Mode | The experience |
+| --- | --- |
+| **RPG** | Quests, combat, inventory, loot, progression, and deterministic world rules. |
+| **Chat** | Open-ended dialogue, exploration, and story-led interaction. |
+| **Visual Novel** | Character-focused scenes, relationships, illustrated moments, and adjustable narrative pacing. |
 
-| Capability | Recommended Models | Supported Providers | Notes |
-|---|---|---|---|
-| **World Generation** | Anthropic Opus 5.x, OpenAI 5.x, DeepSeek v4 Pro | OpenRouter, Anthropic, OpenAI, DeepSeek, Kimi, Ollama, OpenAI-compatible APIs | Requires deep reasoning to generate complex, valid JSON schemas |
-| **Mechanics (Pass 1)** | DeepSeek Flash, GPT-6 Luna, Claude 4.5 Haiku | OpenAI, OpenRouter, Anthropic, DeepSeek, Ollama, OpenAI-compatible APIs | Resolve actions, inventory changes, and game rules |
-| **Narrative (Pass 2)** | DeepSeek v4 Pro, GPT-6 Luna Pro, Claude 4.5 Sonnet | OpenAI, Anthropic, OpenRouter, DeepSeek, Ollama, OpenAI-compatible APIs | Rich, atmospheric prose adapting to player choices and mood |
-| **Text-to-Speech (TTS)** | Google Gemini TTS, ElevenLabs | Google Gemini, ElevenLabs | High-fidelity voice narration; feels like a live audiobook |
-| **Speech-to-Text (STT)**| OpenAI Whisper (Base / Small / Medium) | Local Whisper (background thread) | Hands-free microphone input with Push-to-Talk hotkeys |
-| **Visual Scene Art** | SDXL, Illustrious, Animagine, FLUX, Anima | ComfyUI, Automatic1111 / Forge, Ollama, supported cloud APIs | Covers, backgrounds, portraits, items, and scene illustrations |
-| **Optional Memory Recall** | A multilingual embedding model suited to your stories | Ollama, OpenAI-compatible embedding APIs | Retrieve relevant earlier events |
+The comic-style feed combines narration, character portraits, dialogue, and action cues. Add expressive **Gemini or ElevenLabs speech**, or use local **Whisper push-to-talk** for your own replies. Choose a session language for new narration, dialogue, and action suggestions.
 
-> [!TIP]
-> **Mix Models to Fit Your Setup**: Use a model that follows structured instructions for mechanics and worldbuilding, and choose your preferred writing model for narration. Speed and cost depend on the models, providers, and adventure size. Pre-configured test adventures are included in `/adventures`, and community creations are available in the **[Community Adventure Repository](https://github.com/jschm42/taleweaver-adventures)**.
+Generate an adventure from an idea, import an existing world, or create a sequel or variation through **Cover Mode**. Refresh action suggestions whenever you need inspiration. The separate **Play Agent** can take the protagonist's turns step by step or automatically.
+
+## 🎭 Characters With a Point of View
+
+Meet NPCs, learn who they are, and build a shared history. Character cards bring together portraits, descriptions, appearance, background, and the experiences your protagonist has learned about.
+
+### NPC Personality · Optional · v1.0.0
+
+**NPC Personality** is the player-facing name of the CHPM module. It adds a more deliberate decision layer to VN dialogue:
+
+- **Identity and motivation:** use a character's established traits, values, goals, and commitments to guide intentions.
+- **Experience and change:** keep remembered events and their supporting evidence separate from a temporary reaction or an unsupported claim.
+- **Bounded agent lookups:** consult accessible memories, possessions, and visible clothing through session-scoped tools.
+- **An active cast:** focus detailed analysis on selected interlocutors while keeping other participants in the scene.
+- **A choice of depth:** leave it off, observe its decisions, or enable narration guidance and review. The default enabled-mode failure policy keeps RP moving through standard narration when optional analysis fails; strict mode is available for inspection.
+
+Results depend on the models you choose. More active characters and deeper checks mean more requests and longer turns.
+
+[Player guide](docs/chpm-continuation.md) · [Technical guide](docs/chpm-pilot.md) · [Module releases](docs/chpm-changelog.md)
+
+### Clothing, Belongings & Continuity
+
+- **Layered outfits:** record garments by layer and body coverage, with visible clothing available to narration and illustrations.
+- **Items from the story:** VN can register supported acquisitions, gifts, transfers, and clothing changes from completed narration, with ownership and evidence checks.
+- **Descriptions worth reading:** generate fuller item descriptions about the object itself, alongside its equipment and clothing metadata.
+- **Review and repair:** inspect outfits in **Debug → NPCs → Clothing**, recover missing garments from recent history, and select which validated entries to restore.
+- **Improve an existing item:** preview and apply description, technical-field, and image repairs separately. An unsuccessful image request preserves the previous image.
+
+Detailed clothing and mature-content preferences are configurable; inner garments remain subject to the saved clothing settings and established adult age requirements.
+
+[Item continuity and clothing recovery](docs/narrated-item-reconciliation.md) · [Item repair](docs/item-repair.md)
+
+## 🌍 A World With a History
+
+### Living World & Concordia
+
+Optional **Living World** lets NPCs follow bounded routines, move through connected locations, and interact beyond the protagonist's immediate reply. Configure activity limits, away-time catch-up, and the decision engine in adventure defaults or an individual session.
+
+Use the built-in engine or the optional **Concordia 2.4** integration. NPC intentions still pass through world rules before becoming actions. NPC Personality and Living World's private-decision mode are alternative decision paths; the [Living World guide](docs/living-world-usage.md) and [NPC Personality guide](docs/chpm-continuation.md) explain their controls.
+
+### Memory & Relevant Recall
+
+Persistent journals focus on meaningful facts, promises, decisions, and relationship changes. Optional **LanceDB-backed retrieval** uses an embedding model to find relevant older dialogue and summaries. Recall is scoped to the adventure/session; character tools respect the information available to that NPC.
+
+The authoritative story and game state stay in SQLite. The search index can be rebuilt separately. Configure embeddings under **Administration → Memory & recall** when you want this extra layer.
+
+[Memory guide](docs/memory-rag.md)
+
+### Explore, Revisit & Share
+
+Discover connected places through the world map, and optionally create nearby locations when the story confirms a local arrival. Keep separate playthroughs, return to saved sessions from the Library, and revisit recent milestones through **Chronicles** checkpoints.
+
+Export adventures and session bundles for backups or sharing. Reuse characters and items across worlds, including their artwork.
+
+## 🎨 Art That Fits the Scene
+
+A portrait, an inventory icon, and a wide scene illustration need different compositions. This fork gives them separate assignments:
+
+**Image task → Preset → Base or reference workflow → ComfyUI**
+
+Illustrate a story moment or regenerate a portrait during play, with task presets controlling how each asset is drawn.
+
+- **A searchable preset library:** organize presets by name and task labels, then assign them to the image tasks they suit.
+- **A visual workflow editor:** import ComfyUI editor/API JSON, inspect the node graph in a dedicated expandable window, edit inputs, and bind TaleWeaver's prompts, dimensions, seed, reference, and output.
+- **Base and reference variants:** keep both in a preset and use the appropriate compatible workflow for the request.
+- **Task templates:** start from **80 recipes across 10 model families and 8 image tasks**, including portraits, inventory items, backgrounds, illustrations, covers, avatars, and style previews.
+- **Component-aware setup:** choose embedded or external encoders and VAE, check available model filenames and server nodes, and configure the graph for the actual checkpoint.
+- **Model-aware prompts:** use tags, natural descriptions, or mixed formats, with extra positive/negative instructions and optional mature-content rules.
+
+Included families cover **SD 1.5, SDXL, Pony V6 XL, Illustrious XL, Animagine XL 4.0, FLUX.1 Dev, SD3.5 Large, Anima, Nova Anime AM, and Qwen Image**.
+
+ComfyUI is one supported image provider; **Automatic1111 / Forge**, Ollama image generation, and supported cloud image APIs are also available. Checkpoints, custom nodes, and other model assets must be installed on their own server. An img2img reference workflow does not by itself guarantee a character's face or identity.
+
+[ComfyUI task templates and model layouts](docs/comfyui-task-templates.md) · [Portraits and references](docs/portrait-regeneration.md)
+
+## 🛠️ Build Your Own Adventures
+
+The browser workbench brings together locations, routes, NPCs, items, quests, tone, and artwork. Generate drafts, refine their details, and run structural checks or AI-assisted reviews before playing.
+
+<details>
+<summary><b>Worldbuilding and editing tools</b></summary>
+
+- Generate new worlds or variations of existing adventures, with supported staged jobs resumable after interruption.
+- Edit character traits, appearance, age, equipment, and clothing data.
+- Create item drafts from descriptions and review them before saving.
+- Inspect connected scenes, route requirements, containers, switches, and readable objects.
+- Review validation findings and apply AI-Fix proposals.
+- Use debug tools to inspect scene JSON, move NPCs, edit recorded clothing, or repair an item in a saved session.
+
+</details>
+
+<details>
+<summary><b>Custom events and scripting</b></summary>
+
+Use validated Python event scripts to define scene-entry events, interactions, turn hooks, and conditional outcomes. The editor provides a scripting workbench for repeatable world logic.
+
+[Adventure format](docs/specs/adventure_format.md) · [Turn pipeline](docs/diagrams/game_session_loop.mermaid) · [World generation](docs/diagrams/adventure_generation.mermaid)
+
+</details>
 
 ---
 
-## 🚀 Quick Start
+## 🔌 Your Models, Your Setup
 
-### Option A: Automatic Setup Script (Recommended)
+Use **Ollama**, an **OpenAI-compatible API**, or supported cloud providers such as **OpenAI, Anthropic, OpenRouter, DeepSeek, and Gemini**. Compatible self-hosted servers include **KoboldCpp, llama.cpp, LM Studio, and vLLM**.
 
-The setup script creates a virtual environment, installs backend and frontend dependencies, runs database migrations, and initializes your environment keys.
+| Role | What it does |
+| --- | --- |
+| **Small / Utility** | Structured tasks, action interpretation, and mechanics. |
+| **Main / Narration** | Prose, dialogue, and storytelling. |
+| **Worldbuilder** | Adventure generation and world structure. |
+| **Play Agent** | The protagonist's optional automated turns. |
+| **Compression** | History compression and summaries. |
 
-**Linux / macOS:**
+Choose a provider and model for each role. **Ollama and OpenAI-compatible APIs support a shared base URL plus individual role URL overrides**, so a technical model and a prose model can run on separate servers. One model can also serve every role. Custom servers can use an optional saved API key or remain keyless when their server permits it.
+
+Memory recall has a separate **embedding endpoint**. Image and voice providers are configured independently, so these capabilities can be enabled as your setup grows.
+
+Your saves and assets live on your TaleWeaver host. Story context is sent to the providers you select; a fully local setup uses your own inference endpoints. Saved provider keys are encrypted at rest.
+
+[OpenAI-compatible setup](docs/custom-openai-compatible.md) · [Ollama roles](docs/ollama-roles.md) · [Provider network policy](docs/provider-network-policy.md)
+
+## 🚀 Get Started
+
+### Desktop Apps · Preview
+
+Download a completed build from **[Desktop distributions → Artifacts](https://github.com/Gam1409/taleweaver/actions/workflows/desktop.yml?query=event%3Aworkflow_dispatch)**, extract the archive, and launch the application.
+
+| Platform | Launch | Notes |
+| --- | --- | --- |
+| **Windows x64** | `TaleWeaver.exe` | Native tray application. |
+| **Linux x64** | `TaleWeaver` | Built on Ubuntu 22.04; requires a compatible desktop and tray support. |
+| **macOS ARM64** | `TaleWeaver.app` | Apple Silicon; the current package does not target Intel Macs. |
+| **Docker** | See below | Server deployment with persistent storage. |
+
+The native app starts the service in the background, waits for the browser UI, and opens your default browser. Its tray menu offers **Start / Stop / Restart / Log / Exit**, with a **green** ready indicator, **red** stopped indicator, and **yellow** starting/error indicator.
+
+The package includes its Python runtime and prebuilt web UI; you do not need to install Python or Node.js separately. No Electron browser or AI model weights are embedded. Your user-data profile stays outside the application bundle. Preview builds are unsigned. Full packaging runs on release tags or manual dispatch, rather than every commit.
+
+[Desktop installation, storage, and build details](docs/desktop.md)
+
+### Docker
+
+Install Docker with Compose, then clone the fork:
 
 ```bash
 git clone https://github.com/Gam1409/taleweaver.git
 cd taleweaver
-chmod +x setup.sh && ./setup.sh
 ```
 
-**Windows (PowerShell):**
+Copy `.env.example` to `.env` and set `SECRET_KEY` and `ENCRYPTION_KEY`. To generate both keys using Docker:
+
+```bash
+docker run --rm python:3.12-slim python -c "import base64, os, secrets; print('SECRET_KEY=' + secrets.token_hex(32)); print('ENCRYPTION_KEY=' + base64.urlsafe_b64encode(os.urandom(32)).decode())"
+```
+
+Paste the values into `.env`, then start the bootstrapper:
+
+```bash
+bash scripts/docker-setup.sh
+```
+
+On Windows CMD, use `scripts\docker-setup.bat`. The script prints the HTTPS address and uses a self-signed local certificate.
+
+SQLite, RAG, and media use separate persistent directories: **`sqlite-docker/`**, **`db/`**, and **`data-docker/`**. Preserve all three and the original keys when backing up or updating. Existing Docker installations should follow the [storage migration guide](docs/docker-storage.md).
+
+### Run From Source
+
+The regular terminal workflow remains available. Recommended development setup: **Python 3.12, Poetry 2.x, Node.js 22, and Git**. The backend package requires Python 3.11 or later. Current macOS installations require Apple Silicon to match the available LanceDB wheels.
+
+**Windows · PowerShell**
 
 ```powershell
 git clone https://github.com/Gam1409/taleweaver.git
@@ -226,179 +253,103 @@ cd taleweaver
 .\setup.ps1
 ```
 
-For subsequent Windows starts, use `.\run.ps1` from the project directory. After updating the repository, run `.\setup.ps1 -SkipStart` to refresh dependencies and apply updates; on Linux/macOS, use `bash setup.sh --skip-start`.
+For later starts, use `.\run.ps1`. From **CMD**:
 
-The setup scripts install the memory-search dependency too. To use semantic recall, configure an embedding model separately in **Admin → Memory & recall**.
+```cmd
+powershell -ExecutionPolicy Bypass -File .\run.ps1
+```
 
----
-
-### Option B: Manual Development Setup
-
-**Requirements:** Python 3.11–3.13, [Poetry](https://python-poetry.org/) 2.x, Node.js 20.19+ or 22.12+ (supported LTS recommended)
+**Linux / macOS**
 
 ```bash
-# 1. Clone & install Python dependencies
 git clone https://github.com/Gam1409/taleweaver.git
 cd taleweaver
-poetry install
+bash setup.sh
+```
 
-# 2. Configure environment & encryption keys
+For later starts, use `bash run.sh`. Add `--no-update` to skip the launcher's Git update check. After pulling changes, refresh dependencies with `.\setup.ps1 -SkipStart` or `bash setup.sh --skip-start`.
+
+<details>
+<summary><b>Manual setup and prebuilt frontend</b></summary>
+
+From the repository root, install the dependencies and prepare `.env`:
+
+```bash
+poetry install
 cp .env.example .env
 poetry run python scripts/generate_keys.py
-# Copy both generated values into .env before continuing.
+```
 
-# 3. Apply database migrations
+Copy both generated key values into `.env`, then continue:
+
+```bash
 poetry run alembic upgrade head
-
-# 4. Install & build frontend
 cd frontend
 npm ci
 npm run build
 cd ..
-
-# 5. Start TaleWeaver
-poetry run taleweaver
+poetry run python -m backend.main
 ```
 
-Open `http://127.0.0.1:8000` in your browser. Complete the initial setup, add your API keys under **Administration**, and jump into an adventure!
+Open `http://127.0.0.1:8000`. This starts the backend serving the built frontend; Vite is not required. The normal run scripts start the development frontend and backend together.
 
-For development on Linux/macOS, `./run.sh --no-update` starts both the backend
-and Vite. It detects `.venv`, `venv`, an activated environment, or Poetry's
-external environment. Omit `--no-update` to try a fast-forward pull first.
-Ctrl+C stops both services; if either service exits, its companion is stopped
-and the launcher returns the failed service's exit code. The command above
-continues to serve the prebuilt frontend without Vite.
+</details>
 
----
+### Your First Adventure
 
-### Optional Living World / Concordia setup
+1. Open the application locally and create the initial administrator account.
+2. Configure your text providers and role models in **Administration**. Test the endpoints before generating a world.
+3. Create an adventure or import an existing one, select RPG, Chat, or VN, and begin a new session.
+4. Add images, voice, memory recall, Living World, or NPC Personality when you want them. Optional layers have their own setup and request budgets.
 
-Living World is disabled by default. Enable shared inference serialization with
-`INFERENCE_SERIALIZATION_ENABLED=true` in `.env`, restart the backend, then open a
-session's settings and choose **Living World · Experimental**. Use **Allow bounded
-NPC decisions** and **Schedule recurring NPC decisions** to try autonomous routines.
+For **Concordia**, use Python 3.12+ and install `poetry install --extras concordia` before selecting it. The setup scripts also accept `-Concordia` on Windows and `--concordia` on Linux/macOS. Living World additionally requires `INFERENCE_SERIALIZATION_ENABLED=true`; see its guide for activation and limits.
 
-Concordia is optional and requires **Python 3.12 or 3.13**. Install it with
-`poetry install --extras concordia`, or use `./setup.ps1 -Concordia` on Windows /
-`./setup.sh --concordia` on Linux and macOS. Select **Concordia 2.4** in the session's
-decision-engine setting. Keep using the extra when updating dependencies.
-
-The [Living World guide](docs/living-world-usage.md) explains supported actions,
-model settings, budgets, and recovery.
-
-## 🐳 Running with Docker
-
-Run the frontend and backend together in a container:
-
-```bash
-git clone https://github.com/Gam1409/taleweaver.git
-cd taleweaver
-
-# Run the automated container bootstrapper
-bash scripts/docker-setup.sh      # Windows: scripts\docker-setup.bat
-```
-
-Compose keeps media in `./data-docker`, SQLite (including WAL/SHM) in `./sqlite-docker`, and RAG in `./db`. Keep all three plus the original encryption keys. Existing installations must follow [Docker storage migration](docs/docker-storage.md) before switching to the separate SQLite volume.
-
----
-
-## Desktop applications (preview)
-
-Native distributions are built separately for Windows, macOS and Linux. A small
-system-tray launcher starts the backend, waits for the bundled browser UI to be
-ready, then opens your default browser. Its menu provides Start, Stop, Restart,
-Log and Exit; green means ready, red stopped and yellow starting or unhealthy.
-No Electron runtime or local model weights are embedded.
-
-Builds run on release tags or manual dispatch through **Desktop distributions**;
-ordinary changes run launcher tests instead of rebuilding all three packages.
-See [Desktop installation and builds](docs/desktop.md) for artifact formats,
-user-data locations, platform requirements and measured memory limits.
-
----
+> [!TIP]
+> Start with a small adventure and one active NPC when trying the optional personality layer. A strong structured-output model for utility tasks and your preferred prose model for narration are a useful pairing. Local-model compatibility, RP quality, image consistency, and latency depend on your chosen models and workflows.
 
 ## ⚙️ Configuration
 
-Core server and security settings are configured in `.env` (refer to [`.env.example`](.env.example)):
+Set model routing, credentials, visuals, and optional features through **Administration**. Adventure settings define defaults for new sessions; saved sessions have their own controls.
 
-| Variable | Purpose | Default / Example |
-|---|---|---|
-| `SECRET_KEY` | **Required** – JWT token signing key (min 32 random characters) | `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `ENCRYPTION_KEY` | **Required** – 32-byte Fernet key for encrypting stored provider API keys | `python scripts/generate_fernet_key.py` |
-| `DATA_DIR` | Directory for persistent database, session state, and uploads | `./data` |
-| `ALLOWED_HOSTS` | Comma-separated domain whitelist for HTTP request validation | `localhost,127.0.0.1` |
-| `ALLOW_PRIVATE_NETWORK_MODELS` | Allow connections to intended local AI servers (Ollama, ComfyUI, custom APIs) | `true` |
-| `ALLOW_REMOTE_SETUP` | Allow non-loopback clients to execute initial root bootstrap | `false` |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | Optional default provider keys | Set in `.env` or save encrypted keys in Administration |
+Source and Docker deployments use [`.env.example`](.env.example) as their server configuration reference. Desktop apps keep their generated keys and overrides in the profile's `server.env`.
 
----
+| Setting | Purpose |
+| --- | --- |
+| `SECRET_KEY` / `ENCRYPTION_KEY` | Sign access tokens and encrypt stored provider credentials. Keep the original keys across updates and restores. |
+| `DATA_DIR` | Persistent application media and data directory. |
+| `DATABASE_URL` | Database destination; Docker uses its separate SQLite mount. |
+| `MEMORY_DB_DIR` | RAG index location, independently configurable. |
+| `BACKEND_PORT` | Backend port, normally `8000`. |
+| `ALLOW_PRIVATE_NETWORK_MODELS` | Explicitly enable intended local/LAN model endpoints when required by the provider policy. |
 
-## 🛠️ Adventure Editor & Scripting
+In Docker, `localhost` refers to the container. Use an address reachable from the backend for your model servers. Private-network access, remote initial setup, and allowed hosts are explained in the [provider policy](docs/provider-network-policy.md) and `.env.example`.
 
-TaleWeaver includes a comprehensive browser-based authoring workbench that puts you in full control of your worlds:
+## 📚 Guides
 
-<details>
-<summary><b>🐍 Sandboxed Python Event Scripting Engine</b></summary>
+| Explore | Read more |
+| --- | --- |
+| Visual Novel play | [VN mode](docs/visual-novel-mode.md) · [Session language](docs/session-content-language.md) |
+| NPCs and shared history | [Character introductions and journals](docs/npc-introductions.md) |
+| Optional personality | [Player controls and fallback](docs/chpm-continuation.md) · [Technical guide](docs/chpm-pilot.md) |
+| World simulation | [Living World and Concordia](docs/living-world-usage.md) |
+| Long-term recall | [Memory and retrieval](docs/memory-rag.md) |
+| Clothing and item continuity | [Narrated items and recovery](docs/narrated-item-reconciliation.md) · [Repair](docs/item-repair.md) |
+| ComfyUI | [Task presets and model layouts](docs/comfyui-task-templates.md) · [Prompt presets](docs/comfyui/presets.md) |
+| Local text inference | [OpenAI-compatible APIs](docs/custom-openai-compatible.md) · [Ollama role settings](docs/ollama-roles.md) |
+| Authoring and exploration | [Staged world generation](docs/staged-world-generation.md) · [Dynamic locations](docs/dynamic-locations.md) |
+| Installation and storage | [Desktop apps](docs/desktop.md) · [Docker storage](docs/docker-storage.md) |
 
-Use the scripting workbench to define repeatable events and outcomes for your adventure:
+## 🤝 Credits & License
 
-- **Lifecycle Hooks**: Attach custom logic to `on_enter_scene`, `on_interact`, `on_turn_start`, and `on_turn_end`.
-- **State Manipulation**: Safely query and mutate scene descriptions, room exits, inventory items, NPC dialogue states, avatar hitpoints, and custom session variables.
-- **Victory & Defeat Triggers**: Define custom branching conditions that evaluate player actions and story milestones.
-- **In-Editor Workbench**: Test, debug, and lint event scripts directly inside the **Scripts Tab** with syntax assistance and priority scheduling.
+**Original author:** [jschm42](https://github.com/jschm42), creator of [TaleWeaver](https://github.com/jschm42/taleweaver). This fork builds on the original author's and contributors' work.
 
-</details>
+**Fork maintainer:** [Gam1409](https://github.com/Gam1409). Issues and contributions for this version belong in [this repository](https://github.com/Gam1409/taleweaver).
 
-<details>
-<summary><b>🛡️ Security & Hardening Architecture</b></summary>
-
-TaleWeaver includes protections for self-hosted play:
-
-- **Encrypted Provider Keys:** Saved API credentials are encrypted at rest.
-- **Protected Saves & Uploads:** Access checks help keep each user's sessions and files separate.
-- **Local Setup:** Initial administrator setup is restricted to the local host by default.
-- **Your Choice of Providers:** Choose where model requests are sent and which services receive your story content.
-
-</details>
-
-<details>
-<summary><b>🗺️ Architecture Diagrams & Turn Flow</b></summary>
-
-Inspect the internal engine workflows through Mermaid diagrams in the repository:
-
-- [Adventure Generation Workflow](docs/diagrams/adventure_generation.mermaid)
-- [Adventure Generation Activity Flow](docs/diagrams/adventure_generation_activity.mermaid)
-- [Game Session Loop Sequence](docs/diagrams/game_session_loop.mermaid)
-- [Game Session Loop Activity](docs/diagrams/game_session_loop_activity.mermaid)
-
-</details>
-
-<details>
-<summary><b>📚 Feature Guides</b></summary>
-
-- [Visual Novel mode](docs/visual-novel-mode.md)
-- [Character introductions and journals](docs/npc-introductions.md)
-- [Dynamic exploration](docs/dynamic-locations.md)
-- [Memory and relevant recall](docs/memory-rag.md)
-- [ComfyUI image generation](docs/comfyui/README.md)
-- [ComfyUI workflow starters](docs/comfyui/starters.md)
-- [Ollama role settings](docs/ollama-roles.md)
-- [OpenAI-compatible APIs](docs/custom-openai-compatible.md)
-- [Portrait regeneration and references](docs/portrait-regeneration.md)
-- [Session language](docs/session-content-language.md)
-- [Staged world generation](docs/staged-world-generation.md)
-- [Action ideas](docs/idea-refresh.md)
-
-</details>
+- **Code:** [MIT](LICENSE).
+- **Adventures and story content:** [CC-BY-NC 4.0](LICENSE-CC-BY-NC-4.0), unless a file declares a different license, such as the MIT-licensed combat test adventure.
+- **Bundled fonts and assets:** see the [font licenses](frontend/public/assets/fonts/licenses/README.txt) and individual asset notices.
+- **Community adventures:** the [upstream adventure repository](https://github.com/jschm42/taleweaver-adventures) remains available for shared creations.
 
 ---
 
-## 📜 License & Acknowledgments
-
-**Original author:** [jschm42](https://github.com/jschm42), creator of [TaleWeaver](https://github.com/jschm42/taleweaver). Thank you to the original author and contributors for the foundation of this project.
-
-**Fork maintainer:** [Gam1409](https://github.com/Gam1409). This repository develops additional features on top of the original project.
-
-- **Code**: Licensed under the [MIT License](LICENSE).
-- **Adventures & Story Content**: Licensed under [CC-BY-NC 4.0](LICENSE-CC-BY-NC-4.0), unless an individual file declares a different license (for example the MIT-licensed combat test adventure).
-- **Fonts & Assets**: Bundled frontend typography assets and licenses are documented in `frontend/public/assets/fonts/licenses`.
+<p align="center"><b>Build the setting. Meet its people. See what your choices change.</b></p>
