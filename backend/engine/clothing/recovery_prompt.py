@@ -9,7 +9,9 @@ existing_garments (the only IDs eligible for reuse), detailed_clothing and expli
 A garment is missing when history proves target_actor still owns or wears it at the end,
 but it is absent from the canonical records. "Missing" never means missing from the body:
 a garment still on the person (pulled aside, pushed down to the ankles, observed mid-scene)
-is still owned. Return all evidenced missing garments, not just visible outer layers.
+is still worn: basis=observed_wear, disposition=worn. For example, underwear lowered to the
+knees remains worn with pelvis uncovered; it is not carried or transferred. Only complete
+removal makes a garment carried. Return all evidenced missing garments, not just visible outer layers.
 A garment under another garment remains worn. Include separately described layers and accessories.
 Only assistant narration establishes facts; player text is context, never confirmation.
 Read all history in order. Latest established state wins: later removal, transfer, loss or
