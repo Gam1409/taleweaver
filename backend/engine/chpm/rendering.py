@@ -31,6 +31,8 @@ async def validate(
 ) -> str:
     turn = current(manager)
     if turn is not None and turn.simplified:
+        if turn.simplified_text is None and turn.usage.fallback_reason == "review_rejected":
+            raise ChpmError("No replacement for the rejected narration is available.")
         turn.simplified_text = turn.simplified_text or text
         return turn.simplified_text
     if turn is None or not turn.decisions or turn.initial.settings.mode != "live":
@@ -62,6 +64,7 @@ async def _validated(
     narration_messages: list[dict[str, str]] | None,
     ordinary_context: str,
 ) -> str:
+    original_text = text
     verdict = await _review(manager, turn, text, resolution)
     if not verdict.matches:
         try:
@@ -79,18 +82,30 @@ async def _validated(
                 verdict.issues,
                 narration_messages,
                 ordinary_context,
+                rejected_texts=(original_text,),
             )
         except Exception as exc:
             raise ChpmError(
                 f"CHPM repair failed ({type(exc).__name__}). No response was published."
             ) from exc
-        # A newly repaired candidate has not itself been rejected. If its reviewer
-        # is unavailable, keep this candidate as explicitly unreviewed ordinary RP.
+        # A repair can echo the rejected candidate. Only a different reply may
+        # continue as explicitly unreviewed when its reviewer is unavailable.
         try:
             verdict = await _review(manager, turn, text, resolution)
         except RecoverableChpmError:
             if not continuation.enabled(turn):
                 raise
+            if _candidate_key(text) == _candidate_key(original_text):
+                return await _rejected(
+                    manager,
+                    turn,
+                    resolution,
+                    system_prompt,
+                    verdict.issues,
+                    narration_messages,
+                    ordinary_context,
+                    rejected_texts=(original_text,),
+                )
             continuation.activate(turn, "review_unavailable")
             turn.simplified_text = text
             return text
@@ -103,6 +118,7 @@ async def _validated(
             verdict.issues,
             narration_messages,
             ordinary_context,
+            rejected_texts=(original_text, text),
         )
     turn.verdict = verdict
     turn.usage.status = "validated"
@@ -117,14 +133,23 @@ async def _rejected(
     issues: list[str],
     narration_messages: list[dict[str, str]] | None,
     ordinary_context: str,
+    *,
+    rejected_texts: tuple[str, ...],
 ) -> str:
     if not continuation.enabled(turn):
         raise ChpmError("CHPM dialogue validation failed after one repair: " + "; ".join(issues))
     continuation.activate(turn, "review_rejected", issues)
-    turn.simplified_text = await continuation_writer.generate(
+    replacement = await continuation_writer.generate(
         manager, turn, resolution, system_prompt, narration_messages, ordinary_context
     )
+    if _candidate_key(replacement) in {_candidate_key(text) for text in rejected_texts}:
+        raise ChpmError("The ordinary narrator repeated an already rejected candidate.")
+    turn.simplified_text = replacement
     return turn.simplified_text
+
+
+def _candidate_key(text: str) -> str:
+    return " ".join(text.split())
 
 
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
@@ -144,9 +169,10 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         },
     )
     if not raw.matches:
-        if not raw.issues:
-            raise RecoverableChpmError("CHPM validator rejected the reply without feedback.")
-        return Verdict(matches=False, issues=raw.issues)
+        return Verdict(
+            matches=False,
+            issues=raw.issues or ["The dialogue validator rejected this candidate."],
+        )
     try:
         verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
     except ChpmError as exc:

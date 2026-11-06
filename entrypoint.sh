@@ -4,10 +4,15 @@
 
 set -e
 
+WORKERS="${WEB_CONCURRENCY:-1}"
+if [ "$WORKERS" != "1" ]; then
+    echo "[entrypoint] TaleWeaver requires a single worker (WEB_CONCURRENCY=1): session leases and visual jobs are process-local." >&2
+    exit 64
+fi
+
 echo "[entrypoint] Running database migrations..."
 python -m alembic upgrade head
 
-WORKERS="${WEB_CONCURRENCY:-2}"
 TIMEOUT="${GUNICORN_TIMEOUT:-120}"
 GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
 
