@@ -5,7 +5,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 root = Path(SPECPATH).parent
-hidden = collect_submodules("backend")
+hidden = collect_submodules("backend", on_error="raise")
 hidden += ["desktop.server", "scripts.desktop_processes"]
 hidden += ["greenlet", "aiosqlite", "sqlalchemy.dialects.sqlite.aiosqlite", "sqlalchemy.dialects.sqlite.pysqlite"]
 hidden += collect_submodules("passlib.handlers") + collect_submodules("tiktoken_ext")

@@ -6,7 +6,6 @@ import random
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import backend.engine.gameplay.manager as gl
 from backend.engine.combat.initiative import PLAYER_ID
 from backend.engine.combat.special_attacks import (
     STAT_LABELS,
@@ -117,7 +116,7 @@ class CombatPlayerMixin(CombatCombatantMixin, CombatConsumableMixin):
         player = self._player_view(combat)
         mods = player.get("modifiers") or {}
         target_ac = max(1, effective_ac(target) - int(mods.get("dexterity", 0)))
-        roll = gl.roll_attack(self.avatar, "dexterity", target_ac, weapon["dice"])
+        roll = self._turn_services.roll_attack(self.avatar, "dexterity", target_ac, weapon["dice"])
         roll = apply_strength_bonus(roll, int(mods.get("strength", 0)))
         damage = 0
         if roll.get("is_hit"):

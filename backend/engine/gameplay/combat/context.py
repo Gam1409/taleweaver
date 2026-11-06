@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 from fastapi.encoders import jsonable_encoder
@@ -29,6 +30,14 @@ class CombatContextMixin(TurnContext):
     """Proxies the turn manager state and offers combat state persistence helpers."""
 
     manager: GameTurnManager
+
+    @property
+    def _turn_services(self) -> ModuleType:
+        # Preserve legacy dependency overrides without importing the orchestrator
+        # while combat/guardrail packages are still initializing.
+        import backend.engine.gameplay.manager as services
+
+        return services
 
     @property
     def turn_language(self) -> str | None:

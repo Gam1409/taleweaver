@@ -28,7 +28,11 @@ def verify(root: Path) -> None:
 def verify_resources(root: Path) -> None:
     from backend.core import generation_sayings, visual_trace
     from backend.core.system_diagnostics import service
+    from backend.engine.gameplay.combat import TurnCombatManager
+    from backend.engine.gameplay.guardrails import TurnGuardrailsManager
 
+    if not callable(TurnCombatManager) or not callable(TurnGuardrailsManager):
+        raise RuntimeError("The distribution is missing gameplay implementations.")
     bundle = Path(__file__).resolve().parents[1]
     resources = (
         bundle / "frontend/src/assets/svg/items/chest.svg",

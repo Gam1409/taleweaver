@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import AsyncGenerator
 from typing import Any
 
-import backend.engine.gameplay.manager as gl
 from backend.engine.combat.special_attacks import (
     can_afford,
     describe_special_result,
@@ -71,13 +71,13 @@ class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarra
 
         heals = [a for a in specials if _is_self_heal(a)]
         hp_ratio = int(enemy.get("hp") or 0) / max(1, int(enemy.get("max_hp") or 1))
-        if hp_ratio < HEAL_THRESHOLD and heals and gl.random.random() < HEAL_CHANCE:
-            return gl.random.choice(heals)
+        if hp_ratio < HEAL_THRESHOLD and heals and random.random() < HEAL_CHANCE:
+            return random.choice(heals)
 
         # Offensive and utility specials are used at random with the NPC's special chance.
         others = [a for a in specials if a not in heals]
-        if others and gl.random.random() < special_chance(enemy):
-            return gl.random.choice(others)
+        if others and random.random() < special_chance(enemy):
+            return random.choice(others)
         return None
 
     async def _enemy_special(
@@ -175,7 +175,9 @@ class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarra
             }
 
         player_ac = effective_ac(player)
-        roll = gl.roll_attack(self._enemy_avatar(enemy), "dexterity", player_ac, weapon["dice"])
+        roll = self._turn_services.roll_attack(
+            self._enemy_avatar(enemy), "dexterity", player_ac, weapon["dice"]
+        )
         roll = apply_strength_bonus(roll, int((enemy.get("modifiers") or {}).get("strength", 0)))
         damage = 0
         if roll.get("is_hit"):

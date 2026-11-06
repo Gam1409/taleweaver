@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
-import backend.engine.gameplay.manager as gl
 from backend.core.content_language import prose_language_instruction
 from backend.core.prompts import (
     COMBAT_SPECIAL_EVENT_SYSTEM_PROMPT,
@@ -36,7 +36,7 @@ class CombatNarrationMixin(CombatContextMixin):
 
     def _complex_llm(self) -> tuple[Any, str] | None:
         try:
-            gm = gl.GameMasterLLM.for_role(self.user, "complex")
+            gm = self._turn_services.GameMasterLLM.for_role(self.user, "complex")
             return gm, gm.model
         except ValueError:
             return None
@@ -182,7 +182,7 @@ class CombatNarrationMixin(CombatContextMixin):
         """At most once per round the GM may spice up the fight with a special event."""
         if combat.get("special_event_round") == combat.get("round"):
             return None
-        if gl.random.random() > SPECIAL_EVENT_CHANCE:
+        if random.random() > SPECIAL_EVENT_CHANCE:
             return None
         combat["special_event_round"] = combat.get("round")
 
@@ -194,7 +194,7 @@ class CombatNarrationMixin(CombatContextMixin):
 
         event_data = await self._request_llm_combat_special_event(combat)
         if not event_data:
-            if gl.random.random() < 0.5:
+            if random.random() < 0.5:
                 text = f"Special Event: {enemy_name} performs a special attack for {FALLBACK_SPECIAL_DAMAGE} damage!"
                 return self._special_event_damage(combat, text, FALLBACK_SPECIAL_DAMAGE)
             event_data = {

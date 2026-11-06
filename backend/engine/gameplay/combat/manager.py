@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
-import backend.engine.gameplay.manager as gl
 from backend.engine.gameplay.combat.context import (
     engaged_enemies,
     find_enemy,
@@ -73,10 +73,7 @@ class TurnCombatManager(CombatTriggerMixin, CombatUnlockMixin, CombatPlayerMixin
         if not target or target not in engaged_enemies(combat):
             return
         max_hp = int(target.get("max_hp") or 100)
-        if (
-            int(target.get("hp") or 0) <= max_hp * FLEE_HP_RATIO
-            and gl.random.random() < FLEE_CHANCE
-        ):
+        if int(target.get("hp") or 0) <= max_hp * FLEE_HP_RATIO and random.random() < FLEE_CHANCE:
             async for chunk in self._on_enemy_out(combat, target, fled=True):
                 yield chunk
 
