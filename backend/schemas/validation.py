@@ -100,6 +100,7 @@ class AIFixSuggestionsRequest(BaseModel):
 
 
 class AIFixSuggestionsResponse(BaseModel):
+    served_provider: Optional[str] = Field(default=None, max_length=80)
     finding_signature: str = Field(
         ...,
         description="Stable signature of the finding the suggestions were generated for.",

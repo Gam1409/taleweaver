@@ -25,6 +25,7 @@ const props = defineProps<{
   findingLocation?: string | null
   hasBackupConfirmed: boolean
   errorMessage?: string | null
+  servedProvider?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -86,6 +87,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
             <p class="text-xs text-slate-400 mt-1">
               The AI generated up to three different ways to resolve this finding. Pick one to apply.
             </p>
+            <p v-if="props.servedProvider" class="mt-1 text-xs text-slate-400">Provider: {{ props.servedProvider }}</p>
           </div>
         </div>
         <button

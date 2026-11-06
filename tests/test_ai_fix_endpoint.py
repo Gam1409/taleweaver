@@ -948,6 +948,7 @@ async def test_apply_fix_evicts_cache(client, setup_test_db, monkeypatch):
         username="fix_user_evict",
         hashed_password="x",
         role="admin",
+        llm_settings={"complex_model_provider": "openai", "complex_model": "gpt-4o"},
     )
     async with TestSessionLocal() as db:
         db.add(user)

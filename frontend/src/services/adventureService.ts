@@ -479,6 +479,7 @@ export interface AIFixSuggestionsRequest {
 }
 
 export interface AIFixSuggestionsResponse {
+  served_provider?: string | null
   finding_signature: string
   proposals: FixProposal[]
   generated_at: string

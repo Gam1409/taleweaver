@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     # Provider/model used as a fallback when the user's configured
     # complex_model_provider times out or errors. Empty string disables
     # the fallback and surfaces the original error to the caller.
-    AI_FIX_FALLBACK_PROVIDER: str = "openai"
+    AI_FIX_FALLBACK_PROVIDER: str = ""
     AI_FIX_FALLBACK_MODEL: str = "gpt-4o-mini"
 
     # Maximum number of HTTPS scheme bytes accepted in user-supplied URLs.

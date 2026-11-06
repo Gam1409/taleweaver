@@ -105,7 +105,7 @@ The specification's 30 original locations map to the following current code. Sev
 
 ## Remaining limitations
 
-The global legacy `ollama_url` still lacks save-time and router-time SSRF validation. This task validates the new role URLs and submitted test URLs without changing that older policy. `AI_FIX_FALLBACK_PROVIDER=openai` with the default `gpt-4o-mini` can send adventure content to a cloud service after a local failure if an OpenAI key is configured; setting the fallback provider to an empty value disables that environment fallback. Image, TTS and STT providers are unchanged. No dependency lock files were modified.
+The global legacy `ollama_url` still lacks save-time and router-time SSRF validation. This task validates the new role URLs and submitted test URLs without changing that older policy. The additional AI-Fix environment fallback is now disabled by default. Explicitly setting `AI_FIX_FALLBACK_PROVIDER=openai` can send adventure content to that service; see [AI-Fix provider policy](ai-fix-providers.md). Image, TTS and STT providers are unchanged. No dependency lock files were modified.
 
 ## Discovering models for a role URL
 

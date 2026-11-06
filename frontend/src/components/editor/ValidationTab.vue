@@ -477,6 +477,7 @@ const aiFixFindingSignature = ref<string>('')
 const aiFixFinding = ref<AnnotatedValidationFinding | null>(null)
 const aiFixBackupConfirmed = ref(false)
 const aiFixErrorMessage = ref<string | null>(null)
+const aiFixServedProvider = ref<string | null>(null)
 
 function findingKey(finding: AnnotatedValidationFinding, index: number): string {
   return `${finding.source}-${finding.code}-${finding.location || ''}-${index}`
@@ -502,6 +503,7 @@ async function openAIFixSuggestions(
 }
 
 async function runAIFixRequest(finding: AnnotatedValidationFinding) {
+  aiFixServedProvider.value = null
   aiFixLoading.value = true
   aiFixErrorMessage.value = null
   try {
@@ -517,6 +519,7 @@ async function runAIFixRequest(finding: AnnotatedValidationFinding) {
     aiFixProposals.value = resp.proposals ?? []
     aiFixFindingSignature.value = resp.finding_signature
     aiFixErrorMessage.value = resp.error ?? null
+    aiFixServedProvider.value = resp.served_provider ?? null
     if (aiFixSelectedIndex.value >= aiFixProposals.value.length) {
       aiFixSelectedIndex.value = aiFixProposals.value.length > 0 ? 0 : -1
     }
@@ -968,6 +971,7 @@ defineExpose({
       :finding-location="aiFixFinding?.location ?? null"
       :has-backup-confirmed="aiFixBackupConfirmed"
       :error-message="aiFixErrorMessage"
+      :served-provider="aiFixServedProvider"
       @close="closeAIFixModal"
       @select="selectFixProposal"
       @apply="applySelectedFix"

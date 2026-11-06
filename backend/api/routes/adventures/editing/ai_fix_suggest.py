@@ -28,6 +28,7 @@ from backend.core.auth import get_current_user
 from backend.core.authoring_completion_prompts import completion_contract
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.inference.diagnostics import admission_diagnostic
 from backend.core.validators_prompts import AI_FIX_SUGGESTIONS_SYSTEM_PROMPT
 from backend.engine.vn_world_generation import vn_editor_guidance
 from backend.models.user import User
@@ -131,6 +132,9 @@ def _suggestion_prompt(payload: AIFixSuggestionsRequest, summary: dict[str, Any]
 
 def _failure_message(exc: Exception, template_id: str) -> str:
     """User-facing, provider-neutral message for a failed suggestion call (logged here)."""
+    queue_message = admission_diagnostic(exc)
+    if queue_message:
+        return queue_message
     if isinstance(exc, _AllProvidersFailedError):
         logger.warning("AI fix suggestion unavailable for %s: %s", template_id, exc)
         return _summarize_outcomes(exc.outcomes)
@@ -207,7 +211,7 @@ async def generate_fix_proposals(
     user_prompt = _suggestion_prompt(payload, _summarize_world_for_fix(debug_payload))
     generated_at = datetime.now(timezone.utc).isoformat()
     try:
-        wrapper, _served_provider = await _generate_llm_proposals(
+        wrapper, served_provider = await _generate_llm_proposals(
             user_prompt=user_prompt,
             current_user=current_user,
             response_model=AISuggestFixWrapperResponse,
@@ -228,6 +232,7 @@ async def generate_fix_proposals(
         finding_signature=signature,
         proposals=[p for p in (_clean_proposal(raw) for raw in raw_proposals) if p],
         generated_at=generated_at,
+        served_provider=served_provider,
         error=None,
     )
     if response.proposals:
