@@ -52,6 +52,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="TaleWeaver system tray launcher")
     parser.add_argument("--server", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--tray-smoke-test", action="store_true")
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument(
         "--data-dir", type=Path, default=user_data_path("TaleWeaver", appauthor=False)
@@ -87,8 +88,10 @@ def run_locked(args: argparse.Namespace, root: Path) -> int:
     from desktop.app import run
 
     logo = args.icon or bundle_root() / "desktop/assets/logo.png"
-    run(controller, logo, log_path)
-    return 0
+    ready = run(
+        controller, logo, log_path, smoke_timeout=args.timeout if args.tray_smoke_test else None
+    )
+    return 0 if ready or not args.tray_smoke_test else 1
 
 
 if __name__ == "__main__":

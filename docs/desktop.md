@@ -55,8 +55,10 @@ require separately configured release credentials. No signing keys are bundled.
 The **Desktop distributions** workflow runs lightweight launcher tests on all
 three operating systems for launcher changes. Full packaging runs only for
 `v*` release tags or **Run workflow**. It builds the frontend, packages the service,
-then runs the actual executable against a disposable profile. No LLM requests
-are made. Failed startup, migrations, API or missing frontend fail the job.
+then runs the actual executable against a disposable profile. A second smoke
+test initializes the native tray and menu and waits for readiness without opening
+a browser. Linux uses a private D-Bus session and Xvfb for that check. No LLM
+requests are made. Failed startup, migrations, API or missing frontend fail the job.
 Archives are uploaded as Actions artifacts, rather than committed into Git.
 
 For a local build with Python 3.12 and Node 22:
@@ -86,5 +88,5 @@ embedded Chromium, Vite or second web server. The headless source smoke test on
 for its backend**, with a fresh profile and no model calls. This excludes native
 tray libraries, the external browser, populated sessions and active requests;
 it is not a packaged-application memory guarantee. Each native build reports its
-own measured launcher/service peaks. RAG, transcription and other optional work
+own measured headless and native-tray launcher/service peaks. RAG, transcription and other optional work
 can add memory when used; those model workloads are not started by the tray.

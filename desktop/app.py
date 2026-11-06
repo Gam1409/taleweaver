@@ -1,6 +1,7 @@
 """Native tray menu; no embedded browser, web runtime or model weights."""
 
 import logging
+import threading
 import webbrowser
 from pathlib import Path
 
@@ -37,17 +38,25 @@ class BrowserOnReady:
             webbrowser.open(f"http://127.0.0.1:{self.controller.port}")
 
 
-def run(controller: Controller, logo: Path, log_path: Path) -> None:
+def run(
+    controller: Controller, logo: Path, log_path: Path, *, smoke_timeout: float | None = None
+) -> bool:
     # Import only for interactive use: the service and CI smoke test need no display.
     import pystray
 
     browser = BrowserOnReady(controller)
+    became_ready = False
 
     def changed(state: str) -> None:
+        nonlocal became_ready
         tray.icon = icon_image(logo, state)
         tray.title = f"TaleWeaver — {state}"
         tray.update_menu()
-        browser.update(state)
+        if smoke_timeout is None:
+            browser.update(state)
+        elif state in {"running", "error"}:
+            became_ready = state == "running"
+            controller.request("exit")
 
     def action(name: str):
         return lambda _icon, _item: controller.request(name)
@@ -75,11 +84,26 @@ def run(controller: Controller, logo: Path, log_path: Path) -> None:
     )
     controller.changed = changed
     controller.exited = tray.stop
-    controller.launch()
+
+    def setup(icon) -> None:
+        icon.visible = True
+        controller.launch()
+
+    timer = None
+    if smoke_timeout is not None:
+        timer = threading.Timer(smoke_timeout, lambda: controller.request("exit"))
+        timer.daemon = True
+        timer.start()
+    shutdown_failed = False
     try:
-        tray.run()
+        tray.run(setup)
     finally:
-        controller.request("exit")
-        controller.worker.join(timeout=18)
-        if controller.worker.is_alive():
-            logging.error("Service shutdown did not finish; check the owned backend process.")
+        if timer is not None:
+            timer.cancel()
+        if controller.worker.ident is not None:
+            controller.request("exit")
+            controller.worker.join(timeout=18)
+            if controller.worker.is_alive():
+                logging.error("Service shutdown did not finish; check the owned backend process.")
+                shutdown_failed = True
+    return became_ready and not shutdown_failed

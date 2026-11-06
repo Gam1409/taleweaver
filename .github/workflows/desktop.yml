@@ -64,7 +64,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 xvfb dbus-x11
       - name: Install packaging environment
         run: |
           pip install 'poetry>=2,<3'
@@ -78,6 +78,12 @@ jobs:
         run: poetry run python scripts/build_desktop.py
       - name: Smoke-test built executable and measure memory
         run: poetry run python scripts/smoke_desktop.py '${{ matrix.executable }}'
+      - name: Verify Linux native tray and menu initialization
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a poetry run python scripts/smoke_desktop.py --tray '${{ matrix.executable }}'
+      - name: Verify Windows or macOS native tray and menu initialization
+        if: runner.os != 'Linux'
+        run: poetry run python scripts/smoke_desktop.py --tray '${{ matrix.executable }}'
       - name: Archive distribution (preserve executable permissions and macOS symlinks)
         if: runner.os != 'Windows'
         shell: bash

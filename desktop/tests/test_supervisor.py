@@ -197,3 +197,59 @@ def test_service_startup_failure_returns_status_without_a_native_crash_dialog(mo
     monkeypatch.setattr("sys.argv", ["TaleWeaver", "--server"])
     monkeypatch.setattr(server, "run", fail)
     assert entrypoint.main() == 1
+
+
+def test_native_menu_smoke_waits_for_tray_setup_and_never_opens_browser(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from desktop import app
+
+    calls = []
+
+    class Icon:
+        def __init__(self, *args):
+            self.visible = False
+
+        def run(self, setup):
+            calls.append("tray initialized")
+            setup(self)
+
+        def stop(self):
+            calls.append("tray stopped")
+
+        def update_menu(self):
+            calls.append("menu updated")
+
+    class Owner:
+        state = "stopped"
+        port = 8000
+        worker = SimpleNamespace(ident=1, join=lambda **kw: None, is_alive=lambda: False)
+
+        def launch(self):
+            calls.append("service started")
+            self.changed("running")
+
+        def request(self, action):
+            if action == "exit":
+                self.exited()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "pystray",
+        SimpleNamespace(
+            Icon=Icon,
+            Menu=lambda *args: args,
+            MenuItem=lambda *args, **kwargs: args,
+        ),
+    )
+    monkeypatch.setattr(
+        app.webbrowser, "open", lambda *a: pytest.fail("CI must not open a browser")
+    )
+    logo = tmp_path / "logo.png"
+    Image.new("RGB", (64, 64), "black").save(logo)
+    assert app.run(Owner(), logo, tmp_path / "desktop.log", smoke_timeout=5)
+    assert calls.index("tray initialized") < calls.index("service started")
+    assert "menu updated" in calls

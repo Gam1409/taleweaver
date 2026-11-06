@@ -15,6 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path, nargs="?")
     parser.add_argument("--source", action="store_true")
+    parser.add_argument("--tray", action="store_true")
     args = parser.parse_args()
     if args.executable is None and not args.source:
         parser.error("Provide an executable or select --source.")
@@ -26,7 +27,7 @@ def main() -> None:
         child = subprocess.Popen(
             command
             + [
-                "--smoke-test",
+                "--tray-smoke-test" if args.tray else "--smoke-test",
                 "--data-dir",
                 folder,
                 "--timeout",
