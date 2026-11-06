@@ -15,6 +15,7 @@ from backend.engine.scripting.sandbox import (
     ScriptExecutionError,
     ScriptSecurityError,
     ScriptTimeoutError,
+    check_source_size,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class ScriptRunner:
             return
 
         try:
+            check_source_size(self.init_script)
             tree = ast.parse(self.init_script, mode="exec")
         except Exception as exc:
             logger.error(f"[ScriptRunner] Failed to parse init_script definitions: {exc}")

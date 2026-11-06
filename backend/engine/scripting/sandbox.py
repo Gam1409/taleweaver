@@ -10,27 +10,19 @@ from __future__ import annotations
 import ast
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
+from backend.engine.scripting import call_budget
+from backend.engine.scripting.errors import (
+    ScriptExecutionError,
+    ScriptSecurityError,
+    ScriptTimeoutError,
+)
+from backend.engine.scripting.percent_budget import check_percent
+from backend.engine.scripting.text_budget import bounded, payload_size, text_size
+
 logger = logging.getLogger(__name__)
-
-
-class ScriptSecurityError(Exception):
-    """Raised when a script attempts an unauthorized or unsafe operation."""
-
-    pass
-
-
-class ScriptExecutionError(Exception):
-    """Raised when a runtime error occurs during script evaluation."""
-
-    pass
-
-
-class ScriptTimeoutError(ScriptExecutionError):
-    """Raised when a script exceeds its maximum execution instruction budget."""
-
-    pass
 
 
 class _ReturnSignalError(Exception):
@@ -106,6 +98,7 @@ ALLOWED_AST_NODES: set[type[ast.AST]] = {
 
 # Resource limits. Adventure scripts may come from imported (untrusted) adventures, so a
 # single script must not be able to exhaust server memory or CPU.
+MAX_SOURCE_LENGTH = 100_000
 MAX_SEQUENCE_LENGTH = 100_000
 MAX_RANGE_LENGTH = 100_000
 MAX_INT_BITS = 10_000
@@ -231,30 +224,34 @@ def _safe_pow(left: Any, right: Any) -> Any:
     return left**right
 
 
+def _safe_mod(left: Any, right: Any) -> Any:
+    if isinstance(left, (str, bytes)):
+        check_percent(left, right, MAX_SEQUENCE_LENGTH)
+    return left % right
+
+
 _BINOPS: dict[type[ast.operator], Any] = {
     ast.Add: _safe_add,
     ast.Sub: lambda a, b: a - b,
     ast.Mult: _safe_mult,
     ast.Div: lambda a, b: a / b,
     ast.FloorDiv: lambda a, b: a // b,
-    ast.Mod: lambda a, b: a % b,
+    ast.Mod: _safe_mod,
     ast.Pow: _safe_pow,
 }
 
 
-def _guard_call_arguments(func: Any, args: list[Any], kwargs: dict[str, Any]) -> None:
-    """Rejects calls on builtin sequences that would allocate huge results in one step."""
-    owner = getattr(func, "__self__", None)
-    if not isinstance(owner, _SIZE_SENSITIVE_TYPES):
-        return
-    for value in (*args, *kwargs.values()):
-        if isinstance(value, int) and abs(value) > MAX_SEQUENCE_LENGTH:
-            raise ScriptSecurityError("Argument exceeds safe size limit.")
-    is_join = getattr(func, "__name__", "") == "join" and bool(args)
-    if is_join and isinstance(args[0], (list, tuple)):
-        total = sum(len(part) for part in args[0] if isinstance(part, _SIZE_SENSITIVE_TYPES))
-        if total > MAX_SEQUENCE_LENGTH:
-            raise ScriptSecurityError("join() result exceeds safe memory limit.")
+def _guard_call_arguments(
+    func: Any, args: list[Any], kwargs: dict[str, Any], tick: Callable[[], None]
+) -> tuple[Any, list[Any], dict[str, Any]]:
+    return call_budget.prepare(func, args, kwargs, MAX_SEQUENCE_LENGTH, _safe_print, tick)
+
+
+def check_source_size(code: str) -> None:
+    if len(code) > MAX_SOURCE_LENGTH:
+        raise ScriptSecurityError(
+            f"Script source exceeds the safe limit of {MAX_SOURCE_LENGTH} characters."
+        )
 
 
 _BREAK = object()
@@ -304,11 +301,12 @@ class SafeAstInterpreter:
         Statically parses and validates Python script code without running it.
         Returns a list of error strings (empty if valid).
         """
-        if not code or not code.strip():
+        if not code:
             return []
 
         errors: list[str] = []
         try:
+            check_source_size(code)
             tree = ast.parse(code, mode="exec")
         except SyntaxError as exc:
             msg = f"Syntax error at line {exc.lineno or 1}"
@@ -330,11 +328,14 @@ class SafeAstInterpreter:
     @classmethod
     def check_expression_syntax(cls, code: str) -> list[str]:
         """Statically parses and validates Python expression syntax without running it."""
-        if not code or not code.strip():
+        if not code:
             return []
 
         errors: list[str] = []
         try:
+            check_source_size(code)
+            if not code.strip():
+                return []
             tree = ast.parse(code.strip(), mode="eval")
         except SyntaxError as exc:
             msg = f"Syntax error at line {exc.lineno or 1}"
@@ -359,6 +360,7 @@ class SafeAstInterpreter:
         """
         self._start_budget()
         try:
+            check_source_size(code)
             tree = ast.parse(code, mode="exec")
         except SyntaxError as exc:
             raise ScriptExecutionError(f"Syntax error in script: {exc}") from exc
@@ -387,6 +389,7 @@ class SafeAstInterpreter:
         """
         self._start_budget()
         try:
+            check_source_size(expr_str)
             tree = ast.parse(expr_str.strip(), mode="eval")
         except SyntaxError as exc:
             raise ScriptExecutionError(f"Syntax error in expression: {exc}") from exc
@@ -565,14 +568,15 @@ class SafeAstInterpreter:
             violation = attribute_violation(target.attr)
             if violation:
                 raise ScriptSecurityError(violation)
+            payload_size(val, MAX_SEQUENCE_LENGTH)
             setattr(obj, target.attr, val)
         elif isinstance(target, ast.Subscript):
             container = self._eval_expr(target.value)
             key = self._eval_expr(target.slice)
-            container[key] = val
+            container[key] = call_budget.assignment(container, key, val, MAX_SEQUENCE_LENGTH)
         elif isinstance(target, (ast.Tuple, ast.List)):
             try:
-                items = list(val)
+                items = call_budget.collect(val, MAX_SEQUENCE_LENGTH)
             except TypeError as exc:
                 raise ScriptExecutionError(
                     f"Cannot unpack non-iterable '{type(val).__name__}'"
@@ -603,7 +607,7 @@ class SafeAstInterpreter:
         return handler(expr)
 
     def _eval_Constant(self, expr: ast.Constant) -> Any:
-        return expr.value
+        return _check_int_size(_check_sequence_size(expr.value))
 
     def _eval_Name(self, expr: ast.Name) -> Any:
         name = expr.id
@@ -690,7 +694,7 @@ class SafeAstInterpreter:
         kwargs = {kw.arg: self._eval_expr(kw.value) for kw in expr.keywords if kw.arg is not None}
         if not callable(func):
             raise ScriptExecutionError(f"'{type(func).__name__}' object is not callable")
-        _guard_call_arguments(func, args, kwargs)
+        func, args, kwargs = _guard_call_arguments(func, args, kwargs, self._tick)
         return _check_int_size(_check_sequence_size(func(*args, **kwargs)))
 
     def _eval_Attribute(self, expr: ast.Attribute) -> Any:
@@ -718,12 +722,15 @@ class SafeAstInterpreter:
         return slice(lower, upper, step)
 
     def _eval_List(self, expr: ast.List) -> list[Any]:
+        bounded(len(expr.elts), MAX_SEQUENCE_LENGTH)
         return [self._eval_expr(elt) for elt in expr.elts]
 
     def _eval_Tuple(self, expr: ast.Tuple) -> tuple[Any, ...]:
+        bounded(len(expr.elts), MAX_SEQUENCE_LENGTH)
         return tuple(self._eval_expr(elt) for elt in expr.elts)
 
     def _eval_Dict(self, expr: ast.Dict) -> dict[Any, Any]:
+        bounded(len(expr.keys), MAX_SEQUENCE_LENGTH)
         return {
             self._eval_expr(k): self._eval_expr(v)
             for k, v in zip(expr.keys, expr.values, strict=False)
@@ -773,8 +780,13 @@ class SafeAstInterpreter:
 
     def _eval_joined_str(self, expr: ast.JoinedStr) -> str:
         parts = []
+        size = 0
         for val in expr.values:
-            parts.append(str(self._eval_expr(val)))
+            value = self._eval_expr(val)
+            size = bounded(
+                size + text_size(value, max(0, MAX_SEQUENCE_LENGTH - size)), MAX_SEQUENCE_LENGTH
+            )
+            parts.append(str(value))
         result = "".join(parts)
         _check_sequence_size(result)
         return result
@@ -783,6 +795,7 @@ class SafeAstInterpreter:
         if expr.format_spec is not None or expr.conversion != -1:
             raise ScriptExecutionError("Format specifications and conversions are not supported.")
         val = self._eval_expr(expr.value)
+        text_size(val, MAX_SEQUENCE_LENGTH)
         return str(val)
 
     # Aliases matching ast class names for dispatch
