@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from backend.engine.clothing.classification import classify_action
 from backend.engine.clothing.profiles import (
     garment_for_item,
     load_profile,
@@ -158,7 +159,7 @@ def apply_actions(
     for index, proposal in enumerate(extraction.actions):
         action = proposal
         try:
-            action = resolve_participants(proposal, actors)
+            action = classify_action(resolve_participants(proposal, actors))
             item = _resolve(
                 action,
                 actors,

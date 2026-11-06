@@ -88,10 +88,6 @@ def _scope(
 
 def _target(mind: Mind, proposal: Development, domain: str, subject: str) -> str:
     if proposal.existing_id:
-        if proposal.existing_id not in {
-            item["development_id"] for item in context.tendencies(mind)
-        }:
-            raise ChpmError("Development revision refers to an unavailable tendency.")
         old = next((b for b in mind.snapshot.beliefs if b.id == proposal.existing_id), None)
         if old is None or (old.domain, old.about_id, old.statement) != (
             domain,
