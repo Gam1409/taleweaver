@@ -78,6 +78,7 @@ from backend.engine.gameplay.language import (
     initialize_content_language,
     resolve_content_language,
 )
+from backend.engine.gameplay import progression_request
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
@@ -1727,10 +1728,11 @@ class GameTurnManager:
                 for_story_initiative=policy.vn,
             )
 
-            progression_start = time.perf_counter()
             try:
                 await release_for_model(self)
-                progression_intent = await llm.aexecute_complex_task(
+                progression_intent = await progression_request.request(
+                    self,
+                    llm,
                     (
                         VN_PROGRESSION_PROMPT
                         if policy.vn
@@ -1751,6 +1753,7 @@ class GameTurnManager:
                     return
                 raise
 
+            yield f"event: status\ndata: {json.dumps({'content': 'Applying progression...'})}\n\n"
             # Guardrail: avoid accidental teleports from hypothetical/planned statements.
             if progression_intent.new_scene_id:
                 allowed_open_destinations = {
@@ -1778,22 +1781,6 @@ class GameTurnManager:
                 if not move_is_valid:
                     progression_intent.new_scene_id = None
                     progression_intent.exit_label = None
-
-            log_structured_event(
-                "gm.turn.pipeline.pass",
-                adventure_id=self.adventure.id,
-                game_id=self.game_id,
-                operation="chat_turn",
-                phase="chat_progression",
-                duration_ms=round((time.perf_counter() - progression_start) * 1000, 2),
-                model=small_model,
-                provider=small_model_provider,
-                reduced_payload_chars=len(progression_user_prompt),
-                quest_count=len(reduced_quests),
-                award_count=len(reduced_awards),
-                npc_count=len(reduced_npcs),
-                notes_count=min(len(self._get_gm_notes()), GM_NOTES_PROMPT_MAX_ITEMS),
-            )
 
             if getattr(progression_intent, "new_local_place", None):
                 yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
@@ -1908,7 +1895,7 @@ class GameTurnManager:
         yield f"event: state\ndata: {json.dumps(pre_narration_state)}\n\n"
 
         # Pass 2: Narration
-        yield f"event: status\ndata: {json.dumps({'content': 'Generating narrative...'})}\n\n"
+        yield f"event: status\ndata: {json.dumps({'content': 'Preparing narrative...'})}\n\n"
         try:
             llm = GameMasterLLM.for_role(self.user, "complex")
             complex_model = llm.model
@@ -1971,6 +1958,7 @@ class GameTurnManager:
         from backend.engine.chpm import rendering as chpm_rendering
         from backend.engine.chpm import runtime as chpm_runtime
 
+        yield f"event: status\ndata: {json.dumps({'content': 'Preparing NPC responses...'})}\n\n"
         chpm_context = await chpm_runtime.prepare(self, user_msg, all_entities)
         chpm_buffered = chpm_runtime.buffered(self)
 
@@ -1997,6 +1985,7 @@ class GameTurnManager:
         stream_usage: Any = None
         narration_warning: str | None = None
         narration_end_reason: str | None = None
+        yield f"event: status\ndata: {json.dumps({'content': 'Generating narrative...'})}\n\n"
         try:
             await release_for_model(self)
             stream = await llm.stream_simple_task(

@@ -2,6 +2,7 @@
 # pylint: disable=unused-argument,unused-variable,using-constant-test
 # ruff: noqa: ARG001,F841,PLR0133
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -1417,6 +1418,19 @@ async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(
         assert mock_llm_instance.aexecute_complex_task.await_count == 1
         assert mock_llm_instance.stream_simple_task.await_count == 1
         assert any("quiet wind" in c for c in chunks)
+        statuses = [
+            json.loads(c.split("data: ", 1)[1])["content"]
+            for c in chunks
+            if c.startswith("event: status\n")
+        ]
+        phases = [
+            "Checking progression...",
+            "Applying progression...",
+            "Preparing narrative...",
+            "Preparing NPC responses...",
+            "Generating narrative...",
+        ]
+        assert [status for status in statuses if status in phases] == phases
         assert (state.quests or [])[0].get("status") == "open"
         assert user.earned_awards == []
 
