@@ -4,6 +4,7 @@ import DebugNpcClothing from './DebugNpcClothing.vue'
 import DebugSceneJson from './DebugSceneJson.vue'
 import DebugVnSettings from './DebugVnSettings.vue'
 import DebugItemRepair from './DebugItemRepair.vue'
+import SessionStateChecks from './immersive/SessionStateChecks.vue'
 /**
  * DebugModal — Unified In-Game Debug Panel
  *
@@ -1225,6 +1226,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <!-- TAB 4: DIAGNOSTICS & RAW JSON INSPECTOR -->
             <!-- ========================================================= -->
             <section v-else-if="activeTab === 'diagnostics'" class="flex-1 flex flex-col min-h-0 p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6">
+              <SessionStateChecks v-if="sessionDebug?.session?.id || sheet?.session_id" :session-id="sessionDebug?.session?.id || sheet?.session_id" />
               <!-- Quick Action Triggers Grid -->
               <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
                 <h4 class="text-xs font-black uppercase tracking-[0.2em] text-cyan-400 mb-3 flex items-center gap-2">

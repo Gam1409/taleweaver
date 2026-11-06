@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
+import { ClipboardCheck } from 'lucide-vue-next'
 const props = defineProps<{ sessionId: string }>()
 interface Checks {
   mode: string
@@ -60,7 +61,8 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <button type="button" class="text-[10px] text-cyan-300 hover:underline" @click="open">
+  <button type="button" class="inline-flex w-fit items-center gap-2 rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/10 focus-visible:ring-2 focus-visible:ring-cyan-400" @click="open">
+    <ClipboardCheck class="h-4 w-4" aria-hidden="true" />
     Item and travel checks
   </button>
   <Teleport to="body">

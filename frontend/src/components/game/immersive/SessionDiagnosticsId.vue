@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import SessionStateChecks from './SessionStateChecks.vue'
 defineProps<{
   enabled: boolean
   sessionId?: string
@@ -15,5 +14,4 @@ defineProps<{
   >
     {{ sessionId }}
   </p>
-  <SessionStateChecks v-if="sessionId" :session-id="sessionId" />
 </template>
