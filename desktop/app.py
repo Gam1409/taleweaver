@@ -3,7 +3,9 @@
 import logging
 import threading
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -11,6 +13,39 @@ from desktop.controller import Controller
 from scripts.desktop_processes import open_log
 
 COLORS = {"running": "#25c76f", "stopped": "#ef4545"}
+
+
+def _notification_cleanup_unavailable(error: Exception) -> bool:
+    """Identify pystray 0.19.5's unused-notification cleanup on minimal desktops."""
+    traceback = error.__traceback__
+    while traceback is not None:
+        frame = traceback.tb_frame
+        if (
+            frame.f_globals.get("__name__") == "pystray._util.notify_dbus"
+            and frame.f_code.co_name == "hide"
+        ):
+            from gi.repository import Gio, GLib
+
+            return isinstance(error, GLib.Error) and error.matches(
+                Gio.dbus_error_quark(), Gio.DBusError.SERVICE_UNKNOWN
+            )
+        traceback = traceback.tb_next
+    return False
+
+
+def _run_tray(
+    tray: Any, setup: Callable, controller: Controller, was_ready: Callable[[], bool]
+) -> None:
+    try:
+        tray.run(setup)
+    except Exception as error:
+        if not (
+            was_ready()
+            and controller.state == "stopped"
+            and _notification_cleanup_unavailable(error)
+        ):
+            raise
+        logging.warning("Desktop notification service is unavailable during tray cleanup.")
 
 
 def icon_image(logo: Path, state: str) -> Image.Image:
@@ -54,6 +89,7 @@ def run(
         tray.update_menu()
         if smoke_timeout is None:
             browser.update(state)
+            became_ready = browser.opened
         elif state in {"running", "error"}:
             became_ready = state == "running"
             controller.request("exit")
@@ -96,7 +132,7 @@ def run(
         timer.start()
     shutdown_failed = False
     try:
-        tray.run(setup)
+        _run_tray(tray, setup, controller, lambda: became_ready)
     finally:
         if timer is not None:
             timer.cancel()

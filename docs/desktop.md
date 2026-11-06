@@ -77,8 +77,8 @@ poetry run python scripts/smoke_desktop.py dist/TaleWeaver/TaleWeaver
 ```
 
 Use `.exe` on Windows or `dist/TaleWeaver.app/Contents/MacOS/TaleWeaver` on macOS.
-The current macOS package targets Intel x64; Apple Silicon runs it through Rosetta 2.
-CI uses the explicit Intel runner because ARM64 hosted runners are capacity constrained.
+The macOS package targets Apple Silicon (ARM64), built on the pinned macOS 15 runner.
+LanceDB 0.40 publishes no macOS Intel wheel, so an x64/Rosetta package is not offered.
 The default logo is the transparent `docs/branding/visualnovel.png`. The original
 black-background JPEG is retained beside it.
 Linux builds need GTK, GObject introspection and Ayatana AppIndicator development
