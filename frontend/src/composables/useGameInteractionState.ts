@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 import { gameCommandService } from '@/services/gameCommandService'
 import { isConsumableEntity, normalizeHoverEntity } from '@/services/hoverEntityService'
 
@@ -115,26 +116,12 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
       }
     }
 
-    const fromEntities = (npcEntities?.value || []).find((entity: any) => {
-      const entityName = String(entity?.name || '').trim().toLowerCase()
-      const entityId = String(entity?.id || '').trim().toLowerCase()
-      return entityName === normalizedName || entityId === normalizedName
-    })
-
-    let metadata = npcMetadata.value[name]
-    if (!metadata) {
-      metadata = Object.entries(npcMetadata.value || {}).find(([key, value]) => {
-        const keyMatch = String(key || '').trim().toLowerCase() === normalizedName
-        const valueNameMatch = String((value as any)?.name || '').trim().toLowerCase() === normalizedName
-        return keyMatch || valueNameMatch
-      })?.[1]
-    }
-
+    const resolved = resolveNpc(name, npcEntities?.value || [], npcMetadata.value)
+    const fromEntities = resolved && (npcEntities?.value || []).find(entity => entity.id === resolved.id)
+    const metadata = resolved && resolveNpcMetadata(resolved.id, npcMetadata.value)
     const mergedNpc = fromEntities
       ? { ...(metadata || {}), ...fromEntities, entity_type: 'NPC' }
-      : metadata
-        ? { ...metadata, entity_type: 'NPC' }
-        : { name, entity_type: 'NPC' }
+      : metadata ? { ...metadata, entity_type: 'NPC' } : resolved || { name, entity_type: 'NPC' }
 
     tooltipImageFailed.value = false
     hoveredEntity.value = normalizeHoverEntity(mergedNpc)

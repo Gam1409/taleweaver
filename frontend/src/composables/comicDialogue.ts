@@ -64,13 +64,14 @@ export function knownSpeakerNames(
   )
 }
 
-function isDialogueSpeaker(name: string, quoted: boolean, known: ReadonlySet<string>): boolean {
+function isDialogueSpeaker(name: string, quoted: boolean, known: ReadonlySet<string>, resolved = false): boolean {
   if (known.has(name.toLowerCase())) return true
+  if (NON_SPEAKER_LABELS.has(name.toLowerCase())) return false
+  if (resolved) return true
   // New characters may speak before their metadata arrives. Require quoted speech
   // and a name-like label; punctuation in a known character's exact name is allowed.
   return (
     quoted &&
-    !NON_SPEAKER_LABELS.has(name.toLowerCase()) &&
     /^[\p{L}\p{M}\p{N}_ .’'()-]{1,60}$/u.test(name)
   )
 }
@@ -174,8 +175,8 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
     speakerName = toMatch[1].trim()
     targetName = toMatch[2].trim()
   }
-  if (!isDialogueSpeaker(speakerName, hasQuotes, knownNames)) return null
   const resolvedNpc = resolveSpeaker(speakerName)
+  if (!isDialogueSpeaker(speakerName, hasQuotes, knownNames, Boolean(resolvedNpc))) return null
   const isPlayer =
     speakerName.toLowerCase() === 'you' ||
     speakerName.toLowerCase() === (playerName || '').toLowerCase()

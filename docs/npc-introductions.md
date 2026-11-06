@@ -12,6 +12,13 @@ Open **Characters** in the game toolbar to see recorded characters. Select one t
 their portrait and learned history. New NPCs receive a server-generated UUID; their
 names can use any language. Existing authored NPCs remain usable as before.
 
+Dialogue and hover cards resolve an unambiguous shortened name to the same session NPC:
+`Рин` can refer to `Доктор Рин Аояма`, retaining the existing ID, portrait and card.
+Explicit IDs, exact names and recorded aliases take priority. Short forms match complete
+consecutive name parts, not arbitrary letter prefixes; ambiguous forms are not assigned
+to a guessed character. Scene and metadata copies with the same ID count as one person.
+This is display resolution only: it creates no NPC, merges no records and needs no LLM call.
+
 The card shows the portrait, current description and a short **General overview**
 from learned background facts. Two history tabs separate **General history**
 (background, appearance and other known facts) from **History with your character**
