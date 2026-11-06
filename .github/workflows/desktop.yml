@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,7 +47,7 @@ jobs:
           - os: windows-latest
             name: windows
             executable: dist/TaleWeaver/TaleWeaver.exe
-          - os: macos-latest
+          - os: macos-15-intel
             name: macos
             executable: dist/TaleWeaver.app/Contents/MacOS/TaleWeaver
     steps:
