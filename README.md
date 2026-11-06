@@ -262,6 +262,13 @@ poetry run taleweaver
 
 Open `http://127.0.0.1:8000` in your browser. Complete the initial setup, add your API keys under **Administration**, and jump into an adventure!
 
+For development on Linux/macOS, `./run.sh --no-update` starts both the backend
+and Vite. It detects `.venv`, `venv`, an activated environment, or Poetry's
+external environment. Omit `--no-update` to try a fast-forward pull first.
+Ctrl+C stops both services; if either service exits, its companion is stopped
+and the launcher returns the failed service's exit code. The command above
+continues to serve the prebuilt frontend without Vite.
+
 ---
 
 ### Optional Living World / Concordia setup
