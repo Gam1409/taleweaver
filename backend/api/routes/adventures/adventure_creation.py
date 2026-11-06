@@ -20,6 +20,7 @@ from backend.api.routes.adventures.session_materializer import (
 )
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
+from backend.engine.chpm.template_settings import initial_states as personality_initial_states
 from backend.engine.clothing.settings import with_clothing_settings
 from backend.engine.generation_bounds import GenerationBounds
 from backend.engine.generation_control import (
@@ -142,6 +143,11 @@ def build_template(
         owner_id=owner_id,
         title=payload.title,
         living_world_settings=stored_defaults(payload.living_world_settings),
+        npc_personality_settings=(
+            payload.npc_personality_settings.model_dump(mode="json")
+            if payload.npc_personality_settings
+            else None
+        ),
         original_prompt=payload.original_prompt,
         strict_rules=policy.mechanics,
         rule_enforcement_mode=payload.rule_enforcement_mode or "rpg",
@@ -233,7 +239,7 @@ def _build_session_state(
         current_scene_id="START",
         in_game_time=0,
         quests=deepcopy(adv.quests or []),
-        entity_states=entity_states,
+        entity_states=personality_initial_states(adv, entity_states),
         start_datetime=AdventureLogic.resolve_start_datetime(
             adv.original_manifest, time_config=adv.time_config
         ),

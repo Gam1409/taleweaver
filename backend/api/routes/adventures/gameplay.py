@@ -69,6 +69,7 @@ from backend.core.prompts import (
 )
 from backend.core.system_diagnostics import service as diagnostic_service
 from backend.engine.adventure_updates import is_legacy_session
+from backend.engine.chpm.runtime import public_status as npc_behavior_status
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.trigger_service import TriggerService
 from backend.models.adventure_template import AdventureTemplate
@@ -196,6 +197,7 @@ async def get_chat_history(
     session_status = state.session.status if state.session else None
 
     return ChatResponse(
+        npc_behavior=npc_behavior_status(state),
         system_debug_enabled=diagnostic_service.enabled,
         language=language,
         messages=history,

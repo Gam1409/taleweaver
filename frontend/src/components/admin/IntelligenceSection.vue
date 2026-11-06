@@ -4,6 +4,8 @@ import OllamaRoleSettings from './OllamaRoleSettings.vue'
 import { normalizeOllamaRoleNumbers, normalizeOllamaNumber, setGlobalOllamaUrl } from '@/services/ollamaRoleSettings'
 import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import CustomOpenAIEndpoint from './CustomOpenAIEndpoint.vue'
+import CustomOpenAIRoleSettings from './CustomOpenAIRoleSettings.vue'
+import { customOpenAIUrl, useSharedApiUrlForAll } from '@/services/llmRoleEndpoints'
 
 const props = defineProps<{
   llmForm: any
@@ -12,6 +14,8 @@ const props = defineProps<{
   isSubmitting: boolean
   isLoadingOllamaModels: boolean
   ollamaModelsByUrl?: Record<string, string[]>
+  customOpenAIModelsByUrl?: Record<string, string[]>
+  customOpenAILoadingByUrl?: Record<string, boolean>
   isLoadingMinimaxModels: boolean
   isLoadingLlmModels?: Record<string, boolean>
   testResults: Record<string, { status: string; message: string }>
@@ -19,7 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'save', payload: any): void
-  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string; ollamaOptions?: OllamaTestOptions }): void
+  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string; ollamaOptions?: OllamaTestOptions; apiBase?: string }): void
   (e: 'refreshOllamaModels', ollamaUrl?: string, role?: OllamaRole): void
   (e: 'refreshMinimaxModels', minimaxUrl?: string): void
   (e: 'refreshLlmModels', provider: string, apiBase?: string): void
@@ -85,7 +89,11 @@ const effectiveOllamaUrl = (role: OllamaRole): string => (
   localForm.value[`${role}_ollama_url`]?.trim() || localForm.value.ollama_url || 'http://localhost:11434'
 ).trim().replace(/\/+$/, '')
 
+const effectiveCustomOpenAIUrl = (role?: OllamaRole) => customOpenAIUrl(localForm.value, role)
+const customApiLoading = (role?: OllamaRole) => !!props.customOpenAILoadingByUrl?.[effectiveCustomOpenAIUrl(role)]
+
 const roleModels = (role: OllamaRole, provider: string): string[] => {
+  if (provider === 'custom_openai') return props.customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl(role)] || []
   if (provider !== 'ollama') return props.availableConstants?.predefined_llm_models?.[provider] || []
   const url = effectiveOllamaUrl(role)
   const cached = props.ollamaModelsByUrl?.[url]
@@ -238,17 +246,18 @@ const isLlmDiscoveryProvider = (provider: string | undefined | null) => {
   return !!provider && LLM_MODEL_DISCOVERY_PROVIDERS.includes(provider)
 }
 
-const isLlmProviderLoading = (provider: string | undefined | null) => {
+const isLlmProviderLoading = (provider: string | undefined | null, role?: OllamaRole) => {
+  if (provider === 'custom_openai') return customApiLoading(role)
   if (!provider) return false
   if (provider === 'minimax') return props.isLoadingMinimaxModels
   return !!props.isLoadingLlmModels?.[provider]
 }
 
-const refreshLlmProviderModels = (provider: string) => {
+const refreshLlmProviderModels = (provider: string, role?: OllamaRole) => {
   if (provider === 'minimax') {
     emit('refreshMinimaxModels', localForm.value.minimax_url)
   } else {
-    emit('refreshLlmModels', provider, provider === 'custom_openai' ? localForm.value.custom_openai_url : undefined)
+    emit('refreshLlmModels', provider, provider === 'custom_openai' ? effectiveCustomOpenAIUrl(role) : undefined)
   }
 }
 
@@ -284,6 +293,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
     model,
     provider,
     openrouterProvider,
+    apiBase: provider === 'custom_openai' ? effectiveCustomOpenAIUrl(passKey) : undefined,
     ollamaOptions: {
       role: passKey,
       apiMode: localForm.value.ollama_api_mode || 'generate',
@@ -483,12 +493,12 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
             <button
               v-if="isLlmDiscoveryProvider(localForm.small_model_provider)"
               type="button"
-              @click="refreshLlmProviderModels(localForm.small_model_provider)"
-              :disabled="isLlmProviderLoading(localForm.small_model_provider)"
+              @click="refreshLlmProviderModels(localForm.small_model_provider, 'small')"
+              :disabled="isLlmProviderLoading(localForm.small_model_provider, 'small')"
               class="text-[11px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
               title="Refresh available models from provider API"
             >
-              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.small_model_provider)}"></i>
+              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.small_model_provider, 'small')}"></i>
               <span>Refresh list</span>
             </button>
           </div>
@@ -522,6 +532,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Test Result Alert -->
+      <CustomOpenAIRoleSettings
+        v-if="localForm.small_model_provider === 'custom_openai'"
+        role="small"
+        v-model:url="localForm.small_custom_openai_url"
+        :global-url="localForm.custom_openai_url"
+        :loading="customApiLoading('small')"
+        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('small')]"
+        @refresh="refreshLlmProviderModels('custom_openai', 'small')"
+      />
+
       <OllamaRoleSettings
         v-if="localForm.small_model_provider === 'ollama'"
         role="small"
@@ -679,11 +699,11 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
             <button
               v-if="isLlmDiscoveryProvider(localForm.complex_model_provider)"
               type="button"
-              @click="refreshLlmProviderModels(localForm.complex_model_provider)"
-              :disabled="isLlmProviderLoading(localForm.complex_model_provider)"
+              @click="refreshLlmProviderModels(localForm.complex_model_provider, 'complex')"
+              :disabled="isLlmProviderLoading(localForm.complex_model_provider, 'complex')"
               class="text-[11px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
             >
-              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.complex_model_provider)}"></i>
+              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.complex_model_provider, 'complex')}"></i>
               <span>Refresh list</span>
             </button>
           </div>
@@ -717,6 +737,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Test Result Alert -->
+      <CustomOpenAIRoleSettings
+        v-if="localForm.complex_model_provider === 'custom_openai'"
+        role="complex"
+        v-model:url="localForm.complex_custom_openai_url"
+        :global-url="localForm.custom_openai_url"
+        :loading="customApiLoading('complex')"
+        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('complex')]"
+        @refresh="refreshLlmProviderModels('custom_openai', 'complex')"
+      />
+
       <OllamaRoleSettings
         v-if="localForm.complex_model_provider === 'ollama'"
         role="complex"
@@ -868,11 +898,11 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
             <button
               v-if="isLlmDiscoveryProvider(localForm.generator_model_provider)"
               type="button"
-              @click="refreshLlmProviderModels(localForm.generator_model_provider)"
-              :disabled="isLlmProviderLoading(localForm.generator_model_provider)"
+              @click="refreshLlmProviderModels(localForm.generator_model_provider, 'generator')"
+              :disabled="isLlmProviderLoading(localForm.generator_model_provider, 'generator')"
               class="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
             >
-              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.generator_model_provider)}"></i>
+              <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.generator_model_provider, 'generator')}"></i>
               <span>Refresh list</span>
             </button>
           </div>
@@ -893,6 +923,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </select>
         </div>
       </div>
+
+      <CustomOpenAIRoleSettings
+        v-if="localForm.generator_model_provider === 'custom_openai'"
+        role="generator"
+        v-model:url="localForm.generator_custom_openai_url"
+        :global-url="localForm.custom_openai_url"
+        :loading="customApiLoading('generator')"
+        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('generator')]"
+        @refresh="refreshLlmProviderModels('custom_openai', 'generator')"
+      />
 
       <OllamaRoleSettings
         v-if="localForm.generator_model_provider === 'ollama'"
@@ -1025,12 +1065,12 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
               <button
                 v-if="isLlmDiscoveryProvider(localForm.play_agent_model_provider)"
                 type="button"
-                @click="refreshLlmProviderModels(localForm.play_agent_model_provider)"
-                :disabled="isLlmProviderLoading(localForm.play_agent_model_provider)"
+                @click="refreshLlmProviderModels(localForm.play_agent_model_provider, 'play_agent')"
+                :disabled="isLlmProviderLoading(localForm.play_agent_model_provider, 'play_agent')"
                 class="text-[11px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
                 title="Refresh available models from provider API"
               >
-                <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.play_agent_model_provider)}"></i>
+                <i class="ra ra-recycle" :class="{'animate-spin': isLlmProviderLoading(localForm.play_agent_model_provider, 'play_agent')}"></i>
                 <span>Refresh list</span>
               </button>
             </div>
@@ -1048,7 +1088,17 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         </div>
 
         <!-- Custom Model Input if custom -->
-        <OllamaRoleSettings
+        <CustomOpenAIRoleSettings
+        v-if="localForm.play_agent_model_provider === 'custom_openai'"
+        role="play_agent"
+        v-model:url="localForm.play_agent_custom_openai_url"
+        :global-url="localForm.custom_openai_url"
+        :loading="customApiLoading('play_agent')"
+        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('play_agent')]"
+        @refresh="refreshLlmProviderModels('custom_openai', 'play_agent')"
+      />
+
+      <OllamaRoleSettings
         v-if="localForm.play_agent_model_provider === 'ollama'"
         role="play_agent"
         v-model:url="localForm.play_agent_ollama_url"
@@ -1259,6 +1309,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </div>
         </div>
 
+      <CustomOpenAIRoleSettings
+        v-if="localForm.compression_model_provider === 'custom_openai'"
+        role="compression"
+        v-model:url="localForm.compression_custom_openai_url"
+        :global-url="localForm.custom_openai_url"
+        :loading="customApiLoading('compression')"
+        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('compression')]"
+        @refresh="refreshLlmProviderModels('custom_openai', 'compression')"
+      />
+
       <OllamaRoleSettings
         v-if="localForm.compression_model_provider === 'ollama'"
         role="compression"
@@ -1299,16 +1359,20 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-3">
         <CustomOpenAIEndpoint
           v-model:url="localForm.custom_openai_url"
           v-model:timeout="localForm.custom_openai_timeout"
           v-model:response-format="localForm.custom_openai_response_format"
           :loading="isLlmProviderLoading('custom_openai')"
-          :model-count="availableConstants?.predefined_llm_models?.custom_openai?.length || 0"
+          :model-count="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl()]?.length || 0"
           :has-key="!!configuredKeys?.custom_openai"
           @detect="refreshLlmProviderModels('custom_openai')"
           @vault="emit('switchSection', 'keys')"
         />
+        <button type="button" class="rounded-lg border border-purple-500/30 px-3 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/10" @click="useSharedApiUrlForAll(localForm)">Use shared API URL for all roles</button>
+        <p class="text-xs text-slate-400">This clears role URL overrides. Each role keeps its selected provider and model; blank API URLs follow the shared address above.</p>
+        </div>
         <!-- Ollama Endpoint -->
         <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
           <div class="flex items-center justify-between">

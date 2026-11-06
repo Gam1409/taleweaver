@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from backend.core.config import settings
 from backend.core.llm_diagnostics import bridge_event
+from backend.core.llm_usage_capture import record_usage
 
 # Logs may be sensitive (system prompts, full LLM I/O). Prefer a dedicated
 # directory outside DATA_DIR (set LLM_LOG_DIR). When unset we fall back to
@@ -114,6 +115,10 @@ def log_llm_interaction(
 
     record("llm.response", system=system_prompt, user=user_prompt, response=response_content)
     usage = raw_response.get("usage") if isinstance(raw_response, dict) else None
+    record_usage(usage)
+    from backend.core.llm_completion_capture import record_completion
+
+    record_completion(raw_response)
     counts = (
         {
             key: usage.get(key)

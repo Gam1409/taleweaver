@@ -16,6 +16,8 @@ import { useEntityTransfer } from '@/composables/useEntityTransfer'
 import EditorHeader from '@/components/editor/EditorHeader.vue'
 
 import WorldTab from '@/components/editor/WorldTab.vue'
+import LivingWorldTab from '@/components/editor/LivingWorldTab.vue'
+import type { ChpmSettings } from '@/composables/useChpmSettings'
 import SequencesSection from '@/components/editor/SequencesSection.vue'
 import ProtagonistTab from '@/components/editor/ProtagonistTab.vue'
 import ItemsTab from '@/components/editor/ItemsTab.vue'
@@ -415,9 +417,9 @@ const isSaving = ref(false)
 const errorMsg = ref('')
 const promptError = ref('')
 const showDebug = ref(false)
-const activeTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('world')
-const sceneEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('scenes')
-const exitEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('map')
+const activeTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('world')
+const sceneEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('scenes')
+const exitEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('map')
 
 const selectedVisual = ref<{ kind: VisualKind; id: string; label: string; description: string; hint: string } | null>(null)
 const selectedUploadTarget = ref<{ kind: VisualKind; id: string; label: string } | null>(null)
@@ -485,6 +487,7 @@ const availableVoices = ref<Array<{ name: string; gender?: string; description?:
 
 const editorTabs = [
   { key: 'world', label: 'World' },
+  { key: 'living-world', label: 'Living World' },
   { key: 'sequences', label: 'Sequences' },
   { key: 'protagonist', label: 'Protagonist' },
   { key: 'map', label: 'Map' },
@@ -640,6 +643,7 @@ const form = ref({
   original_prompt: '',
   rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
   living_world_settings: null as LivingWorldPreferences | null,
+  npc_personality_settings: null as ChpmSettings | null,
   detailed_clothing: false,
   nsfw_enabled: false,
   nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
@@ -844,6 +848,7 @@ async function fetchAdventure() {
     form.value.license_url = data.license_url || ''
     form.value.original_prompt = data.original_prompt || ''
     form.value.living_world_settings = data.living_world_settings ? { ...data.living_world_settings } : null
+    form.value.npc_personality_settings = data.npc_personality_settings ? { ...data.npc_personality_settings, actor_ids: [...data.npc_personality_settings.actor_ids] } : null
     form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
     form.value.detailed_clothing = data.detailed_clothing === true
     form.value.nsfw_enabled = data.nsfw_enabled === true
@@ -2538,13 +2543,24 @@ watch(
               @update:calendar-pacing-unit="form.time_config = { ...(form.time_config || {}), calendar_pacing_unit: $event }"
               @update:calendar-max-value="form.time_config = { ...(form.time_config || {}), calendar_max_value: $event }"
               @update:calendar-max-unit="form.time_config = { ...(form.time_config || {}), calendar_max_unit: $event }"
-              @update:living-world="form.living_world_settings = $event"
               @update:mode="form.rule_enforcement_mode = $event as any"
               @update:detailed-clothing="form.detailed_clothing = $event"
               @update:nsfw-enabled="form.nsfw_enabled = $event"
               @update:nsfw-level="form.nsfw_level = $event as any"
               @save-changes="saveChanges"
               @notify="addNotification"
+            />
+
+            <LivingWorldTab
+              v-else-if="activeTab === 'living-world'"
+              :living-world="form.living_world_settings"
+              :personality="form.npc_personality_settings"
+              :characters="editorNpcs.map((actor: any) => ({ id: actor.id, name: actor.name || actor.id }))"
+              :is-vn="form.rule_enforcement_mode === 'vn'"
+              :busy="isSaving"
+              @update:living-world="form.living_world_settings = $event"
+              @update:personality="form.npc_personality_settings = $event"
+              @save="saveChanges"
             />
 
             <div v-else-if="activeTab === 'sequences'" class="space-y-6">

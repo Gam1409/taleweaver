@@ -488,7 +488,10 @@ class WorldObjectSchema(WorldBaseSchema):
     )
     id: str = Field(..., description="Unique slug for the object, e.g., GOLDEN_KEY")
     name: str = Field(..., description="Human-readable name")
-    description: str = Field(..., description="Physical characteristics and details.")
+    description: str = Field(
+        ...,
+        description="Detailed literary description of the object itself, in complete sentences with correct spelling and punctuation, at most 1000 characters. Describe intrinsic appearance, material, shape and construction; exclude acquisition, current owner, use and temporary status.",
+    )
     start_scene_id: str = Field(..., description="The ID of the scene where the object starts.")
     spatial_position: str = Field(
         ...,

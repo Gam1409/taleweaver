@@ -1964,6 +1964,12 @@ class GameTurnManager:
             reminders.append(direction_reminder(self, game_event))
             reminders.append(PROGRESS_REMINDER)
 
+        from backend.engine.chpm import rendering as chpm_rendering
+        from backend.engine.chpm import runtime as chpm_runtime
+
+        chpm_context = await chpm_runtime.prepare(self, user_msg, all_entities)
+        chpm_buffered = chpm_runtime.buffered(self)
+
         turn_context = build_narration_turn_block(
             ctx.narration_state_block,
             draft_narration,
@@ -1972,6 +1978,9 @@ class GameTurnManager:
             exits_task=exits_task,
             reminders=tuple(reminders),
         )
+        ordinary_context = turn_context
+        if chpm_context:
+            turn_context += "\n\n" + chpm_context
 
         pass2_start = time.perf_counter()
         narration_messages, memory_turns = await self._build_narration_messages(
@@ -2005,7 +2014,8 @@ class GameTurnManager:
                 delta = choices[0].delta.content or ""
                 if delta:
                     response_text += delta
-                    yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
+                    if not chpm_buffered:
+                        yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
 
         except Exception as e:
             if (response_text or "").strip():
@@ -2025,6 +2035,18 @@ class GameTurnManager:
                     yield f"event: error\ndata: {json.dumps({'detail': user_safe_error})}\n\n"
                     return
                 raise
+
+        if chpm_buffered:
+            yield f"event: status\ndata: {json.dumps({'content': 'Reviewing NPC reply...'})}\n\n"
+        response_text = await chpm_rendering.validate(
+            self,
+            response_text,
+            completed=not narration_warning,
+            resolution=draft_narration + "\n" + outcome_json,
+            system_prompt=narration_prompt,
+            narration_messages=narration_messages,
+            ordinary_context=ordinary_context,
+        )
 
         token_usage = extract_usage_tokens(stream_usage) or {
             # Rough estimate when the provider reports no usage (avoids re-tokenizing the prompt).
@@ -2361,6 +2383,7 @@ class GameTurnManager:
             )
             await capture_completed_moment(self, assistant_chat)
             remember_completed(self, assistant_chat, completed=narration_completed)
+            chpm_runtime.finish(self, assistant_chat, completed=narration_completed)
         from backend.engine.memory_rag.worker import mark_dirty
 
         await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)
@@ -2393,6 +2416,7 @@ class GameTurnManager:
 
         final_data = jsonable_encoder(
             {
+                "npc_behavior": chpm_runtime.public_status(self.state),
                 "map_data": map_payload,
                 "nodes": await AdventureLogic.get_all_scene_metadata(
                     self.db, self.state.template_id, session_id=self.state.session_id
@@ -2428,6 +2452,8 @@ class GameTurnManager:
                 "status": "success",
             }
         )
+        if chpm_buffered:
+            yield f"event: chunk\ndata: {json.dumps({'content': response_text})}\n\n"
         yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
         if pending_generator_proposal:
             yield f"event: adventure_generator_proposal\ndata: {json.dumps(pending_generator_proposal)}\n\n"

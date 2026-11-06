@@ -11,7 +11,27 @@ In **Admin → Intelligence → Local Endpoints & Memory → Local & Custom API 
 3. For loopback/LAN endpoints, explicitly set `ALLOW_PRIVATE_NETWORK_MODELS=true` in the server environment or `.env`, then restart TaleWeaver. Custom endpoints require this explicit opt-in even though legacy local providers may allow private networks by default. Metadata/link-local destinations and redirects are rejected even with this setting enabled. Public deployments should keep private-network access disabled.
 4. Leave the API key unset for an unauthenticated server. For a protected server, use **Add optional API key in Provider Vault**, save the key under **OpenAI-Compatible API**, then return to Intelligence. Keys use the existing encrypted vault and do not belong in the Base URL.
 5. Choose **Detect Models**, or enter the exact **Custom Model ID** in each pass. Detection uses `<base>/models`; servers without that endpoint still support manual selection. Model IDs retain vendor slashes, including IDs starting with `openai/`.
-6. Select **OpenAI-Compatible API** for mechanics, narrative, worldbuilder, play agent, and/or compression. Save the settings before clicking **Test Model**. Testing sends a small real structured completion to the saved endpoint, using the selected output mode, and validates a JSON object containing a message. This checks the JSON path used by mechanics rather than only text connectivity.
+6. Select **OpenAI-Compatible API** for mechanics, narrative, worldbuilder, play agent, and/or compression. Discovery and **Test Model** use the current URL and model fields, including unsaved role overrides. Testing sends a small real structured completion and validates a JSON object containing a message. Save changes to the API key, timeout or structured output mode before testing those options. Save routing before playing with the new configuration.
+
+## Shared address and individual roles
+
+The shared **Base URL** is the default for all five roles. Each role using
+**OpenAI-Compatible API** has a collapsible **API URL for this role** field:
+
+- Leave it blank to follow the shared address.
+- Enter a different `/v1` address to use another server for that role. For example,
+  use a technical model for mechanics and a prose model for the narrator.
+- Changing the shared address preserves explicit role overrides. **Use shared API
+  URL for all roles** clears those overrides while preserving each selected
+  provider and model. Roles using another provider retain that provider.
+
+Discovery results and loading indicators belong to each endpoint, so one role
+cannot accidentally show another server's model list. A manual model ID works
+when discovery is unavailable. The connection test uses that same effective role
+URL; an unsaved test does not persist it. Normal generation uses saved routing.
+All these servers share the existing `custom_openai` vault key, timeout and output
+mode; per-server keys and separate output modes are not part of this change.
+Other provider configurations, including official OpenAI, remain separate.
 
 In Docker, `127.0.0.1` is the container itself. Use `host.docker.internal` where supported, or a deliberately configured host gateway/container network address. Ensure the inference server listens on an interface reachable from TaleWeaver. Restrict its exposure using firewall rules and authentication.
 

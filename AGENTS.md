@@ -30,6 +30,27 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
    - Never suppress complexity (`C901`, `PLR0912`, `PLR0915`) or security (`S`) warnings with `# noqa`; refactor the code instead.
    - Full check / fix command: `poetry run python scripts/lint.py --fix`.
 
+4. **Regression Prevention (Owner Requirement)**:
+   - Preserve working behavior when extending the project. For each reproducible bug,
+     add a regression test that fails before the fix, then verify the affected feature
+     and its integration boundaries before publishing.
+   - Check combinations of features and exact limits, not only each feature in isolation.
+     Producer, consumer, and persistence limits must agree. Every successfully saved
+     state must load again; reject invalid updates before replacing the previous state.
+   - Do not hide regressions by dropping assertions, silently discarding canonical
+     history, or increasing limits without addressing the cause. Add no extra paid
+     model requests merely to mask a host bug.
+   - Distinguish verified fixes from known remaining issues. Passing mock/schema tests
+     does not establish psychological quality or live-model reliability.
+
+5. **Release History and Schema Discipline (Owner Requirement)**:
+   - Bump persisted schema versions only for incompatible data-shape changes, not
+     additive fields with safe defaults. Verify legacy loading explicitly.
+   - Collect prompt-only edits into one final `prompt tuning` commit per work wave.
+   - Before merging the CHPM pilot, squash `d89de9e0` and `bc33c1e6` into one logical
+     explicit-choice change. Prepare that integration history before the merge;
+     do not rewrite the published working branch during unrelated implementation.
+
 ---
 
 ## 1. Workspace Rules (`.agents/rules/`)

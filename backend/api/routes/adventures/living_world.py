@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.chpm.state import load as load_chpm
 from backend.engine.living_world import (
     concordia_adapter,
     cycles,
@@ -93,6 +94,10 @@ async def configure(
     state = await owned(db, game_id, user)
     simulation = read_simulation(state)
     check_revision(simulation, payload.expected_revision)
+    if payload.settings.deliberation_enabled and load_chpm(state).settings.mode == "live":
+        raise HTTPException(
+            409, "Disable live CHPM before enabling Living World private decisions."
+        )
     game = await game_row(db, game_id)
     reconcile(simulation, int(state.in_game_time or 0), game.living_world_presence)
     if simulation.target > simulation.cursor and payload.settings.mode != simulation.settings.mode:

@@ -19,6 +19,7 @@ from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.engine.adventure_updates import is_legacy_session
+from backend.engine.chpm.lifecycle import fork as fork_chpm
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.memory_rag.lifecycle import (
     copy_session_summaries,
@@ -666,6 +667,7 @@ async def start_session_for_template(
         adventure, template_entities, avatar, first_scene_id, initial_entity_states
     )
 
+    from backend.engine.chpm.template_settings import initial_states as personality_initial_states
     from backend.engine.living_world.template_settings import initial_state
 
     new_state = SessionState(
@@ -679,7 +681,7 @@ async def start_session_for_template(
         max_memory_turns=initial_turns or 10,
         enable_history_compression=initial_compression,
         quests=deepcopy(adventure.quests or []),
-        entity_states=initial_entity_states,
+        entity_states=personality_initial_states(adventure, initial_entity_states),
         time_system=adventure.time_system or "calendar",
         time_config=deepcopy(adventure.time_config) if adventure.time_config else None,
         start_datetime=AdventureLogic.resolve_start_datetime(
@@ -1005,6 +1007,9 @@ async def copy_session(
             lambda url: _copy_data_asset_to_session(
                 copied_session.id, "illustrations", url, asset_copy_cache
             ),
+        )
+        cloned_state.entity_states = fork_chpm(
+            cloned_state.entity_states, message_ids, copied_session.id
         )
 
     from .session_copy_world import clone_saved_world

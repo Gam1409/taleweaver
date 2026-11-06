@@ -2,6 +2,8 @@
 
 import re
 
+from backend.engine.clothing.schema import Garment
+from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.schema import ItemAction
 
 # Whole item names only: description/evidence can mention underwear beneath an ordinary skirt.
@@ -12,23 +14,24 @@ _INNER_NAME = re.compile(
     r"бюстгальтер\w*|нижнее бель[её]|пояс для чулок)\b",
     re.IGNORECASE,
 )
-POLICY_REJECTIONS = (
-    "New inner clothing requires detailed clothing and an established adult owner.",
-    "Wearing inner clothing requires detailed clothing and an established adult age.",
-)
 
 
 def classify_action(action: ItemAction) -> ItemAction:
     proposal = action.new_item
     if proposal is None or proposal.clothing is None or not _INNER_NAME.search(proposal.name):
         return action
-    garment = proposal.clothing.model_copy(update={"underwear": True})
+    garment = classify_garment(proposal.name, proposal.clothing)
     corrected = proposal.model_copy(update={"clothing": garment})
     return action.model_copy(update={"new_item": corrected})
 
 
+def classify_garment(name: str, garment: Garment) -> Garment:
+    """Supplement the explicit flag; ordinary coverage alone never implies underwear."""
+    return garment.model_copy(update={"underwear": True}) if _INNER_NAME.search(name) else garment
+
+
 def partition_rejections(
-    rejected: list[str], *, detailed: bool, age: object
+    rejected: list[ItemFailure], *, detailed: bool, age: object
 ) -> tuple[list[str], list[str]]:
     reasons = []
     if not detailed:
@@ -39,10 +42,11 @@ def partition_rejections(
         reasons.append(f"NPC age is {age}; inner clothing requires an adult owner")
     skipped = []
     errors = []
-    for error in rejected:
-        suffix = next((text for text in POLICY_REJECTIONS if error.endswith(text)), None)
-        if suffix:
-            skipped.append(error[: -len(suffix)] + "; ".join(reasons) + "." if reasons else error)
+    for failure in rejected:
+        if failure.code in {"inner_creation_policy", "inner_wear_policy"}:
+            skipped.append(
+                f"{failure.label}: " + "; ".join(reasons) + "." if reasons else failure.message()
+            )
         else:
-            errors.append(error)
+            errors.append(failure.message())
     return errors, skipped

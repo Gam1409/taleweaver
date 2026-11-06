@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from backend.core.custom_openai_roles import ROLE_DEFAULTS as CUSTOM_OPENAI_ROLE_DEFAULTS
 from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 
@@ -32,6 +33,7 @@ PLAY_AGENT_PERSONALITIES = ("casual", "bureaucrat", "powerplayer", "custom")
 _LEGACY_PERSONALITIES = {"bürokrat": "bureaucrat", "buerokrat": "bureaucrat"}
 
 _LLM_ENDPOINT_DEFAULTS: dict[str, Any] = {
+    **CUSTOM_OPENAI_ROLE_DEFAULTS,
     **OLLAMA_ROLE_DEFAULTS,
     "ollama_api_mode": "generate",
     "custom_openai_url": "",

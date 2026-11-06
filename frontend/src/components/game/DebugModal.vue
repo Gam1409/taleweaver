@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import DebugNpcTools from './DebugNpcTools.vue'
+import DebugNpcClothing from './DebugNpcClothing.vue'
 import DebugSceneJson from './DebugSceneJson.vue'
+import DebugVnSettings from './DebugVnSettings.vue'
+import DebugItemRepair from './DebugItemRepair.vue'
 /**
  * DebugModal — Unified In-Game Debug Panel
  *
@@ -26,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   executeCommand: [cmd: string]
+  refresh: []
 }>()
 
 // --- Active Tab State ---
@@ -481,7 +485,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       >
         <div class="w-full max-w-7xl h-[92vh] flex flex-col bg-slate-900/95 border border-cyan-500/30 rounded-3xl shadow-[0_0_80px_rgba(6,182,212,0.2)] overflow-hidden animate-modal-in">
           <!-- TOP HEADER BAR -->
-          <header class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-800/90 bg-slate-950/80 shrink-0">
+          <header class="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-slate-800/90 bg-slate-950/80 shrink-0">
             <div class="flex items-center gap-3">
               <div class="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-inner shadow-cyan-500/20">
                 <Terminal class="w-5 h-5" />
@@ -503,14 +507,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </div>
             </div>
 
-            <DebugSceneJson :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" />
 
             <!-- TAB SELECTOR IN HEADER -->
-            <div class="hidden md:flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-2xl border border-slate-800">
+            <div role="toolbar" aria-label="Debug tools" class="flex w-full flex-wrap items-center gap-1.5 bg-slate-950/70 p-1 rounded-2xl border border-slate-800 font-sans">
+            <DebugSceneJson :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" />
+            <DebugVnSettings :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" />
+
               <button
                 type="button"
                 @click="activeTab = 'npcs'"
-                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                class="flex h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                 :class="activeTab === 'npcs' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200'"
               >
                 <Users class="w-4 h-4" />
@@ -519,7 +525,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <button
                 type="button"
                 @click="activeTab = 'map'"
-                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                class="flex h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                 :class="activeTab === 'map' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200'"
               >
                 <MapIcon class="w-4 h-4" />
@@ -528,7 +534,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <button
                 type="button"
                 @click="activeTab = 'items'"
-                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                class="flex h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                 :class="activeTab === 'items' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200'"
               >
                 <Package class="w-4 h-4" />
@@ -537,60 +543,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <button
                 type="button"
                 @click="activeTab = 'diagnostics'"
-                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                class="flex h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                 :class="activeTab === 'diagnostics' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200'"
               >
                 <Terminal class="w-4 h-4" />
                 <span>Diagnostics</span>
               </button>
-            </div>
-
             <!-- Close Button -->
             <button
               type="button"
-              class="p-2 rounded-full bg-slate-800/80 hover:bg-red-600 text-slate-400 hover:text-white transition-all border border-slate-700/60 cursor-pointer"
+              aria-label="Close Debug Panel" class="ml-auto flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-red-600 hover:text-white"
               @click="emit('close')"
               title="Close Debug Panel (ESC)"
             >
               <X class="w-5 h-5" />
             </button>
+            </div>
+
           </header>
 
-          <!-- MOBILE TAB SELECTOR BAR -->
-          <div class="md:hidden flex items-center justify-around bg-slate-950 border-b border-slate-800 p-2 shrink-0">
-            <button
-              type="button"
-              @click="activeTab = 'npcs'"
-              class="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold uppercase"
-              :class="activeTab === 'npcs' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'"
-            >
-              <Users class="w-3.5 h-3.5" /> NPCs
-            </button>
-            <button
-              type="button"
-              @click="activeTab = 'map'"
-              class="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold uppercase"
-              :class="activeTab === 'map' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'"
-            >
-              <MapIcon class="w-3.5 h-3.5" /> Map
-            </button>
-            <button
-              type="button"
-              @click="activeTab = 'items'"
-              class="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold uppercase"
-              :class="activeTab === 'items' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'"
-            >
-              <Package class="w-3.5 h-3.5" /> Items
-            </button>
-            <button
-              type="button"
-              @click="activeTab = 'diagnostics'"
-              class="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold uppercase"
-              :class="activeTab === 'diagnostics' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'"
-            >
-              <Terminal class="w-3.5 h-3.5" /> Diag
-            </button>
-          </div>
 
           <!-- SUCCESS TOAST IF COMMAND EXECUTED -->
           <div v-if="commandSuccessMsg" class="px-6 py-2 bg-cyan-500/10 border-b border-cyan-500/30 text-cyan-300 text-xs font-mono flex items-center justify-between animate-fade-in shrink-0">
@@ -654,7 +625,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </div>
 
               <!-- NPC Cards Grid -->
-              <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 grid content-start grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div
                   v-for="npc in filteredNpcs"
                   :key="npc.id"
@@ -804,6 +775,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                     >
                       Kill
                     </button>
+                    <DebugNpcClothing :npc="npc" :busy="commandBusy" :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" @command="runCmd" @repaired="emit('refresh')" />
                     <button
                       v-if="npc.is_hidden"
                       type="button"
@@ -1218,6 +1190,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                       <!-- Actions -->
                       <td class="py-3 px-4 text-right">
                         <div class="flex items-center justify-end gap-1.5">
+                          <DebugItemRepair :session-id="sessionDebug?.session?.id || sheet?.session_id || ''" :item-id="item.id" :name="item.name" @repaired="emit('refresh')" />
                           <button
                             v-if="item.is_hidden"
                             type="button"

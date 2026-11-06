@@ -18,7 +18,6 @@ function move(target: string) {
 </script>
 <template>
   <div class="space-y-2">
-    <DebugNpcClothing :npc="npc" :busy="busy" @command="emit('command', $event)" />
     <details class="rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-xs text-slate-200">
       <summary class="cursor-pointer font-bold text-cyan-300">Location</summary>
       <div class="mt-3 space-y-3">

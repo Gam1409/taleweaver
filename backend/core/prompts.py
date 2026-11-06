@@ -4,6 +4,7 @@ This module contains all LLM prompts used across the system, centralized for
 better maintainability and documentation.
 """
 
+from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION
@@ -133,6 +134,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "- `guard_expression`: optional deterministic Python boolean condition evaluated by the engine. Empty string if none.\n\n"
     + PUZZLE_JSON_ENFORCEMENT_BLOCK
     + PUZZLE_DESIGN_PATTERNS_BLOCK
+    + ITEM_DESCRIPTION_STYLE
 )
 """
 The primary system prompt for generating a complete world manifest (scenes, NPCs, items, protagonist).

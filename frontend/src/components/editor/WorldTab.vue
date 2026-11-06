@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import PlotTab from '@/components/editor/PlotTab.vue'
-import LivingWorldAdventureButton from '@/components/living-world/LivingWorldAdventureButton.vue'
-import type { LivingWorldPreferences } from '@/services/livingWorld'
 import { Save, X } from 'lucide-vue-next'
 import { computed } from 'vue'
 
@@ -34,7 +32,6 @@ const emit = defineEmits<{
   (e: 'update:tempValue', val: string): void
   (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
   (e: 'save-changes'): void
-  (e: 'update:living-world', value: LivingWorldPreferences): void
   (e: 'update:detailed-clothing', val: boolean): void
   (e: 'update:nsfw-enabled', val: boolean): void
   (e: 'update:nsfw-level', val: 'soft' | 'medium' | 'hard'): void
@@ -226,7 +223,9 @@ const time12Parts = computed(() => {
     const [hRaw, mRaw] = String(raw).split(':').map(Number)
     if (!isNaN(hRaw)) h = hRaw
     if (!isNaN(mRaw)) m = mRaw
-  } catch (e) {}
+  } catch {
+    // Keep the existing/default time display when legacy time data is malformed.
+  }
 
   const isPM = h >= 12
   const h12 = h % 12 || 12
@@ -453,7 +452,9 @@ const previewGameTime = computed(() => {
         const ampm = h >= 12 ? 'PM' : 'AM'
         timeDisplay = `${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`
       }
-    } catch (e) {}
+    } catch {
+    // Keep the existing/default time display when legacy time data is malformed.
+  }
   }
   return {
     dateShort: `${dayLabel} ${initialDay}`,
@@ -552,14 +553,7 @@ const licenseUrlInvalid = computed(() => {
       </div>
     </div>
 
-    <LivingWorldAdventureButton
-      v-if="form.rule_enforcement_mode === 'vn'"
-      :model-value="form.living_world_settings"
-      :disabled="isSaving"
-      existing
-      @update:model-value="emit('update:living-world', $event)"
-      @save="emit('save-changes')"
-    />
+
 
     <!-- Narrator Memory & Context Window Panel -->
     <div class="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 backdrop-blur-md shadow-xl space-y-4">

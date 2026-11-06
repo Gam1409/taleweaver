@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import DebugWardrobePreferences, { type WardrobePreferences } from './DebugWardrobePreferences.vue'
 import DebugWardrobeRecovery, { type WardrobeRecoveryPreview } from './DebugWardrobeRecovery.vue'
+import DebugItemRepair from './DebugItemRepair.vue'
+import { Pencil } from 'lucide-vue-next'
 
 interface Clothing {
   category: string
@@ -31,8 +33,9 @@ const props = defineProps<{
     }
   }
   busy: boolean
+  sessionId?: string
 }>()
-const emit = defineEmits<{ command: [value: string] }>()
+const emit = defineEmits<{ command: [value: string]; repaired: [] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const layers = ['Under layer', 'Base layer', 'Mid layer', 'Outer layer', 'Outermost layer']
 const groups = computed(() => [
@@ -47,6 +50,9 @@ const groups = computed(() => [
     items: items.value.filter(item => !item.clothing || !layers[item.clothing.layer])
   }
 ])
+const visibleGroups = computed(() =>
+  groups.value.filter(group => group.key !== 'unknown' || group.items.length)
+)
 function close() {
   dialog.value?.close()
 }
@@ -97,7 +103,7 @@ function save() {
 <template>
   <button
     type="button"
-    class="rounded border border-cyan-800 bg-cyan-950 px-3 py-2 text-xs font-bold text-cyan-200"
+    class="flex-1 py-1 px-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
     @click="dialog?.showModal()"
   >
     Clothing
@@ -106,7 +112,7 @@ function save() {
     <dialog
       ref="dialog"
       :aria-label="`Clothing — ${npc.name || npc.id}`"
-      class="m-auto max-h-[90dvh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-600 bg-slate-950 p-5 text-sm text-slate-200 shadow-xl backdrop:bg-black/70"
+      class="m-auto max-h-[85dvh] w-[min(92rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-600 bg-slate-950 p-4 text-sm text-slate-200 shadow-xl backdrop:bg-black/70"
       @close="resetEditor"
       @keydown.esc.stop
     >
@@ -114,66 +120,102 @@ function save() {
         <h3 class="text-lg font-bold">Clothing — {{ npc.name || npc.id }}</h3>
         <button type="button" class="rounded bg-slate-800 px-3 py-2" @click="close">Close</button>
       </header>
-      <p class="mb-4 text-slate-400">
-        Changes affect this session only. Layers run from closest to the body (0) to outermost (4).
-        Inventory items are listed separately by status; they are not worn.
+      <p class="mb-3 text-xs text-slate-400">
+        Session only · Layers 0–4: closest to body → outermost. Inventory does not mean worn.
+        Missing records do not mean undressed.
       </p>
-      <div class="space-y-4">
-        <DebugWardrobePreferences
-          v-if="npc.wardrobe?.preferences"
-          :npc-id="npc.id"
-          :preferences="npc.wardrobe.preferences"
-          :busy="busy"
-          @command="emit('command', $event)"
-        />
-        <DebugWardrobeRecovery
-          :npc-id="npc.id"
-          :preview="npc.wardrobe?.recovery"
-          :busy="busy"
-          @command="emit('command', $event)"
-        />
-        <h4 class="font-bold">Existing clothing</h4>
+      <div class="space-y-3">
+        <details
+          :open="!!npc.wardrobe?.recovery"
+          class="rounded-xl border border-slate-700 px-3 py-2"
+        >
+          <summary class="cursor-pointer text-xs font-bold text-cyan-200">
+            Recovery & clothing settings
+          </summary>
+          <div class="mt-3 space-y-3">
+            <DebugWardrobePreferences
+              v-if="npc.wardrobe?.preferences"
+              :npc-id="npc.id"
+              :preferences="npc.wardrobe.preferences"
+              :busy="busy"
+              @command="emit('command', $event)"
+            />
+            <DebugWardrobeRecovery
+              :npc-id="npc.id"
+              :preview="npc.wardrobe?.recovery"
+              :busy="busy"
+              @command="emit('command', $event)"
+            />
+          </div>
+        </details>
         <p v-if="!npc.wardrobe?.profile_known" class="text-amber-300">
           Worn state is not established. Missing records do not mean undressed.
         </p>
         <p v-if="!items.length" class="text-slate-400">
           No structured clothing items are recorded.
         </p>
-        <section
-          v-for="group in groups.filter(group => group.key !== 'unknown' || group.items.length)"
-          :key="group.key"
-          class="space-y-2"
+        <div
+          class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          :class="visibleGroups.length === 6 ? 'xl:grid-cols-6' : 'xl:grid-cols-5'"
         >
-          <h4 class="font-bold text-cyan-200">
-            {{ group.label }} <span class="text-slate-400">({{ group.items.length }})</span>
-          </h4>
-          <p v-if="!group.items.length" class="text-slate-500">No recorded items in this layer.</p>
-          <div
-            v-for="item in group.items"
-            :key="item.id"
-            class="rounded border border-slate-700 p-2"
+          <section
+            v-for="group in visibleGroups"
+            :key="group.key"
+            :data-clothing-layer="group.key"
+            class="min-w-0 space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3"
           >
-            <div class="flex items-start justify-between gap-2">
-              <span>{{ item.name || item.id }} — {{ item.worn ? 'Worn' : 'Inventory' }}</span>
-              <button
-                type="button"
-                class="text-cyan-300 underline"
-                :disabled="busy"
-                @click="edit(item)"
-              >
-                Edit
-              </button>
+            <h4 class="text-xs font-bold text-cyan-200">
+              {{ group.label }} <span class="text-slate-400">({{ group.items.length }})</span>
+            </h4>
+            <p v-if="!group.items.length" class="text-xs text-slate-500">No recorded items.</p>
+            <div
+              v-for="item in group.items"
+              :key="item.id"
+              class="rounded border border-slate-700 p-2"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <p class="break-words text-xs font-bold">{{ item.name || item.id }}</p>
+                  <p
+                    class="mt-1 text-[10px] uppercase tracking-wider"
+                    :class="item.worn ? 'text-emerald-300' : 'text-slate-400'"
+                  >
+                    {{ item.worn ? 'Worn' : 'Inventory' }}
+                  </p>
+                </div>
+                <div class="flex w-20 shrink-0 flex-col gap-1.5">
+                  <DebugItemRepair
+                    v-if="sessionId"
+                    :session-id="sessionId"
+                    :item-id="item.id"
+                    :name="item.name"
+                    stacked
+                    @repaired="emit('repaired')"
+                  />
+                  <button
+                    type="button"
+                    class="inline-flex w-full items-center justify-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40"
+                    :disabled="busy"
+                    @click="edit(item)"
+                  >
+                    <Pencil class="h-3 w-3" />Edit
+                  </button>
+                </div>
+              </div>
+              <details v-if="item.description" class="mt-2 text-xs text-slate-400">
+                <summary class="cursor-pointer text-cyan-300/80">Description</summary>
+                <p class="mt-2 whitespace-pre-line leading-relaxed">{{ item.description }}</p>
+              </details>
+              <p v-if="item.uncovered_regions?.length" class="text-amber-200">
+                Partially displaced — exposed: {{ item.uncovered_regions.join(', ') }}
+              </p>
+              <p v-if="item.clothing" class="mt-2 text-[10px] text-slate-400">
+                Layer {{ item.clothing.layer }} · {{ item.clothing.coverage.join(', ')
+                }}{{ item.clothing.underwear ? ' · Underwear' : '' }}
+              </p>
             </div>
-            <p class="mt-1 text-slate-400">{{ item.description }}</p>
-            <p v-if="item.uncovered_regions?.length" class="text-amber-200">
-              Partially displaced — exposed: {{ item.uncovered_regions.join(', ') }}
-            </p>
-            <p v-if="item.clothing" class="text-slate-400">
-              Layer {{ item.clothing.layer }} · {{ item.clothing.coverage.join(', ')
-              }}{{ item.clothing.underwear ? ' · Underwear' : '' }}
-            </p>
-          </div>
-        </section>
+          </section>
+        </div>
         <form
           v-if="draft"
           class="space-y-2 border-t border-slate-700 pt-3"

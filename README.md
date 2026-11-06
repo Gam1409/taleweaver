@@ -73,6 +73,7 @@ This fork builds on [jschm42/taleweaver](https://github.com/jschm42/taleweaver),
 * **Character Cards:** View a portrait, description, general background, and a separate history of shared experiences. Known attitudes toward your character can appear when supported by the story.
 * **Appearance & Clothing:** VN tracks individual outfits and changes such as gifts, dressing, and removing items. Visible clothing helps guide both narration and illustrations; more detailed clothing is optional.
 * **Private Knowledge:** A character card shows what your protagonist has learned. It does not reveal an NPC's hidden inventory or private thoughts.
+* **NPC Personality · Optional · v1.0.0:** In VN sessions, give selected NPCs their own evidence-backed intentions, remembered experiences and promises. Choose to keep playing through analysis failures or stop for inspection. Off by default; more active NPCs require extra model requests and waiting. See the [NPC Personality guide](docs/chpm-continuation.md).
 
 ### 🌍 A World Beyond Your Turn
 

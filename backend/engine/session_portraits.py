@@ -103,14 +103,14 @@ async def _settings(
 
 
 def _image_request(
-    session_id: str, npc: dict, t2i: dict, user: User, style: str, tone: str
+    session_id: str, npc: dict, t2i: dict, user: User, style: str, tone: str, *, kind: str = "npc"
 ) -> dict:
-    profile = "advanced" if advanced_for(t2i, "npc") else "simple"
-    provider = image_provider(t2i, profile, "npc")
+    profile = "advanced" if advanced_for(t2i, kind) else "simple"
+    provider = image_provider(t2i, profile, kind)
     options = {
         **t2i,
-        "image_purpose": "npc",
-        "visual_target_type": "npc",
+        "image_purpose": kind,
+        "visual_target_type": kind,
         "_prompt_user": user,
         "comfyui_profile": profile,
         "_prompt_prepared": False,
@@ -121,10 +121,13 @@ def _image_request(
     }
     if provider in ("stable_diffusion", "ollama", "comfyui"):
         width, height = MediaEngine._resolve_sd_dimensions(
-            "NPC", t2i.get(f"{profile}_min_long_edge")
+            kind.upper(), t2i.get(f"{profile}_min_long_edge")
         )
         options.update(width=width, height=height)
-    prompt = asset_source(t2i, "npc", prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(**npc), **npc)
+    template = (
+        prompts.NPC_IMAGE_PROMPT_TEMPLATE if kind == "npc" else prompts.OBJECT_IMAGE_PROMPT_TEMPLATE
+    )
+    prompt = asset_source(t2i, kind, template.format(**npc), **npc)
     if tone:
         prompt += f" Mood: {tone}"
     ext = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
@@ -135,7 +138,7 @@ def _image_request(
         "api_key": MediaEngine._resolve_api_key(provider, user.encrypted_api_keys or {}),
         "adventure_id": session_id,
         "target_dir": safe_data_path("adventures", "sessions", session_id, "visuals", "entities"),
-        "filename": f"npc_{uuid4().hex}.{ext}",
+        "filename": f"{kind}_{uuid4().hex}.{ext}",
         "provider_options": options,
         "style_instruction": style,
     }

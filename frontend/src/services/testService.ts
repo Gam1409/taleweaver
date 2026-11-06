@@ -74,13 +74,14 @@ class TestService {
    * Test an LLM model with the specified provider.
    * Returns response time if successful.
    */
-  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions) {
+  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string) {
     this.testResults.value[key] = { status: 'loading', message: 'Testing connection...' }
 
     try {
       const data = await api.testLlm({
         model,
         provider,
+        custom_openai_url: provider === 'custom_openai' ? apiBase : undefined,
         ollama_url: ollamaOptions?.url ?? ollamaUrl,
         role: ollamaOptions?.role ?? 'small',
         ollama_api_mode: provider === 'ollama' ? ollamaOptions?.apiMode : undefined,

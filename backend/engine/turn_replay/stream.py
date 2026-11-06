@@ -9,6 +9,7 @@ from typing import Any
 from anyio import CancelScope
 from sqlalchemy import select
 
+from backend.engine.chpm.kernel import ChpmError
 from backend.engine.turn_replay import service
 from backend.models.chat import ChatMessage
 
@@ -42,6 +43,38 @@ async def run(
     replay_id: str | None,
     hooks: Any,
 ) -> AsyncGenerator[str, None]:
+    """Hold CHPM narration until the inner runner commits its recovery boundary."""
+    manager._chpm_turn = None
+    manager._chpm_publish_after_commit = False
+    held: list[str] = []
+    async with aclosing(
+        _run(manager, message, auto_visualize, language, replay_id, hooks)
+    ) as stream:
+        async for chunk in stream:
+            if _hold_chunk(manager, chunk):
+                held.append(chunk)
+                continue
+            if chunk.startswith("event: final"):
+                for item in held:
+                    yield item
+                held.clear()
+            yield chunk
+
+
+def _hold_chunk(manager: Any, chunk: str) -> bool:
+    return chunk.startswith("event: chunk") and bool(
+        getattr(manager, "_chpm_publish_after_commit", False)
+    )
+
+
+async def _run(
+    manager: Any,
+    message: str,
+    auto_visualize: bool,
+    language: str | None,
+    replay_id: str | None,
+    hooks: Any,
+) -> AsyncGenerator[str, None]:
     succeeded = False
     error = None
     try:
@@ -68,7 +101,7 @@ async def run(
                 yield outgoing
     except (asyncio.CancelledError, GeneratorExit):
         raise
-    except service.ReplayUnavailableError as exc:
+    except (service.ReplayUnavailableError, ChpmError) as exc:
         error = f"event: error\ndata: {json.dumps({'detail': str(exc)})}\n\n"
     finally:
         if (

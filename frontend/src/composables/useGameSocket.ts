@@ -5,6 +5,7 @@
  * Manages chat history fetching, message posting, and state synchronization.
  */
 import { ref, watch, type Ref } from 'vue'
+import { updateNpcBehaviorStatus } from '@/composables/useNpcBehaviorStatus'
 import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
@@ -278,6 +279,7 @@ export function useGameSocket(): UseGameSocket {
 
   function applySessionSnapshot(data: any, updateMessages = true): void {
     if (!data) return
+    if ('npc_behavior' in data) updateNpcBehaviorStatus(currentGameId, data.npc_behavior)
     if (typeof data.system_debug_enabled === 'boolean') {
       systemDebugEnabled.value = data.system_debug_enabled
     }

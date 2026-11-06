@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from backend.engine.chpm.state import controls
 from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
@@ -59,6 +60,7 @@ def _available(state: Any, npc: Any) -> bool:
     override = _override(state, npc)
     return (
         getattr(npc, "entity_type", None) == "NPC"
+        and not controls(state, npc.id)
         and override.get("current_scene_id", npc.current_scene_id) == state.current_scene_id
         and physically_present(npc, state)
         and not override.get("is_hidden", getattr(npc, "is_hidden", False))
