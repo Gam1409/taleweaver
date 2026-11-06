@@ -28,7 +28,9 @@ def test_comfy_portrait_composition_survives_template_adaptation(workflow, adapt
     for kind in ("npc", "protagonist"):
         source = asset_source(options, kind, "legacy", name="Lina", description="A sailor")
         assert "Exactly one subject" in source
-        assert "chest-up" in source
+        assert "waist-up" in source
+        assert "entire head visible" in source
+        assert "crop at the waist" in source
         if adapt:
             assert json.loads(source)["asset_type"] == kind
     assert "Exactly one subject" not in asset_source(options, "scene", "legacy")
@@ -112,3 +114,12 @@ async def test_missing_reference_workflow_keeps_old_portrait(
     assert result["state"] == "failed"
     assert "workflow" in result["message"]
     assert portrait_world == []
+
+
+def test_scene_prompt_matches_runtime_landscape_dimensions():
+    from backend.engine.media_engine import MediaEngine
+
+    width, height = MediaEngine._resolve_sd_dimensions("SCENE", 1024)
+    assert width * 9 == height * 16
+    assert "16:9" in prompts.SCENE_IMAGE_PROMPT_TEMPLATE
+    assert "3:2" not in prompts.SCENE_IMAGE_PROMPT_TEMPLATE

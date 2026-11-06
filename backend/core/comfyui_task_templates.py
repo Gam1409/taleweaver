@@ -18,15 +18,15 @@ from backend.core.visual_limits import visual_limits
 TASKS = {
     "npc": (
         "NPC portrait",
-        "Frame one character in a readable portrait. Preserve established appearance and clothing; keep the background secondary.",
+        "Use a waist-up portrait with the entire head visible and the crop at the waist. Preserve identity and clothing visible within that crop; do not zoom out to show the full wardrobe. Keep the background secondary.",
         "An adult traveler in a blue coat, waist-up portrait, simple backdrop",
         "1person, solo, blue coat, waist up, simple background",
     ),
     "protagonist": (
         "Hero portrait",
-        "Frame the protagonist alone as a character portrait. Preserve identity and current clothing; do not invent equipment.",
-        "An adult explorer in a green jacket, character portrait, simple backdrop",
-        "1person, solo, green jacket, character portrait, simple background",
+        "Use the same waist-up framing as NPC portraits: entire head visible, crop at the waist. Preserve identity and clothing visible within that crop; do not zoom out to show the full wardrobe or invent equipment.",
+        "An adult explorer in a green jacket, waist-up portrait, simple backdrop",
+        "1person, solo, green jacket, waist up, simple background",
     ),
     "avatar": (
         "Account avatar",
@@ -36,7 +36,7 @@ TASKS = {
     ),
     "object": (
         "Inventory item",
-        "Show the supplied object clearly as an isolated inventory asset. Avoid hands, people, labels and UI frames unless explicitly requested.",
+        "Show the supplied object clearly as an isolated inventory asset. Preserve its stated count, material, cut and proportions; a matching pair remains a pair. For clothing, describe the empty garment itself, not its owner wearing it; do not add a body or mannequin. Avoid hands, people, labels and UI frames unless explicitly requested.",
         "One brass lantern, isolated object, neutral background, clear silhouette",
         "brass lantern, single object, isolated, simple background, no humans",
     ),
@@ -107,6 +107,20 @@ def task_preset(family: str, purpose: ImagePurpose, recipe: LoaderRecipe | None 
     chosen = resolved_recipe(family, recipe)
     label = recipe_label(chosen)
     rules = template_rules(family)
+    if purpose in ("npc", "protagonist"):
+        separator = ", " if rules.format == "tags" else " "
+        framing = (
+            "waist up, medium shot, entire head visible, crop at waist"
+            if rules.format == "tags"
+            else "Waist-up medium shot, with the entire head visible and the crop at the waist."
+        )
+        rules.suffix = separator.join(filter(None, (rules.suffix, framing)))
+        rules.negative_prompt = ", ".join(
+            filter(
+                None,
+                (rules.negative_prompt, "full body, knees, feet, cropped head, extreme close-up"),
+            )
+        )
     task = TASKS[purpose]
     rules.instructions = f"{rules.instructions}\nTask composition: {task[1]}"
     example = task[3] if rules.format == "tags" else task[2]

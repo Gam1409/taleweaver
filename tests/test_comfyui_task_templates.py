@@ -10,7 +10,7 @@ from backend.core.comfyui_config import ComfyPreset
 from backend.core.comfyui_starter_models import FAMILIES, LoaderRecipe
 from backend.core.comfyui_starters import starter_workflow
 from backend.core.comfyui_task_templates import TASKS, preset_catalog, task_preset
-from backend.core.image_prompt_templates import TEMPLATES
+from backend.core.image_prompt_templates import TEMPLATES, template_rules
 from backend.core.image_purposes import PURPOSES, purpose_target
 from backend.core.visual_limits import visual_limits
 from backend.engine.comfyui_output import bounded_dimensions
@@ -215,3 +215,28 @@ def test_workflow_names_distinguish_packaging_and_purpose():
     assert aio["generate"]["name"] == "NPC portrait · SD3.5 Large · No reference · AIO"
     assert cover["generate"]["name"].startswith("Adventure cover · ")
     assert aio["reference"]["name"] == "NPC portrait · SD3.5 Large · With reference (img2img) · AIO"
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+async def test_npc_and_hero_framing_survives_prompt_preparation(family):
+    from backend.engine.image_prompt_adapter import prepare_prompt
+
+    for purpose in ("npc", "protagonist"):
+        preset = task_preset(family, purpose)["preset"]
+        options = {
+            "comfyui_presets": {"portrait": preset},
+            "comfyui_assignments": {purpose: "portrait"},
+            "image_purpose": purpose,
+            "_prompt_prepared": True,
+        }
+        source = "One character in a green jacket."
+        prepared = await prepare_prompt(source, options)
+        assert source in prepared["positive"]
+        normalized = prepared["positive"].lower().replace("-", " ")
+        assert "waist up" in normalized
+        assert "entire head visible" in normalized
+        assert "crop at" in normalized
+        # FLUX deliberately has no negative binding; other families receive the crop exclusions.
+        if "negative_prompt" in preset["generate"]["bindings"]:
+            assert "full body" in prepared["negative"]
+        assert "waist" not in template_rules(family).instructions.lower()

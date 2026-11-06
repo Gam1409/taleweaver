@@ -187,7 +187,7 @@ Variables: title, original_prompt.
 
 PORTRAIT_COMPOSITION_INSTRUCTION = (
     "Single-character portrait for a character card. Exactly one subject, centered, "
-    "chest-up framing with the face clearly visible and a simple unobtrusive background. "
+    "waist-up framing with the entire head visible, the crop at the waist, and a simple unobtrusive background. "
     "Preserve known visible appearance and clothing. Do not depict other characters "
     "mentioned in the biography, hidden possessions, captions, text, borders, collages "
     "or multiple views. Portrait orientation."
@@ -198,7 +198,7 @@ PROTAGONIST_IMAGE_PROMPT_TEMPLATE = (
 )
 
 SCENE_IMAGE_PROMPT_TEMPLATE = (
-    "Background scene: {name}. {description}. 3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
+    "Background scene: {name}. {description}. 16:9 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
     "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
 )
 """
