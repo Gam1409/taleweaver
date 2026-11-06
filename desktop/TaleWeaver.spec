@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy
 root = Path(SPECPATH).parent
 hidden = collect_submodules("backend")
 hidden += ["desktop.server", "scripts.desktop_processes"]
-hidden += ["aiosqlite", "sqlalchemy.dialects.sqlite.aiosqlite", "sqlalchemy.dialects.sqlite.pysqlite"]
+hidden += ["greenlet", "aiosqlite", "sqlalchemy.dialects.sqlite.aiosqlite", "sqlalchemy.dialects.sqlite.pysqlite"]
 hidden += collect_submodules("passlib.handlers") + collect_submodules("tiktoken_ext")
 hidden += ["uvicorn.logging", "uvicorn.loops.asyncio", "uvicorn.protocols.http.h11_impl", "uvicorn.lifespan.on"]
 if sys.platform == "linux":
