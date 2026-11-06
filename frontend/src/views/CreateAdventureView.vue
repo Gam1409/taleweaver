@@ -248,7 +248,7 @@ async function handleCreate() {
   // Construct structured time_config
   let timeConfigPayload: any = null
   let pacingVal = form.value.pacing_minutes || 5
-  let timeSystemVal = form.value.time_system || 'calendar'
+  const timeSystemVal = form.value.time_system || 'calendar'
 
   if (!form.value.time_auto && form.value.time_config) {
     const tc = form.value.time_config

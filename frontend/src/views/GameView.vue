@@ -140,7 +140,7 @@ const saveSessionNote = async (note: string) => {
     statusNote.value = note
     addNotification('Session note updated.', 'success')
     showNoteModal.value = false
-  } catch (err) {
+  } catch {
     addNotification('Failed to update session note.', 'error')
   } finally {
     isSavingNote.value = false
@@ -173,7 +173,7 @@ const saveSessionSettings = async (payload: { turns: number; enableCompression?:
     }
     addNotification('Session memory settings updated.', 'success')
     showSettingsModal.value = false
-  } catch (err) {
+  } catch {
     addNotification('Failed to update session settings.', 'error')
   } finally {
     isSavingSettings.value = false
@@ -261,7 +261,7 @@ const loadSessionCheckpoints = async () => {
   isLoadingCheckpoints.value = true
   try {
     checkpoints.value = await api.listSessionCheckpoints(props.id)
-  } catch (error) {
+  } catch {
     addNotification('Failed to load Chronicles timeline.', 'error')
   } finally {
     isLoadingCheckpoints.value = false
@@ -299,7 +299,7 @@ const confirmRestoreCheckpoint = async () => {
     pendingRestoreCheckpoint.value = null
     addNotification(`Timeline restored. Removed ${result.deleted_messages} future messages.`, 'success')
     for (const warning of result.warnings ?? []) addNotification(warning, 'info')
-  } catch (error) {
+  } catch {
     addNotification('Failed to restore checkpoint timeline.', 'error')
   } finally {
     restoringCheckpointId.value = null

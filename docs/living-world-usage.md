@@ -50,7 +50,7 @@ Use Python **3.12 or 3.13** and install the pinned optional extra:
 poetry install --extras concordia
 ```
 
-The normal dependency set still supports Python 3.10/3.11 without Concordia.
+The normal dependency set still supports Python 3.11 without Concordia.
 Selecting Concordia without the compatible package returns a configuration error;
 there is no silent fallback to the native engine and no runtime package download.
 Keep specifying the extra on subsequent dependency installations.

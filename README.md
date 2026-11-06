@@ -10,7 +10,7 @@ A self-hosted storytelling studio for RPG adventures, open-ended conversations, 
 Create worlds, meet memorable characters, and bring your stories to life with illustrated scenes and cinematic voices.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-0ea5e9.svg)](LICENSE)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue%203-SPA-42b883?logo=vue.js&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-local%20data-003b57?logo=sqlite&logoColor=white)
@@ -234,7 +234,7 @@ The setup scripts install the memory-search dependency too. To use semantic reca
 
 ### Option B: Manual Development Setup
 
-**Requirements:** Python 3.10–3.13, [Poetry](https://python-poetry.org/) 2.x, Node.js 20.19+ or 22.12+ (supported LTS recommended)
+**Requirements:** Python 3.11–3.13, [Poetry](https://python-poetry.org/) 2.x, Node.js 20.19+ or 22.12+ (supported LTS recommended)
 
 ```bash
 # 1. Clone & install Python dependencies

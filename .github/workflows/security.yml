@@ -1,0 +1,62 @@
+name: Security checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths: [pyproject.toml, poetry.lock, frontend/package.json, frontend/package-lock.json, .github/workflows/security.yml]
+  schedule:
+    - cron: '23 5 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install 'poetry>=2,<3' poetry-plugin-export pip-audit
+      - name: Audit all locked Python groups and extras
+        run: |
+          mkdir -p reports
+          poetry export --all-extras --with dev --without-hashes -f requirements.txt -o reports/requirements.txt
+          pip-audit -r reports/requirements.txt --no-deps --disable-pip -f json -o reports/python-audit.json
+      - name: Audit frontend including development tooling
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=moderate --json > ../reports/npm-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-security-reports
+          path: reports/
+          retention-days: 14
+
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: '${{ matrix.language }}'
+          build-mode: none
+      - uses: github/codeql-action/analyze@v3

@@ -15,7 +15,16 @@ type WalkthroughPart =
 
 const props = defineProps<{
   open: boolean
-  data: any | null
+  data: {
+    current_xp?: number
+    preview?: string
+    message?: string
+    available?: boolean
+    revealed?: boolean
+    reveal_cost?: number
+    steps?: { title?: string; content?: string }[]
+    walkthrough?: string
+  } | null
   entities?: WorldEntity[]
 }>()
 

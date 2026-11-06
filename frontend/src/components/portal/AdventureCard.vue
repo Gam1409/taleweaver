@@ -36,7 +36,7 @@ const toneLabel = computed(() => {
     try {
       const obj = JSON.parse(tone)
       return obj.id || obj.name || tone
-    } catch (e) {
+    } catch {
       return tone
     }
   }

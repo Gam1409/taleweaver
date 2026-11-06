@@ -21,7 +21,7 @@ const emit = defineEmits<{
   (e: 'open-exit', exitId: string): void
 }>()
 
-const mapContainer = ref<HTMLDivElement | null>(null)
+
 
 // Tooltip State
 const hoveredNodeId = ref<string | null>(null)
@@ -404,7 +404,7 @@ onMounted(() => {
     </div>
 
     <!-- Map Canvas Window -->
-    <div class="relative h-[65vh] bg-slate-950 border border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-2xl bg-radial-gradient" ref="mapContainer">
+    <div class="relative h-[65vh] bg-slate-950 border border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-2xl bg-radial-gradient">
       
       <!-- Empty state if no scenes -->
       <div

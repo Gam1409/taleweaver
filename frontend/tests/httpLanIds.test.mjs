@@ -1,4 +1,3 @@
-/* eslint-env node, es2020 */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'

@@ -938,14 +938,14 @@ async function fetchAdventure() {
     form.value.selected_style_id = Array.isArray(data.selected_image_styles) && data.selected_image_styles.length > 0 
       ? (typeof data.selected_image_styles[0] === 'string' ? data.selected_image_styles[0] : data.selected_image_styles[0].id)
       : ''
-    let rawTone = data.selected_tone
+    const rawTone = data.selected_tone
     if (rawTone && typeof rawTone === 'object') {
       form.value.selected_tone_id = rawTone.id || rawTone.name || ''
     } else if (typeof rawTone === 'string' && rawTone.startsWith('{')) {
       try {
         const obj = JSON.parse(rawTone)
         form.value.selected_tone_id = obj.id || obj.name || rawTone
-      } catch (e) {
+      } catch {
         form.value.selected_tone_id = rawTone
       }
     } else {
@@ -1154,7 +1154,7 @@ async function saveEntityText(data: any) {
       return
     }
 
-    let candidateId = String(data.entity_id || '').trim().toUpperCase()
+    const candidateId = String(data.entity_id || '').trim().toUpperCase()
     if (!candidateId) {
       addNotification('Entity ID is required.', 'error')
       return

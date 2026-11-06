@@ -23,7 +23,7 @@ const props = defineProps<{
   debugData: any
 }>()
 
-const mapContainerRef = ref<HTMLDivElement | null>(null)
+
 const zoom = ref(1)
 const offset = ref({ x: 0, y: 0 })
 const isPanning = ref(false)
@@ -399,7 +399,7 @@ onMounted(() => {
     </div>
 
     <div
-      ref="mapContainerRef"
+
       class="relative h-[34rem] rounded-3xl border border-slate-800 overflow-hidden bg-slate-950 bg-radial-gradient"
       @wheel="handleWheel"
       @mousedown="handleMouseDown"

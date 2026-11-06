@@ -217,7 +217,7 @@ function closeModal() {
 function saveQuest() {
   if (!modalQuest.value.title.trim() || !modalQuest.value.description.trim()) return
   const raw = props.adventure?.quests || []
-  let allQuests = Array.isArray(raw) ? [...raw] : []
+  const allQuests = Array.isArray(raw) ? [...raw] : []
   modalQuest.value.is_main = false
   if (isNewQuest.value) {
     allQuests.push({ ...modalQuest.value })
@@ -249,7 +249,7 @@ function confirmDeleteQuest() {
     return
   }
   const raw = props.adventure?.quests || []
-  let allQuests = Array.isArray(raw) ? [...raw] : []
+  const allQuests = Array.isArray(raw) ? [...raw] : []
   const updatedList = allQuests.filter((q: any) => q.id !== pendingDeleteQuestId.value)
   emit('update-quests', updatedList)
   cancelDeleteQuest()

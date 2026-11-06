@@ -101,6 +101,8 @@ async function addDecorativeObject() {
   }
 }
 
+const decorativeObjects = computed<string[]>(() => routeSceneDetails.value?.decorative_objects || [])
+
 async function removeDecorativeObject(index: number) {
   const scene = routeSceneDetails.value
   if (!scene) return
@@ -596,11 +598,11 @@ function editRouteEntity(type: 'npc' | 'object', entity: any) {
         <!-- Decorative Background Details Column -->
         <div class="space-y-2">
           <div class="flex flex-wrap justify-between items-center gap-2">
-            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Decorative Background Details <span class="text-slate-400">({{ (routeSceneDetails?.decorative_objects || []).length }}/7)</span></label>
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Decorative Background Details <span class="text-slate-400">({{ decorativeObjects.length }}/7)</span></label>
             <div class="flex items-center gap-2">
               <span class="text-[9px] text-slate-400 font-medium hidden sm:inline">Simple, static background details (max 7)</span>
               <button
-                v-if="(routeSceneDetails?.decorative_objects || []).length < 7"
+                v-if="decorativeObjects.length < 7"
                 type="button"
                 @click="handleGenerateDecorativeItems"
                 :disabled="isGeneratingDecorativeItems || localIsSavingText"
@@ -616,7 +618,7 @@ function editRouteEntity(type: 'npc' | 'object', entity: any) {
             <!-- Existing Tags -->
             <div class="flex flex-wrap gap-2">
               <div 
-                v-for="(item, idx) in (routeSceneDetails?.decorative_objects || [])" 
+                v-for="(item, idx) in decorativeObjects"
                 :key="idx"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-slate-900/60 text-xs text-slate-300 hover:text-white hover:border-white/20 transition-all shadow-sm"
               >
@@ -630,13 +632,13 @@ function editRouteEntity(type: 'npc' | 'object', entity: any) {
                   <X class="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div v-if="!(routeSceneDetails?.decorative_objects || []).length" class="text-xs text-slate-500 italic py-1">
+              <div v-if="!decorativeObjects.length" class="text-xs text-slate-500 italic py-1">
                 No decorative details added yet. These fill the room with static items (e.g. "metal table", "bookshelf").
               </div>
             </div>
 
             <!-- Add Input -->
-            <div v-if="(routeSceneDetails?.decorative_objects || []).length < 7" class="flex gap-2 items-center">
+            <div v-if="decorativeObjects.length < 7" class="flex gap-2 items-center">
               <input
                 v-model="newDecorativeInput"
                 type="text"

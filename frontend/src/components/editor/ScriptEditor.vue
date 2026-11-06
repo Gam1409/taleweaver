@@ -55,7 +55,7 @@ const emit = defineEmits<{
 }>()
 
 const editorEl = ref<HTMLDivElement | null>(null)
-const fallbackTextarea = ref<HTMLTextAreaElement | null>(null)
+
 const isCmReady = ref(false)
 const isLoadingCdn = ref(true)
 const isFullscreen = ref(false)
@@ -723,7 +723,7 @@ onBeforeUnmount(() => {
       <!-- Fallback Textarea if CDN is offline or unavailable -->
       <textarea
         v-if="!isCmReady"
-        ref="fallbackTextarea"
+
         :value="modelValue"
         @input="handleFallbackInput"
         :placeholder="placeholder"
