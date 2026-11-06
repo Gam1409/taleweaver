@@ -23,7 +23,7 @@ def eligible(task: dict, now: float) -> bool:
         return False
     status = task.get("status")
     if status == "pending":
-        return True
+        return float(task.get("retry_after", 0)) <= now
     if status == "failed":
         return float(task.get("retry_after", 0)) <= now
     return status == "running" and float(task.get("lease_until", 0)) <= now
@@ -35,7 +35,7 @@ def eligible_expression(now: float) -> ColumnElement[bool]:
     return and_(
         func.coalesce(task["attempts"].as_integer(), 0) < MAX_ATTEMPTS,
         or_(
-            status == "pending",
+            and_(status == "pending", func.coalesce(task["retry_after"].as_float(), 0) <= now),
             and_(status == "failed", func.coalesce(task["retry_after"].as_float(), 0) <= now),
             and_(status == "running", func.coalesce(task["lease_until"].as_float(), 0) <= now),
         ),
@@ -97,7 +97,11 @@ async def next_retry_at(db: AsyncSession, session_id: str) -> float | None:
     rows = await db.scalars(
         select(ChatMessage.npc_journal).where(
             ChatMessage.session_id == session_id,
-            ChatMessage.npc_journal["status"].as_string().in_(["failed", "running"]),
+            ChatMessage.npc_journal["status"].as_string().in_(["pending", "failed", "running"]),
+            or_(
+                ChatMessage.npc_journal["status"].as_string() != "pending",
+                ChatMessage.npc_journal["retry_after"].as_float() > time.time(),
+            ),
             or_(
                 ChatMessage.npc_journal["attempts"].as_integer() < MAX_ATTEMPTS,
                 ChatMessage.npc_journal["status"].as_string() == "running",

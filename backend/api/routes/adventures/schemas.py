@@ -584,6 +584,7 @@ class TranslateTextResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    pending_turn: Optional[dict[str, Any]] = None
     npc_behavior: Optional[dict[str, Any]] = None
     system_debug_enabled: bool = False
     language: str = "English"

@@ -84,7 +84,8 @@ from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.memory_rag.scheduling import foreground_turn
-from backend.engine.turn_replay.service import record_input
+from backend.engine.turn_replay.service import mark_committed, record_input
+from backend.engine.turn_replay import drafts as turn_drafts
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.turn_replay.stream import run as run_replayable_turn
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
@@ -1182,7 +1183,7 @@ class GameTurnManager:
             if not pipeline_error:
                 logger.exception("[Turn %s] Turn pipeline aborted unexpectedly", self.game_id)
                 pipeline_error = _friendly_llm_unexpected_error_message()
-            yield f"event: error\ndata: {json.dumps({'detail': pipeline_error, 'retryable': retryable(exc)})}\n\n"
+            yield f"event: error\ndata: {json.dumps({'detail': pipeline_error, 'retryable': retryable(exc) and not bool(turn_drafts.receipt(self)), **turn_drafts.receipt(self)})}\n\n"
             return
 
         turn_end = time.perf_counter()
@@ -2018,6 +2019,7 @@ class GameTurnManager:
                 if delta:
                     response_text += delta
                     if not chpm_buffered:
+                        turn_drafts.observe(self, response_text)
                         yield f"event: chunk\ndata: {json.dumps({'content': delta})}\n\n"
 
         except Exception as e:
@@ -2042,6 +2044,7 @@ class GameTurnManager:
         presentation_tail = portrait_turn.finish()
         response_text += presentation_tail
         if presentation_tail and not chpm_buffered:
+            turn_drafts.observe(self, response_text)
             yield f"event: chunk\ndata: {json.dumps({'content': presentation_tail})}\n\n"
         if chpm_buffered:
             yield f"event: status\ndata: {json.dumps({'content': 'Reviewing NPC reply...'})}\n\n"
@@ -2054,6 +2057,7 @@ class GameTurnManager:
             narration_messages=narration_messages,
             ordinary_context=ordinary_context,
         )
+        turn_drafts.observe(self, response_text)
 
         token_usage = extract_usage_tokens(stream_usage) or {
             # Rough estimate when the provider reports no usage (avoids re-tokenizing the prompt).
@@ -2394,8 +2398,13 @@ class GameTurnManager:
             chpm_runtime.finish(self, assistant_chat, completed=narration_completed)
         from backend.engine.memory_rag.worker import mark_dirty
 
+        turn_drafts.clear(self.state)
+        await mark_committed(self, assistant_chat)
         await mark_dirty(self.db, self.state.session_id, self.user.id, self.state.template_id)
         await self.db.commit()
+        self._committed_response_id = (
+            assistant_chat.id if not getattr(self, "_replaying", False) else None
+        )
         if narration_warning:
             logger.warning(
                 "Committed incomplete narration: session=%s turn_id=%s reason=%s chars=%d",

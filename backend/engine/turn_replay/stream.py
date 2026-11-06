@@ -10,7 +10,7 @@ from anyio import CancelScope
 from sqlalchemy import select
 
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.turn_replay import service
+from backend.engine.turn_replay import drafts, service
 from backend.models.chat import ChatMessage
 
 
@@ -45,6 +45,9 @@ async def run(
 ) -> AsyncGenerator[str, None]:
     """Hold CHPM narration until the inner runner commits its recovery boundary."""
     manager._chpm_turn = None
+    manager._committed_response_id = None
+    manager._visible_narration_draft = ""
+    manager._visible_narration_truncated = False
     manager._chpm_publish_after_commit = False
     held: list[str] = []
     async with aclosing(
@@ -111,6 +114,7 @@ async def _run(
             with CancelScope(shield=True):
                 await manager.db.rollback()
                 await service.recover(manager.db, manager.game_id)
+                await drafts.preserve(manager)
                 await manager.db.refresh(manager.user)
                 manager.state = manager.avatar = manager.adventure = None
     if error:

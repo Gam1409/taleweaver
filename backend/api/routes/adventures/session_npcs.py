@@ -172,6 +172,7 @@ async def retry_learning(
             "status": "pending",
             "attempts": 0,
             "recovering": True,
+            "retry_after": 0,
         }
     await db.commit()
     schedule(game_id, user.id, retry=True)

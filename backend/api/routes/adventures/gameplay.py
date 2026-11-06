@@ -66,6 +66,8 @@ from backend.engine.gameplay.unlock_targets import _require_session_exit, _resol
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.trigger_service import TriggerService
+from backend.engine.turn_replay.drafts import pending as pending_turn
+from backend.engine.turn_replay.drafts import receipt as committed_receipt
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -184,6 +186,7 @@ async def get_chat_history(
     session_status = state.session.status if state.session else None
 
     return ChatResponse(
+        pending_turn=await pending_turn(db, state, busy=read_only),
         npc_behavior=npc_behavior_status(state),
         system_debug_enabled=diagnostic_service.enabled,
         language=language,
@@ -261,7 +264,7 @@ async def post_chat_message(
                 yield (
                     f"id: {turn_id}\n"
                     "event: error\n"
-                    f"data: {json.dumps({'detail': CLIENT_TURN_ERROR_DETAIL, 'retryable': True})}\n\n"
+                    f"data: {json.dumps({'detail': CLIENT_TURN_ERROR_DETAIL, 'retryable': not bool(committed_receipt(manager)), **committed_receipt(manager)})}\n\n"
                 )
 
             finally:

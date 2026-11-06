@@ -1,5 +1,15 @@
 import type { ChatMessage } from '@/types'
 
+/** A durable pending input can offer a retry after navigation or a page reload. */
+export function pendingTurnError(value: unknown, dismissedAction = ''): { message: string; action: string; draft?: string } | null {
+  if (!value || typeof value !== 'object') return null
+  const pending = value as Record<string, unknown>
+  if (typeof pending.action !== 'string' || !pending.action.trim() || pending.action === dismissedAction) return null
+  const detail = typeof pending.message === 'string' ? pending.message : 'The previous turn did not finish. Retry the original action.'
+  const message = pending.draft_truncated === true ? `${detail} The saved draft was truncated.` : detail
+  return { message, action: pending.action, ...(typeof pending.draft === 'string' && pending.draft ? { draft: pending.draft } : {}) }
+}
+
 /** Track only local output from a failed request, never persisted story history. */
 export function createFailedTurnDrafts() {
   let failed: { action: string; messages: Set<ChatMessage> } | null = null

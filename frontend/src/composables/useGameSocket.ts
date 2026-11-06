@@ -11,7 +11,7 @@ import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
 import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
-import { createFailedTurnDrafts, savedActionIndex } from '@/services/failedTurnDrafts'
+import { createFailedTurnDrafts, pendingTurnError, savedActionIndex } from '@/services/failedTurnDrafts'
 import { createSnapshotPoller } from '@/services/snapshotPoller'
 import { readSessionSnapshot, snapshotErrorMessage } from '@/services/sessionSnapshot'
 import { readServerEvents } from '@/services/serverEvents'
@@ -23,6 +23,7 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface TurnErrorState {
   message: string
   action: string
+  draft?: string
 }
 
 export interface AgentLogEntry {
@@ -195,6 +196,7 @@ export function useGameSocket(): UseGameSocket {
   const showGeneratorModal = ref(false)
   const sessionLoadError = ref<string | null>(null)
   const turnError = ref<TurnErrorState | null>(null)
+  let dismissedPendingAction = ''
   const lastUserAction = ref<string>('')
 
   function openGeneratorModal(proposal?: any): void {
@@ -296,6 +298,7 @@ export function useGameSocket(): UseGameSocket {
 
   function applySessionSnapshot(data: any, updateMessages = true): void {
     if (!data) return
+    if (!activeChatController && 'pending_turn' in data) turnError.value = pendingTurnError(data.pending_turn, dismissedPendingAction)
     if ('npc_behavior' in data) updateNpcBehaviorStatus(currentGameId, data.npc_behavior)
     if (typeof data.system_debug_enabled === 'boolean') {
       systemDebugEnabled.value = data.system_debug_enabled
@@ -393,6 +396,7 @@ export function useGameSocket(): UseGameSocket {
     const revision = ++snapshotRevision
     turnError.value = null
     lastUserAction.value = ''
+    dismissedPendingAction = ''
     resetSuggestionsRequest()
     currentGameId = gameId
     systemDebugEnabled.value = false
@@ -549,6 +553,7 @@ export function useGameSocket(): UseGameSocket {
     }
 
     const gameId = currentGameId
+    dismissedPendingAction = ''
     const correction = getCorrection(gameId)
     const draft = failedTurnDrafts.prepare(messages.value, normalizedContent)
     messages.value = draft.messages
@@ -584,6 +589,8 @@ export function useGameSocket(): UseGameSocket {
     let receivedFinalEvent = false
     let savedUserMessageId: string | undefined
     let receivedErrorEvent = false
+    let streamErrorDetail = ''
+    let committedReplyId: string | undefined
     const controller = new AbortController()
     activeChatController = controller
     const ownsRequest = () => activeChatController === controller && currentGameId === gameId
@@ -621,8 +628,8 @@ export function useGameSocket(): UseGameSocket {
       const actionIndex = savedActionIndex(history, normalizedContent, knownMessageIds, reusableInputId)
       const freshAssistant = (message: ChatMessage) => message.role === 'assistant' &&
         message.id && !knownMessageIds.has(message.id)
-      const confirmed = normalizedContent ? actionIndex >= 0 && history.slice(actionIndex + 1).some(freshAssistant) :
-        history.some(freshAssistant)
+      const confirmed = committedReplyId ? history.some(message => message.role === 'assistant' && message.id === committedReplyId) :
+        normalizedContent ? actionIndex >= 0 && history.slice(actionIndex + 1).some(freshAssistant) : history.some(freshAssistant)
       if (confirmed) {
         applySessionSnapshot(snapshot, true)
         turnError.value = null
@@ -630,6 +637,12 @@ export function useGameSocket(): UseGameSocket {
         const detail = `${reason} The saved turn was recovered; do not repeat the action.`
         _pushMessage('system', detail)
         addNotification(detail, 'info')
+        return
+      }
+      if (committedReplyId) {
+        turnError.value = null
+        lastUserAction.value = ''
+        _pushMessage('system', 'The answer was saved, but history could not be refreshed. Reload the session; do not repeat the action.')
         return
       }
       if (replayMessageId) {
@@ -733,7 +746,9 @@ export function useGameSocket(): UseGameSocket {
           status.value = 'connecting'
         } else if (event === 'error') {
           receivedErrorEvent = true
-          reportTurnError(data.detail || 'An error occurred.')
+          committedReplyId = typeof data.committed_assistant_id === 'string' ? data.committed_assistant_id : undefined
+          streamErrorDetail = data.detail || 'An error occurred.'
+          reportTurnError(streamErrorDetail)
         } else if (event === 'scene_transition') {
           // The story feed starts a new page per scene; previous scenes stay browsable.
           isSceneTransitioning.value = true
@@ -767,8 +782,8 @@ export function useGameSocket(): UseGameSocket {
             addNotification(narrationWarning, 'info')
           }
         }
-      } else if (!receivedErrorEvent) {
-        await reconcileInterruptedTurn('The response stream ended before the turn was confirmed. The answer may be incomplete.')
+      } else if (!receivedErrorEvent || committedReplyId) {
+        await reconcileInterruptedTurn(streamErrorDetail || 'The response stream ended before the turn was confirmed. The answer may be incomplete.')
       }
     } catch (err: any) {
       if (!ownsRequest()) return
@@ -804,6 +819,7 @@ export function useGameSocket(): UseGameSocket {
   }
 
   function cancelTurnError(): void {
+    dismissedPendingAction = turnError.value?.action || ''
     turnError.value = null
     if (!activeChatController && (status.value === 'connecting' || status.value === 'loading')) {
       status.value = 'connected'

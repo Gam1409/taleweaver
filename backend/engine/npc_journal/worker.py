@@ -6,6 +6,7 @@ import time
 
 from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
@@ -92,9 +93,14 @@ async def _extract_when_idle(
         await _defer(message_id, task)
         return None
     progress.set_phase(session.id, message_id, "extracting")
-    return await asyncio.wait_for(
-        extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
-    )
+    try:
+        return await asyncio.wait_for(
+            extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
+        )
+    except (InferenceUncertainError, InferenceQueueError):
+        await _defer(message_id, task, delay=queue.RETRY_DELAY)
+        logger.info("NPC journal deferred by inference admission for message %s", message_id)
+        return None
 
 
 @retry_transaction
@@ -136,7 +142,7 @@ async def _save(
 
 
 @retry_transaction
-async def _defer(message_id: str, task: dict) -> None:
+async def _defer(message_id: str, task: dict, *, delay: float = 0) -> None:
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
         if message is None or not await queue.fence(db, message, task["token"]):
@@ -145,6 +151,7 @@ async def _defer(message_id: str, task: dict) -> None:
             **task,
             "status": "pending",
             "attempts": max(0, task["attempts"] - 1),
+            "retry_after": time.time() + delay,
         }
         await db.commit()
 

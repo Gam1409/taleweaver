@@ -17,7 +17,7 @@ const props = defineProps<{
   statusText?: string
   agentActive?: boolean
   debugMode?: boolean
-  turnError?: { message: string; action: string } | null
+  turnError?: { message: string; action: string; draft?: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -236,6 +236,10 @@ defineExpose({
         <div class="flex flex-col min-w-0">
           <span class="font-black text-red-300 uppercase tracking-wider text-[10px]">Action Failed</span>
           <span class="break-words font-medium text-slate-200">{{ props.turnError.message }}</span>
+          <details v-if="props.turnError.draft" class="mt-2 text-slate-300">
+            <summary class="cursor-pointer text-amber-200">Draft answer — not applied to the story</summary>
+            <p class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">{{ props.turnError.draft }}</p>
+          </details>
         </div>
       </div>
       <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">

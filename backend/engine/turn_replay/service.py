@@ -95,6 +95,21 @@ async def finish(manager: Any) -> None:
     await manager.db.commit()
 
 
+async def mark_committed(manager: Any, message: ChatMessage) -> None:
+    """Fence the canonical response in its state transaction, before transport/payload work."""
+    if getattr(manager, "_replaying", False):
+        return
+    if not (
+        getattr(manager, "_turn_replay_recorded", False) or getattr(manager, "_replaying", False)
+    ):
+        return
+    await manager.db.flush()
+    row = await manager.db.get(TurnReplay, manager.game_id)
+    if row is None:
+        raise RuntimeError("The turn recovery record is missing")
+    row.assistant_id, row.status, row.backup = message.id, "ready", None
+
+
 async def begin(manager: Any, message_id: str) -> str:
     db: AsyncSession = manager.db
     sid: str = manager.game_id

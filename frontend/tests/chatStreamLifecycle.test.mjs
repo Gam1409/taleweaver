@@ -71,6 +71,57 @@ function stream(signal) {
 }
 const completed = (final = {}) => new Response(frame('chunk', { content: 'A complete answer.' }) + frame('final', final))
 
+test('reload restores retry and the unfinished draft without repeating the action', async t => {
+  const f = await fixture(t)
+  const pending = { action, message: 'The previous turn did not finish.', user_message_id: 'user-1', draft: 'Unfinished visible answer' }
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify({ ...snapshot([...initial, { id: 'user-1', role: 'user', content: action }]), pending_turn: pending })))
+  await f.game.connect('session-a')
+  assert.equal(f.game.turnError.value.action, action)
+  assert.equal(f.game.turnError.value.draft, pending.draft)
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 0)
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify({ ...saved(), pending_turn: null })))
+  await f.game.retryLastAction()
+  assert.equal(f.game.turnError.value, null)
+  assert.equal(f.game.messages.value.filter(message => message.role === 'user').length, 1)
+  const sent = f.requests.filter(r => r.options.method === 'POST')
+  assert.equal(sent.length, 1)
+  assert.equal(JSON.parse(sent[0].options.body).content, action)
+})
+
+test('cancel dismisses the pending action for this visit instead of resurrecting it on polling', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), pending_turn: { action, message: 'Interrupted' } })))
+  await f.game.refreshSession()
+  assert.ok(f.game.turnError.value)
+  f.game.cancelTurnError()
+  await f.game.refreshSession()
+  assert.equal(f.game.turnError.value, null)
+})
+
+test('an error after commit recovers the saved answer and does not offer a duplicate retry', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'A complete answer.' }) + frame('error', { detail: 'Late transport failure', committed_assistant_id: 'reply-1' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.game.messages.value.some(message => message.id === 'reply-1'))
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 1)
+})
+
+test('a committed response receipt prevents duplicate retries when history reload fails', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'Visible answer' }) + frame('error', { detail: 'Late failure', committed_assistant_id: 'reply-1' }))
+    : new Response('{}', { status: 503 }))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.game.messages.value.some(message => message.content === 'Visible answer'))
+  assert.ok(f.game.messages.value.some(message => message.content.includes('The answer was saved')))
+  await f.game.retryLastAction()
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 1)
+})
+
 test('initial load failures expose a separate retryable error and successful retry clears it', async t => {
   const f = await fixture(t)
   f.route(async () => new Response('{}', { status: 503 }))
