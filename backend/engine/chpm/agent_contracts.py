@@ -42,7 +42,8 @@ Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.
-inspect_beliefs(argument=actor_id): up to two OWN subjective beliefs about that person.
+inspect_beliefs(argument=subject_id): up to two OWN subjective beliefs about that person.
+Use player_actor_id for the player; other belief subjects are in belief_subject_ids.
 read_belief_basis(argument=belief_id): grounds for a belief ID returned by inspect_beliefs.
 Grounds support/challenge the statement, not the person. A belief is never a world fact.
 Hidden clothing and other people's inventories are unavailable. Unknown is not empty or undressed.
