@@ -5,22 +5,49 @@ from typing import TYPE_CHECKING
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Belief, Interpret
 from backend.engine.chpm.core.history import events
+from backend.engine.chpm.host_observations import previous
+from backend.engine.chpm.host_state import Mind
 
 if TYPE_CHECKING:
     from backend.engine.chpm.agent_tools import Tools
 
 MAX_PINNED_BELIEFS = 2
+MAX_SUBJECT_IDS = 32
 
 
-def inspect(tools: "Tools", subject: str) -> dict:
-    matches = [
+def _readable(mind: Mind) -> list[Belief]:
+    return [
         belief
-        for belief in relationships.recent(tools.mind.snapshot, len(tools.mind.snapshot.beliefs))
-        if belief.about_id == subject
-        and subject != tools.mind.genesis.scope.observer_id
+        for belief in relationships.recent(mind.snapshot, len(mind.snapshot.beliefs))
+        if belief.about_id != mind.genesis.scope.observer_id
         and belief.domain in relationships.DOMAINS
         and len(belief.statement) <= 240
     ]
+
+
+def subject_view(mind: Mind) -> dict:
+    subjects = list(dict.fromkeys(belief.about_id for belief in reversed(_readable(mind))))
+    return {
+        "player_actor_id": "@player",
+        "belief_subject_ids": subjects[:MAX_SUBJECT_IDS],
+        "omitted_belief_subjects": max(0, len(subjects) - MAX_SUBJECT_IDS),
+    }
+
+
+def _known(mind: Mind) -> set[str]:
+    facts = previous(mind)
+    return (
+        {"@player"}
+        | {belief.about_id for belief in mind.snapshot.beliefs}
+        | {source.speaker_id for source in mind.sources.values()}
+        | set(facts.visible_actor_ids if facts else ())
+    )
+
+
+def inspect(tools: "Tools", subject: str) -> dict:
+    if subject == tools.mind.genesis.scope.observer_id or subject not in _known(tools.mind):
+        return {"status": "unavailable_subject", "results": [], "omitted_beliefs": 0}
+    matches = [belief for belief in _readable(tools.mind) if belief.about_id == subject]
     results = []
     for belief in reversed(matches[-MAX_PINNED_BELIEFS:]):
         alias = next(

@@ -43,6 +43,14 @@ Supporting/challenging a proposition never means approving/disapproving its subj
 Retrieved quotes reach narration/review with report/witness provenance; subjective
 belief statements are not manufactured into observed world facts.
 
+The agent receives the reserved `player_actor_id=@player` and up to 32 recent
+`belief_subject_ids`, with an explicit omitted count. IDs identify read subjects;
+they do not establish presence, reliability or another person's knowledge. The
+agent-stage state view does not point to the later, absent appraisal-context block.
+An unknown/self subject returns `unavailable_subject`; a known subject with no
+ordinary beliefs returns a legitimate empty `ok` result. Names are not guessed or
+converted to IDs. Both the subject view and reads remain observer/session-local.
+
 Visible clothing uses canonical object metadata, session overrides, the existing
 clothing-detail setting and explicit age rules. Covered lower layers and carried
 items are excluded. Missing profiles/references remain unknown. Co-presence uses
