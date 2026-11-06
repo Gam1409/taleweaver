@@ -50,6 +50,11 @@ These are contextual qualifications, not new numerical selection weights.
 Unrelated traits and relationships must remain distinct. Semantic fidelity still
 depends on proposal and review quality; typed citations cannot prove it.
 
+The current revision gate also accepts only the tendencies exposed by this compact
+view. A fifth older tendency is retained in history but can be unavailable for
+revision until selection exposes it. Full-registry revision and succession to a
+new proposition are not implemented; this is a bounded reflection mechanism.
+
 ## Budgets and failure
 
 Optional consolidation first tries to fit within the configured input budget.

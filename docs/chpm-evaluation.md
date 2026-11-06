@@ -35,9 +35,17 @@ model requests.
 Both arms receive the same narrator instructions, character, voice example,
 public scene, witnessed history and player input. The baseline is an authored,
 context-rich dialogue prompt, **not an empty prompt**. The CHPM arm additionally
-uses production perception, observer context, proposal/selection, dialogue
-contract, semantic review, and the existing single repair policy. Production
-turns and evaluations share the cognitive selection boundary.
+uses production perception, observer context, legacy proposal/selection, dialogue
+contract, semantic review, and the existing single repair policy.
+
+The 41-case comparison and the sequential trajectory tool call
+`cognition.decide()` (`goal-first-v1`). They do **not** run the live
+`cognition.deliberate()` path with the observer's Mind, belief/experience updates,
+development or agent investigation. An `ok` result in those legacy tools must not
+be reported as a successful test of the current full Personality mechanism.
+Use [the matrix runner](chpm-matrix-evaluation.md), the appraisal probe and real VN
+integration tests for that path. Matrix histories remain authored fixtures; they
+do not by themselves demonstrate long-term psychological accuracy.
 
 This is an **isolated dialogue comparison**, not the complete standard TaleWeaver
 pipeline, a Concordia performance test, or a full session simulation. It does not
