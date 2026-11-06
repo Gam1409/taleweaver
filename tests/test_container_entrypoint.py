@@ -77,3 +77,37 @@ async def test_failed_migration_does_not_start_server(launch_environment):
     code, _ = await launch(env)
     assert code != 0
     assert await asyncio.to_thread(Path(env["AUDIT_LAUNCH_LOG"]).read_text) == "migrate\n"
+
+
+async def test_separate_sqlite_volume_does_not_silently_replace_existing_db(
+    launch_environment, tmp_path
+):
+    legacy = tmp_path / "legacy.db"
+    target = tmp_path / "sqlite/taleweaver.db"
+    legacy.write_bytes(b"existing database fixture")
+    env = {
+        **launch_environment,
+        "TALEWEAVER_LEGACY_SQLITE_FILE": str(legacy),
+        "TALEWEAVER_SQLITE_FILE": str(target),
+        "DATABASE_URL": "sqlite+aiosqlite:///" + str(target),
+    }
+    code, output = await launch(env)
+    assert code == 78
+    assert "migrate" in output.lower()
+    assert not await asyncio.to_thread(Path(env["AUDIT_LAUNCH_LOG"]).exists)
+    assert legacy.read_bytes() == b"existing database fixture"
+
+
+async def test_explicitly_migrated_sqlite_volume_can_start(launch_environment, tmp_path):
+    legacy, target = tmp_path / "old.db", tmp_path / "new.db"
+    legacy.write_bytes(b"retained original")
+    target.write_bytes(b"operator migrated database")
+    env = {
+        **launch_environment,
+        "TALEWEAVER_LEGACY_SQLITE_FILE": str(legacy),
+        "TALEWEAVER_SQLITE_FILE": str(target),
+        "DATABASE_URL": "sqlite+aiosqlite:///" + str(target),
+    }
+    code, output = await launch(env)
+    assert code == 0, output
+    assert legacy.read_bytes() == b"retained original"

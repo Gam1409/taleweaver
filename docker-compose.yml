@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   taleweaver:
     build: .
@@ -10,9 +8,16 @@ services:
       - "8000"
     volumes:
       - ${DOCKER_DATA_DIR:-./data-docker}:/app/data
+      - ${DOCKER_SQLITE_DIR:-./sqlite-docker}:/app/sqlite
       - ${DOCKER_MEMORY_DB_DIR:-./db}:/app/db
     env_file:
       - .env
+    environment:
+      DATA_DIR: /app/data
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-sqlite+aiosqlite:////app/sqlite/taleweaver.db}
+      MEMORY_DB_DIR: /app/db/lancedb
+      TALEWEAVER_SQLITE_FILE: /app/sqlite/taleweaver.db
+      TALEWEAVER_LEGACY_SQLITE_FILE: /app/data/taleweaver.db
     restart: unless-stopped
     # Enable communication with Ollama running on the host
     extra_hosts:
