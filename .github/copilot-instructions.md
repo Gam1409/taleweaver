@@ -199,7 +199,7 @@ To prevent terminal commands executed by AI agents (like the Gemini agent in Ant
 
 ## 9. Game Turn Loop & Mechanics Pipeline
 
-TaleWeaver processes each gameplay turn through a structured pipeline in [GameTurnManager](file:///c:/Users/jschmitz/DEV/git-repositories/taleweaver/backend/api/routes/adventures/gameplay_logic.py):
+TaleWeaver processes each gameplay turn through a structured pipeline in [GameTurnManager](../backend/api/routes/adventures/gameplay_logic.py):
 
 * **Pass 1 (Mechanics Check)**:
   * The LLM mechanics model processes the user prompt and suggests state changes (e.g. changing exit locks, switch states, opening containers, updating inventories).
@@ -215,7 +215,7 @@ TaleWeaver processes each gameplay turn through a structured pipeline in [GameTu
   * **WorldExit**: A connection between scenes (directional or bidirectional).
   * **Exit Resolution**: Always resolve session-scoped exits by preferring the session row (via mapping from_scene_id/to_scene_id) over the template-scoped exit to respect dynamic in-game unlocking.
   * **Key Item Mentions**: Enforced state-based validation checks to verify if key items or codes are mentioned or utilized in the player's turn to prevent automatic/implicit unlocking. The game is designed to be language-independent.
-  * **Dynamic Item Generation**: Spontaneous item generation is permanently disabled. Items spawned or added must exist in the adventure's predefined databases.
+  * **Dynamic Item Generation**: Narrated-item reconciliation can register evidence-backed ordinary objects and garments in VN sessions. Keep its ownership, evidence and clothing-policy checks; it cannot grant mechanical bonuses. See [narrated-item reconciliation](../docs/narrated-item-reconciliation.md).
 
 ---
 

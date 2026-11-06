@@ -47,30 +47,28 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
    - Bump persisted schema versions only for incompatible data-shape changes, not
      additive fields with safe defaults. Verify legacy loading explicitly.
    - Collect prompt-only edits into one final `prompt tuning` commit per work wave.
-   - Before merging the CHPM pilot, squash `d89de9e0` and `bc33c1e6` into one logical
-     explicit-choice change. Prepare that integration history before the merge;
-     do not rewrite the published working branch during unrelated implementation.
+   - Keep each behavior change in a coherent commit. The CHPM pilot has already
+     been integrated; do not rewrite published history to follow obsolete hashes.
 
 ---
 
-## 1. Workspace Rules (`.agents/rules/`)
+## 1. Portable project references
 
-Specific project rules are located in `.agents/rules/` and triggered contextually to optimize context usage:
+The checked-in [Copilot Instructions](.github/copilot-instructions.md) contain
+Python, TypeScript, testing, security and migration rules. They are authoritative
+on every machine; an ignored `.agents/` directory is optional local tooling.
 
-* [architecture.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/architecture.md) (`type: model_decision`) — Complete architectural breakdown of the Game Turn Loop (Pass 1, Pass 1.5, Pass 2), World Manifest (`adventure.adv`/`.adz`), state mutations, and scripting engine.
-* [typescript.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/typescript.md) (`type: glob`, `**/*.{ts,tsx}`) — TypeScript code formatting, naming conventions, and strict typing.
-* [python.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/python.md) (`type: glob`, `**/*.py`) — Python conventions, type hinting, error handling, and Alembic migrations.
-* [testing.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/testing.md) (`type: glob`, `tests/**/*.py`) — AAA pattern, mocking requirements, and mandatory adventure lifecycle verification.
-* [security.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/security.md) (`type: model_decision`) — Path traversal prevention (CWE-22) and secure filesystem handling.
+- [Turn pipeline](docs/diagrams/game_session_loop.mermaid)
+- [Adventure format](docs/specs/adventure_format.md)
+- [Living World architecture](docs/living-world-architecture.md)
+- [NPC Personality pilot](docs/chpm-pilot.md)
+- [Database inspector](scripts/inspect_state.py): list-adventures, show-adventure,
+  list-sessions and show-session; use it before changing state logic.
 
----
+## 2. Local tools
 
-## 2. On-Demand Skills (`.agents/skills/`)
-
-* [taleweaver-inspector](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-inspector/SKILL.md) — Inspect database state, session inventories, entity overrides, and manifests via `python scripts/inspect_state.py`.
-* [taleweaver-adventure-creator](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-adventure-creator/SKILL.md) — Generates structured adventure concepts using sequence, scene, and entity tags.
-* [taleweaver-dev-tools](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-dev-tools/SKILL.md) — Developer toolkit for admin credential resets, security keys, and thumbnail regeneration.
-* [taleweaver-telemetry](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-telemetry/SKILL.md) — LLM telemetry, latency percentiles (p50/p90/p95), and token analysis.
+Optional private skills must not be required to build, test or review this
+repository. Use the checked-in scripts and documentation when they are absent.
 
 ---
 

@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-slim AS frontend-builder
+FROM node:22-slim AS frontend-builder
 WORKDIR /app/frontend
 
 # Copy package files and install dependencies
@@ -11,7 +11,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Final image
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 # Install system dependencies
@@ -28,7 +28,12 @@ RUN pip install --no-cache-dir "poetry>=2.0.0"
 
 # Install python dependencies
 COPY pyproject.toml poetry.lock README.md ./
-RUN poetry install --no-root --without dev
+ARG INSTALL_CONCORDIA=false
+RUN case "$INSTALL_CONCORDIA" in \
+      true) poetry install --no-root --without dev --extras concordia ;; \
+      false) poetry install --no-root --without dev ;; \
+      *) echo "INSTALL_CONCORDIA must be true or false" >&2; exit 1 ;; \
+    esac
 
 
 # Copy backend code
@@ -40,7 +45,7 @@ COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
 # Install project package
-RUN poetry install --without dev
+RUN poetry install --only-root
 
 # Copy adventures (for automatic import)
 COPY adventures/ ./adventures/

@@ -385,5 +385,5 @@ Inspect the internal engine workflows through Mermaid diagrams in the repository
 **Fork maintainer:** [Gam1409](https://github.com/Gam1409). This repository develops additional features on top of the original project.
 
 - **Code**: Licensed under the [MIT License](LICENSE).
-- **Adventures & Story Content**: Licensed under [CC-BY-NC 4.0](LICENSE-CC-BY-NC-4.0).
+- **Adventures & Story Content**: Licensed under [CC-BY-NC 4.0](LICENSE-CC-BY-NC-4.0), unless an individual file declares a different license (for example the MIT-licensed combat test adventure).
 - **Fonts & Assets**: Bundled frontend typography assets and licenses are documented in `frontend/public/assets/fonts/licenses`.

@@ -124,7 +124,8 @@ class Settings(BaseSettings):
     TTS_RATE_LIMIT_JITTER_MAX: float = 1.15
 
     # SSRF: allow private/loopback hosts in user-supplied URLs (Ollama, Automatic1111, etc.)
-    # Default False rejects calls to 127.0.0.1, ::1, RFC1918 ranges, link-local, etc.
+    # Legacy local providers default to True for self-hosting. Custom OpenAI also
+    # requires an explicit environment setting; see docs/provider-network-policy.md.
     ALLOW_PRIVATE_NETWORK_MODELS: bool = True
 
     # setup-root hardening: allow the bootstrap endpoint to be reached from

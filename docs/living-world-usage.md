@@ -54,9 +54,9 @@ The normal dependency set still supports Python 3.10/3.11 without Concordia.
 Selecting Concordia without the compatible package returns a configuration error;
 there is no silent fallback to the native engine and no runtime package download.
 Keep specifying the extra on subsequent dependency installations.
-The stock Dockerfile uses Python 3.11 and supports the native decision engine;
-Concordia needs a Python 3.12/3.13 image with the extra installed in both Poetry
-installation steps. The standard Docker image is not advertised as Concordia-ready.
+The stock Dockerfile uses Python 3.12 and supports the native decision engine.
+Build with `docker build --build-arg INSTALL_CONCORDIA=true -t taleweaver-concordia .`
+to include the optional Concordia package. It is not installed in the default image.
 
 The setup scripts accept `./setup.ps1 -Concordia` (Windows) and
 `./setup.sh --concordia` (Linux/macOS). Both verify the installed version. Restart
