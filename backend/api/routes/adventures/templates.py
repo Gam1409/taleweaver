@@ -779,6 +779,9 @@ async def update_adventure(
         raise HTTPException(status_code=404, detail="AdventureTemplate not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+    from backend.engine.chpm.template_settings import validate_update
+
+    await validate_update(db, adv, update_data)
     await apply_clothing_update(db, adv, current_user, update_data)
     if update_data.get("max_containers") is not None:
         update_data["max_containers"] = max(0, min(30, int(update_data["max_containers"])))

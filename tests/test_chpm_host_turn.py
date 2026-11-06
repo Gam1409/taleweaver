@@ -29,7 +29,9 @@ async def configured(db, mode="live"):
     user, _, state, _ = await seed_vn(db)
     state.entity_states = {
         **state.entity_states,
-        KEY: KernelState(settings=Settings(mode=mode, actor_ids=["LINA"])).model_dump(),
+        KEY: KernelState(
+            settings=Settings(mode=mode, actor_ids=["LINA"], failure_policy="strict")
+        ).model_dump(),
     }
     await db.commit()
     return user, state

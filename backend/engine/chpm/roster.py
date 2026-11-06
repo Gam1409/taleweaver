@@ -1,6 +1,6 @@
 """Bound deep cognition while retaining every selected character's private state."""
 
-from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.schema import KernelState, Perception, Settings
 
 
@@ -10,8 +10,13 @@ def active_limit(settings: Settings, present: int | None = None) -> int:
 
 
 def recent(state: KernelState, present: set[str]) -> list[str]:
-    latest = max(state.last_active.values(), default=-1)
-    return sorted(actor for actor in present if state.last_active.get(actor) == latest)
+    eligible = {
+        actor: revision
+        for actor, revision in state.last_active.items()
+        if not state.recovery.last_gap_revision or revision > state.recovery.last_gap_revision
+    }
+    latest = max(eligible.values(), default=-1)
+    return sorted(actor for actor in present if eligible.get(actor) == latest)
 
 
 def select(state: KernelState, perceptions: dict[str, Perception]) -> list[str]:
@@ -19,7 +24,7 @@ def select(state: KernelState, perceptions: dict[str, Perception]) -> list[str]:
     limit = active_limit(state.settings, len(available))
     engaged = [actor for actor in available if perceptions[actor].engaged]
     if len(engaged) > limit:
-        raise ChpmError(
+        raise RecoverableChpmError(
             f"This turn directly involves {len(engaged)} NPCs, above the active limit of {limit}. "
             "Raise Active NPCs per turn and its request budget, or split the interaction. "
             "No directly involved character was silently omitted."

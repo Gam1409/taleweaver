@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import FixPatchDetails from './FixPatchDetails.vue'
 import {
   AlertTriangle,
@@ -33,6 +34,8 @@ const emit = defineEmits<{
   (e: 'toggle-backup', value: boolean): void
   (e: 'retry'): void
 }>()
+const dialog = ref<HTMLElement | null>(null)
+useDialogFocus(dialog, () => { if (!props.applying) emit('close') })
 
 const selectedProposal = computed<FixProposal | null>(() => {
   if (props.selectedIndex < 0) return null
@@ -56,11 +59,15 @@ function describeTarget(targetType: string, targetId?: string | null): string {
 </script>
 
 <template>
+  <Teleport to="body">
   <div
     v-if="props.open"
+    ref="dialog"
     class="fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
     role="dialog"
     aria-modal="true"
+    aria-labelledby="ai-fix-title"
+    tabindex="-1"
     @click.self="emit('close')"
   >
     <div class="w-full max-w-3xl rounded-2xl border border-violet-500/30 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -70,7 +77,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
             <Wand2 class="w-5 h-5 text-violet-300" />
           </div>
           <div class="min-w-0">
-            <h3 class="text-lg font-black text-white flex items-center gap-2">
+            <h3 id="ai-fix-title" class="text-lg font-black text-white flex items-center gap-2">
               AI Fix Suggestions
               <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-violet-500/15 border border-violet-500/30 text-violet-200">
                 {{ props.proposals.length }} / 3 options
@@ -249,4 +256,5 @@ function describeTarget(targetType: string, targetId?: string | null): string {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>

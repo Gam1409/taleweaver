@@ -39,7 +39,13 @@ def controls(state: Any, actor_id: str) -> bool:
 
 def retract(state: Any, message_id: str) -> None:
     current = load(state)
-    if not current.actors and not current.memories and not current.agenda and not current.minds:
+    if (
+        not current.actors
+        and not current.memories
+        and not current.agenda
+        and not current.minds
+        and not current.recovery.recent
+    ):
         return
     # Later decisions can depend on earlier speech. Clear all derived pilot
     # decisions on a source change rather than pretending they were recomputed.
@@ -65,4 +71,14 @@ def retract(state: Any, message_id: str) -> None:
             entries = agenda.retract(entries, invalid_id)
         retained_agenda.extend(entries)
     current.agenda = retained_agenda
+    current.recovery.recent = [
+        entry
+        for entry in current.recovery.recent
+        if message_id not in {entry.input_id, entry.reply_id}
+    ]
+    current.recovery.gap_cursors = {
+        actor: min(cursor, current.minds[actor].snapshot.cursor)
+        for actor, cursor in current.recovery.gap_cursors.items()
+        if actor in current.minds
+    }
     save(state, current, expected_revision=current.revision)

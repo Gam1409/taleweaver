@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from backend.engine.chpm.template_settings import stored_defaults as personality_defaults
 from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 
@@ -18,6 +19,9 @@ def build_archive_template(
     resolved_license_url: str | None,
 ) -> AdventureTemplate:
     return AdventureTemplate(
+        npc_personality_settings=personality_defaults(
+            adv_data.get("npc_personality_settings", manifest_data.get("npc_personality_settings"))
+        ),
         living_world_settings=stored_defaults(
             adv_data.get("living_world_settings", manifest_data.get("living_world_settings"))
         ),

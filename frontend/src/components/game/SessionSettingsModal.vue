@@ -100,7 +100,7 @@ function handleInput(event: Event) {
 
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in" @click.self="emit('close')">
-    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="session-settings-title" tabindex="-1" class="w-full max-w-lg rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
+    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="session-settings-title" tabindex="-1" class="flex max-h-[94dvh] w-full max-w-screen-2xl flex-col rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
       <!-- Header -->
       <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between bg-slate-950/40">
         <div class="flex items-center gap-3">
@@ -109,7 +109,7 @@ function handleInput(event: Event) {
           </div>
           <div>
             <h3 id="session-settings-title" class="text-base sm:text-lg font-black text-white font-display uppercase tracking-wider">Session Memory & Settings</h3>
-            <p class="text-xs text-slate-400">Configure LLM context memory for this active session.</p>
+            <p class="text-xs text-slate-400">Story, memory and character behavior for this session.</p>
           </div>
         </div>
         <button 
@@ -122,13 +122,16 @@ function handleInput(event: Event) {
       </div>
 
       <!-- Content -->
-      <div class="px-6 py-6 flex flex-col gap-6 max-h-[65dvh] overflow-y-auto">
+      <div class="grid min-h-0 gap-6 overflow-y-auto px-4 py-6 sm:px-6 md:grid-cols-2 xl:grid-cols-3">
+        <section aria-labelledby="session-story-settings" class="min-w-0 space-y-5">
+        <h4 id="session-story-settings" class="text-xs font-black uppercase tracking-widest text-amber-300">Story & world</h4>
         <VnNarrationSettings v-if="sessionId && mode === 'vn'" ref="vnNarration" :session-id="sessionId" />
         <SessionContentSettings v-if="sessionId" ref="contentSettings" :session-id="sessionId" />
         <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
         <StoryVisualPresets v-if="sessionId" ref="visualPresets" :adventure-id="sessionId" session embedded />
-        <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
-        <ChpmSettings v-if="sessionId && mode === 'vn'" ref="chpm" :session-id="sessionId" />
+        </section>
+        <section aria-labelledby="session-memory-settings" class="min-w-0 space-y-5">
+        <h4 id="session-memory-settings" class="text-xs font-black uppercase tracking-widest text-amber-300">Memory & audio</h4>
         <!-- Memory Turns Slider Panel -->
         <div class="space-y-4">
           <div class="flex justify-between items-start gap-4">
@@ -246,6 +249,12 @@ function handleInput(event: Event) {
           </label>
         </div>
 
+        </section>
+        <section aria-labelledby="session-npc-settings" class="min-w-0 space-y-5 md:col-span-2 xl:col-span-1">
+        <h4 id="session-npc-settings" class="text-xs font-black uppercase tracking-widest text-teal-300">Living World & NPC Personality</h4>
+        <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
+        <ChpmSettings v-if="sessionId && mode === 'vn'" ref="chpm" :session-id="sessionId" />
+        <p v-else class="text-xs text-slate-400">NPC Personality is available in Visual Novel sessions.</p>
         <!-- Helpful tip note -->
         <div class="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/5 text-slate-400 text-xs leading-relaxed">
           <Sparkles class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
@@ -253,6 +262,7 @@ function handleInput(event: Event) {
             Changes take effect immediately on your next action. Intermediate game events (such as dice rolls) are formatted automatically without consuming extra turns.
           </span>
         </div>
+        </section>
       </div>
 
       <!-- Footer -->

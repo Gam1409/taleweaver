@@ -10,6 +10,7 @@ import { ref, computed } from 'vue'
 import { configState } from '@/store/config'
 import { audioService } from '@/services/audioService'
 import SessionDiagnosticsId from './SessionDiagnosticsId.vue'
+import NpcBehaviorIndicator from './NpcBehaviorIndicator.vue'
 import GameClockWidget from '@/components/game/GameClockWidget.vue'
 import BableFishSelector from '@/components/game/BableFishSelector.vue'
 import {
@@ -161,6 +162,7 @@ const sequenceOrder = computed(() => {
           </span>
         </div>
         <SessionDiagnosticsId :enabled="!!props.systemDebugEnabled" :session-id="props.sessionId" />
+        <NpcBehaviorIndicator :session-id="props.sessionId" />
       </div>
     </div>
 

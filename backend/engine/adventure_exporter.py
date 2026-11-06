@@ -372,6 +372,7 @@ class AdventureExporter:
             "adventure": {
                 "title": adv.title,
                 "living_world_settings": adv.living_world_settings,
+                "npc_personality_settings": adv.npc_personality_settings,
                 "teaser": adv.teaser,
                 "version": adv.version,
                 "creator": adv.creator,

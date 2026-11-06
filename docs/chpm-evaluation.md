@@ -5,6 +5,12 @@ change the default CHPM setting or existing adventure/session data. Planning mak
 no model request. Running uses synthetic cases and the normal inference router,
 including its endpoint validation, admission queue and timeout handling.
 
+Evaluation arms explicitly use the **Strict** failure policy. A failed cognitive
+response remains a failure in reports; the player-facing Keep playing recovery
+must not be counted as a successful CHPM decision. Recovery has separate mocked
+VN integration tests. Module release version 1.0.0 is independent of persisted
+schema and evaluation protocol versions.
+
 The suite has **41 cases**:
 
 - 20 bilingual short cases: continuation, missing information, independent goals,

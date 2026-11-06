@@ -49,7 +49,11 @@ async def test_agent_turn_commits_only_after_review_and_failures_keep_original_s
         user, state = await configured(db)
         current = load(state)
         current.settings = Settings(
-            mode="live", actor_ids=["LINA"], agent_steps=2, max_calls_per_turn=8
+            mode="live",
+            actor_ids=["LINA"],
+            agent_steps=2,
+            max_calls_per_turn=8,
+            failure_policy="strict",
         )
         state.entity_states = {**state.entity_states, KEY: current.model_dump()}
         await db.commit()

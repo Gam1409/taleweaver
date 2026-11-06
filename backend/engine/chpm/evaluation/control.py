@@ -26,6 +26,7 @@ async def probe(
 ) -> dict:
     if source.arm != "chpm" or source.status != "ok" or source.case_id != case.id:
         raise ValueError("Control probe requires an accepted CHPM reply for this exact case.")
+    settings = settings.model_copy(update={"failure_policy": "strict"})
     measured = MeasuredFactory(factory, limit=settings.max_calls_per_turn, timeout=timeout)
     decisions = {
         key: Decision.model_validate(value) for key, value in source.trace["decisions"].items()

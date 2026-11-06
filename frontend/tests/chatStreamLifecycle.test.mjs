@@ -15,9 +15,13 @@ const pollerSource = readFileSync(new URL('../src/services/snapshotPoller.ts', i
 const pollerCompiled = ts.transpileModule(pollerSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const pollerUrl = `data:text/javascript;base64,${Buffer.from(pollerCompiled).toString('base64')}`
 const source = readFileSync(new URL('../src/composables/useGameSocket.ts', import.meta.url), 'utf8')
+const npcStatusSource = readFileSync(new URL('../src/composables/useNpcBehaviorStatus.ts', import.meta.url), 'utf8')
+const npcStatusCompiled = ts.transpileModule(npcStatusSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+const npcStatusUrl = `data:text/javascript;base64,${Buffer.from(npcStatusCompiled).toString('base64')}`
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/composables/useNpcBehaviorStatus'", `from '${npcStatusUrl}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace("from '@/services/snapshotPoller'", `from '${pollerUrl}'`)
   .replace("from '@/services/failedTurnDrafts'", `from '${draftModuleUrl}'`)

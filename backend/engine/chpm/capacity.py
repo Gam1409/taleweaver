@@ -5,8 +5,8 @@ from typing import Any
 from backend.engine.chpm import host_sources, roster
 from backend.engine.chpm.core.history import count
 from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIENCES
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
-from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
@@ -68,7 +68,7 @@ def inspect(mind: Mind) -> dict:
 def ensure_budget(state: KernelState, actors: list[str]) -> None:
     required = required_calls(state.settings, len(actors))
     if state.settings.max_calls_per_turn < required:
-        raise ChpmError(
+        raise RecoverableChpmError(
             f"CHPM is paused before model requests: this turn needs a budget of at least {required} "
             "requests, including perception and (in live mode) one shared proposal retry, "
             "one narration repair, repeat review and configured agent lookups. "
@@ -86,7 +86,7 @@ def ensure_turn(state: KernelState, actors: list[str]) -> None:
         if actor in state.minds and inspect(state.minds[actor])["status"] == "pause_required"
     ]
     if full:
-        raise ChpmError(
+        raise RecoverableChpmError(
             "CHPM is paused before model requests: psychological history has insufficient space "
             "for a complete turn for " + ", ".join(full) + ". "
             "No history was discarded or replaced. Open session NPC behavior settings and "

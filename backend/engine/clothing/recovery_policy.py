@@ -2,6 +2,7 @@
 
 import re
 
+from backend.engine.clothing.schema import Garment
 from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.schema import ItemAction
 
@@ -19,9 +20,14 @@ def classify_action(action: ItemAction) -> ItemAction:
     proposal = action.new_item
     if proposal is None or proposal.clothing is None or not _INNER_NAME.search(proposal.name):
         return action
-    garment = proposal.clothing.model_copy(update={"underwear": True})
+    garment = classify_garment(proposal.name, proposal.clothing)
     corrected = proposal.model_copy(update={"clothing": garment})
     return action.model_copy(update={"new_item": corrected})
+
+
+def classify_garment(name: str, garment: Garment) -> Garment:
+    """Supplement the explicit flag; ordinary coverage alone never implies underwear."""
+    return garment.model_copy(update={"underwear": True}) if _INNER_NAME.search(name) else garment
 
 
 def partition_rejections(

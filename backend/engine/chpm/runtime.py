@@ -13,8 +13,8 @@ from backend.engine.chpm import (
     capacity,
     cognition,
     context,
+    continuation,
     development_context,
-    experience,
     host_adapter,
     memory,
     narrative_context,
@@ -24,6 +24,7 @@ from backend.engine.chpm import (
 )
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind, removed_messages
 from backend.engine.chpm.kernel import ChpmError, digest
 from backend.engine.chpm.schema import (
@@ -58,6 +59,12 @@ class Turn:
     deferred_names: dict[str, str] = field(default_factory=dict)
     reply_character_budget: int | None = None
     agent_clothing: dict[str, dict] = field(default_factory=dict)
+    simplified: bool = False
+    fallback_identities: dict = field(default_factory=dict)
+    fallback_issues: list[str] = field(default_factory=list)
+    simplified_text: str | None = None
+    player_request: str = ""
+    gap_cursors: dict[str, int] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -65,9 +72,15 @@ def current(manager: Any) -> Turn | None:
     return value if isinstance(value, Turn) else None
 
 
+def public_status(state: Any) -> dict:
+    return continuation.snapshot_status(state)
+
+
 def buffered(manager: Any) -> bool:
     turn = current(manager)
-    return bool(turn and turn.initial.settings.mode == "live" and turn.decisions)
+    return bool(
+        turn and turn.initial.settings.mode == "live" and (turn.decisions or turn.simplified)
+    )
 
 
 def contract_data(turn: Turn) -> dict:
@@ -87,7 +100,11 @@ def contract_data(turn: Turn) -> dict:
                     if decision.previous_intention
                     else None
                 )
-            data[actor]["subjective_experience_not_traits"] = experience.view(mind)
+            data[actor]["subjective_experience_not_traits"] = continuation.experience_view(
+                mind, turn.gap_cursors
+            )
+            if turn.initial.recovery.pending_gap_turns:
+                data[actor]["continuity_gap"] = continuation.gap_context(turn.initial)
             data[actor]["developing_tendencies"] = development_context.tendencies(mind)
             changed = [
                 b
@@ -104,6 +121,8 @@ def contract_data(turn: Turn) -> dict:
 
 
 def contract(turn: Turn) -> str:
+    if turn.simplified:
+        return continuation.contract(turn)
     return (
         prompts.NARRATE
         + json.dumps(contract_data(turn), ensure_ascii=False, separators=(",", ":"))
@@ -126,7 +145,9 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     old = current(manager)
     if old is not None and old.input_id == input_id:
         return contract(old) if buffered(manager) else ""
-    turn = Turn(state, input_id)
+    turn = Turn(
+        state, input_id, player_request=message, gap_cursors=dict(state.recovery.gap_cursors)
+    )
     manager._chpm_turn = turn
     selected = [
         actor
@@ -135,9 +156,14 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     ]
     if not selected:
         return ""
+    turn.fallback_identities = continuation.identities(manager, state, selected)
+    manager._chpm_publish_after_commit = state.settings.mode == "live"
     turn.present_names = {
         actor.id: str(actor.name) for actor in actors if context.available(actor, manager.state)
     }
+    if continuation.enabled(turn) and state.recovery.cooldown_remaining:
+        continuation.activate(turn, "cooldown")
+        return contract(turn)
     try:
         if len(selected) <= state.settings.max_active_npcs:
             await capacity.admit(manager, state, [actor.id for actor in selected])
@@ -148,20 +174,27 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
             )
         await _prepare(manager, turn, message, selected)
     except Exception as exc:
-        turn.usage.status = "failed"
-        turn.usage.detail = (
-            str(exc) if isinstance(exc, (ChpmError, TransitionError)) else type(exc).__name__
-        )
-        logger.warning(
-            "CHPM preparation failed: session=%s error=%s", manager.game_id, type(exc).__name__
-        )
-        if state.settings.mode == "live":
-            raise ChpmError("CHPM could not prepare this turn. " + turn.usage.detail) from exc
-        turn.decisions = {}
-        return ""
-    turn.usage.status = "prepared" if state.settings.mode == "live" else "shadow"
+        _preparation_failed(manager, turn, exc)
+    if turn.usage.status != "failed":
+        turn.usage.status = "prepared" if state.settings.mode == "live" else "shadow"
     manager._chpm_publish_after_commit = buffered(manager)
     return contract(turn) if buffered(manager) else ""
+
+
+def _preparation_failed(manager: Any, turn: Turn, exc: Exception) -> None:
+    turn.usage.status = "failed"
+    turn.usage.detail = (
+        str(exc) if isinstance(exc, (ChpmError, TransitionError)) else type(exc).__name__
+    )
+    logger.warning(
+        "CHPM preparation failed: session=%s error=%s", manager.game_id, type(exc).__name__
+    )
+    if isinstance(exc, RecoverableChpmError) and continuation.enabled(turn):
+        continuation.activate(turn, "analysis_failed")
+    elif turn.initial.settings.mode == "live":
+        raise ChpmError("CHPM could not prepare this turn. " + turn.usage.detail) from exc
+    else:
+        turn.decisions = {}
 
 
 async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) -> None:
@@ -205,7 +238,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
 
 
 async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:
-    previous = turn.initial.actors.get(actor.id)
+    previous = continuation.previous(turn.initial, actor.id)
     retained = await memory.recall(
         manager,
         actor.id,
@@ -217,6 +250,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     authored = actor
     if turn.initial.settings.mode == "live":
         turn.minds[actor.id] = await host_adapter.prepare(manager, turn, actor, observed)
+        continuation.rebase_gap(turn, actor.id)
         authored = host_adapter.actor_view(actor, turn.minds[actor.id])
         if actor.id in turn.initial.minds:
             invalid = removed_messages(turn.initial.minds[actor.id], turn.minds[actor.id])
@@ -236,6 +270,9 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
         len(turn.initial.agenda) < agenda.MAX_RECORDS
         and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
     )
+    if turn.initial.recovery.pending_gap_turns:
+        supplied["continuity_gap"] = continuation.gap_context(turn.initial)
+    supplied["_chpm_gap_cursors"] = turn.gap_cursors
     perceived = turn.perceptions[actor.id]
     actor_observation = observed.model_copy(
         update={
@@ -277,7 +314,13 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:
     turn = current(manager)
-    if turn is None or not completed:
+    if turn is None:
+        return
+    if turn.simplified:
+        continuation.finish(manager, turn, reply)
+        manager._chpm_turn = None
+        return
+    if not completed:
         return
     if turn.minds and reply.session_id != manager.game_id:
         raise ChpmError("CHPM completed reply belongs to another session.")
@@ -298,6 +341,8 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         retained_agenda = [entry for entry in result.agenda if entry.actor_id not in turn.agendas]
         retained_agenda.extend(entry for entries in turn.agendas.values() for entry in entries)
         result.agenda = agenda.apply(retained_agenda, turn.decisions, turn.verdict, reply)
+        result.recovery.gap_cursors = turn.gap_cursors
+        continuation.mark_verified(result)
     save(manager.state, result, expected_revision=turn.initial.revision)
     manager._chpm_turn = None
 

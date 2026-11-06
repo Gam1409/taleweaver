@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
+import DebugToolbarButton from './DebugToolbarButton.vue'
+import { Braces } from 'lucide-vue-next'
 
 interface MessageInfo {
   id: string
@@ -120,14 +122,13 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <button
-    type="button"
+  <DebugToolbarButton
     :disabled="!sessionId"
-    class="rounded-lg border border-cyan-700 bg-cyan-950 px-3 py-2 text-xs font-bold text-cyan-200 disabled:opacity-40"
     @click="open"
   >
+    <Braces class="h-4 w-4" />
     Scene JSON
-  </button>
+  </DebugToolbarButton>
   <Teleport to="body">
     <dialog
       ref="dialog"

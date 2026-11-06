@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from backend.engine.chpm.template_settings import stored_defaults as personality_defaults
 from backend.engine.living_world.template_settings import stored_defaults
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
@@ -15,6 +16,7 @@ def build_session_template(
 
     old_adv = data["adventure"]
     return AdventureTemplate(
+        npc_personality_settings=personality_defaults(old_adv.get("npc_personality_settings")),
         living_world_settings=stored_defaults(old_adv.get("living_world_settings")),
         id=generate_adventure_id(old_adv["title"]),
         owner_id=user.id,

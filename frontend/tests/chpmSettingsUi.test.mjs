@@ -45,7 +45,7 @@ test('large casts expose focused processing and an explicit all-present choice',
   const html = await render(20)
   assert.match(html, /Character roster \(up to 20/)
   assert.match(html, /Active NPCs per turn/)
-  assert.match(html, /Twenty active NPCs require 25 CHPM requests/)
+  assert.match(html, /Twenty active NPCs require 25 NPC Personality requests/)
   assert.match(html, /Attribution is model-based and can be mistaken/)
 })
 

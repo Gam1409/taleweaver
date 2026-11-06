@@ -44,7 +44,7 @@ async def test_malformed_json_never_publishes_or_changes_memory_and_agenda(
         prior = await db.get(ChatMessage, prior_id)
         evidence = memory.from_source(prior, "LINA", "LINA", prior.content, "own_speech")
         original = KernelState(
-            settings=Settings(mode="live", actor_ids=["LINA"]),
+            settings=Settings(mode="live", actor_ids=["LINA"], failure_policy="strict"),
             memories={"LINA": [evidence]},
             agenda=[
                 AgendaEntry(

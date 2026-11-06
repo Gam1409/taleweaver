@@ -5,42 +5,126 @@ import json
 from typing import Any
 
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import agenda, inference, passages, prompts
+from backend.engine.chpm import (
+    agenda,
+    continuation,
+    continuation_writer,
+    inference,
+    passages,
+    prompts,
+)
+from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.runtime import Turn, contract, contract_data, current
 from backend.engine.chpm.schema import Verdict
 
 
 async def validate(
-    manager: Any, text: str, *, completed: bool, resolution: str, system_prompt: str
+    manager: Any,
+    text: str,
+    *,
+    completed: bool,
+    resolution: str,
+    system_prompt: str,
+    narration_messages: list[dict[str, str]] | None = None,
+    ordinary_context: str = "",
 ) -> str:
     turn = current(manager)
+    if turn is not None and turn.simplified:
+        turn.simplified_text = turn.simplified_text or text
+        return turn.simplified_text
     if turn is None or not turn.decisions or turn.initial.settings.mode != "live":
         return text
     if not completed or not text.strip():
+        if text.strip() and continuation.enabled(turn):
+            continuation.activate(turn, "narration_incomplete")
+            turn.simplified_text = text
+            return text
         raise ChpmError("CHPM received an incomplete narration. No response was published.")
+    try:
+        return await _validated(
+            manager, turn, text, resolution, system_prompt, narration_messages, ordinary_context
+        )
+    except RecoverableChpmError:
+        if turn.simplified or not continuation.enabled(turn):
+            raise
+        continuation.activate(turn, "review_unavailable")
+        turn.simplified_text = text
+        return text
+
+
+async def _validated(
+    manager: Any,
+    turn: Turn,
+    text: str,
+    resolution: str,
+    system_prompt: str,
+    narration_messages: list[dict[str, str]] | None,
+    ordinary_context: str,
+) -> str:
     verdict = await _review(manager, turn, text, resolution)
     if not verdict.matches:
-        if turn.usage.calls + 2 > turn.initial.settings.max_calls_per_turn:
-            raise ChpmError(
-                "CHPM needs two remaining requests for a repair and another review. Increase the turn budget."
-            )
         try:
+            if turn.usage.calls + 2 > turn.initial.settings.max_calls_per_turn:
+                raise RecoverableChpmError(
+                    "CHPM needs two remaining requests for repair and review."
+                )
             text = await _repair(manager, turn, text, resolution, verdict.issues, system_prompt)
-        except ChpmError:
-            raise
+        except RecoverableChpmError:
+            return await _rejected(
+                manager,
+                turn,
+                resolution,
+                system_prompt,
+                verdict.issues,
+                narration_messages,
+                ordinary_context,
+            )
         except Exception as exc:
             raise ChpmError(
                 f"CHPM repair failed ({type(exc).__name__}). No response was published."
             ) from exc
-        verdict = await _review(manager, turn, text, resolution)
+        # A newly repaired candidate has not itself been rejected. If its reviewer
+        # is unavailable, keep this candidate as explicitly unreviewed ordinary RP.
+        try:
+            verdict = await _review(manager, turn, text, resolution)
+        except RecoverableChpmError:
+            if not continuation.enabled(turn):
+                raise
+            continuation.activate(turn, "review_unavailable")
+            turn.simplified_text = text
+            return text
     if not verdict.matches:
-        raise ChpmError(
-            "CHPM dialogue validation failed after one repair: " + "; ".join(verdict.issues)
+        return await _rejected(
+            manager,
+            turn,
+            resolution,
+            system_prompt,
+            verdict.issues,
+            narration_messages,
+            ordinary_context,
         )
     turn.verdict = verdict
     turn.usage.status = "validated"
     return text
+
+
+async def _rejected(
+    manager: Any,
+    turn: Turn,
+    resolution: str,
+    system_prompt: str,
+    issues: list[str],
+    narration_messages: list[dict[str, str]] | None,
+    ordinary_context: str,
+) -> str:
+    if not continuation.enabled(turn):
+        raise ChpmError("CHPM dialogue validation failed after one repair: " + "; ".join(issues))
+    continuation.activate(turn, "review_rejected", issues)
+    turn.simplified_text = await continuation_writer.generate(
+        manager, turn, resolution, system_prompt, narration_messages, ordinary_context
+    )
+    return turn.simplified_text
 
 
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
@@ -61,20 +145,28 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     )
     if not raw.matches:
         if not raw.issues:
-            raise ChpmError("CHPM validator rejected the reply without feedback.")
+            raise RecoverableChpmError("CHPM validator rejected the reply without feedback.")
         return Verdict(matches=False, issues=raw.issues)
-    verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
+    try:
+        verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
+    except ChpmError as exc:
+        raise RecoverableChpmError(str(exc)) from exc
     ids = [entry.actor_id for entry in verdict.evidence]
     if set(ids) != set(turn.decisions) or len(ids) != len(set(ids)):
-        raise ChpmError("CHPM validator did not identify every controlled NPC exactly once.")
+        raise RecoverableChpmError(
+            "CHPM validator did not identify every controlled NPC exactly once."
+        )
     for entry in verdict.evidence:
         silent = turn.decisions[entry.actor_id].selected.kind == "DEFER" and not entry.quote
         if not silent and (not entry.quote or entry.quote not in text):
-            raise ChpmError("CHPM validator supplied no exact speech evidence.")
+            raise RecoverableChpmError("CHPM validator supplied no exact speech evidence.")
     if verdict.matches and verdict.issues:
-        raise ChpmError("CHPM validator returned a contradictory verdict.")
+        raise RecoverableChpmError("CHPM validator returned a contradictory verdict.")
     _validate_hearing(turn, verdict, text)
-    agenda.validate_evidence(turn.decisions, verdict)
+    try:
+        agenda.validate_evidence(turn.decisions, verdict)
+    except ChpmError as exc:
+        raise RecoverableChpmError(str(exc)) from exc
     return verdict
 
 
@@ -108,7 +200,7 @@ def preflight(turn: Turn) -> None:
     # request is still checked exactly; unforeseen huge resolutions fail visibly.
     turn.reply_character_budget = min(4096, (remaining - 2048) // 2)
     if turn.reply_character_budget < 512:
-        raise ChpmError(
+        raise RecoverableChpmError(
             "CHPM review contract leaves insufficient reply space; increase input budget before narration."
         )
 
@@ -123,7 +215,9 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
             or not entry.quote
             or entry.quote not in text
         ):
-            raise ChpmError("CHPM hearing evidence has an invalid observer, speaker, or quote.")
+            raise RecoverableChpmError(
+                "CHPM hearing evidence has an invalid observer, speaker, or quote."
+            )
 
 
 async def _repair(
@@ -149,13 +243,21 @@ async def _repair(
     llm = inference.model_for(manager, "complex", GameMasterLLM)
     llm.enable_thinking = False
     llm.max_tokens = min(llm.max_tokens, 4096)
-    result = await asyncio.wait_for(
-        llm.aexecute_simple_task(
-            system, payload, llm.model, game_id=manager.game_id, operation="chpm", phase="repair"
-        ),
-        timeout=float(llm.request_timeout),
-    )
+    try:
+        result = await asyncio.wait_for(
+            llm.aexecute_simple_task(
+                system,
+                payload,
+                llm.model,
+                game_id=manager.game_id,
+                operation="chpm",
+                phase="repair",
+            ),
+            timeout=float(llm.request_timeout),
+        )
+    except Exception as exc:
+        raise InferenceUnavailableError(f"CHPM repair failed ({type(exc).__name__}).") from exc
     if not isinstance(result, str):
-        raise ChpmError("CHPM repair returned a non-text response.")
+        raise RecoverableChpmError("CHPM repair returned a non-text response.")
     turn.usage.output_chars += len(result)
     return result

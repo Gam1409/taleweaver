@@ -11,7 +11,7 @@ from backend.schemas.authoring_completion import EquipmentSlot
 class NewItem(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=120)
-    description: str = Field(min_length=4, max_length=600)
+    description: str = Field(min_length=4, max_length=1000)
     kind: Literal["ordinary", "clothing"]
     clothing: Garment | None = None
     wearable_slots: list[EquipmentSlot] = Field(default_factory=list, max_length=4)

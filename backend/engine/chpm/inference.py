@@ -9,17 +9,17 @@ from pydantic import BaseModel, ValidationError
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import json_contract
-from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class InvalidResponseError(ChpmError):
+class InvalidResponseError(RecoverableChpmError):
     """A completed model response failed validation; transport failures are separate."""
 
 
-class OutputBudgetError(ChpmError):
+class OutputBudgetError(RecoverableChpmError):
     """Do not repeat a cut-off response with the same output budget."""
 
 
@@ -105,7 +105,7 @@ async def request(
             )
         usage.output_chars += len(result)
     except Exception as exc:
-        raise ChpmError(
+        raise InferenceUnavailableError(
             f"CHPM {phase} failed ({type(exc).__name__}). No decision was applied."
         ) from exc
     check_output_budget(completions, llm.max_tokens, phase)
@@ -122,10 +122,12 @@ async def request(
 
 def reserve(settings: Settings, usage: Usage, size: int) -> None:
     if size > settings.max_input_chars:
-        raise ChpmError(
+        raise RecoverableChpmError(
             f"CHPM input exceeds its configured size limit ({size} > {settings.max_input_chars} characters). No decision was applied."
         )
     if usage.calls >= settings.max_calls_per_turn:
-        raise ChpmError("CHPM request budget exhausted. No unvalidated response was published.")
+        raise RecoverableChpmError(
+            "CHPM request budget exhausted. No unvalidated response was published."
+        )
     usage.calls += 1
     usage.input_chars += size

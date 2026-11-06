@@ -17,6 +17,7 @@ from backend.api.routes.adventures.editor_special_actions import (
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.item_repair import router as item_repair_router
 from backend.api.routes.adventures.living_world import router as living_world_router
 from backend.api.routes.adventures.living_world_capabilities import (
     router as living_world_capabilities_router,
@@ -64,6 +65,7 @@ router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
 router.include_router(state_checks_router)
 router.include_router(scene_debug_router)
+router.include_router(item_repair_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)

@@ -75,6 +75,23 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
     value.actors = {}
     value.last_active = {}
     value.usage = Usage()
+    value.recovery.last_gap_revision = 0
+    value.recovery.recent = [
+        entry.model_copy(
+            update={
+                "input_id": message_ids[entry.input_id],
+                "reply_id": message_ids[entry.reply_id],
+                "reply_revision": None,
+            }
+        )
+        for entry in value.recovery.recent
+        if entry.input_id in message_ids and entry.reply_id in message_ids
+    ]
+    value.recovery.gap_cursors = {
+        actor: min(cursor, value.minds[actor].snapshot.cursor)
+        for actor, cursor in value.recovery.gap_cursors.items()
+        if actor in value.minds
+    }
     value.revision = 0
     result[KEY] = value.model_dump(mode="json")
     validate(result, session_id)

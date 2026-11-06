@@ -61,6 +61,9 @@ async def run_arm(
     *,
     timeout: float = 120,
 ) -> Result:
+    # Benchmarks expose failures instead of counting ordinary-RP degradation as
+    # a successful psychological decision.
+    settings = settings.model_copy(update={"failure_policy": "strict"})
     measured = MeasuredFactory(
         factory, limit=1 if arm == "baseline" else settings.max_calls_per_turn + 1, timeout=timeout
     )

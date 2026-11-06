@@ -38,6 +38,7 @@ async def run(
     cast = actors(case)
     active = case.population if all_present else case.active
     settings = Settings(
+        failure_policy="strict",
         mode="live",
         actor_ids=[a.id for a in cast],
         max_active_npcs=active,

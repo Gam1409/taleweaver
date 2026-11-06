@@ -105,7 +105,9 @@ async def test_real_turn_preserves_opt_out_and_commits_before_live_text(monkeypa
         user, _, state, _ = await seed_vn(db)
         state.entity_states = {
             **state.entity_states,
-            KEY: KernelState(settings=Settings(mode=mode, actor_ids=["LINA"])).model_dump(),
+            KEY: KernelState(
+                settings=Settings(mode=mode, actor_ids=["LINA"], failure_policy="strict")
+            ).model_dump(),
         }
         await db.commit()
         manager = GameTurnManager(db, "session-1", user)
@@ -139,7 +141,9 @@ async def test_rejected_live_reply_rolls_back_and_retry_is_fresh(monkeypatch):
         user, _, state, original = await seed_vn(db)
         state.entity_states = {
             **state.entity_states,
-            KEY: KernelState(settings=Settings(mode="live", actor_ids=["LINA"])).model_dump(),
+            KEY: KernelState(
+                settings=Settings(mode="live", actor_ids=["LINA"], failure_policy="strict")
+            ).model_dump(),
         }
         await db.commit()
         manager = GameTurnManager(db, "session-1", user)
@@ -164,7 +168,9 @@ async def test_second_turn_recalls_only_source_bound_witnessed_quotes(monkeypatc
         user, _, state, _ = await seed_vn(db)
         state.entity_states = {
             **state.entity_states,
-            KEY: KernelState(settings=Settings(mode="live", actor_ids=["LINA"])).model_dump(),
+            KEY: KernelState(
+                settings=Settings(mode="live", actor_ids=["LINA"], failure_policy="strict")
+            ).model_dump(),
         }
         await db.commit()
         for text in (ACTION, "Я продолжаю разговор."):

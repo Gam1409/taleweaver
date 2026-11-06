@@ -22,7 +22,7 @@ from tests.test_chpm_kernel import decision, observation, proposal, wire_proposa
 
 
 def manager(mode="live"):
-    value = KernelState(settings=Settings(mode=mode, actor_ids=["npc"]))
+    value = KernelState(settings=Settings(mode=mode, actor_ids=["npc"], failure_policy="strict"))
     host = SimpleNamespace(
         game_id="session",
         user=SimpleNamespace(),

@@ -31,7 +31,7 @@ function confirm() {
 }
 
 watch(() => props.sessionId, () => gate.value?.close())
-defineExpose({ save })
+defineExpose({ save, busy, loaded })
 </script>
 
 <template>

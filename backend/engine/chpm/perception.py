@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.engine.chpm import inference, perception_fragments
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Perception, Projection, Settings, Usage
 
@@ -57,7 +58,10 @@ async def project(
             "fragments": list(available),
         },
     )
-    return perception_fragments.resolve(result, available, set(names))
+    try:
+        return perception_fragments.resolve(result, available, set(names))
+    except ChpmError as exc:
+        raise RecoverableChpmError(str(exc)) from exc
 
 
 def validate_projection(

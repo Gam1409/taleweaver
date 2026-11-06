@@ -3,11 +3,8 @@
 import hashlib
 import json
 
+from backend.engine.chpm.errors import ChpmError
 from backend.engine.chpm.schema import Candidate, Decision, Observation, Proposal
-
-
-class ChpmError(ValueError):
-    """A visible failure; callers must not silently replace a live decision."""
 
 
 def digest(value: str) -> str:

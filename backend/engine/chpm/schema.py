@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
+from backend.engine.chpm.recovery_contracts import RecoveryState
 
 
 class Contract(BaseModel):
@@ -23,6 +24,7 @@ class Settings(Contract):
     max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
     agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
+    failure_policy: Literal["continue", "strict"] = "continue"
 
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
@@ -287,6 +289,9 @@ class Usage(Contract):
     status: Literal["idle", "prepared", "validated", "shadow", "failed"] = "idle"
     detail: str = ""
     memory_evictions: int = 0
+    simplified: bool = False
+    fallback_reason: str = Field(default="", max_length=80)
+    fallback_requests: int = Field(default=0, ge=0, le=1)
 
 
 class KernelState(Contract):
@@ -308,6 +313,7 @@ class KernelState(Contract):
     agenda: list[AgendaEntry] = Field(default_factory=list, max_length=256)
     minds: dict[str, Mind] = Field(default_factory=dict, max_length=32)
     usage: Usage = Field(default_factory=Usage)
+    recovery: RecoveryState = Field(default_factory=RecoveryState)
 
     @model_validator(mode="after")
     def bounded_observer_memory(self) -> "KernelState":

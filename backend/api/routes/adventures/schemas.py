@@ -4,6 +4,8 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
+from backend.engine.chpm.template_settings import Defaults as NpcPersonalityDefaults
+from backend.engine.chpm.template_settings import ensure_compatible
 from backend.engine.living_world.schema import Settings as LivingWorldSettings
 from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
@@ -13,6 +15,7 @@ class CreateAdventureTemplatePayload(BaseModel):
     """Payload for creating a new adventure. Backwards-compatible with previous tests (avatar_name optional)."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
 
     id: Optional[str] = None  # Client-side UUID optional; server will generate if missing
     title: str
@@ -261,6 +264,10 @@ class CreateAdventureTemplatePayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene_range(self) -> "CreateAdventureTemplatePayload":
+        ensure_compatible(
+            self.npc_personality_settings,
+            self.living_world_settings.model_dump() if self.living_world_settings else None,
+        )
         if (
             self.max_scenes is not None
             and self.min_scenes is not None
@@ -304,6 +311,7 @@ class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
 
     id: str
     title: str
@@ -575,6 +583,7 @@ class TranslateTextResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    npc_behavior: Optional[dict[str, Any]] = None
     system_debug_enabled: bool = False
     language: str = "English"
     messages: list[dict[str, Any]]
@@ -647,6 +656,7 @@ class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
 
     detailed_clothing: Optional[bool] = None
     nsfw_enabled: Optional[bool] = None

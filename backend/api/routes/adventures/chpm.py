@@ -13,8 +13,10 @@ from backend.api.routes.adventures.session_mutations import session_mutation_lea
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.chpm import capacity
+from backend.engine.chpm.continuation import public_status
 from backend.engine.chpm.schema import Contract, Settings, Usage
 from backend.engine.chpm.state import KEY, load
+from backend.engine.chpm.version import VERSION
 from backend.engine.living_world.state import load as load_simulation
 from backend.engine.visual_novel.presentation import known_character, session_is_vn
 from backend.models.session_state import SessionState
@@ -42,6 +44,8 @@ async def _characters(db: AsyncSession, state: SessionState) -> list[dict[str, s
 async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, Any]:
     current = load(state)
     return {
+        "module_version": VERSION,
+        "continuation": public_status(current),
         "settings": current.settings.model_dump(),
         "revision": current.revision,
         "available": await session_is_vn(db, state),
@@ -173,6 +177,7 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         # The current core may include observations from the completed reply.
         # Never transplant them into the replay's pre-turn snapshot, even on off/on.
         "minds": prior.get("minds", {}),
+        "recovery": prior.get("recovery", {}),
         "usage": Usage().model_dump(),
     }
     state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}

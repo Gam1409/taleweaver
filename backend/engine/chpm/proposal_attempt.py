@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.engine.chpm import inference
 from backend.engine.chpm.core.errors import TransitionError
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
@@ -46,12 +47,16 @@ async def request(
                 feedback = inference.validation_feedback(exc)
         usage.proposal_feedback.append(feedback[:600])
         if phase == "proposal_repair" or usage.proposal_repairs:
-            raise ChpmError("CHPM proposal remains invalid; no decision applied. " + feedback)
+            raise RecoverableChpmError(
+                "CHPM proposal remains invalid; no decision applied. " + feedback
+            )
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
         reserve = remaining * (1 + settings.agent_steps) + (3 if settings.mode == "live" else 0)
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
-            raise ChpmError("CHPM proposal retry has no reserved request budget. " + feedback)
+            raise RecoverableChpmError(
+                "CHPM proposal retry has no reserved request budget. " + feedback
+            )
         payload = {
             **payload,
             "proposal_feedback": {
@@ -64,6 +69,8 @@ async def request(
         }
         prompt, content = inference.compose(instruction, payload, schema, identifiers)
         if len(prompt) + len(content) > settings.max_input_chars:
-            raise ChpmError("CHPM proposal retry cannot fit its input budget. " + feedback)
+            raise RecoverableChpmError(
+                "CHPM proposal retry cannot fit its input budget. " + feedback
+            )
         usage.proposal_repairs += 1
         phase = "proposal_repair"

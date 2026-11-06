@@ -43,6 +43,7 @@ class AdventureTemplate(Base, TimestampMixin):
     image_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     living_world_settings: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    npc_personality_settings: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Configuration / Rules
     strict_rules: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

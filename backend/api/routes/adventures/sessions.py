@@ -667,6 +667,7 @@ async def start_session_for_template(
         adventure, template_entities, avatar, first_scene_id, initial_entity_states
     )
 
+    from backend.engine.chpm.template_settings import initial_states as personality_initial_states
     from backend.engine.living_world.template_settings import initial_state
 
     new_state = SessionState(
@@ -680,7 +681,7 @@ async def start_session_for_template(
         max_memory_turns=initial_turns or 10,
         enable_history_compression=initial_compression,
         quests=deepcopy(adventure.quests or []),
-        entity_states=initial_entity_states,
+        entity_states=personality_initial_states(adventure, initial_entity_states),
         time_system=adventure.time_system or "calendar",
         time_config=deepcopy(adventure.time_config) if adventure.time_config else None,
         start_datetime=AdventureLogic.resolve_start_datetime(

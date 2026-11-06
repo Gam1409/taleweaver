@@ -2,18 +2,24 @@
 
 import json
 
-from backend.engine.chpm import appraisal_context, experience, inference, motivation, proposal_draft
+from backend.engine.chpm import (
+    appraisal_context,
+    continuation,
+    inference,
+    motivation,
+    proposal_draft,
+)
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind, Source
-from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
 
 # recent sources, old excerpt characters, recall fragments, beliefs, dialogue window
 TIERS = ((6, 1000, 3, 8, 24), (6, 600, 2, 6, 6), (4, 300, 1, 4, 2), (4, 300, 0, 2, 0))
 
 
-class ContextBudgetError(ChpmError):
+class ContextBudgetError(RecoverableChpmError):
     """Required views do not fit the configured request size."""
 
 
@@ -91,11 +97,13 @@ def _payload(
     previous = supplied.get("witnessed_utterances_not_world_facts", [])
     kept = previous[-dialogue:] if dialogue else []
     result = {
-        **supplied,
+        **{key: value for key, value in supplied.items() if key != "_chpm_gap_cursors"},
         "witnessed_utterances_not_world_facts": kept,
         "appraisal_context": window.payload,
         "motivation_context": catalogue.payload(),
-        "experience_context": experience.view(mind),
+        "experience_context": continuation.experience_view(
+            mind, supplied.get("_chpm_gap_cursors", {})
+        ),
         "context_packing": {
             "policy": "focused-view-budget-v2",
             "tier": tier,

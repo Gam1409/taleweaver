@@ -1,4 +1,7 @@
-# Optional CHPM dialogue pilot
+# NPC Personality — optional CHPM dialogue module
+
+Module release **1.0.0**: start with [the player and recovery guide](chpm-continuation.md).
+See [release history](chpm-changelog.md) for module versions independent of data contracts.
 
 CHPM is an opt-in Visual Novel session feature. Existing sessions default to
 **Standard** and make no CHPM model requests. No separate inference server or
@@ -7,7 +10,7 @@ role through the existing router and shared admission queue.
 
 ## Session controls
 
-Open **Session Memory & Settings → NPC behavior · CHPM pilot**. Select up to 20
+Open **Session Memory & Settings → NPC Personality**. Select up to 20
 known characters and save between turns. The active limit defaults to three; see
 [larger casts](chpm-large-casts.md) for focus, rotation and full-group processing.
 
@@ -76,13 +79,17 @@ Enabled replies are buffered. A reviewer checks the selected stance, additional
 actions/promises and speech attribution. Successful evidence must quote the
 generated text exactly; semantic correctness still depends on the model.
 A mismatch permits one complete prose repair using the existing narrator system
-prompt and Complex role, followed by another review. An incomplete stream, invalid
-review, exhausted budget, or second mismatch fails visibly. No unchecked text is
-published and no silent fallback to the standard planner occurs.
+prompt and Complex role, followed by another review. **Strict** policy stops on
+an incomplete stream, invalid review, exhausted budget or second mismatch.
+**Keep playing**, the default policy when enabled, visibly continues with standard
+RP when optional analysis cannot complete. Confirmed psychology is frozen, and a
+known rejected reply is replaced rather than published. Session/save integrity
+failures still stop. See [recovery rules and continuity gaps](chpm-continuation.md).
 
 The normal recoverable-turn transaction restores failed attempts. Validated text
 is released only after the completed-turn recovery boundary is committed.
-Database commit and browser display are not a distributed atomic transaction;
+Simplified RP uses the same commit-before-publication boundary. Database commit
+and browser display are not a distributed atomic transaction;
 after disconnect, the saved chat history is the recovery source.
 
 Observe-mode preparation failure is recorded in its completed-turn status while

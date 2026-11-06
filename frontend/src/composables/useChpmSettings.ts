@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 
 export interface ChpmSettings {
+  failure_policy?: 'continue' | 'strict'
   mode: 'off' | 'shadow' | 'live'
   actor_ids: string[]
   max_active_npcs: number
@@ -14,11 +15,13 @@ export interface ChpmSettings {
 }
 
 export interface ChpmStatus {
+  module_version?: string
+  continuation?: { quality: string; cooldown_remaining: number; unreviewed_turns: number; total_simplified_turns: number }
   settings: ChpmSettings
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number }
+  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number }
   trace: unknown[]
   memory_counts: Record<string, number>
   memory: Record<string, unknown[]>

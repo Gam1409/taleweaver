@@ -1967,7 +1967,7 @@ class GameTurnManager:
         from backend.engine.chpm import rendering as chpm_rendering
         from backend.engine.chpm import runtime as chpm_runtime
 
-        reminders.append(await chpm_runtime.prepare(self, user_msg, all_entities))
+        chpm_context = await chpm_runtime.prepare(self, user_msg, all_entities)
         chpm_buffered = chpm_runtime.buffered(self)
 
         turn_context = build_narration_turn_block(
@@ -1978,6 +1978,9 @@ class GameTurnManager:
             exits_task=exits_task,
             reminders=tuple(reminders),
         )
+        ordinary_context = turn_context
+        if chpm_context:
+            turn_context += "\n\n" + chpm_context
 
         pass2_start = time.perf_counter()
         narration_messages, memory_turns = await self._build_narration_messages(
@@ -2041,6 +2044,8 @@ class GameTurnManager:
             completed=not narration_warning,
             resolution=draft_narration + "\n" + outcome_json,
             system_prompt=narration_prompt,
+            narration_messages=narration_messages,
+            ordinary_context=ordinary_context,
         )
 
         token_usage = extract_usage_tokens(stream_usage) or {
@@ -2411,6 +2416,7 @@ class GameTurnManager:
 
         final_data = jsonable_encoder(
             {
+                "npc_behavior": chpm_runtime.public_status(self.state),
                 "map_data": map_payload,
                 "nodes": await AdventureLogic.get_all_scene_metadata(
                     self.db, self.state.template_id, session_id=self.state.session_id
