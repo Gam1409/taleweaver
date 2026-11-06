@@ -30,6 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const preferences = computed(() => props.portraitPreferences || DEFAULT_PORTRAIT_PREFERENCES)
+const paletteActive = computed(() => preferences.value.emotion_palette && preferences.value.brightness > 0)
 const thought = ref({ id: '', name: '', text: '', anchor: null as HTMLElement | null })
 function closeThought() { thought.value = { id: '', name: '', text: '', anchor: null } }
 function showThought(npc: any, event: MouseEvent | FocusEvent) {
@@ -131,6 +132,7 @@ function isNpcSpeaking(npc: any): boolean {
   <aside
     ref="stageContainerRef"
     class="game-character-stage flex gap-2 shrink-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto w-full sm:w-28 md:w-36 lg:w-44 custom-scrollbar sm:pr-1 py-1 max-h-24 sm:max-h-full"
+    :class="{ 'emotion-stage': paletteActive }"
   >
     <TransitionGroup name="npc-stage" tag="div" class="flex flex-row sm:flex-col gap-2 w-max sm:w-full">
       <div
@@ -216,6 +218,26 @@ function isNpcSpeaking(npc: any): boolean {
 </template>
 
 <style scoped>
+/* Reserve space inside the scrollport so the portrait's outer halo stays visible. */
+.emotion-stage {
+  padding: 0;
+  max-height: 7.5rem;
+}
+.emotion-stage > div {
+  gap: 1rem;
+  padding: 12px;
+  height: max-content;
+}
+@media (min-width: 640px) {
+  .emotion-stage { width: calc(7rem + 1.5rem); max-height: 100%; }
+}
+@media (min-width: 768px) {
+  .emotion-stage { width: calc(9rem + 1.5rem); }
+}
+@media (min-width: 1024px) {
+  .emotion-stage { width: calc(11rem + 1.5rem); }
+}
+
 /* Keep the inner glow above the image, below names and controls. */
 .emotion-portrait::after {
   content: '';

@@ -71,10 +71,15 @@ export function portraitStyle(cue: PortraitCue | undefined, prefs: PortraitPrefe
   if (!emotionLabel(cue, prefs) || !prefs.brightness || !cue?.intensity) return {}
   const color = EMOTION_PALETTE[cue.emotion!]!
   const power = cue.intensity / 100 * prefs.brightness / 100
+  const rim = color.rim || color.rgb
   return {
-    borderColor: `rgba(${color.rim || color.rgb},${Math.min(1, 0.4 + power * 1.4)})`,
-    boxShadow: `0 0 ${8 + power * 26}px rgba(${color.rgb},${Math.min(1, power * 1.5)})`,
-    '--portrait-inner-glow': `inset 0 0 ${6 + power * 14}px rgba(${color.rim || color.rgb},${power * 0.6})`,
+    borderColor: `rgba(${rim},${Math.min(1, 0.4 + power * 1.6)})`,
+    boxShadow: [
+      `0 0 4px 1px rgba(${rim},${Math.min(1, power * 3)})`,
+      `0 0 12px 3px rgba(${color.rgb},${Math.min(0.95, power * 2.4)})`,
+      `0 0 ${18 + power * 18}px ${1 + power * 3}px rgba(${color.rgb},${Math.min(0.8, power * 1.6)})`,
+    ].join(', '),
+    '--portrait-inner-glow': `inset 0 0 ${8 + power * 12}px ${1 + power * 2}px rgba(${color.rgb},${Math.min(0.85, power * 2.4)})`,
   }
 }
 
