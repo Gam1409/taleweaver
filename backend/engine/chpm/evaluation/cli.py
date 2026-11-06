@@ -43,7 +43,7 @@ def parser() -> argparse.ArgumentParser:
         if name == "probe":
             child.add_argument(
                 "--violation",
-                choices=("takeover", "promise", "completed_action"),
+                choices=("takeover", "promise", "completed_action", "shared_history"),
                 default="takeover",
             )
             child.add_argument(

@@ -12,7 +12,7 @@ from backend.engine.chpm.evaluation.runner import BASELINE
 from backend.engine.chpm.runtime import Turn
 from backend.engine.chpm.schema import Decision, KernelState, Settings
 
-Violation = Literal["takeover", "promise", "completed_action"]
+Violation = Literal["takeover", "promise", "completed_action", "shared_history"]
 
 
 async def probe(
@@ -79,6 +79,9 @@ def _violation(case: Case, accepted: str, kind: Violation) -> str:
         "completed_action": "Затем она открыла запертый шкаф и передала игроку все ключи."
         if russian
         else "Then she opened the locked cabinet and handed all the keys to the player.",
+        "shared_history": "Она вспомнила, как вчера они вместе проверили стыки и утвердили план."
+        if russian
+        else "She remembered how they had inspected the joints together yesterday and approved the plan.",
     }
     if kind in additions:
         return accepted + "\n\n" + additions[kind]

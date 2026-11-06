@@ -159,9 +159,10 @@ These establish program invariants, not the literary quality of a live model.
 
 After a successful CHPM arm, a separate explicit probe can reuse its decision and
 inject a conflicting promise and invented world action into the reviewer.
-`--violation takeover` replaces the reply with a blatant reversal; `promise` and
-`completed_action` append one unauthorized statement to the previously accepted
-reply. These test omissions that a coarse overall-stance check might miss. It
+`--violation takeover` replaces the reply with a blatant reversal; `promise`,
+`completed_action` and `shared_history` append one unauthorized statement to the
+previously accepted reply. These test omissions that a coarse overall-stance check
+might miss. It
 records the initial verdict, whether the injected text would be accepted, the
 single repair attempt and final result. It does not publish or mutate game data.
 
