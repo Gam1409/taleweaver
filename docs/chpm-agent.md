@@ -43,6 +43,12 @@ Supporting/challenging a proposition never means approving/disapproving its subj
 Retrieved quotes reach narration/review with report/witness provenance; subjective
 belief statements are not manufactured into observed world facts.
 
+Repeated reads of one source keep the same handle. Disjoint quotations expand
+to the contiguous source span covering them, rather than automatically pinning
+the entire message. This preserves exact source text without inventing a join.
+The source-count and character budgets are unchanged. An explicit full-message
+read can still be refused for budget reasons; that refusal retains prior excerpts.
+
 The agent receives the reserved `player_actor_id=@player` and up to 32 recent
 `belief_subject_ids`, with an explicit omitted count. IDs identify read subjects;
 they do not establish presence, reliability or another person's knowledge. The

@@ -16,6 +16,18 @@ from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
 
 
+def covering_excerpt(whole: str, previous: str, current: str) -> str:
+    """Retain both quotes in one real source span without inventing a join."""
+    if current in previous:
+        return previous
+    if previous in current:
+        return current
+    left, right = whole.find(previous), whole.find(current)
+    if left < 0 or right < 0:
+        raise ChpmError("A pinned excerpt no longer belongs to its source.")
+    return whole[min(left, right) : max(left + len(previous), right + len(current))]
+
+
 @dataclass
 class Tools:
     mind: Mind
@@ -111,7 +123,7 @@ class Tools:
             return {"status": "evidence_source_limit_reached"}
         if alias in self.pins:
             previous = self.pins[alias][2]
-            text = previous if text in previous else text if previous in text else source.text
+            text = covering_excerpt(source.text, previous, text)
         used = sum(len(item[2]) for a, item in self.pins.items() if a != alias)
         if used + len(text) > MAX_PINNED_CHARS:
             return {"status": "evidence_budget_exhausted"}

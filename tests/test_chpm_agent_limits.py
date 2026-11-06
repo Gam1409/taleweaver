@@ -118,6 +118,26 @@ def test_full_source_can_still_be_read_when_the_count_limit_is_reached():
     }
 
 
+def test_separate_quotes_keep_their_contiguous_context_without_expanding_to_full_source():
+    tools = Tools(mind(), observation(), {})
+    for index in range(5):
+        text = f"Other source {index}. " + "x" * 1080
+        assert tools.expose(str(index), source(str(index), text), full=True)["status"] == "ok"
+    text = "p" * 600 + "first quotation; " + "context " * 10 + "second quotation" + "s" * 800
+    item = source("target", text)
+    first = tools.expose("target", item, fragment="first quotation")
+    second = tools.expose("target", item, fragment="second quotation")
+    assert second["status"] == "ok"
+    assert second["source_id"] == first["source_id"]
+    assert second["text"] == "first quotation; " + "context " * 10 + "second quotation"
+    assert second["text"] in item.text
+    assert len(tools.pins) == 6
+    assert tools.execute(Lookup(tool="read_memory", argument="target")) == {
+        "status": "evidence_budget_exhausted"
+    }
+    assert tools.pins[first["source_id"]][2] == second["text"]
+
+
 @pytest.mark.parametrize("invalid", ["count", "characters", "duplicate"])
 def test_handoff_rejects_invalid_batches_even_if_a_producer_bypasses_tools(invalid):
     entries = 9 if invalid == "count" else 4 if invalid == "characters" else 2
