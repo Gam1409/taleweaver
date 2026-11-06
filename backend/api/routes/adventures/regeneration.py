@@ -23,6 +23,7 @@ from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.message_versions import archive
 from backend.engine.narration_correction import NarrationCorrection, append_correction
 from backend.engine.npc_journal.worker import schedule
+from backend.engine.npc_presentation.rewrites import clean_rewrite, prepare_rewrite
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.user import User
@@ -115,6 +116,9 @@ async def regenerate_latest_message(
     if not history or history[0].role != "assistant" or history[0].id != payload.message_id:
         raise HTTPException(409, "The latest response changed. Refresh the chat and try again.")
     guidance = await narration_guidance(db, session, current_user)
+    presentation = await prepare_rewrite(db, game_id)
+    guidance = "\n\n".join(filter(None, (guidance, presentation.prompt)))
+    previous_portrait = history[0].portrait_state
     original = history[0].content
     original_revision = history[0].revision_id
     message_id = history[0].id
@@ -127,6 +131,7 @@ async def regenerate_latest_message(
             ),
             role_timeout(current_user, "complex"),
         )
+        narration = clean_rewrite(presentation, narration)
     except TimeoutError:
         raise HTTPException(
             504, "Regeneration timed out. The original response was kept."
@@ -149,7 +154,7 @@ async def regenerate_latest_message(
             ChatMessage.content == original,
             ChatMessage.revision_id == original_revision,
         )
-        .values(content=narration)
+        .values(content=narration, portrait_state=presentation.payload(narration))
         .returning(ChatMessage.id)
         .execution_options(synchronize_session=False)
     )
@@ -160,7 +165,7 @@ async def regenerate_latest_message(
     if message is None:
         raise HTTPException(409, "The response no longer exists.")
     if narration != original:
-        archive(message, original)
+        archive(message, original, previous_portrait_state=previous_portrait)
         await refresh_evidence(db, session, message)
     await db.commit()
     if message.npc_journal is not None:
@@ -235,8 +240,16 @@ async def restore_version(
     if not selected:
         raise HTTPException(404, "Narration revision not found.")
     original = message.content
+    previous_portrait = message.portrait_state
     message.content = selected["content"]
-    archive(message, original, origin="restore", restored_from=payload.version_id)
+    message.portrait_state = selected.get("portrait_state")
+    archive(
+        message,
+        original,
+        origin="restore",
+        restored_from=payload.version_id,
+        previous_portrait_state=previous_portrait,
+    )
     await refresh_evidence(db, session, message)
     await db.commit()
     if message.npc_journal is not None:

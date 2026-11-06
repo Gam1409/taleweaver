@@ -52,6 +52,7 @@ async def test_new_chat_messages_get_current_scene_and_sequence(setup_test_db):
             "scene_id": "BASEMENT",
             "sequence_id": "SEQ_2",
             "revision_id": second.revision_id,
+            "portrait_state": None,
         }
 
 

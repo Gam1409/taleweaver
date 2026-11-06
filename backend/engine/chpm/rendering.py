@@ -17,6 +17,7 @@ from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChp
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.runtime import Turn, contract, contract_data, current
 from backend.engine.chpm.schema import Verdict
+from backend.engine.npc_presentation.runtime import clean_candidate
 
 
 async def validate(
@@ -29,6 +30,7 @@ async def validate(
     narration_messages: list[dict[str, str]] | None = None,
     ordinary_context: str = "",
 ) -> str:
+    text = clean_candidate(manager, text)
     turn = current(manager)
     if turn is not None and turn.simplified:
         if turn.simplified_text is None and turn.usage.fallback_reason == "review_rejected":
@@ -286,4 +288,4 @@ async def _repair(
     if not isinstance(result, str):
         raise RecoverableChpmError("CHPM repair returned a non-text response.")
     turn.usage.output_chars += len(result)
-    return result
+    return clean_candidate(manager, result)

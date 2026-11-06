@@ -7,6 +7,7 @@ import DynamicLocationSettings from './DynamicLocationSettings.vue'
 import StoryVisualPresets from '../editor/StoryVisualPresets.vue'
 import LivingWorldSettings from './LivingWorldSettings.vue'
 import ChpmSettings from './ChpmSettings.vue'
+import SessionPortraitSettings from './SessionPortraitSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -32,6 +33,7 @@ const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
 const visualPresets = ref<InstanceType<typeof StoryVisualPresets> | null>(null)
 const livingWorld = ref<InstanceType<typeof LivingWorldSettings> | null>(null)
+const portraitSettings = ref<InstanceType<typeof SessionPortraitSettings> | null>(null)
 const chpm = ref<InstanceType<typeof ChpmSettings> | null>(null)
 const savingExploration = ref(false)
 async function saveAll(): Promise<void> {
@@ -42,6 +44,7 @@ async function saveAll(): Promise<void> {
     if (vnNarration.value && !await vnNarration.value.save()) return
     if (exploration.value && !await exploration.value.save()) return
     if (livingWorld.value && !await livingWorld.value.save()) return
+    if (portraitSettings.value && !await portraitSettings.value.save()) return
     if (chpm.value && !await chpm.value.save()) return
     if (visualPresets.value && !await visualPresets.value.save()) return
     emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
@@ -253,6 +256,7 @@ function handleInput(event: Event) {
         <section aria-labelledby="session-npc-settings" class="min-w-0 space-y-5 md:col-span-2 xl:col-span-1">
         <h4 id="session-npc-settings" class="text-xs font-black uppercase tracking-widest text-teal-300">Living World & NPC Personality</h4>
         <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
+        <SessionPortraitSettings v-if="sessionId" ref="portraitSettings" :session-id="sessionId" />
         <ChpmSettings v-if="sessionId && mode === 'vn'" ref="chpm" :session-id="sessionId" />
         <p v-else class="text-xs text-slate-400">NPC Personality is available in Visual Novel sessions.</p>
         <!-- Helpful tip note -->

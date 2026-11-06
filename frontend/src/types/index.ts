@@ -1,3 +1,5 @@
+import type { PortraitPreferences, PortraitState } from '@/utils/npcPresentation'
+
 export type RuleMode = 'rpg' | 'story' | 'chat' | 'vn'
 
 export interface ModeCapabilities {
@@ -14,6 +16,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'thought' | 'license_info'
   content: string
   timestamp: Date
+  portrait_state?: PortraitState | null
   itemIds?: string[]
   /** Scene/sequence the message belongs to; the story feed shows one page per scene/sequence. */
   scene_id?: string | null
@@ -42,6 +45,7 @@ export interface PlayerClothing {
 
 /** Character sheet snapshot pushed by the server after every action. */
 export interface CharacterSheet {
+  portrait_preferences?: PortraitPreferences
   mode_capabilities?: ModeCapabilities
   clothing?: PlayerClothing | null
   name: string

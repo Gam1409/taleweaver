@@ -11,6 +11,7 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy
 from backend.engine.clothing.presentation import player_clothing
 from backend.engine.item_logic import get_item_slot, normalize_equipment_keys
+from backend.engine.npc_presentation.settings import effective as portrait_preferences
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -47,6 +48,7 @@ async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSes
 
     profile_image = await _sheet_profile_image(db, avatar, state, session_manifest)
     snapshot = {
+        "portrait_preferences": portrait_preferences(state).model_dump(),
         "clothing": player_clothing(avatar, session_manifest),
         "name": avatar.name,
         "role": avatar.role,

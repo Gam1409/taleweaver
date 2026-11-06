@@ -5,6 +5,7 @@ import uuid6
 from sqlalchemy import JSON, ForeignKey, String, Text, event, inspect
 from sqlalchemy.orm import Mapped, Session, UOWTransaction, mapped_column
 
+from backend.core.npc_presentation import public_cues
 from backend.models.base import Base, TimestampMixin
 from backend.models.session_state import SessionState
 
@@ -38,13 +39,14 @@ class ChatMessage(Base, TimestampMixin):
     npc_journal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     illustration: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    portrait_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     revision_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, default=lambda: str(uuid6.uuid7())
     )
     versions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
-    def to_client_dict(self) -> dict[str, str | None]:
+    def to_client_dict(self) -> dict[str, Any]:
         """Chat history entry as sent to the client."""
         return {
             "id": self.id,
@@ -53,6 +55,9 @@ class ChatMessage(Base, TimestampMixin):
             "scene_id": self.scene_id,
             "sequence_id": self.sequence_id,
             "revision_id": self.revision_id,
+            "portrait_state": public_cues(self.portrait_state, self.content)
+            if self.role == "assistant"
+            else None,
         }
 
 

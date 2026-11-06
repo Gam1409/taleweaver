@@ -35,6 +35,7 @@ def restore_messages(
             npc_journal=journal,
             revision_id=raw.get("revision_id") or str(uuid4()),
             versions=deepcopy(raw.get("versions")),
+            portrait_state=deepcopy(raw.get("portrait_state")),
         )
         created_at = raw.get("created_at")
         if isinstance(created_at, datetime):
@@ -68,6 +69,7 @@ async def copy_messages(db: AsyncSession, original_id: str, copied_id: str) -> d
                 "npc_journal": m.npc_journal,
                 "revision_id": m.revision_id,
                 "versions": m.versions,
+                "portrait_state": m.portrait_state,
             }
             for m in messages
         ],

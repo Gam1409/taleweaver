@@ -28,7 +28,7 @@ def test_upgrade_from_either_parent(tmp_path, monkeypatch, parent):
         assert "source_keys" in {
             column["name"] for column in schema.get_columns("memory_summaries")
         }
-        assert {"revision_id", "versions"} <= {
+        assert {"revision_id", "versions", "portrait_state"} <= {
             column["name"] for column in schema.get_columns("chat_messages")
         }
         assert "hook_runs" in schema.get_table_names()

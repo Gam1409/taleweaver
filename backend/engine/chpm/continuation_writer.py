@@ -8,6 +8,7 @@ from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import continuation, inference
 from backend.engine.chpm.errors import ChpmError
+from backend.engine.npc_presentation.runtime import clean_candidate
 
 if TYPE_CHECKING:
     from backend.engine.chpm.runtime import Turn
@@ -60,6 +61,8 @@ async def generate(
             timeout=float(llm.request_timeout),
         )
     inference.check_output_budget(records, llm.max_tokens, "rp_continuation")
+    if isinstance(result, str):
+        result = clean_candidate(manager, result)
     if not isinstance(result, str) or not result.strip():
         raise ChpmError("The narrator could not produce the ordinary RP continuation.")
     return result

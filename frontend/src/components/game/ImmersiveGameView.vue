@@ -14,6 +14,7 @@ import { ref, computed, toRef } from 'vue'
 import type { ChatMessage } from '@/types'
 import type { ConnectionStatus } from '@/composables/useGameSocket'
 import { getImageUrl } from '@/utils/game_icons'
+import { pagePortraitCues, portraitPreferences } from '@/utils/npcPresentation'
 import { useComicTurns } from '@/composables/useComicTurns'
 import ImmersiveHeader from './immersive/ImmersiveHeader.vue'
 import ImmersiveCharacterStage from './immersive/ImmersiveCharacterStage.vue'
@@ -167,6 +168,9 @@ const {
   sheet: toRef(props, 'sheet'),
 })
 
+const portraitCues = computed(() => pagePortraitCues(activeTurn.value?.exchanges || []))
+const portraitOptions = computed(() => portraitPreferences(props.sheet?.portrait_preferences))
+
 // Mobile Hotspot Drawer
 const showMobileInteract = ref(false)
 
@@ -261,6 +265,8 @@ defineExpose({
         :npcs="npcs"
         :active-speakers="activeSpeakers"
         :active-turn-index="activeTurnIndex"
+        :portrait-cues="portraitCues"
+        :portrait-preferences="portraitOptions"
         @npc-click="handleNpcClick"
         @portrait="(npc) => emit('npcPortrait', npc)"
         @npc-hover="(npc, event) => emit('npcHover', getEntityForHover(npc), event)"

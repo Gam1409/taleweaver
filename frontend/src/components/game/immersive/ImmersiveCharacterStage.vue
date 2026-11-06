@@ -7,6 +7,8 @@
  */
 import { ref, watch, nextTick, computed } from 'vue'
 import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+import NpcThoughtBubble from './NpcThoughtBubble.vue'
+import { DEFAULT_PORTRAIT_PREFERENCES, emotionLabel, portraitStyle, thoughtText, type PortraitCue, type PortraitPreferences } from '@/utils/npcPresentation'
 import { ImagePlus } from 'lucide-vue-next'
 import type { PortraitTarget } from '@/composables/useSessionPortrait'
 
@@ -15,6 +17,8 @@ const props = defineProps<{
   npcs: any[]
   activeSpeakers: Set<string>
   activeTurnIndex?: number
+  portraitCues?: Record<string, PortraitCue>
+  portraitPreferences?: PortraitPreferences
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +28,44 @@ const emit = defineEmits<{
   npcContextmenu: [npc: any, event: MouseEvent]
   portrait: [npc: PortraitTarget]
 }>()
+
+const preferences = computed(() => props.portraitPreferences || DEFAULT_PORTRAIT_PREFERENCES)
+const thought = ref({ id: '', name: '', text: '', anchor: null as HTMLElement | null })
+function closeThought() { thought.value = { id: '', name: '', text: '', anchor: null } }
+function showThought(npc: any, event: MouseEvent | FocusEvent) {
+  const useThought = preferences.value.character_thoughts && npc.id !== 'PLAYER'
+  if (!useThought) {
+    closeThought()
+    if (event instanceof MouseEvent) emit('npcHover', npc, event)
+    return
+  }
+  emit('npcLeave')
+  const text = thoughtText(props.portraitCues?.[npc.id], preferences.value)
+  if (!text) { closeThought(); return }
+  thought.value = { id: npc.id, name: npc.name, text, anchor: event.currentTarget as HTMLElement }
+}
+function onMove(npc: any, event: MouseEvent) {
+  if (!preferences.value.character_thoughts || npc.id === 'PLAYER') emit('npcHover', npc, event)
+}
+function onClick(npc: any) {
+  closeThought()
+  emit('npcLeave')
+  if (preferences.value.character_thoughts && npc.id !== 'PLAYER') {
+    emit('portrait', npc)
+    return
+  }
+  emit('npcClick', npc)
+}
+function onKeydown(npc: any, event: KeyboardEvent) {
+  if (event.target !== event.currentTarget) return
+  if (event.key === 'Escape') closeThought()
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    onClick(npc)
+  }
+}
+function onLeave() { closeThought(); emit('npcLeave') }
+watch([() => props.activeTurnIndex, () => props.portraitCues, preferences], closeThought)
 
 const stageContainerRef = ref<HTMLElement | null>(null)
 const brokenImages = ref<Record<string, boolean>>({})
@@ -96,16 +138,24 @@ function isNpcSpeaking(npc: any): boolean {
         :key="npc.id"
         class="relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-14 sm:w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
         :class="[
-          isNpcSpeaking(npc)
+          isNpcSpeaking(npc) && !emotionLabel(props.portraitCues?.[npc.id], preferences)
             ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.6)] ring-2 ring-amber-400/60'
             : npc.id === 'PLAYER'
               ? 'border-emerald-500/70 hover:border-emerald-400'
               : 'border-slate-700/70 hover:border-cyan-400/80'
         ]"
-        @click="emit('npcClick', npc)"
-        @mouseenter="emit('npcHover', npc, $event)"
-        @mousemove="emit('npcHover', npc, $event)"
-        @mouseleave="emit('npcLeave')"
+        tabindex="0"
+        :aria-label="[npc.name, emotionLabel(props.portraitCues?.[npc.id], preferences)].filter(Boolean).join(' · ')"
+        :aria-describedby="thought.id === npc.id ? 'npc-current-thought' : undefined"
+        :title="!preferences.character_thoughts ? emotionLabel(props.portraitCues?.[npc.id], preferences) || undefined : undefined"
+        :style="npc.id !== 'PLAYER' ? portraitStyle(props.portraitCues?.[npc.id], preferences) : {}"
+        @click="onClick(npc)"
+        @keydown="onKeydown(npc, $event)"
+        @focusin.self="showThought(npc, $event)"
+        @focusout="closeThought"
+        @mouseenter="showThought(npc, $event)"
+        @mousemove="onMove(npc, $event)"
+        @mouseleave="onLeave"
         @contextmenu.prevent="emit('npcContextmenu', npc, $event)"
       >
         <!-- Full 2:3 Character Portrait -->
@@ -162,6 +212,7 @@ function isNpcSpeaking(npc: any): boolean {
       </div>
     </TransitionGroup>
   </aside>
+  <NpcThoughtBubble :text="thought.text" :name="thought.name" :anchor="thought.anchor" @dismiss="closeThought" />
 </template>
 
 <style scoped>

@@ -24,6 +24,7 @@ from backend.engine.gameplay.agent_commands import (
 from backend.engine.gameplay.world import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
 from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warning
+from backend.engine.npc_presentation import runtime as portrait_presentation
 from backend.engine.narration_correction import append_correction, correction_applied
 from backend.engine.visual_novel.narration import narration_suffix
 from backend.engine.npc_presence import presence_context
@@ -1938,6 +1939,8 @@ class GameTurnManager:
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
         narration_prompt = append_correction(narration_prompt, self.narration_correction)
+        portrait_turn = portrait_presentation.prepare(self, all_entities)
+        narration_prompt = "\n\n".join(filter(None, (narration_prompt, portrait_turn.prompt)))
 
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
@@ -2011,7 +2014,7 @@ class GameTurnManager:
                 if isinstance(finish_reason, str):
                     narration_end_reason = finish_reason
                 narration_warning = finish_warning(finish_reason) or narration_warning
-                delta = choices[0].delta.content or ""
+                delta = portrait_turn.feed(choices[0].delta.content or "")
                 if delta:
                     response_text += delta
                     if not chpm_buffered:
@@ -2036,6 +2039,10 @@ class GameTurnManager:
                     return
                 raise
 
+        presentation_tail = portrait_turn.finish()
+        response_text += presentation_tail
+        if presentation_tail and not chpm_buffered:
+            yield f"event: chunk\ndata: {json.dumps({'content': presentation_tail})}\n\n"
         if chpm_buffered:
             yield f"event: status\ndata: {json.dumps({'content': 'Reviewing NPC reply...'})}\n\n"
         response_text = await chpm_rendering.validate(
@@ -2051,7 +2058,7 @@ class GameTurnManager:
         token_usage = extract_usage_tokens(stream_usage) or {
             # Rough estimate when the provider reports no usage (avoids re-tokenizing the prompt).
             "prompt_tokens": int(sum(len(m.get("content", "")) for m in narration_messages) / 4),
-            "completion_tokens": int(len(response_text) / 4),
+            "completion_tokens": int(portrait_turn.output_chars / 4),
             "cached_prompt_tokens": 0,
             "estimated": True,
         }
@@ -2177,6 +2184,7 @@ class GameTurnManager:
             session_id=self.state.session_id,
             role="assistant",
             content=response_text,
+            portrait_state=portrait_turn.payload(response_text) if narration_completed else None,
             npc_journal={
                 "status": "pending" if narration_completed else "incomplete",
                 "attempts": 0,

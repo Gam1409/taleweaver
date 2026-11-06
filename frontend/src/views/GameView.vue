@@ -170,6 +170,7 @@ const saveSessionSettings = async (payload: { turns: number; enableCompression?:
       sheet.value.max_memory_turns = payload.turns
       sheet.value.enable_history_compression = payload.enableCompression
     }
+    await refreshSession()
     addNotification('Session memory settings updated.', 'success')
     showSettingsModal.value = false
   } catch {
