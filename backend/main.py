@@ -4,14 +4,12 @@ import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from starlette.responses import Response
 
@@ -43,22 +41,11 @@ from backend.api.routes.system_diagnostics import router as diagnostics_router
 from backend.core.config import settings
 from backend.core.database import run_db_migrations
 from backend.core.diagnostic_http import DiagnosticMiddleware, session_diagnostic_context
+from backend.core.frontend import install as install_frontend
 from backend.core.system_diagnostics import service as diagnostic_service
 from backend.utils.static_media import SafeStaticFiles
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_join(base_dir: str, *parts: str) -> Optional[str]:
-    """Safely join path parts and ensure result stays inside base_dir."""
-    base_abs = os.path.abspath(base_dir)
-    candidate = os.path.abspath(os.path.join(base_abs, *parts))
-    try:
-        if os.path.commonpath([candidate, base_abs]) != base_abs:
-            return None
-    except ValueError:
-        return None
-    return candidate
 
 
 @asynccontextmanager
@@ -257,49 +244,8 @@ app.mount("/data", SafeStaticFiles(directory=os.path.abspath(settings.DATA_DIR))
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
 BACKEND_ASSETS_DIR = BACKEND_DIR / "static" / "assets"
-FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend_dist"
+FRONTEND_DIST_DIR = Path(os.environ.get("TALEWEAVER_FRONTEND_DIR", PROJECT_ROOT / "frontend_dist"))
 BACKEND_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Serve frontend if available (Production/Docker mode)
-if FRONTEND_DIST_DIR.is_dir():
-    # First, define a route for assets that checks both backend and frontend folders
-    @app.get("/assets/{path:path}")
-    def serve_assets(path: str) -> Response | dict[str, str]:
-        # 1. Try backend static assets (like catalog images)
-        backend_asset = _safe_join(str(BACKEND_ASSETS_DIR), path)
-        if backend_asset and os.path.isfile(backend_asset):
-            return FileResponse(backend_asset)
-
-        # 2. Try frontend built assets (JS, CSS)
-        frontend_asset = _safe_join(str(FRONTEND_DIST_DIR / "assets"), path)
-        if frontend_asset and os.path.isfile(frontend_asset):
-            return FileResponse(frontend_asset)
-
-        return {"error": "Asset not found"}
-
-    # Catch-all for SPA client-side routing
-    @app.get("/{catchall:path}")
-    def serve_spa(catchall: str) -> FileResponse:
-        # Check if the specific file exists in frontend_dist (e.g. favicon.ico)
-        full_path = _safe_join(str(FRONTEND_DIST_DIR), catchall)
-        if catchall and full_path and os.path.isfile(full_path):
-            return FileResponse(full_path)
-
-        # Otherwise serve the index.html for the SPA
-        return FileResponse(FRONTEND_DIST_DIR / "index.html")
-else:
-    # Standard mount for development
-    app.mount("/assets", StaticFiles(directory=BACKEND_ASSETS_DIR), name="assets")
-
-    @app.get("/", tags=["Development"])
-    async def dev_root() -> dict:
-        return {
-            "name": "TaleWeaver Backend API",
-            "status": "online",
-            "docs": "/docs",
-            "frontend_dev_url": "http://localhost:5173",
-            "message": "Backend is running. In development mode, start and open the frontend on http://localhost:5173 ('cd frontend; npm run dev') or run 'npm run build' in /frontend to serve the web UI directly on port 8000.",
-        }
 
 
 @app.get("/health", tags=["Health"])
@@ -311,6 +257,11 @@ async def health_check() -> dict:
 @app.post("/api/ping")
 async def ping() -> dict[str, str]:
     return {"message": "pong"}
+
+
+# API routes, including liveness, must precede the SPA catch-all.
+
+install_frontend(app, FRONTEND_DIST_DIR, BACKEND_ASSETS_DIR)
 
 
 def start() -> None:

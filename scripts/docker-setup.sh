@@ -15,9 +15,9 @@ if [ ! -f .env ]; then
     echo "[i] Please edit the .env file and set your ENCRYPTION_KEY and API keys."
 fi
 
-# Read FRONTEND_PORT and DOCKER_DATA_DIR from .env
-FRONTEND_PORT=$(grep FRONTEND_PORT .env | cut -d '=' -f2 | tr -d '\r')
-FRONTEND_PORT=${FRONTEND_PORT:-443}
+# Read HTTPS_PORT and DOCKER_DATA_DIR from .env
+HTTPS_PORT=$(grep HTTPS_PORT .env | cut -d '=' -f2 | tr -d '\r')
+HTTPS_PORT=${HTTPS_PORT:-443}
 
 DOCKER_DATA_DIR=$(grep DOCKER_DATA_DIR .env | cut -d '=' -f2 | tr -d '\r')
 DOCKER_DATA_DIR=${DOCKER_DATA_DIR:-./data-docker}
@@ -52,7 +52,7 @@ fi
 
 echo "--------------------------------"
 echo "[+] TaleWeaver is now running with HTTPS!"
-echo "[+] Access the UI at: https://localhost:$FRONTEND_PORT"
+echo "[+] Access the UI at: https://localhost:$HTTPS_PORT"
 echo "[+] (Example adventures are being imported automatically)"
 echo "[+] Logs: docker compose logs -f"
 echo "--------------------------------"

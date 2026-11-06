@@ -1,0 +1,62 @@
+name: Docker distribution
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: taleweaver:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start with isolated SQLite, RAG and media volumes
+        run: |
+          python - <<'PY'
+          import base64, os, secrets
+          from pathlib import Path
+          Path('/tmp/taleweaver-image.env').write_text(
+              'SECRET_KEY=' + secrets.token_hex(32) + '\n'
+              'ENCRYPTION_KEY=' + base64.urlsafe_b64encode(os.urandom(32)).decode() + '\n'
+              'DATABASE_URL=sqlite+aiosqlite:////app/sqlite/taleweaver.db\n'
+              'MEMORY_DB_DIR=/app/db/lancedb\n'
+              'LITELLM_LOCAL_MODEL_COST_MAP=True\n'
+          )
+          PY
+          docker run -d --name taleweaver-ci --env-file /tmp/taleweaver-image.env \
+            --mount type=volume,source=tw-ci-sqlite,target=/app/sqlite \
+            --mount type=volume,source=tw-ci-rag,target=/app/db \
+            --mount type=volume,source=tw-ci-media,target=/app/data taleweaver:ci
+      - name: Verify actual API and frontend startup
+        run: |
+          for attempt in $(seq 1 60); do
+            if docker exec taleweaver-ci curl --fail --silent http://127.0.0.1:8000/health | grep -q '"ok"'; then
+              docker exec taleweaver-ci curl --fail --silent http://127.0.0.1:8000/ | grep -q 'id="app"'
+              exit $?
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Show diagnostic logs
+        if: failure()
+        run: docker logs taleweaver-ci
+      - name: Remove disposable container and volumes
+        if: always()
+        run: |
+          docker rm -f taleweaver-ci || true
+          docker volume rm tw-ci-sqlite tw-ci-rag tw-ci-media || true
+          rm -f /tmp/taleweaver-image.env

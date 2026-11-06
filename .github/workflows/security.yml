@@ -29,7 +29,7 @@ jobs:
       - name: Audit all locked Python groups and extras
         run: |
           mkdir -p reports
-          poetry export --all-extras --with dev --without-hashes -f requirements.txt -o reports/requirements.txt
+          poetry export --all-extras --with dev,packaging --without-hashes -f requirements.txt -o reports/requirements.txt
           pip-audit -r reports/requirements.txt --no-deps --disable-pip -f json -o reports/python-audit.json
       - name: Audit frontend including development tooling
         working-directory: frontend

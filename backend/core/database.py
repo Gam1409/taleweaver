@@ -63,11 +63,11 @@ def run_db_migrations() -> None:
     project_root = Path(__file__).resolve().parent.parent.parent
     alembic_ini = project_root / "alembic.ini"
     if not alembic_ini.exists():
-        logger.warning("alembic.ini not found at %s. Skipping auto-migration.", alembic_ini)
-        return
+        raise RuntimeError(f"Required migration configuration is missing: {alembic_ini}")
 
     logger.info("Applying Alembic migrations (head)...")
     alembic_cfg = Config(str(alembic_ini))
+    alembic_cfg.set_main_option("script_location", str(project_root / "alembic"))
     # Embedded migrations must preserve Uvicorn and application error/debug logging.
     alembic_cfg.attributes["configure_logger"] = False
     command.upgrade(alembic_cfg, "head")

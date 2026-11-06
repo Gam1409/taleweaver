@@ -228,3 +228,7 @@ data-docker/
 
 # Private system diagnostics and its persisted switch
 /log/
+
+# The reviewed desktop spec is a source file; generated databases are not.
+!/desktop/TaleWeaver.spec
+/sqlite-docker/

@@ -229,7 +229,10 @@ class Settings(BaseSettings):
         return keys.get(provider.lower())
 
     # Resolve .env against the project root so loading does not depend on the CWD
-    model_config = {"env_file": PROJECT_ROOT / ".env", "extra": "ignore"}
+    model_config = {
+        "env_file": os.environ.get("TALEWEAVER_ENV_FILE", PROJECT_ROOT / ".env"),
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

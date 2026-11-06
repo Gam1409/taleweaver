@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/src/assets/svg/app-logo.svg" alt="TaleWeaver Logo" width="100" height="100" />
+<img src="docs/branding/visualnovel.jpg" alt="VisualNovel — an open golden book and an eye-shaped feather" width="420" />
 
 # TaleWeaver
 
@@ -298,7 +298,22 @@ cd taleweaver
 bash scripts/docker-setup.sh      # Windows: scripts\docker-setup.bat
 ```
 
-The Compose configuration keeps game data in `./data-docker` by default and the optional memory index in `./db`. Keep these folders when updating containers to preserve your saves and assets.
+Compose keeps media in `./data-docker`, SQLite (including WAL/SHM) in `./sqlite-docker`, and RAG in `./db`. Keep all three plus the original encryption keys. Existing installations must follow [Docker storage migration](docs/docker-storage.md) before switching to the separate SQLite volume.
+
+---
+
+## Desktop applications (preview)
+
+Native distributions are built separately for Windows, macOS and Linux. A small
+system-tray launcher starts the backend, waits for the bundled browser UI to be
+ready, then opens your default browser. Its menu provides Start, Stop, Restart,
+Log and Exit; green means ready, red stopped and yellow starting or unhealthy.
+No Electron runtime or local model weights are embedded.
+
+Builds run on release tags or manual dispatch through **Desktop distributions**;
+ordinary changes run launcher tests instead of rebuilding all three packages.
+See [Desktop installation and builds](docs/desktop.md) for artifact formats,
+user-data locations, platform requirements and measured memory limits.
 
 ---
 

@@ -38,6 +38,8 @@ RUN case "$INSTALL_CONCORDIA" in \
 
 # Copy backend code
 COPY backend/ ./backend/
+COPY desktop/ ./desktop/
+COPY scripts/ ./scripts/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 COPY version.json .
