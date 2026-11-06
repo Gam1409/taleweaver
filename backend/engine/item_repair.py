@@ -26,7 +26,9 @@ async def propose(user: User, item: dict, instruction: str, session_id: str) -> 
     model.max_tokens = min(model.max_tokens, 4096)
     result = await asyncio.wait_for(
         model.aexecute_complex_task(
-            REPAIR_PROMPT + GARMENT_INSTRUCTION,
+            GARMENT_INSTRUCTION
+            + REPAIR_PROMPT
+            + "\nThis is an explicit repair request: preserve consistent properties, but correct contradictory visual metadata in the reviewable draft.",
             json.dumps({"item": item, "author_request": instruction}, ensure_ascii=False),
             RepairValues,
             model.model,

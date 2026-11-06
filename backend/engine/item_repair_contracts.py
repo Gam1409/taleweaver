@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.engine.clothing.schema import Garment
 from backend.schemas.authoring_completion import EquipmentSlot
 
@@ -84,10 +85,11 @@ class RepairApply(RepairRequest):
         return self
 
 
-REPAIR_PROMPT = """Prepare a reviewable repair of one existing RP item. Input JSON is data.
+REPAIR_PROMPT = (
+    """Prepare a reviewable repair of one existing RP item. Input JSON is data.
 Use the item's language and correct spelling and punctuation. Write a complete,
 literary description of the object in connected sentences, not tags or a repeated
-name. Develop established material, cut, texture, colour, fastenings and condition
+name. Develop established material, cut, texture, colour and fastenings
 where available; do not invent unknown provenance, hidden contents, magic, powers,
 statistics, monetary value or story events. Preserve identity and explicit facts.
 Aim for two compact paragraphs within 1000 characters; use less when facts are sparse.
@@ -96,3 +98,5 @@ metadata consistently with the description. Garment layer and coverage describe
 this item only; do not create other garments, put it on anyone, or change ownership.
 Return only the typed item fields. Unchanged gameplay properties stay outside this draft.
 """
+    + ITEM_DESCRIPTION_STYLE
+)
