@@ -23,7 +23,7 @@ class ControlModels(Models):
 
 
 @pytest.mark.parametrize("reject", [0, 1, 2])
-@pytest.mark.parametrize("violation", ["takeover", "promise", "completed_action"])
+@pytest.mark.parametrize("violation", ["takeover", "promise", "completed_action", "shared_history"])
 async def test_probe_distinguishes_false_acceptance_repair_and_failed_repair(reject, violation):
     case = choose(["continue-ru"])[0]
     source = await run_arm(case, 1, "chpm", Models(), settings())
