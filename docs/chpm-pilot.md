@@ -295,6 +295,15 @@ including `Experience` events and their derived `experiences` projection.
 the optional `sexual_desire` dimension, distinct from general arousal.
 They are different contracts and need not increment together.
 
+Persisted versions change only for incompatible data shapes. Additive fields with
+safe defaults retain the current version and require legacy-load regression tests.
+Candidate `preconditions` is one such field: old saved decisions load with `[]`,
+while new live proposals must explicitly supply their unmet conditions (or `[]`).
+Envelope/core versions stay 6 and 4/v3. The focused context-packing policy changes
+only the model-facing view, not canonical history or saved budgets. Exact duplicate
+player-request text may use visible-source IDs only when every character remains
+available and the serialized reference is shorter. It never summarizes the input.
+
 The model-facing appraisal protocol `split-beliefs-v1` uses two required arrays:
 `new_beliefs` and `belief_revisions`, at most two entries combined. New beliefs carry
 subject/domain/statement; revisions carry only an existing belief handle plus

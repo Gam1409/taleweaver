@@ -1,5 +1,7 @@
 """Fit optional historical views without dropping identity or changing saved budgets."""
 
+import json
+
 from backend.engine.chpm import appraisal_context, experience, inference, motivation, proposal_draft
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
@@ -27,6 +29,7 @@ def pack(
     extra: dict | None = None,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
     pinned_beliefs: dict[str, Belief] | None = None,
+    focus_subjects: tuple[str, ...] = (),
     wire_schema: type[proposal_draft.Draft] | None = None,
 ) -> tuple[appraisal_context.Window, motivation.Catalogue, dict, dict]:
     cues = " ".join(
@@ -46,6 +49,7 @@ def pack(
             current_message_id=observation.message_id,
             pinned=pinned,
             pinned_beliefs=pinned_beliefs,
+            focus_subjects=focus_subjects,
         )
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()
@@ -93,7 +97,7 @@ def _payload(
         "motivation_context": catalogue.payload(),
         "experience_context": experience.view(mind),
         "context_packing": {
-            "policy": "historical-view-budget-v1",
+            "policy": "focused-view-budget-v2",
             "tier": tier,
             "dialogue_entries_omitted": len(previous) - len(kept),
             "canonical_history_changed": False,
@@ -110,11 +114,18 @@ def _payload(
         and source.kind == "speech"
         and source.speaker_id == "@player"
     ]
-    if tier == len(TIERS) - 1 and "\n".join(text for _, text in current) == observed.get(
-        "player_request"
+    reference = {"player_request_source_ids": [alias for alias, _ in current]}
+    literal = {"player_request": observed.get("player_request")}
+    smaller = len(json.dumps(reference, ensure_ascii=False)) < len(
+        json.dumps(literal, ensure_ascii=False)
+    )
+    if (
+        current
+        and smaller
+        and "\n".join(text for _, text in current) == observed.get("player_request")
     ):
         result["observation"] = {
             key: value for key, value in observed.items() if key != "player_request"
         }
-        result["observation"]["player_request_source_ids"] = [alias for alias, _ in current]
+        result["observation"].update(reference)
     return result

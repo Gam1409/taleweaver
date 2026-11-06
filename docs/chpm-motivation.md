@@ -52,6 +52,13 @@ relevance fits the selected intention and source. It must not demand that the NP
 recite these reasons, nor reject a contextual social question merely for being a
 question. Generic permission to continue remains outside the NPC's decision needs.
 
+In the model-facing narrator/reviewer view, `text_ref` can replace an exact text
+already present in that NPC's same contract when the JSON pointer is shorter.
+Short or unique text remains literal. Provenance hashes stay in the full saved
+trace; neither stored motives nor original identity are shortened or summarized.
+The pointer resolves against that NPC's object, not the outer actor-ID map. It is
+an exact in-contract reference, not a retrieval request or inference.
+
 No new endpoint, database table, model role, LLM call or default activation is added.
 Old saved decisions load without motive fields; off/shadow retain their previous
 paths. New live proposals must supply motives explicitly. Failed proposals or
@@ -126,3 +133,11 @@ The metadata-hash tie-break remains only in historical/legacy policies. Saved v1
 decisions are not retroactively reselected. See `chpm-pilot.md`. A valid citation
 proves provenance, not psychological truth: semantic relevance and preference are
 still fallible model judgments, with no calibrated human utility function.
+
+Candidates explicitly declare zero to two unmet `preconditions` (160 characters
+each). These conditions reach both the narrator and its existing reviewer. A
+`maintain` choice must retain the previous condition list exactly; changing it
+requires the existing explicit `revise` path with accessible new evidence. Reports
+and promises cannot establish that a check or physical action has completed.
+This does not add a semantic checker: identifying an omitted condition and judging
+fulfilment still depend on proposal/review quality. No extra LLM call is introduced.

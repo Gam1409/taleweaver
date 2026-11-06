@@ -17,7 +17,9 @@ def test_large_history_packs_without_changing_sources_or_required_fields():
     for number in range(40):
         value = heard(value, f"m{number}", f"Episode {number}. " + "A remembered report. " * 45)
         window = cognitive_context.appraisal_context.build(value)
-        alias = next(reversed(window.sources))
+        alias = next(
+            alias for alias, (_, src, _) in window.sources.items() if src.message_id == f"m{number}"
+        )
         value = accept(
             value,
             [

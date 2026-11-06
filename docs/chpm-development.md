@@ -20,8 +20,13 @@ diagnoses, numerical Big Five scores and automatic identity migration are absent
 
 ## Evidence and lifecycle
 
-Up to nine dated speech episodes are sampled across available history, with
-chronological endpoints retained. Excerpts are at most 200 characters. A source
+Up to nine dated speech episodes are sampled across available history. In busy
+histories, up to three slots retain the observer's own reviewed speech and up to
+three retain the current relevant person's speech (the player when unspecified).
+Each group keeps its chronological endpoints and prefers a different scene for
+the middle example. Remaining slots favor lexical relevance and recency; the
+final view remains chronological. This prevents uniform sampling from losing all
+of the NPC's own dated speech. Excerpts are at most 200 characters. A source
 needs an observer-local host frame to establish its scene. Missing dates/scenes
 are not guessed. Sampling can miss relevant episodes and counterexamples; omission
 is not evidence of absence.

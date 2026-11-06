@@ -22,14 +22,31 @@ can be wrong; it remains an inference and cannot become a world event or edit th
 original character. A malformed proposal or fabricated citation fails the whole
 turn, preserving its previous state.
 
-Inputs expose up to six recent speech excerpts (1,000 characters each) and eight
-recent beliefs. Output allows two interpretations with two citations each. These
-limits bound the protocol, not the accuracy of retrieval or psychological inference.
+Inputs normally expose up to six recent speech excerpts (1,000 characters each),
+three historical slots and eight ordinary beliefs. All current approved evidence
+is retained even when it exceeds the recent-source count. Ordinary beliefs are
+filtered before applying the count limit; developmental propositions cannot crowd
+them out. Present people explicitly mentioned in the approved request, current
+speakers, lexical overlap and evidence recency guide selection. This is local
+retrieval, not a psychological confidence score or semantic search.
+
+Historical slots first retain available opposing/supporting grounds for selected
+beliefs; remaining slots use observer-local episodic recall. A single available
+slot favors counterevidence. `basis_for` labels the interpretation's stance toward
+a proposition, never the truth of the reported event. Short sources retain their
+full wording; longer sources use the cited passage when it fits, otherwise the
+exact quote with `excerpted=true`. Relevant grounds outside a historical source's
+prefix replace that prefix, not current evidence. Missing recall proves no absence.
+Explicit agent pins keep their existing separate limits and priority.
+
+Output allows two interpretations with two citations each. These limits bound
+the protocol, not the accuracy of retrieval or psychological inference.
 The existing settings still bound total input characters and output tokens. Calls
 per live turn remain N + 2, or N + 4 with narration repair, plus the normal narrator.
 
-The live selection policy is `initiative-gated-v1`; the older comparison path
-retains `goal-first-v1`. The LLM still supplies intentions, goal alignment and
+Current live selection uses `motivated-choice-v2` with the existing clarification
+gate; see [motivation and arbitration](chpm-motivation.md). The older comparison
+path retains `goal-first-v1`. The LLM still supplies intentions, goal alignment and
 conditional dependencies. Matching quotations and structurally valid dependencies
 do not prove semantic relevance. There are no numeric trust/affection changes, spontaneous trait edits,
 automatic trauma recovery, or confidence inferred from source counts.

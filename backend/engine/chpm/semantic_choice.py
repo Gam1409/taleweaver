@@ -92,6 +92,14 @@ def select(
             + "."
         )
     selected = allowed[choice.preferred]
+    if (
+        prior
+        and choice.continuity == "maintain"
+        and selected.preconditions != prior.selected.preconditions
+    ):
+        raise ChpmError(
+            "Maintaining an intention must preserve its conditions; revise explicitly with new evidence."
+        )
     cited = {m.source.id: m for m in motives[selected.kind]}
     if (
         len(set(choice.motive_ids)) != len(choice.motive_ids)

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from backend.engine.chpm.belief_recall import words
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.host_observations import previous
@@ -22,7 +23,9 @@ class Episode:
     excerpt: str
 
 
-def episodes(mind: Mind) -> dict[str, Episode]:
+def episodes(
+    mind: Mind, *, query: str = "", focus_subjects: tuple[str, ...] = ()
+) -> dict[str, Episode]:
     scene = None
     times = {event.event_id: event.sim_minute for event in events(mind.snapshot)}
     available = []
@@ -36,11 +39,39 @@ def episodes(mind: Mind) -> dict[str, Episode]:
             Episode(evidence.id, source, times[evidence.event_id], scene, source.text[:200])
         )
     if len(available) > SOURCE_LIMIT:
-        indices = sorted(
-            {round(i * (len(available) - 1) / (SOURCE_LIMIT - 1)) for i in range(SOURCE_LIMIT)}
-        )
-        available = [available[index] for index in indices]
+        available = _sample(available, mind.genesis.scope.observer_id, query, focus_subjects)
     return {f"d{index}": item for index, item in enumerate(available, 1)}
+
+
+def _dated(entries: list[Episode]) -> list[Episode]:
+    unique = list({e.source.message_id: e for e in entries}.values())
+    if len(unique) <= 3:
+        return unique
+    first, last = unique[0], unique[-1]
+    others = [e for e in unique[1:-1] if e.scene not in {first.scene, last.scene}]
+    middle = (others or unique[1:-1])[len(others or unique[1:-1]) // 2]
+    return [first, middle, last]
+
+
+def _sample(
+    entries: list[Episode], observer: str, query: str, subjects: tuple[str, ...]
+) -> list[Episode]:
+    own = [e for e in entries if e.source.speaker_id == observer and e.source.role == "assistant"]
+    selected = {e.record_id: e for e in _dated(own)}
+    subject = next((s for s in subjects if s != observer), "@player")
+    selected.update(
+        {e.record_id: e for e in _dated([e for e in entries if e.source.speaker_id == subject])}
+    )
+    cues = words(query)
+    order = {e.record_id: index for index, e in enumerate(entries)}
+    ranked = sorted(
+        entries, key=lambda e: (len(cues & words(e.excerpt)), order[e.record_id]), reverse=True
+    )
+    for entry in ranked:
+        if len(selected) >= SOURCE_LIMIT:
+            break
+        selected.setdefault(entry.record_id, entry)
+    return sorted(selected.values(), key=lambda e: order[e.record_id])
 
 
 def spans(entries: list[Episode], minimum: int) -> bool:
