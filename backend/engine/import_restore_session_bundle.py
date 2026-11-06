@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.game_modes import normalize_vn_template
 from backend.engine.import_build_session_template import build_session_template
+from backend.engine.import_bundle_details import restore_details, restore_world
 from backend.engine.import_transaction import register_created
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.living_world.state import fork as fork_simulation
@@ -23,6 +24,16 @@ async def restore_session_bundle(
 ) -> bool:
     data = payload
     old_adv = data["adventure"]
+    old_state = data.get("game_state")
+    if old_state is None:
+        old_state = data.get("session_state")
+    old_avatar = data.get("avatar")
+    if (old_state is not None or old_avatar is not None) and not (
+        isinstance(old_state, dict) and isinstance(old_avatar, dict)
+    ):
+        raise ValueError("A session bundle requires both state and avatar objects.")
+    if data.get("chat_history") and old_state is None:
+        raise ValueError("Conversation history requires a complete session bundle.")
 
     new_template = build_session_template(data, user, origin_id)
 
@@ -38,9 +49,7 @@ async def restore_session_bundle(
     new_template.creation_status = "Ready"
     new_template.creation_error = None
 
-    old_state = data.get("game_state") or data.get("session_state")
-    old_avatar = data.get("avatar")
-    if old_state and old_avatar:
+    if old_state is not None and old_avatar is not None:
         new_avatar = Avatar(
             user_id=user.id,
             template_id=new_template.id,
@@ -122,20 +131,24 @@ async def restore_session_bundle(
             },
         )
 
-        db.add(
-            SessionState(
-                session_id=new_sess.id,
-                current_scene_id=old_state.get("scene_id")
-                or old_state.get("current_scene_id")
-                or "START",
-                in_game_time=old_state.get("in_game_time", 0),
-                inventory=old_state.get("inventory", []),
-                entity_states=restored_entity_states,
-                living_world=fork_simulation(old_state.get("living_world")),
-                exit_states=old_state.get("exit_states", {}),
-                discovered_scenes=old_state.get("discovered_scenes", []),
-            )
+        restored_state = SessionState(
+            session_id=new_sess.id,
+            user_id=user.id,
+            template_id=new_template.id,
+            avatar_id=new_avatar.id,
+            current_scene_id=old_state.get("scene_id")
+            or old_state.get("current_scene_id")
+            or "START",
+            in_game_time=old_state.get("in_game_time", 0),
+            inventory=old_state.get("inventory", []),
+            entity_states=restored_entity_states,
+            living_world=fork_simulation(old_state.get("living_world")),
+            exit_states=old_state.get("exit_states", {}),
+            discovered_scenes=old_state.get("discovered_scenes", []),
         )
+        db.add(restored_state)
+        restore_details(db, restored_state, old_state, data.get("chat_history") or [])
+        await restore_world(db, restored_state, new_template.id, data)
 
     await db.flush()
     # Ensure thumbnails are generated for imported assets
