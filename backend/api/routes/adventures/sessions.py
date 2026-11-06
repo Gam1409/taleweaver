@@ -1350,7 +1350,9 @@ async def import_session_ads(
         raise
     except Exception as e:
         logger.exception("ADS Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Session import failed. Check the file and server logs."
+        ) from e
 
 
 def _backfill_readable_fields(merged: dict[str, Any], metadata: dict[str, Any]) -> None:

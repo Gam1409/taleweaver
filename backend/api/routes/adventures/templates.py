@@ -568,7 +568,9 @@ async def update_all_adventure_templates(
         )
     except Exception as e:
         logger.exception("Failed to update all adventure templates")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="Adventure operation failed. Check the server logs."
+        ) from e
 
 
 @router.post("/templates/{template_id}/update", response_model=None)
@@ -591,7 +593,9 @@ async def update_adventure_template(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to update adventure template %s", template_id)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="Adventure operation failed. Check the server logs."
+        ) from e
 
 
 @router.post("/templates/{template_id}/migrate", response_model=None)
@@ -614,7 +618,9 @@ async def migrate_adventure_template(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to migrate adventure template %s", template_id)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="Adventure operation failed. Check the server logs."
+        ) from e
 
 
 @router.get("/{template_id}", response_model=AdventureTemplateResponse)
@@ -1122,7 +1128,9 @@ async def export_adventure_adv(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("Export failed")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="Adventure operation failed. Check the server logs."
+        ) from e
 
 
 @router.get("/{template_id}/export/adz", response_model=None)
@@ -1149,7 +1157,9 @@ async def export_adventure_adz(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("ADZ Export failed")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="Adventure operation failed. Check the server logs."
+        ) from e
 
 
 @router.get("/{template_id}/export/session", response_model=None)

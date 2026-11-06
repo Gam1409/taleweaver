@@ -131,4 +131,6 @@ async def upload_image(
             status_code=400, detail="Image dimensions exceed safety limits."
         ) from exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Image processing failed. Check the image file and server logs."
+        ) from e

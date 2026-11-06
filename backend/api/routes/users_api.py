@@ -28,6 +28,7 @@ from backend.core.auth import (
 )
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.error_diagnostics import diagnose_provider_error
 from backend.core.image_purposes import image_provider
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
@@ -310,7 +311,11 @@ async def generate_my_bio(
         await db.refresh(current_user)
         return {"bio": bio}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bio generation failed: {str(e)}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Bio generation failed. "
+            + diagnose_provider_error(e, provider=getattr(gm, "provider", "")),
+        ) from e
 
 
 @router.post("/users/me/profile-image/generate", response_model=UserResponse)
@@ -380,4 +385,8 @@ async def generate_my_profile_image(
         return current_user
     except Exception as e:
         logger.exception("Profile image generation failed for user %s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Image generation failed. "
+            + diagnose_provider_error(e, provider=provider, context="image"),
+        ) from e

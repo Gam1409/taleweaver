@@ -198,7 +198,7 @@ async def transcribe_audio(
         logger.exception("Failed to decode WAV file")
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid audio format. Must be 16kHz 16-bit mono WAV: {e}",
+            detail="Invalid audio format. Use 16kHz sample rate, 16-bit mono WAV.",
         ) from e
 
     try:
@@ -209,4 +209,7 @@ async def transcribe_audio(
         return {"text": text}
     except Exception as e:
         logger.exception("Whisper transcription failed")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Transcription failed. Check the speech-model settings and server logs.",
+        ) from e

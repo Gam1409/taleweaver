@@ -188,7 +188,9 @@ async def import_adventure(
         raise
     except Exception as e:
         logger.exception("Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
 @router.post("/import/session-bundle", response_model=None)
@@ -247,7 +249,9 @@ async def import_session_bundle(
         raise
     except Exception as e:
         logger.exception("Session bundle import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
 @router.post("/import/adz", response_model=None)
@@ -285,7 +289,9 @@ async def import_adventure_adz(
         raise
     except Exception as e:
         logger.exception("ADZ Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
 @router.post("/import/adv", response_model=None)
@@ -322,7 +328,9 @@ async def import_adventure_adv(
         raise
     except Exception as e:
         logger.exception("ADV Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
 @router.get("/generation-sayings", response_model=list[str])

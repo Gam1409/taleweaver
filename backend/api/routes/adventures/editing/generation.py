@@ -83,7 +83,10 @@ async def _run_structured(
         return response_model.model_validate(result)
     except Exception as e:
         logger.error(f"Failed to generate {label}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail="Text generation failed. Check the model settings and server logs.",
+        ) from e
 
 
 async def _run_text(current_user: User, system_prompt: str, user_prompt: str, label: str) -> str:
@@ -94,7 +97,10 @@ async def _run_text(current_user: User, system_prompt: str, user_prompt: str, la
         )
     except Exception as e:
         logger.error(f"Failed to generate {label}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail="Text generation failed. Check the model settings and server logs.",
+        ) from e
 
 
 def _clean_generated_text(text: str) -> str:

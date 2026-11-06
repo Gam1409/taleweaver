@@ -21,6 +21,7 @@ class DiagnosticMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         started = time.perf_counter()
+        request_id = uuid4().hex
         status_code = 0
         byte_count = 0
         disconnected = False
@@ -37,11 +38,16 @@ class DiagnosticMiddleware:
             nonlocal status_code, byte_count
             if message["type"] == "http.response.start":
                 status_code = message["status"]
+                message["headers"] = [
+                    (key, value)
+                    for key, value in message.get("headers", [])
+                    if key.lower() != b"x-request-id"
+                ] + [(b"x-request-id", request_id.encode("ascii"))]
             elif message["type"] == "http.response.body":
                 byte_count += len(message.get("body", b""))
             await send(message)
 
-        with service.context(request_id=uuid4().hex):
+        with service.context(request_id=request_id):
             service.http_event("http.started", scope, method=scope["method"])
             try:
                 await self.app(scope, observed_receive, observed_send)
