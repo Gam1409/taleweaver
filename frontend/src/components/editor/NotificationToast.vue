@@ -37,7 +37,7 @@ const emit = defineEmits<{
             <p class="text-xs font-black uppercase tracking-widest opacity-50">{{ n.type }}</p>
             <p class="text-xs font-bold leading-relaxed">{{ n.message }}</p>
           </div>
-          <button @click="emit('close', n.id)" class="opacity-50 hover:opacity-100 transition-opacity">
+          <button aria-label="Dismiss notification" @click="emit('close', n.id)" class="opacity-50 hover:opacity-100 transition-opacity">
             <i class="ra ra-cancel text-xs"></i>
           </button>
         </div>

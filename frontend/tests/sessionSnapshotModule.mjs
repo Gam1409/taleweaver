@@ -7,7 +7,7 @@ const compile = path =>
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
   }).outputText
 const uri = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-const httpModule = uri(
+export const httpModule = uri(
   compile('../src/services/http.ts').replace(
     /import .* from '@\/store\/auth';/,
     "const authState = {token:'test-token'};"

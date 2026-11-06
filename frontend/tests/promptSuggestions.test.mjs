@@ -1,3 +1,4 @@
+import { httpModule } from './sessionSnapshotModule.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -9,6 +10,7 @@ const source = readFileSync(new URL('../src/composables/usePromptSuggestions.ts'
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/http'", `from '${httpModule}'`)
   .replace("import { authState } from '@/store/auth';", 'const authState = { token: "test-token" };')
 const { usePromptSuggestions } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
@@ -38,7 +40,7 @@ test('one independent POST stays busy until completion and updates Russian ideas
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, `/api/adventures/${encodeURIComponent(f.session.value)}/suggestions`)
   assert.equal(calls[0].options.method, 'POST')
-  assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token')
+  assert.equal(new Headers(calls[0].options.headers).get('Authorization'), 'Bearer test-token')
   assert.deepEqual(f.ideas.value, oldIdeas)
   complete(response())
   await pending

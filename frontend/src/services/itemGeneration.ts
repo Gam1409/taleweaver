@@ -1,5 +1,5 @@
 import type { ClothingData } from '@/services/clothingAuthoring'
-import { API_BASE, authHeaders } from '@/services/http'
+import { authHeaders, apiFetch } from '@/services/http'
 
 export interface ItemDraft {
   name: string
@@ -12,7 +12,7 @@ export interface ItemDraft {
 }
 
 async function generate<T>(adventureId: string, endpoint: string, input: object): Promise<T> {
-  const response = await fetch(`${API_BASE}/adventures/${adventureId}/editor/${endpoint}`, {
+  const response = await apiFetch(`/adventures/${adventureId}/editor/${endpoint}`, { timeoutMs: null,
     method: 'POST', headers: authHeaders(true), body: JSON.stringify(input),
   })
   if (!response.ok) {

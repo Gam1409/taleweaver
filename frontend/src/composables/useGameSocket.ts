@@ -1,3 +1,4 @@
+import { apiFetch } from '@/services/http'
 /**
  * useGameSocket — Reactive REST-based composable for the TaleWeaver game loop.
  * 
@@ -13,6 +14,7 @@ import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrec
 import { createFailedTurnDrafts, savedActionIndex } from '@/services/failedTurnDrafts'
 import { createSnapshotPoller } from '@/services/snapshotPoller'
 import { readSessionSnapshot, snapshotErrorMessage } from '@/services/sessionSnapshot'
+import { readServerEvents } from '@/services/serverEvents'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -27,6 +29,27 @@ export interface AgentLogEntry {
   timestamp: string
   thought: string
   action: string
+}
+
+interface StoryEventPayload {
+  content: string
+  messages: ChatMessage[]
+  role?: ChatMessage['role']
+  is_debug?: boolean
+  id?: string
+  user_msg_id?: string
+  saved_user_message_id?: string
+  narration_correction_applied?: boolean
+  narration_incomplete?: boolean
+  narration_warning?: string
+  game_over?: boolean
+  game_completed?: boolean
+  input_locked?: boolean
+  game_over_reason?: string
+  status_note?: string
+  detail?: string
+  request?: unknown
+  [key: string]: unknown
 }
 
 const AGENT_LOG_LIMIT = 50
@@ -111,7 +134,6 @@ export function useGameSocket(): UseGameSocket {
     return gameSocketSingleton
   }
 
-  const BASE = '/api'
   const { addNotification } = useNotifications()
   const messages = ref<ChatMessage[]>([])
   const failedTurnDrafts = createFailedTurnDrafts()
@@ -622,7 +644,7 @@ export function useGameSocket(): UseGameSocket {
     resetIdleTimeout()
 
     try {
-      const res = await fetch(`${BASE}/adventures/${gameId}/chat`, {
+      const res = await apiFetch(`/adventures/${gameId}/chat`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         signal: controller.signal,
@@ -645,8 +667,7 @@ export function useGameSocket(): UseGameSocket {
       }
 
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        finalStatus = 'error'
+                finalStatus = 'error'
         reportTurnError('Your session expired. Sign in again before retrying this action.')
         return
       }
@@ -658,106 +679,72 @@ export function useGameSocket(): UseGameSocket {
         return
       }
 
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('No reader available')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (!ownsRequest()) return
-        if (done) break
-        resetIdleTimeout()
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let event = 'message'
-          let data = null
-
-          for (const line of lines) {
-            if (line.startsWith('event:')) event = line.slice(6).trim()
-            else if (line.startsWith('data:')) {
-              try {
-                data = JSON.parse(line.slice(5).trim())
-              } catch (e) {
-                console.error('Failed to parse SSE data', e)
-              }
+      if (!res.body) throw new Error('No response stream available')
+      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout, isCurrent: ownsRequest })) {
+        if (event === 'replay_history') {
+          messages.value = data.messages.map((m: ChatMessage) => ({ ...m, timestamp: new Date() }))
+          if (data.content) _pushMessage('user', data.content)
+        } else if (event === 'status') {
+          statusText.value = data.content
+          appendDebugLog({
+            timestamp: new Date().toLocaleTimeString(),
+            content: data.content
+          })
+        } else if (event === 'state') {
+          // Early turn snapshot: refresh scene/entities before narration streams in.
+          applySessionSnapshot(data, false)
+        } else if (event === 'system' || event === 'assistant') {
+          const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
+          // If the backend included a user_msg_id (debug command flow), attach it to the
+          // optimistically-pushed user message so the delete button becomes available.
+          if (data.user_msg_id) {
+            for (let i = messages.value.length - 1; i >= 0; i--) {
+              const m = messages.value[i] as any
+              if (m.role === 'user' && !m.id) { m.id = data.user_msg_id; break }
             }
           }
-
-          if (!data) continue
-
-          if (event === 'replay_history') {
-            messages.value = data.messages.map((m: ChatMessage) => ({ ...m, timestamp: new Date() }))
-            if (data.content) _pushMessage('user', data.content)
-          } else if (event === 'status') {
-            statusText.value = data.content
-            appendDebugLog({
-              timestamp: new Date().toLocaleTimeString(),
-              content: data.content
-            })
-          } else if (event === 'state') {
-            // Early turn snapshot: refresh scene/entities before narration streams in.
-            applySessionSnapshot(data, false)
-          } else if (event === 'system' || event === 'assistant') {
-            const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
-            // If the backend included a user_msg_id (debug command flow), attach it to the
-            // optimistically-pushed user message so the delete button becomes available.
-            if (data.user_msg_id) {
-              for (let i = messages.value.length - 1; i >= 0; i--) {
-                const m = messages.value[i] as any
-                if (m.role === 'user' && !m.id) { m.id = data.user_msg_id; break }
-              }
-            }
-            _pushMessage(role, data.content, undefined, data.is_debug)
-            // Attach the system message DB id (if provided) so it can be deleted.
-            if (data.id) {
-              const lastMsg = messages.value[messages.value.length - 1]
-              if (lastMsg) (lastMsg as any).id = data.id
-            }
-          } else if (event === 'chunk') {
-            let lastMsg = messages.value[messages.value.length - 1]
-            if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
-              _pushMessage('assistant', '')
-              lastMsg = messages.value[messages.value.length - 1]
-            }
-            lastMsg.content += data.content
-          } else if (event === 'final') {
-            savedUserMessageId = typeof data.saved_user_message_id === 'string' ? data.saved_user_message_id : undefined
-            receivedFinalEvent = true
-            acknowledgeCorrection(gameId, correction, data.narration_correction_applied)
-            if (data.narration_incomplete) {
-              narrationWarning = data.narration_warning || 'The model stopped before finishing its response. The turn was saved; do not repeat the action.'
-            }
-            applySessionSnapshot(data, false)
-            finalStatus = data.game_over ? 'game_over' : data.game_completed && data.input_locked ? 'completed' : 'connected'
-            if (data.game_over || data.game_completed) {
-              gameOverReason.value = data.game_over_reason || data.status_note || ''
-            }
-            if (data.game_over) stopSyncTimer()
-            // Keep input locked until this request finishes its authoritative reload.
-            status.value = 'connecting'
-          } else if (event === 'error') {
-            receivedErrorEvent = true
-            reportTurnError(data.detail || 'An error occurred.')
-          } else if (event === 'scene_transition') {
-            // The story feed starts a new page per scene; previous scenes stay browsable.
-            isSceneTransitioning.value = true
-            applySessionSnapshot(data, false)
-          } else if (event === 'adventure_generator_proposal') {
-            generatorProposal.value = data.request || data
-            window.setTimeout(() => {
-              showGeneratorModal.value = true
-            }, 600)
-          } else if (event === 'checkpoint') {
-            triggerCheckpointPulse()
+          _pushMessage(role, data.content, undefined, data.is_debug)
+          // Attach the system message DB id (if provided) so it can be deleted.
+          if (data.id) {
+            const lastMsg = messages.value[messages.value.length - 1]
+            if (lastMsg) (lastMsg as any).id = data.id
           }
+        } else if (event === 'chunk') {
+          let lastMsg = messages.value[messages.value.length - 1]
+          if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
+            _pushMessage('assistant', '')
+            lastMsg = messages.value[messages.value.length - 1]
+          }
+          lastMsg.content += data.content
+        } else if (event === 'final') {
+          savedUserMessageId = typeof data.saved_user_message_id === 'string' ? data.saved_user_message_id : undefined
+          receivedFinalEvent = true
+          acknowledgeCorrection(gameId, correction, data.narration_correction_applied)
+          if (data.narration_incomplete) {
+            narrationWarning = data.narration_warning || 'The model stopped before finishing its response. The turn was saved; do not repeat the action.'
+          }
+          applySessionSnapshot(data, false)
+          finalStatus = data.game_over ? 'game_over' : data.game_completed && data.input_locked ? 'completed' : 'connected'
+          if (data.game_over || data.game_completed) {
+            gameOverReason.value = data.game_over_reason || data.status_note || ''
+          }
+          if (data.game_over) stopSyncTimer()
+          // Keep input locked until this request finishes its authoritative reload.
+          status.value = 'connecting'
+        } else if (event === 'error') {
+          receivedErrorEvent = true
+          reportTurnError(data.detail || 'An error occurred.')
+        } else if (event === 'scene_transition') {
+          // The story feed starts a new page per scene; previous scenes stay browsable.
+          isSceneTransitioning.value = true
+          applySessionSnapshot(data, false)
+        } else if (event === 'adventure_generator_proposal') {
+          generatorProposal.value = data.request || data
+          window.setTimeout(() => {
+            showGeneratorModal.value = true
+          }, 600)
+        } else if (event === 'checkpoint') {
+          triggerCheckpointPulse()
         }
       }
 
@@ -830,7 +817,7 @@ export function useGameSocket(): UseGameSocket {
   async function updateAgentSettings(patch: AgentSettingsPatch): Promise<boolean> {
     if (!currentGameId) return false
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/agent/settings`, {
+      const res = await apiFetch(`/adventures/${currentGameId}/agent/settings`, { timeoutMs: 60_000,
         method: 'PATCH',
         headers: authHeaders(true),
         body: JSON.stringify(patch)
@@ -877,15 +864,14 @@ export function useGameSocket(): UseGameSocket {
     resetIdleTimeout()
 
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/agent/turn`, {
+      const res = await apiFetch(`/adventures/${currentGameId}/agent/turn`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(false),
         signal: controller.signal
       })
 
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        status.value = 'error'
+                status.value = 'error'
         statusText.value = ''
         return false
       }
@@ -897,91 +883,58 @@ export function useGameSocket(): UseGameSocket {
         return false
       }
 
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('No reader available')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (!controller.signal.aborted) {
-        const { value, done } = await reader.read()
-        if (done) break
-        resetIdleTimeout()
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let event = 'message'
-          let data = null
-
-          for (const line of lines) {
-            if (line.startsWith('event:')) event = line.slice(6).trim()
-            else if (line.startsWith('data:')) {
-              try {
-                data = JSON.parse(line.slice(5).trim())
-              } catch (e) {
-                console.error('Failed to parse SSE data', e)
-              }
-            }
+      if (!res.body) throw new Error('No response stream available')
+      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout })) {
+        if (event === 'status') {
+          statusText.value = data.content
+          appendDebugLog({
+            timestamp: new Date().toLocaleTimeString(),
+            content: data.content
+          })
+        } else if (event === 'state') {
+          // Early turn snapshot: refresh scene/entities before narration streams in.
+          applySessionSnapshot(data, false)
+        } else if (event === 'thought') {
+          _pushMessage('thought' as any, data.content)
+          agentLog.value = [...agentLog.value, { timestamp: new Date().toLocaleTimeString(), thought: data.content, action: '' }].slice(-AGENT_LOG_LIMIT)
+        } else if (event === 'player_action') {
+          _pushMessage('user', data.content)
+          const lastEntry = agentLog.value[agentLog.value.length - 1]
+          if (lastEntry && !lastEntry.action) lastEntry.action = data.content
+        } else if (event === 'agent_state') {
+          if (sheet.value) sheet.value = { ...sheet.value, ...data }
+        } else if (event === 'system' || event === 'assistant') {
+          const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
+          _pushMessage(role, data.content, undefined, data.is_debug)
+        } else if (event === 'chunk') {
+          let lastMsg = messages.value[messages.value.length - 1]
+          if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
+            _pushMessage('assistant', '')
+            lastMsg = messages.value[messages.value.length - 1]
           }
-
-          if (!data) continue
-
-          if (event === 'status') {
-            statusText.value = data.content
-            appendDebugLog({
-              timestamp: new Date().toLocaleTimeString(),
-              content: data.content
-            })
-          } else if (event === 'state') {
-            // Early turn snapshot: refresh scene/entities before narration streams in.
-            applySessionSnapshot(data, false)
-          } else if (event === 'thought') {
-            _pushMessage('thought' as any, data.content)
-            agentLog.value = [...agentLog.value, { timestamp: new Date().toLocaleTimeString(), thought: data.content, action: '' }].slice(-AGENT_LOG_LIMIT)
-          } else if (event === 'player_action') {
-            _pushMessage('user', data.content)
-            const lastEntry = agentLog.value[agentLog.value.length - 1]
-            if (lastEntry && !lastEntry.action) lastEntry.action = data.content
-          } else if (event === 'agent_state') {
-            if (sheet.value) sheet.value = { ...sheet.value, ...data }
-          } else if (event === 'system' || event === 'assistant') {
-            const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
-            _pushMessage(role, data.content, undefined, data.is_debug)
-          } else if (event === 'chunk') {
-            let lastMsg = messages.value[messages.value.length - 1]
-            if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
-              _pushMessage('assistant', '')
-              lastMsg = messages.value[messages.value.length - 1]
-            }
-            lastMsg.content += data.content
-          } else if (event === 'final') {
-            receivedFinalEvent = true
-            applySessionSnapshot(data, false)
-            if (data.game_over) {
-              status.value = 'game_over'
-              gameOverReason.value = data.game_over_reason || data.status_note || ''
-              stopSyncTimer()
-            } else if (data.game_completed) {
-              gameOverReason.value = data.status_note || ''
-              status.value = data.input_locked ? 'completed' : 'connected'
-            } else {
-              status.value = 'connected'
-              statusText.value = ''
-            }
-          } else if (event === 'error') {
-            const detail = data.detail || 'An error occurred.'
-            _pushMessage('system', detail)
-            addNotification(detail, 'error')
+          lastMsg.content += data.content
+        } else if (event === 'final') {
+          receivedFinalEvent = true
+          applySessionSnapshot(data, false)
+          if (data.game_over) {
+            status.value = 'game_over'
+            gameOverReason.value = data.game_over_reason || data.status_note || ''
+            stopSyncTimer()
+          } else if (data.game_completed) {
+            gameOverReason.value = data.status_note || ''
+            status.value = data.input_locked ? 'completed' : 'connected'
+          } else {
             status.value = 'connected'
             statusText.value = ''
-          } else if (event === 'checkpoint') {
-            triggerCheckpointPulse()
           }
+        } else if (event === 'error') {
+          const detail = data.detail || 'An error occurred.'
+          _pushMessage('system', detail)
+          addNotification(detail, 'error')
+          status.value = 'connected'
+          statusText.value = ''
+        } else if (event === 'checkpoint') {
+          triggerCheckpointPulse()
         }
       }
 
@@ -1020,15 +973,14 @@ export function useGameSocket(): UseGameSocket {
   async function createTerminalEpilogue(): Promise<void> {
     if (!currentGameId) return
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/terminal-epilogue`, {
+      const res = await apiFetch(`/adventures/${currentGameId}/terminal-epilogue`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify({})
       })
 
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        return
+                return
       }
       if (!res.ok) return
 
@@ -1045,7 +997,7 @@ export function useGameSocket(): UseGameSocket {
   async function deleteMessage(messageId: string): Promise<void> {
     if (!currentGameId || !messageId) return
     try {
-      const res = await fetch(`${BASE}/adventures/sessions/${currentGameId}/messages/${messageId}`, {
+      const res = await apiFetch(`/adventures/sessions/${currentGameId}/messages/${messageId}`, { timeoutMs: 60_000,
         method: 'DELETE',
         headers: authHeaders(false)
       })

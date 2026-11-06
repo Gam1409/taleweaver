@@ -1,4 +1,4 @@
-import { API_BASE, authHeaders } from '@/services/http'
+import { authHeaders, apiFetch } from '@/services/http'
 
 export type PersonalityProfile = Record<string, string>
 export interface PersonalityField {
@@ -8,7 +8,7 @@ export interface PersonalityField {
 }
 
 async function read<T>(url: string, body?: object): Promise<T> {
-  const response = await fetch(`${API_BASE}/adventures/${url}`, {
+  const response = await apiFetch(`/adventures/${url}`, { timeoutMs: body ? null : 15_000,
     method: body ? 'POST' : 'GET', headers: authHeaders(Boolean(body)),
     ...(body ? { body: JSON.stringify(body) } : {}),
   })

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/services/http'
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
 
@@ -93,7 +94,7 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
   }
 
   async function request(path: string, signal: AbortSignal, method = 'GET'): Promise<unknown> {
-    const response = await fetch(`/api/adventures/${encodeURIComponent(sessionId.value)}/${path}`, {
+    const response = await apiFetch(`/adventures/${encodeURIComponent(sessionId.value)}/${path}`, { timeoutMs: null,
       method, headers: { Authorization: `Bearer ${authState.token}` }, signal,
     })
     if (!response.ok) throw new Error(response.status === 404

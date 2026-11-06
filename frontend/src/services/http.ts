@@ -40,28 +40,50 @@ export async function apiFetch(path: string, init: ApiFetchInit = {}): Promise<R
   const callerHeaders = new Headers(incomingHeaders)
   callerHeaders.forEach((value, key) => mergedHeaders.set(key, value))
 
-  const controller = new AbortController()
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort(signal.reason)
-    } else {
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
-    }
-  }
-
-  // null delegates the deadline to the backend (long-running model requests).
-  const timeoutId = timeoutMs === null ? undefined : window.setTimeout(() => controller.abort('request-timeout'), timeoutMs)
-  try {
+  async function send(requestSignal?: AbortSignal | null): Promise<Response> {
     const response = await fetch(buildApiUrl(path), {
       ...rest,
       headers: mergedHeaders,
-      signal: controller.signal,
+      signal: requestSignal,
       credentials: 'same-origin',
       cache: cache ?? 'no-store',
     })
     if (response.status === 401) window.dispatchEvent(new Event('auth-unauthorized'))
     return response
+  }
+
+  // Long model calls and streaming retain their native body and caller deadline.
+  if (timeoutMs === null) return send(signal)
+  if (signal?.aborted) throw new DOMException('Request aborted.', 'AbortError')
+  const controller = new AbortController()
+  let rejectPending: (reason: DOMException) => void
+  const canceled = new Promise<never>((_, reject) => { rejectPending = reject })
+  const abort = () => {
+    controller.abort(signal?.reason)
+    rejectPending(new DOMException('Request aborted.', 'AbortError'))
+  }
+  signal?.addEventListener('abort', abort, { once: true })
+  const timeoutId = window.setTimeout(() => {
+    controller.abort('request-timeout')
+    rejectPending(new DOMException('Request timed out.', 'AbortError'))
+  }, timeoutMs)
+  try {
+    const complete = async () => {
+      const response = await send(controller.signal)
+      if (!response.body) return response
+      const bytes = await response.arrayBuffer()
+      const buffered = new Response(bytes, {
+        status: response.status, statusText: response.statusText, headers: response.headers,
+      })
+      // Finite requests complete under one deadline, including the response body.
+      for (const key of ['url', 'redirected', 'type'] as const) {
+        Object.defineProperty(buffered, key, { value: response[key] })
+      }
+      return buffered
+    }
+    return await Promise.race([complete(), canceled])
   } finally {
     clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', abort)
   }
 }

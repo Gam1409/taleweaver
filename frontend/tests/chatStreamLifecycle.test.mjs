@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
 import { correctionModuleUrl, corrections } from './correctionModule.mjs'
-import { sessionSnapshotModule } from './sessionSnapshotModule.mjs'
+import { httpModule, sessionSnapshotModule } from './sessionSnapshotModule.mjs'
+import { serverEventsModule } from './serverEventsModule.mjs'
 
 const draftSource = readFileSync(new URL('../src/services/failedTurnDrafts.ts', import.meta.url), 'utf8')
 const draftModule = ts.transpileModule(draftSource, {
@@ -25,6 +26,8 @@ const compiled = ts.transpileModule(source, {
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace("from '@/services/snapshotPoller'", `from '${pollerUrl}'`)
   .replace("from '@/services/sessionSnapshot'", `from '${sessionSnapshotModule}'`)
+  .replace("from '@/services/serverEvents'", `from '${serverEventsModule}'`)
+  .replace("from '@/services/http'", `from '${httpModule}'`)
   .replace("from '@/services/failedTurnDrafts'", `from '${draftModuleUrl}'`)
   .replace(/import .* from '@\/composables\/usePromptSuggestions';/, `const usePromptSuggestions = () => ({ suggestionsLoading: ref(false), suggestionsError: ref(''), suggestionsNotice: ref(''), refreshSuggestions: async () => {}, resetSuggestionsRequest: () => {} });`)
   .replace(/import .* from '@\/composables\/useSessionContentLanguage';/, `const useSessionContentLanguage = () => ({ language: ref('English'), languageSaving: ref(false), setLanguage: async () => true });`)
@@ -438,4 +441,25 @@ test('a receipt missing from saved history still reports an unconfirmed turn', a
     : new Response(JSON.stringify(snapshot())))
   await f.game.sendMessage(action)
   assert.ok(f.game.turnError.value)
+})
+
+test('CRLF event frames stream narration before the response closes', async t => {
+  const f = await fixture(t)
+  let output
+  f.route(async (_url, options) => {
+    if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+    output = stream(options.signal)
+    return output.response
+  })
+  const pending = f.game.sendMessage(action)
+  await tick()
+  output.send(frame('chunk', { content: 'Живой ответ.' }).replaceAll('\n', '\r\n'))
+  await tick()
+  try {
+    assert.equal(f.game.messages.value.at(-1).content, 'Живой ответ.')
+  } finally {
+    output.send(frame('final', {}).replaceAll('\n', '\r\n'))
+    output.end()
+    await pending
+  }
 })

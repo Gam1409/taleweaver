@@ -1,4 +1,4 @@
-import { API_BASE, authHeaders } from '@/services/http'
+import { authHeaders, apiFetch } from '@/services/http'
 
 export interface ClothingData {
   category?: 'clothing' | 'armor' | 'accessory'
@@ -13,7 +13,7 @@ export type ClothingDraft = Partial<ClothingData>
 export async function prepareClothing(adventureId: string, input: {
   name: string; description: string; wearable_slots: string[]; clothing: ClothingDraft
 }): Promise<ClothingData> {
-  const response = await fetch(`${API_BASE}/adventures/${adventureId}/editor/prepare-clothing`, {
+  const response = await apiFetch(`/adventures/${adventureId}/editor/prepare-clothing`, { timeoutMs: null,
     method: 'POST', headers: authHeaders(true), body: JSON.stringify(input),
   })
   if (!response.ok) {

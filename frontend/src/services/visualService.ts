@@ -1,5 +1,5 @@
 import { runVisualJob } from '@/services/visualJobs'
-import { API_BASE, authHeaders } from '@/services/http'
+import { authHeaders, apiFetch } from '@/services/http'
 
 export type VisualKind = 'cover' | 'protagonist' | 'scene' | 'npc' | 'object'
 
@@ -83,9 +83,9 @@ export const visualService = {
   },
 
   async suggestPrompt(adventureId: string, kind: VisualKind, id: string, useAdvancedModel?: boolean): Promise<string> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/visuals/suggest-prompt`,
-      {
+    const res = await apiFetch(
+      `/adventures/${adventureId}/visuals/suggest-prompt`,
+      { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify({
@@ -114,7 +114,7 @@ export const visualService = {
     payload.append('target_id', id)
     payload.append('file', file)
 
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/visuals/upload`, {
+    const res = await apiFetch(`/adventures/${adventureId}/visuals/upload`, { timeoutMs: null,
       method: 'POST',
       headers: authHeaders(false),
       body: payload,

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/services/http'
 import { computed, onScopeDispose, shallowRef, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
 
@@ -46,7 +47,7 @@ export function useNpcCardSettings(sessionId: Ref<string>): NpcCardSettingsContr
     state.error.value = ''
     const timeout = setTimeout(() => controller.abort(), 15000)
     try {
-      const response = await fetch(`/api/adventures/${encodeURIComponent(id)}/npc-card-settings`, {
+      const response = await apiFetch(`/adventures/${encodeURIComponent(id)}/npc-card-settings`, { timeoutMs: null,
         method: enabled === undefined ? 'GET' : 'PATCH',
         headers: { Authorization: `Bearer ${token}`, ...(enabled === undefined ? {} : { 'Content-Type': 'application/json' }) },
         ...(enabled === undefined ? {} : { body: JSON.stringify({ show_state: enabled }) }),

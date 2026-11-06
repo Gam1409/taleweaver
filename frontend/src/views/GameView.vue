@@ -31,7 +31,6 @@ import TextLogModal from '@/components/game/TextLogModal.vue'
 import AdventureGeneratorModal from '@/components/game/AdventureGeneratorModal.vue'
 import ExitSessionModal from '@/components/game/ExitSessionModal.vue'
 import GameHoverTooltip from '@/components/game/GameHoverTooltip.vue'
-import GameNotificationsOverlay from '@/components/game/GameNotificationsOverlay.vue'
 import ChroniclesModal from '@/components/game/ChroniclesModal.vue'
 import CheckpointRestoreConfirmModal from '@/components/game/CheckpointRestoreConfirmModal.vue'
 import ContextMenu from '@/components/game/ContextMenu.vue'
@@ -179,7 +178,7 @@ const saveSessionSettings = async (payload: { turns: number; enableCompression?:
     isSavingSettings.value = false
   }
 }
-const { notifications, removeNotification, addNotification } = useNotifications()
+const { addNotification } = useNotifications()
 const gameSettings = ref<GameSettings>({
   clock_24h: false,
 })
@@ -1991,11 +1990,6 @@ usePlayAgentAutoLoop()
     </Teleport>
 
   
-    <!-- TOAST NOTIFICATIONS -->
-    <GameNotificationsOverlay
-      :notifications="notifications"
-      @dismiss="removeNotification"
-    />
   </main>
 </template>
 
