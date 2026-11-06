@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from backend.engine.chpm import host_observations, inference
+from backend.engine.chpm import agent_beliefs, host_observations, inference
 from backend.engine.chpm.agent_contracts import INSTRUCTIONS, Step
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.host_state import Mind
@@ -46,7 +46,12 @@ async def investigate(
                     "observer_id": mind.genesis.scope.observer_id,
                     "identity": mind.genesis.identity.model_dump(mode="json"),
                     "observation": observation.model_dump(),
-                    "current_state": supplied.get("psychological_state", {}),
+                    "current_state": {
+                        key: value
+                        for key, value in supplied.get("psychological_state", {}).items()
+                        if key != "belief_context_ref"
+                    },
+                    **agent_beliefs.subject_view(tools.mind),
                     "agenda": supplied.get("declared_agenda_not_world_facts", []),
                     "visible_clothing_actors": {
                         key: value["name"]
