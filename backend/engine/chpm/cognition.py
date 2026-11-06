@@ -160,15 +160,22 @@ async def deliberate(
             prior,
             context_hash=key,
         )
-        decision.agent_audit = audit
-        decision.agent_evidence = agent_context.collect(pinned, observation)
-        decision.interpretation_ids = accepted_ids
-        decision.experience_ids = experience_ids
-        decision.development_ids = development_ids
-        decision.development_status = development_status
-        decision.motivation_policy = motivation.POLICY
-        decision.candidate_motives = resolved_motives
-        return decision, changed
+        # Assignment/model_copy do not re-run validators on mutable contracts.
+        # Check the complete handoff while the proposal is still turn-local.
+        complete = Decision.model_validate(
+            {
+                **decision.model_dump(),
+                "agent_audit": audit,
+                "agent_evidence": agent_context.collect(pinned, observation),
+                "interpretation_ids": accepted_ids,
+                "experience_ids": experience_ids,
+                "development_ids": development_ids,
+                "development_status": development_status,
+                "motivation_policy": motivation.POLICY,
+                "candidate_motives": resolved_motives,
+            }
+        )
+        return complete, changed
 
     return await proposal_attempt.request(
         manager,

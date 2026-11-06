@@ -57,12 +57,14 @@ def basis(tools: "Tools", alias: str) -> dict:
         if isinstance(event.payload, Interpret)
         and event.payload.record_id in belief.interpretation_ids
     ]
+    grounds = [_grounds(tools, entry) for entry in entries[-2:]]
+    partial = any(citation["status"] != "ok" for row in grounds for citation in row["results"])
     return {
-        "status": "ok",
+        "status": "partial" if partial else "ok",
         "belief_id": alias,
         "subjective": True,
         "status_of_belief": belief.status,
-        "results": [_grounds(tools, entry) for entry in entries[-2:]],
+        "results": grounds,
         "omitted_interpretations": max(0, len(entries) - 2),
     }
 

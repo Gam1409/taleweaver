@@ -2,11 +2,16 @@
 
 from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.schema import AgentEvidence, Decision, Observation
+from backend.engine.chpm.schema import (
+    AgentEvidence,
+    Decision,
+    Observation,
+    validate_agent_evidence,
+)
 
 
 def collect(pins: dict[str, tuple[str, Source, str]], observed: Observation) -> list[AgentEvidence]:
-    return [
+    evidence = [
         AgentEvidence(
             source_id=alias,
             record_id=key,
@@ -20,6 +25,11 @@ def collect(pins: dict[str, tuple[str, Source, str]], observed: Observation) -> 
         )
         for alias, (key, source, text) in pins.items()
     ]
+    try:
+        validate_agent_evidence(evidence)
+    except ValueError as exc:
+        raise ChpmError("CHPM agent handoff is invalid: " + str(exc)) from exc
+    return evidence
 
 
 def present(decision: Decision, mind: Mind) -> list[dict]:

@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 
@@ -189,6 +190,15 @@ class AgentEvidence(Contract):
     current_turn: bool
 
 
+def validate_agent_evidence(entries: list[AgentEvidence]) -> None:
+    if len(entries) > MAX_PINNED_SOURCES:
+        raise ValueError("Agent evidence exceeds its source count limit.")
+    if sum(len(source.text) for source in entries) > MAX_PINNED_CHARS:
+        raise ValueError("Agent evidence exceeds its combined text budget.")
+    if len({source.record_id for source in entries}) != len(entries):
+        raise ValueError("Agent evidence repeats a source.")
+
+
 class PreviousIntention(Contract):
     selected: Candidate
     scene_id: str
@@ -201,7 +211,7 @@ class PreviousIntention(Contract):
 class Decision(Contract):
     choice_preference: ChoicePreference | None = None
     previous_intention: PreviousIntention | None = None
-    agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=8)
+    agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=MAX_PINNED_SOURCES)
     agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
     perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
     actor_id: str
@@ -238,10 +248,7 @@ class Decision(Contract):
 
     @model_validator(mode="after")
     def bounded_agent_evidence(self) -> "Decision":
-        if sum(len(source.text) for source in self.agent_evidence) > 6000:
-            raise ValueError("Agent evidence exceeds its combined text budget.")
-        if len({source.record_id for source in self.agent_evidence}) != len(self.agent_evidence):
-            raise ValueError("Agent evidence repeats a source.")
+        validate_agent_evidence(self.agent_evidence)
         return self
 
     @model_validator(mode="after")

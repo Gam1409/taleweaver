@@ -7,14 +7,13 @@ from dataclasses import dataclass, field
 
 from backend.engine.chpm import agent_beliefs, host_observations
 from backend.engine.chpm.agent_contracts import Lookup
+from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source, identifier, record
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
-
-MAX_PINNED_CHARS = 6000
 
 
 @dataclass
@@ -71,14 +70,13 @@ class Tools:
             for key, (index, source) in available.items()
         ]
         ranked = rank_documents(documents, query, set(), "")
+        results = [self.expose(doc.id, available[doc.id][1], query=query) for doc in ranked[:2]]
         return {
-            "status": "ok",
+            "status": "partial" if any(row["status"] != "ok" for row in results) else "ok",
             "mode": "lexical_observer_rag",
             "matches": len(ranked),
             "omitted_matches": max(0, len(ranked) - 2),
-            "results": [
-                self.expose(doc.id, available[doc.id][1], query=query) for doc in ranked[:2]
-            ],
+            "results": results,
         }
 
     def expose(
@@ -109,6 +107,8 @@ class Tools:
         alias = next(
             (a for a, item in self.pins.items() if item[0] == key), f"a{len(self.pins) + 1}"
         )
+        if alias not in self.pins and len(self.pins) >= MAX_PINNED_SOURCES:
+            return {"status": "evidence_source_limit_reached"}
         if alias in self.pins:
             previous = self.pins[alias][2]
             text = previous if text in previous else text if previous in text else source.text

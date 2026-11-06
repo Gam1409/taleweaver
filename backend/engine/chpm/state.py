@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.engine.chpm import agenda
 from backend.engine.chpm.host_state import before_messages, removed_messages
 from backend.engine.chpm.kernel import ChpmError
@@ -19,9 +21,15 @@ def load(state: Any) -> KernelState:
 def save(state: Any, value: KernelState, *, expected_revision: int) -> None:
     if load(state).revision != expected_revision:
         raise ChpmError("CHPM state changed while the model was responding. Retry the turn.")
-    value = value.model_copy(deep=True)
-    value.revision = expected_revision + 1
-    state.entity_states = {**(state.entity_states or {}), KEY: value.model_dump(mode="json")}
+    # Mutable nested models can have bypassed their construction-time validators.
+    # Validate serialized data, not an existing model instance, before replacing it.
+    data = value.model_dump(mode="json")
+    data["revision"] = expected_revision + 1
+    try:
+        checked = KernelState.model_validate(data)
+    except ValidationError as exc:
+        raise ChpmError("CHPM refused to save invalid state. Previous state is unchanged.") from exc
+    state.entity_states = {**(state.entity_states or {}), KEY: checked.model_dump(mode="json")}
 
 
 def controls(state: Any, actor_id: str) -> bool:
