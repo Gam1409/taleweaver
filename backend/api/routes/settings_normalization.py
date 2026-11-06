@@ -363,14 +363,14 @@ _T2I_STATIC_DEFAULT_KEYS = (
 
 def normalize_t2i_settings(t2i_settings: Optional[dict]) -> dict:
     """Return T2I settings with separate providers."""
+    from backend.core.comfyui_presets import normalize_comfy_presets
+
     if not t2i_settings:
-        return dict(_T2I_FALLBACK)
+        return normalize_comfy_presets(dict(_T2I_FALLBACK))
 
     normalized = dict(t2i_settings)
     _apply_derived_defaults(normalized, _T2I_DERIVED_DEFAULTS)
     for key in _T2I_STATIC_DEFAULT_KEYS:
         normalized.setdefault(key, _T2I_FALLBACK[key])
     _apply_openrouter_models(normalized, ("simple", "advanced"))
-    from backend.core.comfyui_presets import normalize_comfy_presets
-
     return normalize_comfy_presets(normalized)

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import ComfyPresetBrowser from './ComfyPresetBrowser.vue'
 import ComfyPresetStarter from './ComfyPresetStarter.vue'
+import ComfyStandardPresets from './ComfyStandardPresets.vue'
 import { addStarterPreset } from '@/services/comfyPresetDraft'
 import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import type { PresetWorkspace } from '@/services/comfyPresetDraft'
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 }>()
 </script>
 <template>
+  <ComfyStandardPresets :workspace="workspace" :purpose="purpose" />
   <ComfyPresetStarter
     :purpose="purpose"
     :disabled="Object.keys(workspace.presets).length >= 32"

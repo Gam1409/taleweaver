@@ -24,7 +24,15 @@ const entries = computed(() =>
     ([, item]) => Boolean(item.workflow.bindings.image) === Boolean(props.reference)
   )
 )
-const selected = ref('')
+const selected = computed({
+  get: () => entries.value.find(([, item]) =>
+    JSON.stringify(item.workflow) === JSON.stringify(props.modelValue)
+  )?.[0] ?? '',
+  set: (id: string) => {
+    const item = entries.value.find(([key]) => key === id)?.[1]
+    if (item) emit('update:modelValue', clonePresetData(item.workflow))
+  }
+})
 const editing = ref(false)
 const draft = ref<ComfyWorkflow | null>(null)
 const busy = ref(false)
@@ -41,16 +49,11 @@ watch(
     importedSignature = ''
     checking.value = false
     importing.value = false
-    selected.value = ''
   }
 )
 onBeforeUnmount(() => {
   version++
 })
-function choose(): void {
-  const item = props.library[selected.value]
-  if (item) emit('update:modelValue', clonePresetData(item.workflow))
-}
 function edit(): void {
   draft.value = clonePresetData(props.modelValue)
   busy.value = false
@@ -139,7 +142,6 @@ async function check(): Promise<void> {
       >Saved workflows<select
         v-model="selected"
         class="mt-2 w-full rounded-lg border border-slate-600 bg-slate-950 p-3"
-        @change="choose"
       >
         <option value="">Choose a workflow version…</option>
         <option v-for="[id, item] in entries" :key="id" :value="id">

@@ -4,6 +4,22 @@ Status: **live validation performed on 2026-11-06**, using ComfyUI 0.35.0 on an 
 
 **Artistic readiness is not established by successful execution.** The baseline exposed inconsistent portrait crops, garment duplicates, unwanted wearers/mannequins and material changes. Additional sampler, embedding, upscale and presentation experiments are separate from the baseline; no experimental sampler combination was promoted to a universal default.
 
+## Standard preset library
+
+New image-settings libraries include sixteen editable presets: Anima / Prefect Anima and
+Illustrious XL for all eight image tasks. Each preset already pins its base workflow and
+task-specific prompt rules; six tasks per family also pin an optional img2img variant.
+The library contains twenty-eight matching saved workflow versions. No provider or task
+assignment is enabled automatically. Existing custom/legacy libraries remain intact; use
+**Add standard presets · Anima + Illustrious** to add missing entries without replacing
+edits. Explicitly deleted libraries stay empty. Capacity errors leave the draft unchanged.
+
+Anima uses a separate diffusion model, Qwen text encoder and VAE. Illustrious uses a
+combined checkpoint and its embedded encoder/VAE. Required filenames are the upstream
+template defaults, not a claim that these files are installed on every server. Install
+the matching files or select your installed compatible files in the workflow editor.
+Reference variants are img2img; identity fidelity still needs separate live validation.
+
 ## Test inventory
 
 The application currently defines **eight image tasks** in `backend/core/comfyui_task_templates.py`:

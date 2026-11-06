@@ -34,7 +34,7 @@ async function mount(t, source, props, request, editor = false) {
       .replace(/const emit = defineEmits<[\s\S]*?>\(\)/,
         `const emit = (...args) => globalThis['${key}'].emitted.push(args)`)
       .replace(/const \{ (importWorkflowGraphWithServer|suggestBindings) \} = await import\([^\n]+\)/g, '')
-    source = `export function setup() { const defineAsyncComponent = () => null; ${source}; return {importFile, report}; }`
+    source = `export function setup() { const defineAsyncComponent = () => null; ${source}; return {importFile, report, selected}; }`
   } else if (editor) {
     source = source
       .replace(/const props = defineProps<[^\n]+\(\)/, `const props = globalThis['${key}'].props`)
@@ -50,6 +50,7 @@ const comfyRequest = (...args) => globalThis['${key}'].request(...args);
 const importWorkflowGraphWithServer = (...args) => globalThis['${key}'].request(...args);
 const suggestBindings = () => ({bindings:{},output_node:'out',notes:[]});
 const existingPositions = () => ({});
+const clonePresetData = value => JSON.parse(JSON.stringify(value));
 ${source}`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
@@ -179,6 +180,26 @@ test('visual editor trims imported workflow names to the API limit', async t => 
 const slotSource = readFileSync(
   new URL('../src/components/admin/ComfyWorkflowSlot.vue', import.meta.url), 'utf8'
 ).match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+
+test('saved workflow selection survives parent updates and remounting the tab', async t => {
+  const library = {a: {workflow: workflow('A'), revision: 1}, b: {workflow: workflow('B'), revision: 1}}
+  const props = {url: 'https://one', modelValue: structuredClone(library.a.workflow), library}
+  const first = await mount(t, slotSource, props, async () => ({}), 'slot')
+  assert.equal(first.result.selected.value, 'a')
+  first.result.selected.value = 'b'
+  const update = first.ctx.emitted.find(([event]) => event === 'update:modelValue')
+  assert.ok(update)
+  first.ctx.props.modelValue = structuredClone(update[1])
+  await tick()
+  assert.equal(first.result.selected.value, 'b')
+  first.unmount()
+  const remounted = await mount(t, slotSource, {...props, modelValue: update[1]}, async () => ({}), 'slot')
+  assert.equal(remounted.result.selected.value, 'b')
+  assert.deepEqual(remounted.ctx.props.modelValue, library.b.workflow)
+  remounted.ctx.props.modelValue = workflow('Unsaved custom graph')
+  await tick()
+  assert.equal(remounted.result.selected.value, '')
+})
 
 test('slot import warnings survive parent v-model updates and clear when source changes', async t => {
   const notes = ['Unknown node: positional widgets were skipped instead of guessing.']

@@ -24,6 +24,12 @@ def normalize_comfy_presets(data: dict) -> dict:
             "auto_prompt_template": False,
         }
         assignments[role] = key
+    if "comfyui_presets" not in data and not presets and not data.get("comfyui_workflows"):
+        from backend.core.comfyui_defaults import standard_presets
+
+        defaults = standard_presets()
+        presets = defaults["comfyui_presets"]
+        result["comfyui_workflows"] = defaults["comfyui_workflows"]
     if "comfyui_test_preset" not in result:
         result["comfyui_test_preset"] = next(
             (

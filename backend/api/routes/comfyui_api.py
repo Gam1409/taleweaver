@@ -53,6 +53,13 @@ async def starter_workflows(_user: User = Depends(get_current_admin)) -> list[di
     return starter_catalog()
 
 
+@router.get("/standard-presets", response_model=None)
+async def standard_preset_library(_user: User = Depends(get_current_admin)) -> dict:
+    from backend.core.comfyui_defaults import standard_presets
+
+    return standard_presets()
+
+
 class StarterPresetRequest(LoaderRecipe):
     family: str = Field(min_length=1, max_length=80)
     purpose: ImagePurpose
