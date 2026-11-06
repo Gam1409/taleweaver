@@ -197,7 +197,9 @@ def test_40_turns_keep_all_authored_traits_and_bound_the_context():
     for number in range(1, 41):
         value = heard(value, f"m{number}", f"Promise episode {number}")
         window = appraisal_context.build(value)
-        ref = next(reversed(window.sources))
+        ref = next(
+            alias for alias, (_, src, _) in window.sources.items() if src.message_id == f"m{number}"
+        )
         value = accept(
             value,
             [
@@ -209,7 +211,9 @@ def test_40_turns_keep_all_authored_traits_and_bound_the_context():
             f"m{number}",
         )
     window = appraisal_context.build(value)
-    assert len(window.sources) == 6 and len(window.beliefs) == 8
+    assert len(window.sources) == 8 and len(window.beliefs) == 8
+    assert len([alias for alias in window.sources if alias.startswith("r")]) == 2
+    assert {f"m{n}" for n in range(35, 41)} <= {s.message_id for _, s, _ in window.sources.values()}
     assert window.payload["beliefs_omitted"] == 32
     assert value.genesis == genesis and len(genesis.identity.traits) == 7
     assert [b.statement for b in relationships.recent(value.snapshot, 2)] == [

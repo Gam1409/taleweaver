@@ -43,6 +43,14 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
    - Distinguish verified fixes from known remaining issues. Passing mock/schema tests
      does not establish psychological quality or live-model reliability.
 
+5. **Release History and Schema Discipline (Owner Requirement)**:
+   - Bump persisted schema versions only for incompatible data-shape changes, not
+     additive fields with safe defaults. Verify legacy loading explicitly.
+   - Collect prompt-only edits into one final `prompt tuning` commit per work wave.
+   - Before merging the CHPM pilot, squash `d89de9e0` and `bc33c1e6` into one logical
+     explicit-choice change. Prepare that integration history before the merge;
+     do not rewrite the published working branch during unrelated implementation.
+
 ---
 
 ## 1. Workspace Rules (`.agents/rules/`)

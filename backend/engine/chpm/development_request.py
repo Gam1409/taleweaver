@@ -38,8 +38,11 @@ def prepare(
     *,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
     pinned_beliefs: dict[str, Belief] | None = None,
+    focus_subjects: tuple[str, ...] = (),
 ) -> Prepared:
-    available = development_context.episodes(mind)
+    available = development_context.episodes(
+        mind, query=observation.player_request, focus_subjects=focus_subjects
+    )
     allowed = development_context.eligible(mind, available)
     body = development_context.payload(mind, available if allowed else {})
     body["status"] = "available" if allowed else "not_yet_eligible"
@@ -56,6 +59,7 @@ def prepare(
                 wire_schema=proposal_draft.DevelopmentDraft,
                 pinned=pinned,
                 pinned_beliefs=pinned_beliefs,
+                focus_subjects=focus_subjects,
                 extra={"development_context": body},
             )
             return Prepared(
@@ -79,6 +83,7 @@ def prepare(
         wire_schema=proposal_draft.Draft,
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
+        focus_subjects=focus_subjects,
     )
     return Prepared(
         *packed,

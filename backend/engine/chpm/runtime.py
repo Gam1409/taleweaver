@@ -17,6 +17,7 @@ from backend.engine.chpm import (
     experience,
     host_adapter,
     memory,
+    narrative_context,
     perception,
     prompts,
     roster,
@@ -77,10 +78,6 @@ def contract_data(turn: Turn) -> dict:
     for actor, mind in turn.minds.items():
         if actor in data:
             decision = turn.decisions[actor]
-            data[actor]["selected_motives_not_world_facts"] = [
-                motive.model_dump()
-                for motive in decision.candidate_motives.get(decision.selected.kind, [])
-            ]
             data[actor]["agent_observed_sources"] = agent_context.present(decision, mind)
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
             if decision.choice_preference is not None:
@@ -99,6 +96,9 @@ def contract_data(turn: Turn) -> dict:
             ]
             data[actor]["subjective_assessments_not_world_facts"] = relationships.claims(
                 mind.snapshot, tuple(changed)
+            )
+            data[actor]["selected_motives_not_world_facts"] = narrative_context.compact_motives(
+                decision, data[actor]
             )
     return data
 

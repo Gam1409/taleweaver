@@ -121,6 +121,7 @@ class AgendaEntry(Contract):
 
 
 ActionKind = Literal["CONTINUE", "INITIATE", "ACCEPT", "REFUSE", "NEGOTIATE", "CLARIFY", "DEFER"]
+IntentionCondition = Annotated[str, Field(min_length=1, max_length=160)]
 
 
 class QuestionBranch(Contract):
@@ -136,6 +137,7 @@ class QuestionGate(Contract):
 
 class CandidateBody(Contract):
     intention: str = Field(min_length=1, max_length=400)
+    preconditions: list[IntentionCondition] = Field(default_factory=list, max_length=2)
     goal_alignment: Literal["supports", "neutral", "conflicts", "unknown"] = "unknown"
     goal_quote: str = Field(default="", max_length=300)
     reconsider_if: str = Field(min_length=1, max_length=200)

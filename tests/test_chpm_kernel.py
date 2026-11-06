@@ -93,6 +93,7 @@ def motivated_candidates(candidates, *, enabled=True):
     if not enabled:
         return candidates
     for candidate in candidates.values():
+        candidate.setdefault("preconditions", [])
         alignment = candidate.get("goal_alignment", "unknown")
         candidate["motives"] = [
             {

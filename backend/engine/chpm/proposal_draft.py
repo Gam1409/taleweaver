@@ -16,11 +16,18 @@ from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.development_contracts import Development, DevelopmentProposal
 from backend.engine.chpm.motivation import Catalogue
 from backend.engine.chpm.motivation_contracts import Motive
-from backend.engine.chpm.schema import ActionKind, AgendaIntent, ChoicePreference, QuestionGate
+from backend.engine.chpm.schema import (
+    ActionKind,
+    AgendaIntent,
+    ChoicePreference,
+    IntentionCondition,
+    QuestionGate,
+)
 
 
 class Intent(Contract):
     intention: str = Field(min_length=1, max_length=400)
+    preconditions: list[IntentionCondition] = Field(max_length=2)
     reconsider_if: str = Field(min_length=1, max_length=200)
     agenda_change: AgendaIntent | None = None
     motives: list[Motive] = Field(min_length=1, max_length=3)

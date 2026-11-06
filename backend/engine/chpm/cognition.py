@@ -7,6 +7,7 @@ from backend.engine.chpm import (
     agent,
     agent_context,
     appraisal,
+    belief_recall,
     development,
     development_request,
     experience,
@@ -75,6 +76,8 @@ async def deliberate(
     if mind.genesis.scope.observer_id != actor_id:
         raise ChpmError("CHPM cognition belongs to another NPC.")
     prior = semantic_choice.previous_context(mind, previous, observation)
+    names = getattr(getattr(manager, "_chpm_turn", None), "present_names", {})
+    focus = belief_recall.subjects(mind, observation.player_request, observation.message_id, names)
     supplied = {
         **supplied,
         "proposal_contract": "motivated-choice-v2",
@@ -126,6 +129,7 @@ async def deliberate(
         instruction,
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
+        focus_subjects=focus,
     )
     key = fingerprint(payload)
     cached = existing(previous, observation, key)
