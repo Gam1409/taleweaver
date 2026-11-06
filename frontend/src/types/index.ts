@@ -351,6 +351,7 @@ export interface RestoreCheckpointResult {
   status: 'restored'
   checkpoint_id: string
   deleted_messages: number
+  warnings?: string[]
 }
 
 export interface AdventureTemplateSummary {

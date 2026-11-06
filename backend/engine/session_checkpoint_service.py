@@ -7,6 +7,10 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.checkpoint_avatar import restore as restore_avatar
+from backend.engine.checkpoint_world import capture as capture_world
+from backend.engine.checkpoint_world import restore as restore_world
+from backend.engine.checkpoint_world import validate as validate_world
 from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.clothing.lifecycle import (
     CHECKPOINT_KEY,
@@ -167,6 +171,7 @@ class SessionCheckpointService:
 
         snapshot = SessionCheckpointService._build_snapshot(state, avatar, scene_label=scene_label)
         snapshot["session_status"] = game_session.status
+        snapshot.update(await capture_world(db, state))
         snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
 
@@ -206,7 +211,9 @@ class SessionCheckpointService:
         ]
 
     @staticmethod
-    async def restore_checkpoint(db: AsyncSession, session_id: str, checkpoint_id: str) -> int:
+    async def restore_checkpoint(
+        db: AsyncSession, session_id: str, checkpoint_id: str, *, warnings: list[str] | None = None
+    ) -> int:
         cp_res = await db.execute(
             select(SessionCheckpoint).where(
                 SessionCheckpoint.id == checkpoint_id,
@@ -219,32 +226,17 @@ class SessionCheckpointService:
 
         game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         snapshot = checkpoint.state_snapshot or {}
+        validate_world(snapshot)
+        if warnings is not None and "canonical_items" not in snapshot:
+            warnings.append(
+                "This older checkpoint lacks canonical item snapshots. Only item fields stored "
+                "in its inventories can be recovered; other current item fields are retained."
+            )
         avatar_snapshot = snapshot.get("avatar") or {}
         state_snapshot = snapshot.get("session_state") or {}
         restored_entities = deepcopy(validate_chpm(state_snapshot.get("entity_states"), session_id))
 
-        avatar.hp = int(avatar_snapshot.get("hp", avatar.hp))
-        avatar.max_hp = int(avatar_snapshot.get("max_hp", avatar.max_hp))
-        avatar.stamina = int(avatar_snapshot.get("stamina", avatar.stamina))
-        avatar.max_stamina = int(avatar_snapshot.get("max_stamina", avatar.max_stamina))
-        avatar.mana = int(avatar_snapshot.get("mana", avatar.mana))
-        avatar.max_mana = int(avatar_snapshot.get("max_mana", avatar.max_mana))
-        avatar.exp = int(avatar_snapshot.get("exp", avatar.exp))
-        avatar.strength = int(avatar_snapshot.get("strength", avatar.strength))
-        avatar.intelligence = int(avatar_snapshot.get("intelligence", avatar.intelligence))
-        avatar.wisdom = int(avatar_snapshot.get("wisdom", avatar.wisdom))
-        avatar.dexterity = int(avatar_snapshot.get("dexterity", avatar.dexterity))
-        avatar.charisma = int(avatar_snapshot.get("charisma", avatar.charisma))
-        avatar.armor_class = int(avatar_snapshot.get("armor_class", avatar.armor_class))
-        avatar.stats = deepcopy(avatar_snapshot.get("stats") or {})
-        avatar.inventory = deepcopy(avatar_snapshot.get("inventory") or [])
-        avatar.equipment = deepcopy(avatar_snapshot.get("equipment") or {})
-        avatar.gender, avatar.age_years, avatar.visual_profile = (
-            avatar_snapshot.get("gender"),
-            avatar_snapshot.get("age_years"),
-            deepcopy(avatar_snapshot.get("visual_profile")),
-        )
-        avatar.status_effects = deepcopy(avatar_snapshot.get("status_effects") or [])
+        restore_avatar(avatar, avatar_snapshot)
 
         state.current_scene_id = str(
             state_snapshot.get("current_scene_id") or state.current_scene_id
@@ -266,6 +258,7 @@ class SessionCheckpointService:
         state.quests = deepcopy(state_snapshot.get("quests") or [])
         state.is_completed = bool(state_snapshot.get("is_completed", state.is_completed))
         _restore_session_context(game_session, state, snapshot)
+        await restore_world(db, state, snapshot)
         restore_memory(state, state_snapshot)
         await invalidate_memory(db, session_id)
 

@@ -1301,9 +1301,10 @@ async def restore_session_checkpoint(
     if not game_session:
         raise HTTPException(status_code=404, detail="Session not found.")
 
+    restore_warnings: list[str] = []
     try:
         deleted_messages = await SessionCheckpointService.restore_checkpoint(
-            db, game_id, checkpoint_id
+            db, game_id, checkpoint_id, warnings=restore_warnings
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1318,6 +1319,7 @@ async def restore_session_checkpoint(
         status="restored",
         checkpoint_id=checkpoint_id,
         deleted_messages=deleted_messages,
+        warnings=restore_warnings,
     )
 
 

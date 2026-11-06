@@ -296,6 +296,7 @@ const confirmRestoreCheckpoint = async () => {
     showRestoreConfirmModal.value = false
     pendingRestoreCheckpoint.value = null
     addNotification(`Timeline restored. Removed ${result.deleted_messages} future messages.`, 'success')
+    for (const warning of result.warnings ?? []) addNotification(warning, 'info')
   } catch (error) {
     addNotification('Failed to restore checkpoint timeline.', 'error')
   } finally {

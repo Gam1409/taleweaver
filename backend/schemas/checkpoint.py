@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 CheckpointTriggerReason = str
 
@@ -21,3 +21,4 @@ class RestoreCheckpointResponse(BaseModel):
     status: str
     checkpoint_id: str
     deleted_messages: int
+    warnings: list[str] = Field(default_factory=list)
