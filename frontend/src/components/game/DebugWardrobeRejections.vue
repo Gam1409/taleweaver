@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugWardrobeCorrection from './DebugWardrobeCorrection.vue'
+import { ref, watch } from 'vue'
 export interface WardrobeRejection {
   index: number
   label: string
@@ -12,13 +13,24 @@ export interface WardrobeRejection {
   uncovered_regions: string[]
   reasons: string[]
 }
-defineProps<{
+const props = defineProps<{
   entries: WardrobeRejection[]
   sources?: Record<string, string> | null
   token?: string
   busy?: boolean
 }>()
 const emit = defineEmits<{ command: [value: string] }>()
+const selectedQuote = ref({ index: -1, text: '' })
+watch(() => props.token, () => { selectedQuote.value = { index: -1, text: '' } })
+function captureSelection(index: number, event: Event) {
+  const element = event.currentTarget as HTMLElement
+  const selection = window.getSelection()
+  const range = selection?.rangeCount === 1 ? selection.getRangeAt(0) : null
+  selectedQuote.value = {
+    index,
+    text: range && element.contains(range.commonAncestorContainer) ? range.toString() : '',
+  }
+}
 </script>
 <template>
   <section class="space-y-3">
@@ -55,6 +67,8 @@ const emit = defineEmits<{ command: [value: string] }>()
           Original assistant message — compare the exact wording
         </summary>
         <pre
+          @mouseup="captureSelection(entry.index, $event)"
+          @keyup="captureSelection(entry.index, $event)"
           class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs select-text"
           >{{ sources[entry.source_message_id] }}</pre>
       </details>
@@ -68,6 +82,7 @@ const emit = defineEmits<{ command: [value: string] }>()
         :source="sources[entry.source_message_id]!"
         :token="token"
         :busy="!!busy"
+        :selected-quote="selectedQuote.index === entry.index ? selectedQuote.text : ''"
         @command="emit('command', $event)"
       />
     </article>

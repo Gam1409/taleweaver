@@ -16,7 +16,7 @@ from backend.engine.clothing.schema import Region
 
 
 class RecoveryCorrection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: Literal["worn", "carried"]
     evidence: str = Field(min_length=4, max_length=800)
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)

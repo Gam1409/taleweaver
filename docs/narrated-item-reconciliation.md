@@ -39,3 +39,13 @@ Garments that exist only in narration are represented as `new_item` with a null 
 Recovery displays rejected quotes, proposed action basis/disposition, covered/exposed regions and the cited original assistant message. Quotes still require exact contiguous matching; the repair does not normalize or invent evidence. A limited English/Russian underwear-mention check supplements the LLM: detected mentions appear as proposed, explained by a model omission with an exact source quote, or unreviewed. These keyword hints do not establish ownership and never create garments. They cover only messages in the existing recovery window, not all historical prose or every possible paraphrase. Unreviewed mentions remain visible even when other validated garments are selected for restoration.
 
 When the model's single retry still fails, **Correct this proposal** lets the session owner choose worn (including lowered clothing) or fully removed but still owned, copy an exact item quote, and correct exposed regions with an exact placement quote from the same cited message. **Validate correction** updates only the preview and resets its selection token; it makes no model request. Source IDs, ownership, identity and garment metadata remain fixed. Validation rechecks the state/history fingerprint, exact evidence, coverage and clothing/age requirements and preserves other validated candidates. The owner then explicitly selects and restores the corrected garment. Clothing lowered to the knees remains worn with the relevant region uncovered; it is not automatically transferred to the player.
+
+Corrections display separate errors for the item quote, placement quote and exposed regions.
+Invalid regions proposed by the model remain visible until explicitly unchecked or reset.
+Select text inside the cited original message to populate either quote without retyping;
+selection outside that message is ignored. A single exact quote may fill both fields.
+Case/whitespace-only suggestions offer an unchanged excerpt from the cited source for
+explicit selection, only when the match is unique; paraphrases and combined fragments
+are never accepted as evidence. Quote-boundary whitespace is trimmed consistently before
+preview and apply, as for live item actions; interior whitespace, case and punctuation
+still require exact matching. Length limits use Unicode characters on both client and server.

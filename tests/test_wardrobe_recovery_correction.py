@@ -134,3 +134,30 @@ async def test_invalid_correction_preserves_preview_and_possessions(monkeypatch,
         assert "DEBUG ERROR" in result, result
         assert state.entity_states == before and avatar.inventory == inventory
         assert llm.aexecute_complex_task.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_copied_quotes_with_edge_whitespace_still_apply_after_preview_revalidation(
+    monkeypatch,
+):
+    async with TestSessionLocal() as db:
+        user, avatar, state, _, _ = await preview(db, monkeypatch)
+        correction = deepcopy(CORRECTION)
+        correction["evidence"] = "\n  " + correction["evidence"] + " \n"
+        correction["placement_evidence"] = "\t" + correction["placement_evidence"] + "\n"
+        result = await DebugEngine.handle_debug_command(
+            db,
+            state,
+            command(state.entity_states[KEY]["token"], correction),
+            user=user,
+            avatar=avatar,
+        )
+        assert "corrected" in result, result
+        result = await DebugEngine.handle_debug_command(
+            db,
+            state,
+            "wardrobe_apply " + state.entity_states[KEY]["token"] + " 1",
+            user=user,
+            avatar=avatar,
+        )
+        assert "Recovered 1" in result, result
