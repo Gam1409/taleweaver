@@ -27,7 +27,7 @@ host-directory default is unchanged; no index is moved or deleted automatically.
    includes committed WAL contents, for example with the host SQLite CLI:
 
    ```sh
-   mkdir -p sqlite-docker
+   mkdir -m 700 -p sqlite-docker
    sqlite3 data-docker/taleweaver.db '.backup sqlite-docker/taleweaver.db'
    sqlite3 sqlite-docker/taleweaver.db 'PRAGMA integrity_check;'
    ```
@@ -42,4 +42,5 @@ host-directory default is unchanged; no index is moved or deleted automatically.
    history; preserve both for a complete rollback.
 
 The existing Docker image can also use a custom `DATABASE_URL` directly. This
-mount policy does not move a configured external database.
+mount policy does not move an explicitly configured alternative SQLite database.
+Support for a different SQL database engine is not implied by this setting.

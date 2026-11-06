@@ -27,7 +27,7 @@ from backend.core.auth import (
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.login_throttle import login_throttle, recovery_throttle
-from backend.crud.crud_profile import build_user_profile_data
+from backend.engine.profile import build_user_profile_data
 from backend.models.user import User
 
 router = APIRouter()

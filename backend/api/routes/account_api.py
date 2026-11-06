@@ -18,7 +18,7 @@ from backend.core.auth import (
     validate_username,
 )
 from backend.core.database import get_db
-from backend.crud.crud_profile import (
+from backend.engine.profile import (
     PlayerSessionSummary,
     build_user_profile_data,
     list_player_sessions,
