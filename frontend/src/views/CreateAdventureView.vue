@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
+import { createUuid } from '@/utils/uuid'
 import { configState, refreshConfig } from '@/store/config'
 import { authState } from '@/store/auth'
 import type { CatalogTile } from '@/types'
@@ -292,7 +293,7 @@ async function handleCreate() {
       const description = lines.slice(1).join('\n').trim() || 'Follow the sequence blueprint.'
 
       sequences.push({
-        id: crypto.randomUUID(),
+        id: createUuid(),
         order: i,
         title: title,
         description: description.slice(0, 500),
@@ -313,7 +314,7 @@ async function handleCreate() {
     detailed_clothing: form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing,
     nsfw_enabled: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled,
     nsfw_level: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled ? form.value.nsfw_level : undefined,
-    id: crypto.randomUUID(),
+    id: createUuid(),
     title: (form.value.title.trim() || 'Untitled Odyssey').slice(0, 50),
     original_prompt: promptStr,
     sequences: parsedSequences,

@@ -15,6 +15,7 @@ import {
   Info,
 } from 'lucide-vue-next'
 import { api, GENERATION_SAYINGS } from '@/composables/useApi'
+import { createUuid } from '@/utils/uuid'
 import { configState } from '@/store/config'
 import type { CatalogTile } from '@/types'
 
@@ -528,7 +529,7 @@ async function startGeneration() {
       const description = lines.slice(1).join('\n').trim() || 'Follow the sequence blueprint.'
       
       sequences.push({
-        id: crypto.randomUUID(),
+        id: createUuid(),
         order: i,
         title: title,
         description: description.slice(0, 500),
@@ -544,7 +545,7 @@ async function startGeneration() {
 
   const payload: any = {
     ...form.value,
-    id: crypto.randomUUID(),
+    id: createUuid(),
     title: (form.value.title.trim() || 'A New Reality').slice(0, 50),
     original_prompt: promptStr,
     sequences: parsedSequences,

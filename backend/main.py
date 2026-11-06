@@ -177,7 +177,7 @@ app.add_middleware(
         f"http://127.0.0.1:{settings.FRONTEND_PORT}",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
 )
 
@@ -197,8 +197,8 @@ async def add_security_headers(
     # an upstream proxy, or by setting ``ENABLE_HSTS=false`` here.
     if getattr(settings, "ENABLE_HSTS", True):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # CSP keeps 'unsafe-inline' on style-src only (Vue/Vite dev requires it).
-    # script-src remains strict ('self'); use nonces for any inline scripts.
+    # Inline scripts stay blocked. Skulpt needs unsafe-eval, while the two CDN
+    # origins serve the optional Skulpt/CodeMirror tools. Styles allow inline CSS.
     response.headers.setdefault(
         "Content-Security-Policy",
         (
@@ -215,7 +215,7 @@ async def add_security_headers(
     )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        "camera=(), microphone=(self), geolocation=(), payment=(), usb=()"
     )
     return response
 

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { api } from '@/composables/useApi'
+import { createUuid } from '@/utils/uuid'
 import type { CatalogTile } from '@/types'
 
 type CatalogGenerationState = {
@@ -42,7 +43,7 @@ class CatalogService {
 
   /** Allocate once so saving, renaming and image uploads address the same tile. */
   private ensureId(item: CatalogTile): string {
-    const id = item.id?.trim() || crypto.randomUUID()
+    const id = item.id?.trim() || createUuid()
     item.id = id
     return id
   }

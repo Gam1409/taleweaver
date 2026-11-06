@@ -5,6 +5,7 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { uuidModule } from './uuidModule.mjs'
 
 const read = path => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8')
 const moduleFor = async source => {
@@ -66,6 +67,7 @@ test('creation sends the independent preference in both modes and clears it outs
   const formSource = view.slice(view.indexOf('const form = ref('), view.indexOf('const sourceAdventure ='))
   const createSource = view.slice(view.indexOf('async function handleCreate()'), view.indexOf('async function handleSuggestStoryIdea()'))
   const fixture = await moduleFor(`import {ref} from 'vue';
+import {createUuid} from '${uuidModule}';
 ${formSource}
 const calls = [], api = {createAdventure: async payload => calls.push(payload)}, router = {push: () => {}};
 const generatorMode = ref('simple'), isCoverMode = ref(false), sourceAdventure = ref(null), isGenerating = ref(false), errorMsg = ref(''), imageStyles = ref([]), tones = ref([]), coverSourceId = ref('');

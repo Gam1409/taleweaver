@@ -1,4 +1,5 @@
 import { apiFetch } from '@/services/http'
+import { createUuid } from '@/utils/uuid'
 import { updateVisualProgress, clearVisualProgress, visualStageLabel } from './visualJobProgress'
 
 interface JobStatus {
@@ -22,7 +23,7 @@ export async function runVisualJob(
   signal?: AbortSignal,
   sessionId?: string,
 ): Promise<Record<string, unknown>> {
-  const id = crypto.randomUUID()
+  const id = createUuid()
   const path = `/settings/visual-jobs/${id}`
   const cancel = (): void => {
     void apiFetch(path, { method: 'DELETE' }).catch(() => undefined)

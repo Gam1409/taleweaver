@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
+import { uuidModule } from './uuidModule.mjs'
 
 // Exercise the actual service with Vue refs; external requests are replaced.
 const requests = []
@@ -26,6 +27,7 @@ const compiled = ts
   })
   .outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
   .replace("from '@/composables/useApi'", `from '${apiModule}'`)
+  .replace("from '@/utils/uuid'", `from '${uuidModule}'`)
 const { catalogService: service } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
