@@ -86,7 +86,7 @@ private-decision mode and Enabled NPC Personality are alternative decision paths
 | **Linux x64** | `TaleWeaver-linux-X64.tar.gz` | Extract and start `TaleWeaver`; built on Ubuntu 22.04. |
 | **macOS Apple Silicon** | `TaleWeaver-macos-ARM64.tar.gz` | Extract and open `TaleWeaver.app`. |
 | **Docker** | [Docker setup](https://github.com/Gam1409/taleweaver/tree/v0.7.0-beta#docker) | Build the tagged source with separate persistent SQLite, RAG and media storage. |
-| **From source** | [Setup instructions](https://github.com/Gam1409/taleweaver/tree/v0.7.0-beta#get-started) | Terminal startup remains supported. |
+| **From source** | [Setup instructions](https://github.com/Gam1409/taleweaver/tree/v0.7.0-beta#-get-started) | Terminal startup remains supported. |
 
 Native archives include the Python runtime, libraries and built web interface.
 **Extract the complete archive**, rather than moving out only the executable.

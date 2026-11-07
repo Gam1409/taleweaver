@@ -1,0 +1,94 @@
+name: Attach verified release archives
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag
+        required: true
+        type: string
+      build_run_id:
+        description: Successful Desktop distributions run for exactly that tag commit
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag, source run and completed release checks
+        id: verify
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess
+          repo = os.environ['GITHUB_REPOSITORY']
+          tag = os.environ['RELEASE_TAG']
+          run_id = os.environ['BUILD_RUN_ID']
+          if not re.fullmatch(r'v[0-9][A-Za-z0-9._-]{0,99}', tag) or not run_id.isascii() or not run_id.isdecimal() or len(run_id) > 20:
+              raise SystemExit('Invalid release tag or build run ID.')
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          commit = api(f'commits/{tag}')['sha']
+          run = api(f'actions/runs/{run_id}')
+          if (run['head_sha'], run['path'], run['status'], run['conclusion']) != (commit, '.github/workflows/desktop.yml', 'completed', 'success'):
+              raise SystemExit('Source archives must come from successful desktop builds of the exact release commit.')
+          checks = api(f'actions/runs?head_sha={commit}&per_page=100')['workflow_runs']
+          for path in ('ci.yml', 'security.yml', 'docker.yml'):
+              matching = [item for item in checks if item['path'] == f'.github/workflows/{path}']
+              latest = max(matching, key=lambda item: (item['run_number'], item['run_attempt']), default=None)
+              if latest is None or (latest['status'], latest['conclusion']) != ('completed', 'success'):
+                  raise SystemExit(f'Release check {path} has not succeeded.')
+          releases = api('releases?per_page=100')
+          release = next((item for item in releases if item['tag_name'] == tag), None)
+          if release is None or not release['draft']:
+              raise SystemExit('Only an existing draft release can receive these archives.')
+          print(f'Verified {tag} at {commit}, desktop run {run_id}, and all release checks.')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.build_run_id }}
+          pattern: TaleWeaver-*
+          path: release-artifacts
+      - name: Collect the three platform archives and generate SHA-256 checksums
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, shutil
+          root = pathlib.Path('release-artifacts')
+          dist = pathlib.Path('release-dist')
+          dist.mkdir()
+          expected = {'TaleWeaver-windows-X64.zip', 'TaleWeaver-linux-X64.tar.gz', 'TaleWeaver-macos-ARM64.tar.gz'}
+          paths = [path for path in root.rglob('*') if path.is_file()]
+          if len(paths) != 3 or {path.name for path in paths} != expected:
+              raise SystemExit('Expected exactly three platform archives.')
+          sums = []
+          for path in sorted(paths, key=lambda item: item.name):
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              sums.append(f'{digest}  {path.name}\n')
+              shutil.copy2(path, dist / path.name)
+          (dist / 'SHA256SUMS').write_text(''.join(sums))
+          PY
+      - name: Attach to draft without publishing
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release-dist/TaleWeaver-windows-X64.zip \
+            release-dist/TaleWeaver-linux-X64.tar.gz \
+            release-dist/TaleWeaver-macos-ARM64.tar.gz \
+            release-dist/SHA256SUMS

@@ -64,6 +64,12 @@ LanceDB write/reopen/search, cross-user isolation and cleanup using fixed test
 vectors. It runs only in a fresh disposable profile and contacts no model provider.
 Archives are uploaded as Actions artifacts, rather than committed into Git.
 
+For a release, create a draft for the existing version tag, then run **Attach
+verified release archives** with the successful Desktop distributions run ID.
+It requires matching source commits and successful application, security and Docker
+checks, attaches the three archives and `SHA256SUMS`, and leaves publication as a
+separate final action. Rebuilding the application is unnecessary for this transfer.
+
 For a local build with Python 3.12 and Node 22:
 
 ```sh
