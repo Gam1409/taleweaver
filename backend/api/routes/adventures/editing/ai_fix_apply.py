@@ -212,13 +212,12 @@ async def ai_apply_fix_proposal(
         updated_run_dict = await _commit_fix(db, template_id, user_id, payload.finding_signature)
     else:
         await db.rollback()
-        if failed_resolution:
-            await _evict_cached_suggestions(
-                db=db,
-                template_id=template_id,
-                user_id=user_id,
-                signature=payload.finding_signature,
-            )
+        await _evict_cached_suggestions(
+            db=db,
+            template_id=template_id,
+            user_id=user_id,
+            signature=payload.finding_signature,
+        )
 
     status, message = _apply_result(len(applied_tags), len(proposal_patches), failed_resolution)
     return AIFixApplyResponse(

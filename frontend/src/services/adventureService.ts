@@ -471,6 +471,7 @@ export interface FixProposal {
 }
 
 export interface AIFixSuggestionsRequest {
+  force_refresh?: boolean
   finding_code: string
   finding_message: string
   finding_location?: string | null

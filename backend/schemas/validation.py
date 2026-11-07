@@ -88,6 +88,10 @@ class FixProposal(BaseModel):
 
 
 class AIFixSuggestionsRequest(BaseModel):
+    force_refresh: bool = Field(
+        default=False,
+        description="Explicit retry: discard cached suggestions and ask the configured model again.",
+    )
     finding_code: str = Field(..., description="ValidationFinding.code to fix.")
     finding_message: str = Field(..., description="The original finding message.")
     finding_location: Optional[str] = Field(

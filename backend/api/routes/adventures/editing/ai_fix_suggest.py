@@ -15,6 +15,7 @@ from backend.api.routes.adventures.editing.ai_fix_context import (
 )
 from backend.api.routes.adventures.editing.ai_fix_llm import (
     _AllProvidersFailedError,
+    _evict_cached_suggestions,
     _generate_llm_proposals,
     _get_cached_suggestions,
     _summarize_outcomes,
@@ -84,12 +85,15 @@ def _clean_patch(raw: Any) -> Optional[FixProposalEntityPatch]:
     if not field_updates:
         return None
     allowed = _allowed_fields_for(target_type)
+    clean_updates = {str(k): v for k, v in field_updates.items() if k in allowed}
+    if not clean_updates:
+        return None
     target_id = p_dict.get("target_id")
     return FixProposalEntityPatch(
         target_type=target_type,  # type: ignore[arg-type]
         target_id=str(target_id).strip() if target_id is not None else None,
         description=str(p_dict.get("description") or "").strip()[:280],
-        field_updates={str(k): v for k, v in field_updates.items() if k in allowed},
+        field_updates=clean_updates,
     )
 
 
@@ -180,7 +184,7 @@ async def ai_suggest_fix_for_finding(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AIFixSuggestionsResponse:
-    """Suggest up to 3 different fixes for an AI-detected validation finding.
+    """Suggest up to 3 different fixes for a structural or AI validation finding.
 
     Fast-path on cache hit (per (template, user, finding_signature)).
     Otherwise: focused world context, hard watchdog, provider fallback,
@@ -201,8 +205,16 @@ async def generate_fix_proposals(
     # Read before the cache lookup, which may commit/rollback and expire ``current_user``.
     user_id = current_user.id
     signature = _signing(payload)
-    cached = await _get_cached_suggestions(
-        db=db, template_id=template_id, user_id=user_id, signature=signature
+    if payload.force_refresh:
+        await _evict_cached_suggestions(
+            db=db, template_id=template_id, user_id=user_id, signature=signature
+        )
+    cached = (
+        None
+        if payload.force_refresh
+        else await _get_cached_suggestions(
+            db=db, template_id=template_id, user_id=user_id, signature=signature
+        )
     )
     if cached:
         return AIFixSuggestionsResponse(**{"error": None, **cached})
@@ -235,6 +247,10 @@ async def generate_fix_proposals(
         served_provider=served_provider,
         error=None,
     )
+    if raw_proposals and not response.proposals:
+        response.error = (
+            "The AI returned no applicable field changes. Retry to generate fresh suggestions."
+        )
     if response.proposals:
         await _cache_response(db, template_id, user_id, response)
     return response

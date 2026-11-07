@@ -502,12 +502,13 @@ async function openAIFixSuggestions(
   void index
 }
 
-async function runAIFixRequest(finding: AnnotatedValidationFinding) {
+async function runAIFixRequest(finding: AnnotatedValidationFinding, forceRefresh = false) {
   aiFixServedProvider.value = null
   aiFixLoading.value = true
   aiFixErrorMessage.value = null
   try {
     const request: AIFixSuggestionsRequest = {
+      force_refresh: forceRefresh,
       finding_code: finding.code,
       finding_message: finding.message,
       finding_location: finding.location ?? null,
@@ -540,7 +541,7 @@ function retryAIFix() {
   if (!aiFixFinding.value || aiFixLoading.value || aiFixApplying.value) return
   aiFixProposals.value = []
   aiFixSelectedIndex.value = 0
-  void runAIFixRequest(aiFixFinding.value)
+  void runAIFixRequest(aiFixFinding.value, true)
 }
 
 function selectFixProposal(index: number) {
@@ -864,13 +865,10 @@ defineExpose({
           </div>
         </div>
 
-        <!-- Action row: AI-Fix (only AI findings), Manually Fixed / Reactivate toggle, trash.
+        <!-- Action row: AI-Fix for either source, Manually Fixed / Reactivate toggle, trash.
              Lives at the bottom-right of the card per spec. -->
         <div class="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
-          <div
-            v-if="finding.source === 'ai'"
-            class="flex items-center gap-2"
-          >
+          <div class="flex items-center gap-2">
             <button
               type="button"
               class="px-3 py-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 text-violet-200 text-[10px] font-black uppercase tracking-widest hover:bg-violet-500/25 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -884,9 +882,6 @@ defineExpose({
             <span class="text-[10px] text-slate-500 leading-snug hidden sm:inline">
               Generate up to 3 fix proposals.
             </span>
-          </div>
-          <div v-else class="text-[10px] text-slate-500">
-            Structural finding &mdash; resolve through "Manually fixed" or fix the underlying entity.
           </div>
 
           <div class="flex items-center gap-2">
