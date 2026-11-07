@@ -34,6 +34,7 @@ const emit = defineEmits<{
 <template>
   <ComfyStandardPresets :workspace="workspace" :purpose="purpose" />
   <ComfyPresetStarter
+    :url="workspace.url"
     :purpose="purpose"
     :disabled="Object.keys(workspace.presets).length >= 32"
     @create="addStarterPreset(workspace, $event)"

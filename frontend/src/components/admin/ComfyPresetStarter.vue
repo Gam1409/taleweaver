@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { comfyRequest } from '@/services/comfyPresetService'
 import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import type { ComfyPreset } from '@/types/comfyui'
+import ComfyStarterModelCheck from './ComfyStarterModelCheck.vue'
 type Layout = 'checkpoint' | 'diffusion'
 type Source = 'embedded' | 'external'
 interface Entry {
@@ -19,7 +20,7 @@ interface Entry {
   sources: string[]
   notes: string
 }
-const props = defineProps<{ purpose?: ImagePurpose; disabled?: boolean }>()
+const props = withDefaults(defineProps<{ purpose?: ImagePurpose; disabled?: boolean; url?: string }>(), { url: '' })
 const emit = defineEmits<{ (event: 'create', preset: ComfyPreset): void }>()
 const catalog = ref<Entry[]>([])
 const family = ref('sdxl')
@@ -30,6 +31,12 @@ const vae = ref<Source>('embedded')
 const filename = ref('')
 const error = ref('')
 const busy = ref(false)
+const checking = ref(false)
+const prepared = ref<ComfyPreset | null>(null)
+const recipe = computed(() => entry.value ? {
+  family: family.value, purpose: task.value, layout: layout.value,
+  encoder_source: encoder.value, vae_source: vae.value, checkpoint_name: filename.value.trim() || null,
+} : null)
 const families = computed(() => [
   ...new Map(catalog.value.map(item => [item.family, item.family_name])).entries()
 ])
@@ -70,16 +77,21 @@ watch(
   () => {
     version++
     busy.value = false
+    prepared.value = null
     error.value = ''
   },
   { flush: 'sync' }
 )
 async function create(): Promise<void> {
-  if (!entry.value || busy.value) return
+  if (!entry.value || busy.value || checking.value || props.disabled) return
   const current = ++version
   busy.value = true
   error.value = ''
   try {
+    if (prepared.value) {
+      emit('create', prepared.value)
+      return
+    }
     const result = await comfyRequest<{ preset: ComfyPreset }>('starter-presets', {
       family: family.value,
       purpose: task.value,
@@ -187,13 +199,18 @@ async function create(): Promise<void> {
         >{{ source.includes('ComfyUI') ? 'ComfyUI reference' : 'Model reference' }}</a
       >
     </div>
+    <ComfyStarterModelCheck
+      :url="url" :recipe="recipe" :requires-filename="layout === 'checkpoint' && !!entry?.custom_checkpoint_required"
+      :disabled="busy" @prepared="prepared = $event" @busy="checking = $event"
+    />
     <button
       type="button"
       :disabled="
         disabled ||
         busy ||
+        checking ||
         !entry ||
-        (layout === 'checkpoint' && entry.custom_checkpoint_required && !filename.trim())
+        (layout === 'checkpoint' && entry.custom_checkpoint_required && !filename.trim() && !prepared)
       "
       class="mt-4 rounded-lg bg-cyan-700 px-4 py-2 text-sm text-white disabled:opacity-40"
       @click="create"

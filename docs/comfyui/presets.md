@@ -5,6 +5,15 @@ rules. It does not change your model weights. The Standard and High-Fidelity car
 select presets; **Configure** opens a drawer with Workflow and Prompt tabs.
 Additional text controls and prompt preview stay collapsed until needed.
 
+In **Create from a task template**, use **Check VAE / Checkpoint / CLIP** to read
+installed filenames and check the base workflow's node definitions at the current
+ComfyUI URL. Select missing model files directly below the recipe before creating
+the preset. These choices are copied into both its base and reference graphs.
+Custom combined checkpoints can be discovered before typing their filenames.
+Changing the recipe or URL clears the previous check. This action does not submit
+an image job or prove that embedded checkpoint components load successfully;
+use Test Generation for that. Each workflow also retains its own node check.
+
 ## Choosing a model template
 
 New presets enable **Choose template automatically from the workflow model**.
