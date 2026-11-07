@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -34,6 +34,7 @@ class TurnRecall:
     candidates: int = 0
     ranked: int = 0
     projection_metrics: dict = field(default_factory=dict)
+    query: str = ""
 
     def record_usage(
         self, manager: Any, audience: str, block: str, selected: list[MemoryDocument]
@@ -132,7 +133,7 @@ def _canonical_scores(
 
 
 async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRecall:
-    candidates, scope = await _semantic_candidates(manager, query)
+    candidates, scope = await _turn_vectors(manager, query)
     # Read source text AFTER network awaits: edits/deletion/rewinds cannot resurrect vector text.
     documents = await collect_documents(
         manager.db,
@@ -163,14 +164,39 @@ async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRe
         documents=ranked,
         core_documents=core,
         method="hybrid" if scores else "sql_lexical",
+        query=query,
     )
+
+
+async def _turn_vectors(manager: Any, query: str) -> tuple[list[dict], Scope | None]:
+    # Host resolution may rebuild the scene/cast in the same input turn. Reread
+    # canonical SQL and rerank then, while sharing the original vector request.
+    if hasattr(manager, "_memory_vector_result"):
+        return cast(tuple[list[dict], Scope | None], manager._memory_vector_result)
+    result = await _semantic_candidates(manager, query)
+    manager._memory_vector_result = result
+    return result
 
 
 async def prepare_recall(
     manager: Any, user_msg: str, entities: list[Any], *, history: list[dict] | None = None
 ) -> TurnRecall:
     """Cache the result through state-context rebuilds and every actual turn audience."""
-    token = (manager.state.session_id, getattr(manager, "_vn_player_message_id", None), user_msg)
+    turn_token = (
+        manager.state.session_id,
+        getattr(manager, "_vn_player_message_id", None),
+        user_msg,
+    )
+    if getattr(manager, "_memory_vector_token", None) != turn_token:
+        manager._memory_vector_token = turn_token
+        if hasattr(manager, "_memory_vector_result"):
+            del manager._memory_vector_result
+    token = (
+        turn_token,
+        manager.state.current_scene_id,
+        tuple(sorted(str(entity.id) for entity in entities if entity.entity_type == "NPC")),
+        getattr(manager.state, "in_game_time", 0),
+    )
     if getattr(manager, "_memory_recall_token", None) == token and isinstance(
         cached := getattr(manager, "_memory_recall", None), TurnRecall
     ):

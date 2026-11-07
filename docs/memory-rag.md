@@ -68,6 +68,15 @@ waits for the backlog to be indexed or summarized. Context is bounded to 2,500
 characters and filtered for the receiving pass. Disabling recall retains the
 legacy memory context.
 
+The final context preserves scene and message references. Repeated wording in
+different episodes remains distinct; only duplicate instances of the same source
+are folded. Query-focused excerpts retain exact document offsets instead of always
+taking the beginning of a match. Unused category space can be borrowed within the
+same total limit, so a large cast cannot reduce every record below the minimum
+size. A completely unrepresentable result preserves the legacy memory context.
+Scene/cast changes refresh canonical SQL selection and ranking in the same turn,
+while reusing that turn's original vector lookup.
+
 Journal extraction, index batches and summaries share an idle scheduler. A new
 background unit starts only after a 15-second quiet period; a foreground turn
 prevents additional units from starting. Summary calls use the configured
