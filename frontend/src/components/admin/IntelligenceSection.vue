@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import OllamaRoleSettings from './OllamaRoleSettings.vue'
 import { normalizeOllamaRoleNumbers, normalizeOllamaNumber, setGlobalOllamaUrl } from '@/services/ollamaRoleSettings'
 import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import CustomOpenAIEndpoint from './CustomOpenAIEndpoint.vue'
-import CustomOpenAIRoleSettings from './CustomOpenAIRoleSettings.vue'
+import LlmSamplingSettings from './LlmSamplingSettings.vue'
+import RoleGenerationSettings from './RoleGenerationSettings.vue'
+import { effectiveSampling, normalizeSampling, type SamplingProfile } from '@/services/llmSampling'
 import { customOpenAIUrl, useSharedApiUrlForAll } from '@/services/llmRoleEndpoints'
 
 const props = defineProps<{
@@ -23,7 +24,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'save', payload: any): void
-  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string; ollamaOptions?: OllamaTestOptions; apiBase?: string }): void
+  (e: 'test', payload: { key: string; model: string; provider: string; openrouterProvider?: string; ollamaOptions?: OllamaTestOptions; apiBase?: string; sampling?: SamplingProfile }): void
   (e: 'refreshOllamaModels', ollamaUrl?: string, role?: OllamaRole): void
   (e: 'refreshMinimaxModels', minimaxUrl?: string): void
   (e: 'refreshLlmModels', provider: string, apiBase?: string): void
@@ -32,6 +33,7 @@ const emit = defineEmits<{
 
 const normalizeLocalForm = (data: any) => ({
   ...data,
+  sampling: normalizeSampling(data?.sampling),
   turns_before_compacting: typeof data?.turns_before_compacting === 'number' ? data.turns_before_compacting : 10,
   enable_history_compression: typeof data?.enable_history_compression === 'boolean' ? data.enable_history_compression : true,
   small_max_tokens: typeof data?.small_max_tokens === 'number' ? data.small_max_tokens : 12288,
@@ -53,19 +55,6 @@ watch(() => props.llmForm, (newVal) => {
 // Active sub-tab filter
 type TabFilter = 'all' | 'core' | 'world' | 'aux' | 'endpoints'
 const activeTab = ref<TabFilter>('all')
-
-// Accordion / expanded advanced settings state per pass
-const expandedAdvanced = ref<Record<string, boolean>>({
-  small: false,
-  complex: false,
-  generator: false,
-  play_agent: false,
-  compression: false,
-})
-
-const toggleAdvanced = (key: string) => {
-  expandedAdvanced.value[key] = !expandedAdvanced.value[key]
-}
 
 // Check missing keys
 const missingProviders = computed(() => {
@@ -293,6 +282,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
     model,
     provider,
     openrouterProvider,
+    sampling: effectiveSampling(localForm.value.sampling, passKey),
     apiBase: provider === 'custom_openai' ? effectiveCustomOpenAIUrl(passKey) : undefined,
     ollamaOptions: {
       role: passKey,
@@ -532,26 +522,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Test Result Alert -->
-      <CustomOpenAIRoleSettings
-        v-if="localForm.small_model_provider === 'custom_openai'"
+      <RoleGenerationSettings
+        :form="localForm"
         role="small"
-        v-model:url="localForm.small_custom_openai_url"
-        :global-url="localForm.custom_openai_url"
-        :loading="customApiLoading('small')"
-        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('small')]"
-        @refresh="refreshLlmProviderModels('custom_openai', 'small')"
-      />
-
-      <OllamaRoleSettings
-        v-if="localForm.small_model_provider === 'ollama'"
-        role="small"
-        v-model:url="localForm.small_ollama_url"
-        v-model:timeout="localForm.small_ollama_timeout"
-        v-model:num-ctx="localForm.small_ollama_num_ctx"
-        :global-url="localForm.ollama_url"
-        :loading="isLoadingOllamaModels"
-        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('small')]"
-        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('small'), 'small')"
+        :custom-loading="customApiLoading('small')"
+        :custom-models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('small')]"
+        :ollama-loading="isLoadingOllamaModels"
+        :ollama-models="ollamaModelsByUrl?.[effectiveOllamaUrl('small')]"
+        @change="Object.assign(localForm, $event)"
+        @refresh-custom="refreshLlmProviderModels('custom_openai', 'small')"
+        @refresh-ollama="emit('refreshOllamaModels', effectiveOllamaUrl('small'), 'small')"
       />
 
       <div
@@ -569,68 +549,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         <span>{{ testResults.small.message }}</span>
       </div>
 
-      <!-- Advanced Settings Drawer -->
-      <div class="pt-2 border-t border-slate-800/60">
-        <button
-          type="button"
-          @click="toggleAdvanced('small')"
-          class="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
-        >
-          <span>{{ expandedAdvanced.small ? '▲ Hide Advanced Parameters' : '▼ Advanced Parameters (Tokens, Thinking, Routing)' }}</span>
-        </button>
 
-        <div v-if="expandedAdvanced.small" class="mt-4 pt-3 border-t border-slate-800/40 space-y-4 animate-fade-in">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Max Tokens -->
-            <div>
-              <label class="block text-xs font-bold text-slate-400 mb-1">Max Generation Tokens</label>
-              <input
-                v-model.number="localForm.small_max_tokens"
-                type="number"
-                min="512"
-                max="65536"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-
-            <!-- OpenRouter Routing -->
-            <div v-if="localForm.small_model_provider === 'openrouter'">
-              <label class="block text-xs font-bold text-slate-400 mb-1">OpenRouter Provider Routing (optional)</label>
-              <input
-                v-model="localForm.small_openrouter_provider"
-                type="text"
-                placeholder="e.g. Together, Fireworks"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-          </div>
-
-          <!-- Thinking Mode -->
-          <div class="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between gap-4">
-            <div>
-              <span class="text-xs font-bold text-slate-200">Reasoning / Thinking Mode</span>
-              <p class="text-[11px] text-slate-400 mt-0.5">Enables extended internal reasoning tokens for models that support it.</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <div v-if="localForm.small_enable_thinking" class="flex items-center gap-1.5">
-                <span class="text-[11px] text-slate-400">Budget:</span>
-                <input
-                  v-model.number="localForm.small_max_thinking_tokens"
-                  type="number"
-                  min="256"
-                  max="32768"
-                  class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-white text-center"
-                />
-              </div>
-              <input
-                v-model="localForm.small_enable_thinking"
-                type="checkbox"
-                class="w-4 h-4 rounded accent-purple-500 cursor-pointer"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- PASS 2: NARRATION (Complex Model) -->
@@ -737,26 +656,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
 
       <!-- Test Result Alert -->
-      <CustomOpenAIRoleSettings
-        v-if="localForm.complex_model_provider === 'custom_openai'"
+      <RoleGenerationSettings
+        :form="localForm"
         role="complex"
-        v-model:url="localForm.complex_custom_openai_url"
-        :global-url="localForm.custom_openai_url"
-        :loading="customApiLoading('complex')"
-        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('complex')]"
-        @refresh="refreshLlmProviderModels('custom_openai', 'complex')"
-      />
-
-      <OllamaRoleSettings
-        v-if="localForm.complex_model_provider === 'ollama'"
-        role="complex"
-        v-model:url="localForm.complex_ollama_url"
-        v-model:timeout="localForm.complex_ollama_timeout"
-        v-model:num-ctx="localForm.complex_ollama_num_ctx"
-        :global-url="localForm.ollama_url"
-        :loading="isLoadingOllamaModels"
-        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('complex')]"
-        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('complex'), 'complex')"
+        :custom-loading="customApiLoading('complex')"
+        :custom-models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('complex')]"
+        :ollama-loading="isLoadingOllamaModels"
+        :ollama-models="ollamaModelsByUrl?.[effectiveOllamaUrl('complex')]"
+        @change="Object.assign(localForm, $event)"
+        @refresh-custom="refreshLlmProviderModels('custom_openai', 'complex')"
+        @refresh-ollama="emit('refreshOllamaModels', effectiveOllamaUrl('complex'), 'complex')"
       />
 
       <div
@@ -774,64 +683,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         <span>{{ testResults.complex.message }}</span>
       </div>
 
-      <!-- Advanced Settings Drawer -->
-      <div class="pt-2 border-t border-slate-800/60">
-        <button
-          type="button"
-          @click="toggleAdvanced('complex')"
-          class="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
-        >
-          <span>{{ expandedAdvanced.complex ? '▲ Hide Advanced Parameters' : '▼ Advanced Parameters (Tokens, Thinking, Routing)' }}</span>
-        </button>
 
-        <div v-if="expandedAdvanced.complex" class="mt-4 pt-3 border-t border-slate-800/40 space-y-4 animate-fade-in">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-400 mb-1">Max Generation Tokens</label>
-              <input
-                v-model.number="localForm.complex_max_tokens"
-                type="number"
-                min="512"
-                max="65536"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-            <div v-if="localForm.complex_model_provider === 'openrouter'">
-              <label class="block text-xs font-bold text-slate-400 mb-1">OpenRouter Provider Routing (optional)</label>
-              <input
-                v-model="localForm.complex_openrouter_provider"
-                type="text"
-                placeholder="e.g. Anthropic, Together"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-          </div>
-
-          <div class="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between gap-4">
-            <div>
-              <span class="text-xs font-bold text-slate-200">Reasoning / Thinking Mode</span>
-              <p class="text-[11px] text-slate-400 mt-0.5">Allows deep narrative planning tokens before generating text.</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <div v-if="localForm.complex_enable_thinking" class="flex items-center gap-1.5">
-                <span class="text-[11px] text-slate-400">Budget:</span>
-                <input
-                  v-model.number="localForm.complex_max_thinking_tokens"
-                  type="number"
-                  min="256"
-                  max="32768"
-                  class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-white text-center"
-                />
-              </div>
-              <input
-                v-model="localForm.complex_enable_thinking"
-                type="checkbox"
-                class="w-4 h-4 rounded accent-purple-500 cursor-pointer"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- PASS 3: WORLDBUILDER (Generator Model) -->
@@ -924,26 +776,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         </div>
       </div>
 
-      <CustomOpenAIRoleSettings
-        v-if="localForm.generator_model_provider === 'custom_openai'"
+      <RoleGenerationSettings
+        :form="localForm"
         role="generator"
-        v-model:url="localForm.generator_custom_openai_url"
-        :global-url="localForm.custom_openai_url"
-        :loading="customApiLoading('generator')"
-        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('generator')]"
-        @refresh="refreshLlmProviderModels('custom_openai', 'generator')"
-      />
-
-      <OllamaRoleSettings
-        v-if="localForm.generator_model_provider === 'ollama'"
-        role="generator"
-        v-model:url="localForm.generator_ollama_url"
-        v-model:timeout="localForm.generator_ollama_timeout"
-        v-model:num-ctx="localForm.generator_ollama_num_ctx"
-        :global-url="localForm.ollama_url"
-        :loading="isLoadingOllamaModels"
-        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('generator')]"
-        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('generator'), 'generator')"
+        :custom-loading="customApiLoading('generator')"
+        :custom-models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('generator')]"
+        :ollama-loading="isLoadingOllamaModels"
+        :ollama-models="ollamaModelsByUrl?.[effectiveOllamaUrl('generator')]"
+        @change="Object.assign(localForm, $event)"
+        @refresh-custom="refreshLlmProviderModels('custom_openai', 'generator')"
+        @refresh-ollama="emit('refreshOllamaModels', effectiveOllamaUrl('generator'), 'generator')"
       />
 
       <div v-if="isCustomTier('generator')" class="pt-1">
@@ -971,40 +813,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         <span>{{ testResults.generator.message }}</span>
       </div>
 
-      <!-- Advanced Settings Drawer -->
-      <div class="pt-2 border-t border-slate-800/60">
-        <button
-          type="button"
-          @click="toggleAdvanced('generator')"
-          class="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
-        >
-          <span>{{ expandedAdvanced.generator ? '▲ Hide Advanced Parameters' : '▼ Advanced Parameters (Tokens, Thinking, Routing)' }}</span>
-        </button>
 
-        <div v-if="expandedAdvanced.generator" class="mt-4 pt-3 border-t border-slate-800/40 space-y-4 animate-fade-in">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-400 mb-1">Max Generation Tokens</label>
-              <input
-                v-model.number="localForm.generator_max_tokens"
-                type="number"
-                min="1024"
-                max="131072"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-            <div v-if="localForm.generator_model_provider === 'openrouter'">
-              <label class="block text-xs font-bold text-slate-400 mb-1">OpenRouter Provider Routing (optional)</label>
-              <input
-                v-model="localForm.generator_openrouter_provider"
-                type="text"
-                placeholder="e.g. Google, Anthropic"
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:ring-2 focus:ring-purple-500/50 outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- PASS 4 & 5: AUXILIARY (Play Agent & Chronicle Compacting) -->
@@ -1088,26 +897,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         </div>
 
         <!-- Custom Model Input if custom -->
-        <CustomOpenAIRoleSettings
-        v-if="localForm.play_agent_model_provider === 'custom_openai'"
+      <RoleGenerationSettings
+        :form="localForm"
         role="play_agent"
-        v-model:url="localForm.play_agent_custom_openai_url"
-        :global-url="localForm.custom_openai_url"
-        :loading="customApiLoading('play_agent')"
-        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('play_agent')]"
-        @refresh="refreshLlmProviderModels('custom_openai', 'play_agent')"
-      />
-
-      <OllamaRoleSettings
-        v-if="localForm.play_agent_model_provider === 'ollama'"
-        role="play_agent"
-        v-model:url="localForm.play_agent_ollama_url"
-        v-model:timeout="localForm.play_agent_ollama_timeout"
-        v-model:num-ctx="localForm.play_agent_ollama_num_ctx"
-        :global-url="localForm.ollama_url"
-        :loading="isLoadingOllamaModels"
-        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('play_agent')]"
-        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('play_agent'), 'play_agent')"
+        :custom-loading="customApiLoading('play_agent')"
+        :custom-models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('play_agent')]"
+        :ollama-loading="isLoadingOllamaModels"
+        :ollama-models="ollamaModelsByUrl?.[effectiveOllamaUrl('play_agent')]"
+        @change="Object.assign(localForm, $event)"
+        @refresh-custom="refreshLlmProviderModels('custom_openai', 'play_agent')"
+        @refresh-ollama="emit('refreshOllamaModels', effectiveOllamaUrl('play_agent'), 'play_agent')"
       />
 
         <div v-if="isCustomTier('play_agent')" class="pt-1">
@@ -1121,15 +920,6 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         </div>
 
         <!-- OpenRouter Provider Routing if openrouter -->
-        <div v-if="localForm.play_agent_model_provider === 'openrouter'" class="pt-1">
-          <label class="block text-xs font-bold text-slate-400 mb-1">OpenRouter Provider Routing (optional)</label>
-          <input
-            v-model="localForm.play_agent_openrouter_provider"
-            type="text"
-            placeholder="e.g. Together, Grok"
-            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white font-mono focus:ring-2 focus:ring-purple-500/50 outline-none"
-          />
-        </div>
 
         <!-- Play Agent Personality -->
         <div class="pt-2 border-t border-slate-800/80 space-y-3">
@@ -1309,26 +1099,16 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           </div>
         </div>
 
-      <CustomOpenAIRoleSettings
-        v-if="localForm.compression_model_provider === 'custom_openai'"
+      <RoleGenerationSettings
+        :form="localForm"
         role="compression"
-        v-model:url="localForm.compression_custom_openai_url"
-        :global-url="localForm.custom_openai_url"
-        :loading="customApiLoading('compression')"
-        :models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('compression')]"
-        @refresh="refreshLlmProviderModels('custom_openai', 'compression')"
-      />
-
-      <OllamaRoleSettings
-        v-if="localForm.compression_model_provider === 'ollama'"
-        role="compression"
-        v-model:url="localForm.compression_ollama_url"
-        v-model:timeout="localForm.compression_ollama_timeout"
-        v-model:num-ctx="localForm.compression_ollama_num_ctx"
-        :global-url="localForm.ollama_url"
-        :loading="isLoadingOllamaModels"
-        :models="ollamaModelsByUrl?.[effectiveOllamaUrl('compression')]"
-        @refresh="emit('refreshOllamaModels', effectiveOllamaUrl('compression'), 'compression')"
+        :custom-loading="customApiLoading('compression')"
+        :custom-models="customOpenAIModelsByUrl?.[effectiveCustomOpenAIUrl('compression')]"
+        :ollama-loading="isLoadingOllamaModels"
+        :ollama-models="ollamaModelsByUrl?.[effectiveOllamaUrl('compression')]"
+        @change="Object.assign(localForm, $event)"
+        @refresh-custom="refreshLlmProviderModels('custom_openai', 'compression')"
+        @refresh-ollama="emit('refreshOllamaModels', effectiveOllamaUrl('compression'), 'compression')"
       />
 
         <label v-if="isCustomTier('compression')" class="block text-xs text-slate-300">
@@ -1343,6 +1123,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
       </div>
     </div>
 
+    <LlmSamplingSettings v-if="activeTab === 'all' || activeTab === 'endpoints'" v-model="localForm.sampling" />
     <!-- LOCAL ENDPOINTS & INFRASTRUCTURE (Ollama / MiniMax) -->
     <div
       v-if="activeTab === 'all' || activeTab === 'endpoints'"

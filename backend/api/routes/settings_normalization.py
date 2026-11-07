@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from backend.core.custom_openai_roles import ROLE_DEFAULTS as CUSTOM_OPENAI_ROLE_DEFAULTS
+from backend.core.llm_sampling import SamplingSettings
 from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 
@@ -221,9 +222,12 @@ def _apply_openrouter_models(normalized: dict[str, Any], prefixes: tuple[str, ..
 def normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
     """Return LLM settings with separate providers, tokens and thinking modes."""
     if not llm_settings:
-        return dict(_LLM_FALLBACK)
+        return {**_LLM_FALLBACK, "sampling": SamplingSettings().model_dump()}
 
     normalized = {**_LLM_ENDPOINT_DEFAULTS, **llm_settings}
+    normalized["sampling"] = SamplingSettings.model_validate(
+        normalized.get("sampling") or {}
+    ).model_dump()
     _apply_derived_defaults(normalized, _LLM_DERIVED_DEFAULTS)
     _apply_model_fallbacks(normalized)
     _apply_play_agent_options(normalized)

@@ -8,6 +8,7 @@ import { userService } from '@/services/userService'
 import { catalogService } from '@/services/catalogService'
 import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import { testService } from '@/services/testService'
+import type { SamplingProfile } from '@/services/llmSampling'
 
 const router = useRouter()
 
@@ -101,8 +102,8 @@ const handleSaveGameSettings = async (payload: any) => {
 
 // ============ TEST HANDLERS ============
 
-const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string) => {
-  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider, ollamaOptions, apiBase)
+const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string, sampling?: SamplingProfile) => {
+  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider, ollamaOptions, apiBase, sampling)
 }
 
 const handleTestVision = async (payload: any) => {
@@ -413,7 +414,7 @@ const navCategories: NavCategory[] = [
           :is-loading-llm-models="settingsService.isLoadingLlmModels.value"
           :test-results="testService.testResults.value"
           @save="handleSaveLlmSettings"
-          @test="({ key, model, provider, openrouterProvider, ollamaOptions, apiBase }) => handleTestLlm(key, model, provider, openrouterProvider, ollamaOptions, apiBase)"
+          @test="({ key, model, provider, openrouterProvider, ollamaOptions, apiBase, sampling }) => handleTestLlm(key, model, provider, openrouterProvider, ollamaOptions, apiBase, sampling)"
           @refresh-ollama-models="handleRefreshOllamaModels"
           @refresh-minimax-models="handleRefreshMinimaxModels"
           @refresh-llm-models="handleRefreshLlmModels"

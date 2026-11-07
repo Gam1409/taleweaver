@@ -29,6 +29,8 @@ from backend.core.llm_provider_config import (
 )
 from backend.core.llm_request_tuning import apply_prompt_cache_markers
 from backend.core.llm_roles import resolve_llm_role
+from backend.core.llm_sampling import apply as apply_sampling
+from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.security import encryption_util
 from backend.core.voice_repetition import clean_voice_history, clean_voice_repetition
@@ -725,6 +727,9 @@ class GameMasterLLM:
         self.ollama_api_mode = (user.llm_settings or {}).get("ollama_api_mode", "generate")
 
         llm_settings = self.user.llm_settings or {}
+        self.sampling = resolve_sampling(
+            llm_settings, model_category if use_role_settings else None
+        )
         prefix = self._CATEGORY_PREFIXES.get(model_category, "small_")
         self._load_runtime_settings(model_category)
 
@@ -800,6 +805,7 @@ class GameMasterLLM:
             kwargs["num_ctx"] = self.ollama_num_ctx
 
     def _apply_provider_options(self, kwargs: dict[str, Any], model: str) -> None:
+        apply_sampling(kwargs, self.sampling, self.provider)
         if self.provider == "ollama":
             self._apply_ollama_options(kwargs, model)
             return

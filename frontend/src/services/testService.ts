@@ -1,6 +1,7 @@
 import type { ComfyOptions } from '@/types/comfyui'
 import { ref } from 'vue'
 import type { OllamaTestOptions } from '@/services/ollamaRoleSettings'
+import type { SamplingProfile } from '@/services/llmSampling'
 import { api } from '@/composables/useApi'
 
 /**
@@ -74,13 +75,14 @@ class TestService {
    * Test an LLM model with the specified provider.
    * Returns response time if successful.
    */
-  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string) {
+  async testLlm(key: string, model: string, provider: string, ollamaUrl: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string, sampling?: SamplingProfile) {
     this.testResults.value[key] = { status: 'loading', message: 'Testing connection...' }
 
     try {
       const data = await api.testLlm({
         model,
         provider,
+        sampling,
         custom_openai_url: provider === 'custom_openai' ? apiBase : undefined,
         ollama_url: ollamaOptions?.url ?? ollamaUrl,
         role: ollamaOptions?.role ?? 'small',

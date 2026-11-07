@@ -3,6 +3,7 @@ import { api } from '@/composables/useApi'
 import { audioService } from '@/services/audioService'
 import { catalogService } from '@/services/catalogService'
 import { createEndpointModelCache } from '@/services/endpointModelCache'
+import { normalizeSampling } from '@/services/llmSampling'
 import type { OllamaRole } from '@/services/ollamaRoleSettings'
 import { refreshConfig } from '@/store/config'
 
@@ -24,6 +25,7 @@ class SettingsService {
 
   // Forms for configuration sections
   llmForm = ref({
+    sampling: normalizeSampling(),
     small_model: '',
     small_model_provider: 'openai',
     small_max_tokens: 12288,

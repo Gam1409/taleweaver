@@ -48,6 +48,8 @@ from backend.core.global_settings import (
 )
 from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
 from backend.core.llm_router import GameMasterLLM
+from backend.core.llm_sampling import SamplingProfile, SamplingSettings
+from backend.core.llm_sampling import temporary as temporary_sampling
 from backend.core.models_config import (
     IMAGE_PROVIDERS,
     LLM_PROVIDERS,
@@ -484,6 +486,7 @@ class ApiKeyPayload(BaseModel):
 
 
 class SettingsPayload(OllamaRoleSettings, CustomOpenAIRoleSettings):
+    sampling: SamplingSettings = Field(default_factory=SamplingSettings)
     small_model: str
     small_model_provider: str
     small_max_tokens: int = DEFAULT_SMALL_MAX_TOKENS
@@ -940,6 +943,7 @@ async def update_tts_settings(
 
 
 class TestLLMPayload(OllamaConnectionSettings):
+    sampling: SamplingProfile | None = None
     custom_openai_url: Optional[str] = None
     model: str
     provider: str
@@ -959,9 +963,11 @@ async def test_llm_connection(
     # Inject temporary ollama_url or openrouter_provider if provided
     old_settings = user.llm_settings or {}
     temp_settings = dict(old_settings)
+    if payload.sampling is not None:
+        temp_settings = temporary_sampling(temp_settings, payload.role, payload.sampling)
     if payload.provider == "ollama":
         temp_settings = temporary_ollama_settings(
-            old_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
+            temp_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
         )
     if payload.provider == "custom_openai" and "custom_openai_url" in payload.model_fields_set:
         from backend.core.custom_openai import validate_custom_url
