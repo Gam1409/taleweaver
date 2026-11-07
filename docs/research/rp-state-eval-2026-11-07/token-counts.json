@@ -1,0 +1,122 @@
+[
+  {
+    "case": "unrelated_speech",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 419
+  },
+  {
+    "case": "unrelated_speech",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 487
+  },
+  {
+    "case": "cleaning_is_treatment",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 426
+  },
+  {
+    "case": "cleaning_is_treatment",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 494
+  },
+  {
+    "case": "correct_owner",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 427
+  },
+  {
+    "case": "correct_owner",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 495
+  },
+  {
+    "case": "outside_not_inside",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 426
+  },
+  {
+    "case": "outside_not_inside",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 494
+  },
+  {
+    "case": "partial_drain",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 426
+  },
+  {
+    "case": "partial_drain",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 494
+  },
+  {
+    "case": "request_not_completion",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 432
+  },
+  {
+    "case": "request_not_completion",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 500
+  },
+  {
+    "case": "npc_only_arrival",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 428
+  },
+  {
+    "case": "npc_only_arrival",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 496
+  },
+  {
+    "case": "complete_drain",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 428
+  },
+  {
+    "case": "complete_drain",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 496
+  },
+  {
+    "case": "recalled_past",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 427
+  },
+  {
+    "case": "recalled_past",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 495
+  },
+  {
+    "case": "russian_owner",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 447
+  },
+  {
+    "case": "russian_owner",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 515
+  },
+  {
+    "case": "quoted_instruction_is_data",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 432
+  },
+  {
+    "case": "quoted_instruction_is_data",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 500
+  },
+  {
+    "case": "long_history_stale_recall",
+    "arm": "full_snapshot",
+    "prompt_tokens_qwen3": 1570
+  },
+  {
+    "case": "long_history_stale_recall",
+    "arm": "delta",
+    "prompt_tokens_qwen3": 1638
+  }
+]

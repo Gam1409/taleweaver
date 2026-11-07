@@ -37,3 +37,5 @@ These changes reduce browser work. They do not accelerate inference or remove th
 The item response schema distinguishes an existing canonical item from a newly described item. A failed reconciliation records a bounded failure code and, for schema failures, field paths in session diagnostics. Public messages distinguish invalid item data, malformed JSON, timeout, an uncertain inference reservation and an unavailable check. Provider response bodies and credentials are not returned. A failed check preserves the story and valid portrait thoughts/emotions.
 
 Clothing ownership, worn profiles and item condition notes already have saved state. A general lifecycle for wounds, contamination, fluid traces and their explicit resolution is **not implemented by these fixes**. Likewise, the inference admission queue is not a durable queue of player actions. Both need separate evaluation before changing turn semantics or adding model calls.
+
+See the [state-reconciliation investigation and anonymous endpoint pilot](research/rp-state-reconciliation-2026-11-07.md) for measured failure modes and proposed next steps.

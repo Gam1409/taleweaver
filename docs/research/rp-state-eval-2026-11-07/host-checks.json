@@ -1,0 +1,110 @@
+[
+  {
+    "name": "valid_treatment",
+    "state": {
+      "WOUND": "treated",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [],
+    "passed": true
+  },
+  {
+    "name": "unknown_id",
+    "state": {
+      "WOUND": "open",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [
+      "unknown_id"
+    ],
+    "passed": true
+  },
+  {
+    "name": "wrong_owner",
+    "state": {
+      "WOUND": "open",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [
+      "wrong_owner"
+    ],
+    "passed": true
+  },
+  {
+    "name": "stale_previous_state",
+    "state": {
+      "WOUND": "open",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [
+      "stale_previous_state"
+    ],
+    "passed": true
+  },
+  {
+    "name": "invalid_state",
+    "state": {
+      "WOUND": "open",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [
+      "invalid_state"
+    ],
+    "passed": true
+  },
+  {
+    "name": "invented_quote",
+    "state": {
+      "WOUND": "open",
+      "RIN_COAT": "dirty",
+      "MIKI_COAT": "dirty",
+      "TUBE_FLUID": "present",
+      "RIN_LOCATION": "corridor",
+      "MIKI_LOCATION": "corridor",
+      "PLAYER_LOCATION": "corridor"
+    },
+    "rejections": [
+      "missing_exact_evidence"
+    ],
+    "passed": true
+  },
+  {
+    "name": "semantic_counterexample_treatment_is_not_healing",
+    "proposal": {
+      "id": "WOUND",
+      "target": "RIN",
+      "from": "open",
+      "to": "healed",
+      "evidence": "Rin disinfects the neck wound."
+    },
+    "validator_rejections": [],
+    "produced_state": "healed",
+    "correct_state": "treated",
+    "semantic_error_detected": false
+  }
+]
