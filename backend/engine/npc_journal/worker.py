@@ -12,6 +12,7 @@ from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import progress, queue
 from backend.engine.npc_journal.apply import apply_extraction
+from backend.engine.npc_journal.clock import clock_fields
 from backend.engine.npc_journal.extract import extract, extraction_context
 from backend.engine.npc_journal.portraits import resume_pending, schedule_portrait
 from backend.engine.npc_journal.schema import JournalExtraction
@@ -123,6 +124,7 @@ async def _save(
         created = await apply_extraction(db, message, result, player_name)
         task = message.npc_journal or {}
         message.npc_journal = {
+            **clock_fields(task),
             "status": "done",
             "attempts": task["attempts"],
             "gaps": task.get("gaps", []),
@@ -163,6 +165,7 @@ async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> No
         if message is None or not await queue.fence(db, message, task["token"]):
             return
         message.npc_journal = {
+            **clock_fields(task),
             "status": "failed",
             "attempts": task["attempts"],
             "gaps": task.get("gaps", []),

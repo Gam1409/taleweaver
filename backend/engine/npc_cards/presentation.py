@@ -19,6 +19,7 @@ SUMMARY_FIELDS = {
     "message_id",
     "scene_id",
     "recorded_at",
+    "game_minute",
     "category",
     "topic",
     "text",

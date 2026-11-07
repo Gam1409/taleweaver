@@ -2171,6 +2171,7 @@ class GameTurnManager:
             npc_journal={
                 "status": "pending" if narration_completed else "incomplete",
                 "attempts": 0,
+                "game_minute": int(self.state.in_game_time or 0),
             },
         )
         self.db.add(assistant_chat)

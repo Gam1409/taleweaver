@@ -44,7 +44,16 @@ def bounded_parts(
             "source_message_ids": doc.source_message_ids,
             "source_key": doc.source_id,
             "text": doc.text,
+            "recorded_at": doc.created_at,
+            "provenance": doc.provenance,
         }
+        row.update(
+            {
+                key: value
+                for key in ("npc_id", "scene_id", "topic", "significance", "game_minute")
+                if (value := getattr(doc, key, None)) is not None
+            }
+        )
         if len(json.dumps([*rows, row], ensure_ascii=False)) > max_chars:
             break
         rows.append(row)

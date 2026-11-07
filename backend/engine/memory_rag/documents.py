@@ -2,12 +2,14 @@
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from backend.engine.npc_journal.clock import clock_fields
 from backend.engine.npc_journal.records import journal_of, supported_quote
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -17,7 +19,8 @@ from backend.models.world_entity import WorldEntity
 
 DIALOGUE_CHUNK_CHARS = 2500
 DIALOGUE_CHUNK_OVERLAP = 200
-MAX_UNCHUNKED_CHARS = 12000
+# Leave headroom for source IDs, timestamps and other metadata in a 12k summary request.
+MAX_UNCHUNKED_CHARS = 10000
 
 
 @dataclass(frozen=True)
@@ -38,9 +41,13 @@ class MemoryDocument:
     topic: str | None = None
     significance: str | None = None
     category: str | None = None
+    game_minute: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        if self.game_minute is None:
+            result.pop("game_minute")
+        return result
 
 
 def content_hash(value: Any) -> str:
@@ -49,22 +56,38 @@ def content_hash(value: Any) -> str:
     ).hexdigest()
 
 
+def _fragments(text: str) -> Iterator[tuple[int, str]]:
+    offset = 0
+    while offset < len(text):
+        if offset and offset + DIALOGUE_CHUNK_OVERLAP >= len(text):
+            return
+        size = min(DIALOGUE_CHUNK_CHARS, len(text) - offset)
+        while (
+            len(json.dumps(text[offset : offset + size], ensure_ascii=False))
+            > MAX_UNCHUNKED_CHARS // 2
+        ):
+            size //= 2
+        yield offset, text[offset : offset + size]
+        offset += max(1, size - DIALOGUE_CHUNK_OVERLAP)
+
+
 def _bounded_document(document: MemoryDocument) -> list[MemoryDocument]:
     """Imported notes and cumulative chronicles also need bounded embedding inputs."""
-    if len(document.text) <= MAX_UNCHUNKED_CHARS:
+    if (
+        len(document.text) <= MAX_UNCHUNKED_CHARS
+        and len(json.dumps(document.text, ensure_ascii=False)) <= MAX_UNCHUNKED_CHARS
+    ):
         return [document]
     chunks = []
-    for offset in range(0, len(document.text), DIALOGUE_CHUNK_CHARS - DIALOGUE_CHUNK_OVERLAP):
-        if offset and offset + DIALOGUE_CHUNK_OVERLAP >= len(document.text):
-            break
+    for offset, text in _fragments(document.text):
         source_id = f"{document.source_id}:chunk:{offset}"
         chunks.append(
             replace(
                 document,
                 id=content_hash([document.session_id, document.layer, source_id]),
                 source_id=source_id,
-                source_hash=content_hash([document.source_hash, offset]),
-                text=document.text[offset : offset + DIALOGUE_CHUNK_CHARS],
+                source_hash=content_hash([document.source_hash, offset, text]),
+                text=text,
             )
         )
     return chunks
@@ -132,6 +155,7 @@ def _dialogue(state: Any, user_id: str, message: ChatMessage) -> list[MemoryDocu
                 provenance="claimed" if claimed else "observed",
                 source_message_ids=[message.id],
                 created_at=message.created_at.isoformat(),
+                **clock_fields(message.npc_journal),
             )
         )
     return documents
@@ -163,6 +187,7 @@ def _journal_documents(
                 topic=entry.get("topic"),
                 significance=entry.get("significance"),
                 category=entry.get("category"),
+                **clock_fields(entry),
             )
         )
     return documents

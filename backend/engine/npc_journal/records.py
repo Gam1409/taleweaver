@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, get_args
 
 from backend.engine.npc_journal.archive import compact, expanded
+from backend.engine.npc_journal.clock import clock_fields
 from backend.engine.npc_journal.schema import CharacterObservation, Observation, Significance
 
 JOURNAL_KEY = "npc_journal"
@@ -95,6 +96,7 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
                 "message_id": message.id,
                 "scene_id": message.scene_id,
                 "recorded_at": message.created_at.isoformat(),
+                **clock_fields(getattr(message, "npc_journal", None)),
                 **record,
             }
         )

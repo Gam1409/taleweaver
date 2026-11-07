@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement
 from sqlalchemy.sql.selectable import Exists
 
+from backend.engine.npc_journal.clock import clock_fields
 from backend.models.chat import ChatMessage
 
 MAX_ATTEMPTS = 3
@@ -141,6 +142,7 @@ async def claim(
         ).all()
     )
     task = {
+        **clock_fields(old),
         "status": "running",
         "attempts": int(old.get("attempts", 0)) + 1,
         "token": str(uuid4()),
@@ -197,6 +199,7 @@ async def requeue_dependents(db: AsyncSession, recovered: ChatMessage) -> None:
         if recovered.id not in (task.get("gaps") or []):
             continue
         message.npc_journal = {
+            **clock_fields(task),
             "status": "pending",
             "attempts": 0,
             "gaps": [identifier for identifier in task["gaps"] if identifier != recovered.id],

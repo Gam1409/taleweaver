@@ -42,6 +42,8 @@ def _record(
     }
     if document.scene_id is not None:
         fields["scene_id"] = document.scene_id
+    if document.game_minute is not None:
+        fields["game_minute"] = document.game_minute
     if document.source_message_ids:
         fields["source_message_ids"] = document.source_message_ids
     if core:

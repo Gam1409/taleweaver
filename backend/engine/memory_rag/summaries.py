@@ -27,6 +27,7 @@ from backend.models.memory_rag import MemoryIndexState, MemorySummary
 from backend.models.session_state import SessionState
 
 MIN_NEW_EVENTS = 8
+MIN_NPC_REPLIES = 20
 MAX_EVENTS = 24
 MAX_INPUT_CHARS = 12000
 SummaryKey = tuple[str, str | None, str | None]
@@ -82,9 +83,10 @@ def _job(
     sources = summary_sources(documents, *key)
     pending, continuing = pending_parts(sources, existing)
     ids = {mid for doc in pending for mid in doc.source_message_ids}
+    minimum = MIN_NPC_REPLIES if key[0] == "npc_summary" else MIN_NEW_EVENTS
     if (
         not continuing
-        and len(ids) < MIN_NEW_EVENTS
+        and len(ids) < minimum
         and sum(len(doc.text) for doc in pending) < MAX_INPUT_CHARS
     ):
         return None
@@ -169,7 +171,12 @@ async def summarize_one_group(
                 "glances, filler and repetitions that establish no lasting change. "
                 "Distinguish player statements and character claims from observed events. "
                 "Do not infer private thoughts, possessions, consent or new facts. This is a historical "
-                "summary of the supplied interval, not authoritative current state." + language
+                "summary of the supplied interval, not authoritative current state. "
+                "Preserve supplied game-minute markers, scene and participant attribution, "
+                "open commitments, explicit causes and consequences, and later reversals. "
+                "recorded_at is wall-clock metadata, never an in-game event date. "
+                "Missing game time stays unknown; do not invent chronology or causal links."
+                + language
             ),
             user_prompt=job.prompt,
             model=router.model,

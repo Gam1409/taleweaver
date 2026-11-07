@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
+from backend.engine.npc_journal.clock import clock_fields
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -161,7 +162,7 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
         )
     for message_id, task in snapshot["journal_tasks"].items():
         if isinstance(task, dict) and task.get("status") == "running":
-            restored_task = {"status": "pending", "attempts": 0}
+            restored_task = {"status": "pending", "attempts": 0, **clock_fields(task)}
         else:
             restored_task = task
         await db.execute(
