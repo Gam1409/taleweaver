@@ -63,7 +63,7 @@ def test_no_lexical_match_keeps_notes_and_chronicle_available():
     assert context_fallback([notes, chronicle, document()]) == [notes, chronicle]
 
 
-async def test_chronicle_progresses_before_unavailable_embedder(monkeypatch):
+async def test_chronicle_progresses_despite_unavailable_embedder(monkeypatch):
     user = SimpleNamespace(llm_settings={"memory_rag": {"enabled": True}})
     monkeypatch.setattr(worker, "_load", AsyncMock(return_value=(user, object(), [])))
     summarize = AsyncMock(return_value=True)
@@ -73,8 +73,9 @@ async def test_chronicle_progresses_before_unavailable_embedder(monkeypatch):
     monkeypatch.setattr(worker, "_release", AsyncMock())
     claim = worker.Claim("s", "u", 0, 1, "token", None, False)
     assert await worker._step(claim)
+    assert await worker._step(claim)
     summarize.assert_awaited_once_with(claim, chronicle=True)
-    embed.assert_not_awaited()
+    embed.assert_awaited_once()
 
 
 async def test_empty_lexical_recall_projects_canonical_notes(monkeypatch):

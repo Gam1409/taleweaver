@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from backend.engine.memory_rag.ranking import ordered_terms
+
 
 @dataclass(frozen=True)
 class Scope:
@@ -115,7 +117,7 @@ def _membership(field: str, values: list[str]) -> str:
 
 
 def lexical_filter(text: str) -> str:
-    terms = sorted(set(re.findall(r"\w{2,}", text.lower())))[:24]
+    terms = ordered_terms(text, 24)
     if not terms:
         return "false"
     return "(" + " OR ".join("contains(lower(text), " + literal(term) + ")" for term in terms) + ")"

@@ -2,7 +2,7 @@
 
 import asyncio
 import math
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -95,11 +95,15 @@ def _request_url(settings: MemoryRagSettings, base: str) -> str:
 
 
 async def embed_texts(
-    user: Any, texts: list[str], *, timeout: float | None = None
+    user: Any,
+    texts: list[str],
+    *,
+    timeout: float | None = None,
+    purpose: Literal["query", "document"] = "document",
 ) -> list[list[float]]:
     settings = read_settings(user)
     return await embed_with_settings(
-        settings, texts, api_key=_credential_key(user), timeout=timeout
+        settings, texts, api_key=_credential_key(user), timeout=timeout, purpose=purpose
     )
 
 
@@ -110,11 +114,14 @@ async def embed_with_settings(
     *,
     api_key: str = "",
     timeout: float | None = None,
+    purpose: Literal["query", "document"] = "document",
 ) -> list[list[float]]:
     if not settings.enabled or not settings.base_url or not settings.model:
         raise EmbeddingError("Enable memory and configure an embedding URL and model first.")
     if not texts:
         return []
+    prefix = settings.query_prefix if purpose == "query" else settings.document_prefix
+    texts = [prefix + text for text in texts]
     if len(texts) > MAX_BATCH_SIZE or any(
         not isinstance(t, str) or not t.strip() or len(t) > MAX_TEXT_LENGTH for t in texts
     ):

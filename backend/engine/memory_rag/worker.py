@@ -17,6 +17,7 @@ from backend.core import database
 from backend.core.diagnostic_operations import diagnostic_job
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
+from backend.engine.memory_rag import maintenance
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
@@ -284,20 +285,29 @@ async def _step(claim: Claim) -> bool:
         await _release(claim)
         return False
     enabled = read_settings(user).enabled and not claim.paused
-    if await _summarize(claim, chronicle=True):
-        await _release(claim)
-        return True
-    if enabled and await _summarize(claim, chronicle=False, documents=documents):
-        await _release(claim)
-        return True
-    # Canonical summaries must progress even when the optional embedder is unavailable.
-    if enabled and await _index_batch(claim, user, documents):
-        await _release(claim)
-        return True
-    if enabled:
+    outcome = await maintenance.cycle(claim.session_id, claim.user_id, claim.epoch).run(
+        {
+            "index": lambda: _maybe_index(enabled, claim, user, documents),
+            "chronicle": lambda: _summarize(claim, chronicle=True),
+            "summary": lambda: _maybe_summary(enabled, claim, documents),
+        }
+    )
+    if outcome.status == "failed":
+        logger.warning("Memory maintenance deferred for %s: %s", claim.session_id, outcome.error)
+    if enabled and outcome.index_idle:
         await _complete(claim, documents)
-    await _release(claim)
-    return False
+    await _release(claim, last_error=outcome.error)
+    return outcome.status in {"worked", "failed"}
+
+
+async def _maybe_index(
+    enabled: bool, claim: Claim, user: User, documents: list[MemoryDocument]
+) -> bool:
+    return await _index_batch(claim, user, documents) if enabled else False
+
+
+async def _maybe_summary(enabled: bool, claim: Claim, documents: list[MemoryDocument]) -> bool:
+    return await _summarize(claim, chronicle=False, documents=documents) if enabled else False
 
 
 async def _failed(claim: Claim, error_code: str = "internal") -> None:
@@ -417,6 +427,7 @@ async def shutdown() -> None:
     from backend.engine.memory_rag import document_cache
 
     document_cache.clear()
+    maintenance.clear()
     from backend.engine.memory_rag.dirty_queue import shutdown as stop_queue
 
     await stop_queue()

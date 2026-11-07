@@ -1,9 +1,8 @@
 """Bound foreground source loading; full corpus scans belong to idle indexing."""
 
-import re
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from backend.engine.memory_rag.documents import (
@@ -17,6 +16,7 @@ from backend.engine.memory_rag.documents import (
     sources_hash,
     summary_sources,
 )
+from backend.engine.memory_rag.ranking import ordered_terms
 from backend.engine.npc_journal.records import journal_of
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -38,12 +38,17 @@ async def _message_ids(db: Any, sid: str, query: str, candidates: list[dict]) ->
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
     )
     ids = set(await db.scalars(base.limit(RECENT_MESSAGES)))
-    terms = sorted(set(re.findall(r"[^\W_]{3,}", query.casefold())), key=len, reverse=True)[:8]
+    terms = ordered_terms(query, 8, minimum=3)
     if terms:
         ids.update(
             await db.scalars(
                 base.where(
-                    or_(*(ChatMessage.content.icontains(term, autoescape=True) for term in terms))
+                    or_(
+                        *(
+                            func.tw_casefold(ChatMessage.content).contains(term, autoescape=True)
+                            for term in terms
+                        )
+                    )
                 ).limit(LEXICAL_MESSAGES)
             )
         )

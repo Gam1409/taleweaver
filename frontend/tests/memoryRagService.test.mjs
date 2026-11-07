@@ -41,6 +41,16 @@ test('blank key preserves saved secret and public key metadata never becomes a w
   assert.equal(memoryRagPayload(settings, ' replacement-secret ').api_key, 'replacement-secret')
 })
 
+test('embedding instruction whitespace and explicit clearing survive serialization', () => {
+  const configured = memoryRagPayload(
+    { ...settings, query_prefix: 'query: ', document_prefix: 'passage: ' },
+    ''
+  )
+  assert.equal(configured.query_prefix, 'query: ')
+  assert.equal(configured.document_prefix, 'passage: ')
+  assert.equal(memoryRagPayload({ ...settings, query_prefix: '' }, '').query_prefix, '')
+})
+
 test('memory settings and real embeddings test use independent endpoints and explicit opt-in', async () => {
   requests.length = 0
   await service.getSettings()

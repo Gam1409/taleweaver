@@ -8,7 +8,9 @@ const settings = reactive<MemoryRagSettings>({
   provider: 'openai',
   base_url: '',
   model: '',
-  timeout_seconds: 10
+  timeout_seconds: 10,
+  query_prefix: '',
+  document_prefix: ''
 })
 const apiKey = ref('')
 const loading = ref(true)
@@ -153,6 +155,30 @@ onMounted(load)
               />
             </label>
           </div>
+          <details class="rounded-lg border border-white/10 p-3 text-sm text-slate-300">
+            <summary class="cursor-pointer">Advanced embedding instructions</summary>
+            <p class="mt-3 text-xs text-slate-400">
+              Follow your embedding model's instructions. For Snowflake Arctic Embed 2.0, use
+              <code>query: </code> (including the trailing space) for queries and leave the document
+              prefix empty. Changing these values rebuilds the index. Foreground recall uses a short
+              deadline; the timeout above applies to connection tests and background work.
+            </p>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <label
+                >Query prefix
+                <input
+                  v-model="settings.query_prefix"
+                  maxlength="512"
+                  class="memory-input"
+                  placeholder="query: "
+                />
+              </label>
+              <label
+                >Document prefix
+                <input v-model="settings.document_prefix" maxlength="512" class="memory-input" />
+              </label>
+            </div>
+          </details>
           <div class="flex flex-wrap gap-3">
             <button
               type="button"

@@ -16,6 +16,8 @@ class MemoryRagSettings(BaseModel):
     base_url: str = ""
     model: str = Field(default="", max_length=256)
     timeout_seconds: float = Field(default=10, ge=1, le=60, allow_inf_nan=False)
+    query_prefix: str = Field(default="", max_length=512)
+    document_prefix: str = Field(default="", max_length=512)
 
     @field_validator("base_url")
     @classmethod
@@ -53,4 +55,6 @@ def embedding_signature(settings: MemoryRagSettings, dimension: int) -> str:
     if dimension < 1:
         raise ValueError("Embedding dimension must be positive.")
     payload = [settings.provider, settings.base_url, settings.model, dimension]
+    if settings.query_prefix or settings.document_prefix:
+        payload.extend([settings.query_prefix, settings.document_prefix])
     return hashlib.sha256(json.dumps(payload, separators=(",", ":")).encode()).hexdigest()

@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import ConnectionPoolEntry
 
 from backend.core.config import settings
+from backend.utils.sqlite_text import install as install_unicode_search
 
 logger = logging.getLogger(__name__)
+install_unicode_search()
 
 # Create the async engine
 engine = create_async_engine(

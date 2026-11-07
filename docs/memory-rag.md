@@ -26,6 +26,12 @@ Use a multilingual embedding model when the story and player input use different
 languages. A successful endpoint test verifies the response format, not recall
 quality for a particular language or story.
 
+In **Advanced embedding instructions**, set query and document prefixes exactly as
+the embedding model requires. For Snowflake Arctic Embed 2.0, use `query: `
+(including the final space) for queries and an empty document prefix. Other models
+can require different instructions. Empty prefixes preserve the existing behavior.
+Prefix changes invalidate the previous vector space and schedule rebuilding.
+
 Vectors are stored in **`db/lancedb/` at the project root**, ignored by Git.
 `MEMORY_DB_DIR` can override that directory. Docker mounts the project `db/`
 directory at `/app/db`. Canonical history remains in the existing application
@@ -62,7 +68,8 @@ and recency, then validates results against current SQL sources. Owner, session,
 timeline generation and model signature isolate the index. Old clothing and
 possession descriptions are historical evidence; current game state wins.
 
-Foreground recall has a short vector deadline and falls back to SQL-based lexical
+Foreground recall allows at most 1.5 seconds for query embeddings and 0.5 seconds
+of additional vector-search grace, then falls back to SQL-based lexical
 selection when the embedding service fails or indexing is incomplete. It never
 waits for the backlog to be indexed or summarized. Context is bounded to 2,500
 characters and filtered for the receiving pass. Disabling recall retains the
@@ -80,8 +87,11 @@ while reusing that turn's original vector lookup.
 Journal extraction, index batches and summaries share an idle scheduler. A new
 background unit starts only after a 15-second quiet period; a foreground turn
 prevents additional units from starting. Summary calls use the configured
-**compression** role, with bounded input and a 30-second deadline. Failed work
-backs off; subsequent session activity can restart it. Very slow models can time
+**compression** role, with bounded input and that role's configured deadline.
+Indexing, chronicle compression and interval summaries take turns, with at most
+one model batch per idle unit. A failed phase backs off independently, allowing
+other phases to advance; subsequent session activity can restart deferred work.
+Very slow models can time
 out during summarization while raw history remains available for retrieval.
 
 This is process-local scheduling, not remote inference preemption. A request
