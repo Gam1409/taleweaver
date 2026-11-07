@@ -51,10 +51,21 @@ export async function* readServerEvents<T>(
       if (pendingCr) text = text.slice(0, -1)
       buffer += text.replace(/\r\n?/g, '\n')
       let boundary = buffer.indexOf('\n\n')
+      let frames = 0
+      let resumedAt = performance.now()
       while (boundary >= 0) {
+        if (options.signal?.aborted) throw new DOMException('Request aborted.', 'AbortError')
+        if (options.isCurrent?.() === false) return
         const event = parseFrame<T>(buffer.slice(0, boundary))
         buffer = buffer.slice(boundary + 2)
         if (event) yield event
+        // A proxy may deliver hundreds of tokens in one read. Promise-only
+        // iteration starves painting, input handlers and the Abort button.
+        if (++frames >= 32 || performance.now() - resumedAt >= 12) {
+          await new Promise<void>(resolve => setTimeout(resolve, 0))
+          frames = 0
+          resumedAt = performance.now()
+        }
         boundary = buffer.indexOf('\n\n')
       }
       if (done) return

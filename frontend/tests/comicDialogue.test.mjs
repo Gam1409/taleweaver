@@ -9,7 +9,7 @@ const source = readFileSync(new URL('../src/composables/comicDialogue.ts', impor
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText
-const { parseComicDialogue, knownSpeakerNames, resolveSpeakerAlias } = await import(
+const { parseComicDialogue, cachedComicDialogue, knownSpeakerNames, resolveSpeakerAlias } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 
@@ -137,4 +137,45 @@ for (const [opening, closing] of [['"', '"'], ['“', '”'], ['«', '»']]) {
 
 test('an inner quotation at the end retains its closing delimiter', () => {
   assert.equal(parse('Лина: "Он сказал «пора»"').dialogues[0].text, 'Он сказал «пора»')
+})
+
+test('punctuation outside a quoted reply does not create an empty narrator panel', () => {
+  const result = parse('Лина: [whispers] "Десять минут тишины".\n\nМики стоит у двери.')
+  assert.deepEqual(result.dialogues.map(line => [!!line.isNarration, line.text]), [
+    [false, 'Десять минут тишины.'], [true, 'Мики стоит у двери.'],
+  ])
+})
+
+test('inline punctuation returns to the preceding speech before new narration', () => {
+  const result = parse('Лина: "Тише". Мики закрыла дверь.')
+  assert.deepEqual(result.dialogues.map(line => [!!line.isNarration, line.text]), [
+    [false, 'Тише.'], [true, 'Мики закрыла дверь.'],
+  ])
+})
+
+test('loose formatting markers never create narrator panels, but meaningful silence remains', () => {
+  for (const marker of ['*', '**', '_', '•', '·']) {
+    const result = parse(`Лина: "Тише."\n${marker}`)
+    assert.equal(result.dialogues.length, 1)
+    assert.equal(result.dialogues[0].text, 'Тише.')
+  }
+  for (const text of ['...', '…', '?', '!', 'В комнате тихо.']) {
+    assert.equal(parse(text).dialogues[0].text, text)
+  }
+})
+
+
+test('streaming replaces only the changed message cache without evicting settled replies', () => {
+  const parser = cachedComicDialogue({ knownNames: new Set(), resolveSpeaker: () => undefined })
+  const history = Array.from({ length: 300 }, () => ({}))
+  const settled = history.map((message, index) => parser(`Earlier scene ${index}.`, message))
+  const current = {}
+  for (let token = 0; token < 400; token++) parser(`A reply ${token}`, current)
+  history.forEach((message, index) => {
+    assert.equal(parser(`Earlier scene ${index}.`, message), settled[index])
+  })
+  assert.notEqual(parser('An edited reply.', history[0]), settled[0])
+  assert.equal(settled[0].narration, 'Earlier scene 0.')
+  const other = cachedComicDialogue({ knownNames: new Set(), resolveSpeaker: () => undefined })
+  assert.notEqual(other('Earlier scene 0.', history[0]), settled[0], 'identity changes own a fresh cache')
 })

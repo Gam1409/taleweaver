@@ -243,7 +243,7 @@ function getEntityForHover(nameOrEntity: any) {
             >
               {{ props.sheet?.rule_enforcement_mode === 'vn' ? 'Narrator' : 'Game Master' }}
             </span>
-            <span v-html="renderFormattedHtml(dlg.text)"></span>
+            <span v-html="renderFormattedHtml(dlg.text, dlg)"></span>
           </div>
         </div>
       </div>

@@ -110,3 +110,22 @@ for (const [name,short] of [['Dr. Rin Aoyama','Rin'],['Élodie Martin','Élodie'
     assert.equal(resolveNpc(short,[entity])?.id,entity.id)
   })
 }
+
+test('streaming a long page reuses settled dialogue and refreshes changed identities', t => {
+  const scope = effectScope()
+  t.after(() => scope.stop())
+  const history = ref(Array.from({ length: 200 }, (_, i) => ({ id: String(i), role: 'assistant', content: `Доктор Рин: «Реплика ${i}.»`, scene_id: 'ROOM' })))
+  const cast = ref([{ ...doctor }])
+  const turns = scope.run(() => useComicTurns({ messages: history, entities: cast, npcMetadata: ref({}), sheet: ref({}) }))
+  const first = turns.gameTurns.value[0].exchanges[0].dialogues[0]
+  for (let i = 0; i < 100; i++) {
+    history.value.at(-1).content = `Доктор Рин: «Поток ${i}.»`
+    const page = turns.gameTurns.value[0]
+    assert.equal(page.exchanges[0].dialogues[0], first)
+    assert.equal(page.exchanges.at(-1).dialogues[0].text, `Поток ${i}.`)
+  }
+  cast.value[0].image_url = '/new-rin.png'
+  const updated = turns.gameTurns.value[0].exchanges[0].dialogues[0]
+  assert.notEqual(updated, first)
+  assert.equal(updated.avatarUrl, '/new-rin.png')
+})

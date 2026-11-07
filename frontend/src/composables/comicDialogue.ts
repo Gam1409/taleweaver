@@ -85,7 +85,18 @@ function appendNarration(dialogues: DialogueSegment[], line: string): void {
     narrationText = tagMatch[2].trim()
   }
 
+  if (!narrationText || /^(?:[*_]{1,3}|[•·])$/u.test(narrationText)) return
   const last = dialogues[dialogues.length - 1]
+  if (last && !last.isNarration) {
+    // Quoted dialogue is split before its trailing punctuation. Keep that
+    // punctuation with its speech rather than making an empty narrator card.
+    const trailing = narrationText.match(/^([.,;:])(?:\s+|$)(.*)$/u)
+    if (trailing) {
+      if (!last.text.endsWith(trailing[1]!)) last.text += trailing[1]
+      narrationText = trailing[2]!.trim()
+      if (!narrationText) return
+    }
+  }
   if (last && last.isNarration) {
     last.text += '\n\n' + narrationText
     // Use the voice tag from the first paragraph if the new one doesn't have one
@@ -189,5 +200,19 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
     isPlayer,
     text: speechText,
     voiceTag
+  }
+}
+
+
+/** Reuse settled replies while the current message streams; weak keys release old history. */
+export function cachedComicDialogue(options: DialogueOptions) {
+  type Parsed = ReturnType<typeof parseComicDialogue>
+  const replies = new WeakMap<object, { content: string; parsed: Parsed }>()
+  return (content: string, message?: object): Parsed => {
+    const cached = message && replies.get(message)
+    if (cached && cached.content === content) return cached.parsed
+    const parsed = parseComicDialogue(content, options)
+    if (message) replies.set(message, { content, parsed })
+    return parsed
   }
 }

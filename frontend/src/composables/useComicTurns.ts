@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify'
 import { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 import type { ChatMessage } from '@/types'
 import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
-import { knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
+import { cachedComicDialogue, knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
 
 export { normalizeVoiceTag } from './comicDialogue'
 export { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
@@ -115,8 +115,12 @@ export function parseAssistantContent(
   })
 }
 
-export function renderFormattedHtml(text: string): string {
+const formattedReplies = new WeakMap<object, { text: string; html: string }>()
+
+export function renderFormattedHtml(text: string, message?: object): string {
   if (!text) return ''
+  const previous = message && formattedReplies.get(message)
+  if (previous?.text === text) return previous.html
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const withVoiceTags = escaped.replace(/(\[[^\]\n]+\])/g, (match, tag) => {
     const raw = tag.slice(1, -1).trim()
@@ -127,21 +131,35 @@ export function renderFormattedHtml(text: string): string {
   const withBolds = withVoiceTags.replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200 font-bold">$1</strong>')
   const withObjectIds = withBolds.replace(/##([A-Za-z0-9_-]+)/g, '<span class="comic-object-tag">$1</span>')
 
-  return DOMPurify.sanitize(withObjectIds, {
+  const html = DOMPurify.sanitize(withObjectIds, {
     ALLOWED_TAGS: ['span', 'strong', 'em', 'br', 'div'],
     ALLOWED_ATTR: ['class'],
   })
+  if (message) formattedReplies.set(message, { text, html })
+  return html
 }
 
 export function useComicTurns(options: UseComicTurnsOptions) {
   const { messages, entities, npcMetadata, sheet } = options
   const viewingTurnIndex = ref<number | null>(null)
 
+  // Rebuild only when identity/portrait context changes, not on each token.
+  const dialogueParser = computed(() => {
+    const cast = (entities.value || []).map(entity => ({ ...entity }))
+    const metadata = Object.fromEntries(Object.entries(npcMetadata.value || {})
+      .map(([key, value]) => [key, { ...value }]))
+    return cachedComicDialogue({
+      playerName: sheet.value?.name,
+      playerAvatar: sheet.value?.profile_image,
+      knownNames: knownSpeakerNames(sheet.value?.name, cast, metadata),
+      resolveSpeaker: name => resolveNpc(name, cast, metadata),
+    })
+  })
+
   const gameTurns = computed<ComicTurn[]>(() =>
     buildComicPages(messages.value || [], {
       parseUser: (msg) => parseUserMessage(msg, entities.value, npcMetadata.value),
-      parseAssistant: (content) =>
-        parseAssistantContent(content, sheet.value, entities.value, npcMetadata.value),
+      parseAssistant: dialogueParser.value,
     })
   )
 

@@ -55,3 +55,37 @@ test('abort cancels a pending read and releases the stream lock', async () => {
 test('obsolete session streams are canceled before publishing another event', async () => {
   assert.deepEqual(await collect(body('data: {}\n\n'), { isCurrent: () => false }), [])
 })
+
+test('a large buffered response yields to browser tasks before consuming every event', async () => {
+  const frame = 'event: chunk\ndata: {"content":"x"}\n\n'
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode(frame.repeat(512)))
+    controller.close()
+  } })
+  let responsive = false
+  setTimeout(() => { responsive = true }, 0)
+  let count = 0
+  let yieldedBeforeEnd = false
+  for await (const event of readServerEvents(stream)) {
+    assert.equal(event.event, 'chunk')
+    count++
+    if (responsive && count < 512) yieldedBeforeEnd = true
+  }
+  assert.equal(count, 512)
+  assert.ok(yieldedBeforeEnd, 'timers and input tasks must run during a buffered token burst')
+})
+
+test('session changes during a buffered response discard the remaining frames', async () => {
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode('data: {}\n\n'.repeat(3)))
+    controller.close()
+  } })
+  let current = true
+  const events = []
+  for await (const event of readServerEvents(stream, { isCurrent: () => current })) {
+    events.push(event)
+    current = false
+  }
+  assert.equal(events.length, 1)
+  assert.equal(stream.locked, false)
+})

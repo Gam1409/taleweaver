@@ -54,7 +54,7 @@ export interface ComicPageParsers {
     targetEntity?: any
     speechText: string
   }
-  parseAssistant: (content: string) => { narration: string; dialogues: DialogueSegment[] }
+  parseAssistant: (content: string, message?: ChatMessage) => { narration: string; dialogues: DialogueSegment[] }
 }
 
 // Fallback for messages saved before scene info existed: these engine messages mark a
@@ -149,7 +149,7 @@ class PageBuilder {
       this.flushExchange()
       this.exchange.systemMessages.push(...carried)
     }
-    const parsed = this.parsers.parseAssistant(msg.content)
+    const parsed = this.parsers.parseAssistant(msg.content, msg)
     this.exchange.assistantMessage = msg
     this.exchange.timestamp = msg.timestamp || this.exchange.timestamp
     this.exchange.narration = parsed.narration
