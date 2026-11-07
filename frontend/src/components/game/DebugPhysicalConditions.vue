@@ -8,12 +8,13 @@ interface Source { kind: string; message_id?: string; quote: string }
 interface Condition {
   id: string; target_id: string; kind: Kind; part: string; detail: string
   status: string; visibility: 'public' | 'private'; origin: Source; latest: Source
+  first_recorded_minute?: number | null; last_changed_minute?: number | null
 }
 interface Ledger {
   revision: number; conditions: Record<string, Condition>
   subjects: { id: string; name: string }[]; error?: string
   archived_resolved: number; archived_events: number
-  last_check: { status?: string; reason?: string; rejected?: string[] }
+  last_check: { status?: string; reason?: string; rejected?: string[]; accepted?: string[]; proposed_count?: number; minute?: number }
 }
 const props = defineProps<{ data?: Ledger; busy: boolean }>()
 const emit = defineEmits<{ command: [command: string] }>()
@@ -28,6 +29,13 @@ const visibility = ref<'public' | 'private'>('private')
 const operation = ref<Operation>('record')
 const current = computed(() => props.data?.conditions?.[selected.value])
 const available = computed(() => props.data && !props.data.error && Number.isInteger(props.data.revision))
+const extractionStats = computed(() => {
+  const check = props.data?.last_check
+  if (check?.proposed_count == null) return null
+  const applied = check.accepted?.length || 0
+  return { proposed: check.proposed_count, applied, rejected: check.proposed_count - applied, minute: check.minute }
+})
+function gameMinute(value?: number | null) { return value == null ? 'unknown' : `${value} game min` }
 const kinds: Kind[] = ['injury', 'contamination', 'fluid', 'pain', 'other']
 const labels: Record<Operation, string> = {
   record: 'Record condition', change: 'Correct description', treat: 'Treat — keep condition',
@@ -81,6 +89,10 @@ function save() {
     <p v-if="!data" role="status">State data is unavailable. Refresh the debug inspector.</p>
     <p v-else-if="data.error" role="alert" class="text-amber-300">{{ data.error }}</p>
     <template v-else>
+      <div v-if="extractionStats" role="status" class="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs text-slate-300">
+        <p>Last extraction: {{ extractionStats.proposed }} proposed · {{ extractionStats.applied }} applied · {{ extractionStats.rejected }} not applied. Checked at {{ gameMinute(extractionStats.minute) }}.</p>
+        <p v-if="extractionStats.proposed === 0" class="mt-1 text-amber-200">No condition changes were proposed. This does not confirm that no event occurred.</p>
+      </div>
       <div v-if="data.last_check?.status === 'failed' || data.last_check?.rejected?.length" role="status" class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
         <p class="font-bold">Last check needs review. Existing conditions were kept.</p>
         <p v-if="data.last_check.reason">{{ data.last_check.reason }}</p>
@@ -105,6 +117,7 @@ function save() {
               <p v-if="row.latest.message_id" class="break-all">Message: {{ row.latest.message_id }}</p>
               <p v-if="row.latest.kind === 'unavailable'">The original message is unavailable in this copy; the saved fact was retained.</p>
               <p v-if="row.origin.message_id && row.origin.message_id !== row.latest.message_id" class="break-all mt-1">First recorded: {{ row.origin.message_id }}</p>
+              <p class="mt-1">Game clock — first recorded: {{ gameMinute(row.first_recorded_minute) }}; last changed: {{ gameMinute(row.last_changed_minute) }}. Recording time is not necessarily onset time.</p>
             </details>
           </article>
         </div>

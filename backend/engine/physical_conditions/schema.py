@@ -74,6 +74,8 @@ class Condition(Model):
     origin: Source
     latest: Source
     updated_revision: StrictInt = Field(ge=0)
+    first_recorded_minute: StrictInt | None = Field(default=None, ge=0)
+    last_changed_minute: StrictInt | None = Field(default=None, ge=0)
 
 
 class Event(Model):

@@ -33,7 +33,7 @@ async def test_copy_and_ads_roundtrip_preserve_conditions_with_local_message_anc
             narration=message.content,
             message_id=message.id,
             session_id=source_id,
-            minute=0,
+            minute=120,
         )
         assert not errors
         original_message = message.id
@@ -57,6 +57,7 @@ async def test_copy_and_ads_roundtrip_preserve_conditions_with_local_message_anc
             ledger = read(state.entity_states)
             condition = next(iter(ledger.conditions.values()))
             assert condition.target_id == "__player__" and condition.detail == "An open neck wound."
+            assert condition.first_recorded_minute == condition.last_changed_minute == 120
             message = await db.get(ChatMessage, condition.origin.message_id)
             assert message.session_id == session_id and condition.origin.quote in message.content
             assert condition.latest.message_id == message.id == ledger.events[0].source.message_id

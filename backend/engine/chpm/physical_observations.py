@@ -15,6 +15,10 @@ def capture(state: Any, actor_id: str, owned_ids: set[str]) -> tuple[PhysicalFac
         ledger = read(states)
     except ValueError:
         return None  # Unknown is not healed or clean.
+    if not ledger.conditions and ledger.revision == 0:
+        # A diagnostic-only extraction with no proposals is not an observation
+        # that the NPC has no conditions. Keep legacy frames and budgets intact.
+        return None
     targets = {actor_id, *owned_ids}
     rows = sorted(
         (row for row in ledger.conditions.values() if row.target_id in targets),

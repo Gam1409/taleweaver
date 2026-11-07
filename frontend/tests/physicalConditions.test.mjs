@@ -45,3 +45,19 @@ test('rejected candidates are visible without hiding accepted physical facts', a
   assert.match(html, /Bandaged wound/)
   assert.match(html, /Existing conditions were kept/)
 })
+
+test('extraction counts distinguish no proposals from verified absence', async () => {
+  const empty = await render({ ...ledger, last_check: { status: 'complete', proposed_count: 0, accepted: [], rejected: [], minute: 125 } })
+  assert.match(empty, /0 proposed · 0 applied · 0 not applied/)
+  assert.match(empty, /does not confirm that no event occurred/)
+  assert.match(empty, /125 game min/)
+  const mixed = await render({ ...ledger, last_check: { status: 'needs_review', proposed_count: 13, accepted: [], rejected: ['Batch too large.'] } })
+  assert.match(mixed, /13 proposed · 0 applied · 13 not applied/)
+})
+
+test('condition time shows accepted recording clocks without inventing old onset times', async () => {
+  const html = await render({ ...ledger, conditions: { C1: { ...row, first_recorded_minute: 5, last_changed_minute: 70 } } })
+  assert.match(html, /first recorded: 5 game min; last changed: 70 game min/)
+  assert.match(html, /not necessarily onset time/)
+  assert.match(await render(ledger), /first recorded: unknown; last changed: unknown/)
+})

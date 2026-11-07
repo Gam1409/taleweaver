@@ -54,8 +54,6 @@ def finish(manager: Any, message: Any) -> list[str]:
             }
             manager.state.entity_states = {**states, KEY: ledger.model_dump()}
             return []  # The shared extraction already displayed its failure.
-        if not pending.proposals and KEY not in states:
-            return []
         result, _, errors = apply(
             states,
             pending.proposals,

@@ -109,7 +109,7 @@ def test_missing_or_corrupt_ledger_does_not_establish_healing():
     unknown = capture(state)
     assert unknown.physical_conditions is None
     assert host_observations.difference(before, unknown) is None
-    state.entity_states = {KEY: Ledger().model_dump()}
+    state.entity_states = {KEY: Ledger(revision=1).model_dump()}
     missing = json.loads(host_observations.difference(before, capture(state)))
     assert missing["own_physical_conditions_unavailable"]
     assert "resolved" not in json.dumps(missing)

@@ -57,6 +57,7 @@ def _record(
     session_id: str,
     index: int,
     attempt: str,
+    minute: int | None,
 ) -> Condition:
     if proposal.target_id is None or proposal.kind is None or proposal.target_id not in targets:
         raise ValueError("Condition target does not belong to the available session subjects.")
@@ -83,11 +84,17 @@ def _record(
         origin=source,
         latest=source,
         updated_revision=ledger.revision + 1,
+        first_recorded_minute=minute,
+        last_changed_minute=minute,
     )
 
 
 def _update(
-    ledger: Ledger, proposal: ConditionProposal, source: Source, targets: set[str]
+    ledger: Ledger,
+    proposal: ConditionProposal,
+    source: Source,
+    targets: set[str],
+    minute: int | None,
 ) -> Condition:
     current = ledger.conditions.get(proposal.condition_id or "")
     if current is None or current.target_id not in targets:
@@ -108,6 +115,7 @@ def _update(
         changed.visibility = proposal.visibility
     changed.latest = source
     changed.updated_revision = ledger.revision + 1
+    changed.last_changed_minute = minute
     return changed
 
 
@@ -141,6 +149,7 @@ def apply(
         return deepcopy(states or {}), [], []
     accepted: list[str] = []
     rejected: list[str] = []
+    recorded_minute = minute if type(minute) is int and minute >= 0 else None
     entries = proposals if len(proposals) <= MAX_PROPOSALS else []
     if not entries and proposals:
         rejected.append("Too many condition proposals; this batch was not applied.")
@@ -149,9 +158,18 @@ def apply(
             proposal = ConditionProposal.model_validate(raw)
             source = _source(proposal, narration, message_id, manual)
             condition = (
-                _record(ledger, proposal, source, targets, session_id, index, message_id)
+                _record(
+                    ledger,
+                    proposal,
+                    source,
+                    targets,
+                    session_id,
+                    index,
+                    message_id,
+                    recorded_minute,
+                )
                 if proposal.operation == "record"
-                else _update(ledger, proposal, source, targets)
+                else _update(ledger, proposal, source, targets, recorded_minute)
             )
             ledger.conditions[condition.id] = condition
             ledger.events.append(
@@ -176,6 +194,7 @@ def apply(
         "accepted": accepted,
         "rejected": rejected,
         "minute": minute,
+        "proposed_count": len(proposals),
     }
     result = deepcopy(states or {})
     result[KEY] = Ledger.model_validate(ledger.model_dump()).model_dump()

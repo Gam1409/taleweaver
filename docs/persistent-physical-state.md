@@ -33,12 +33,18 @@ The unified debug inspector has a **State** tab containing:
 
 - active conditions, optional recent resolved conditions, canonical subject, body part/item area, status and visibility;
 - the latest source quote and message ID; manually entered corrections are clearly marked;
+- first-recorded and last-changed game minutes, with unknown values for legacy records;
+- counts of proposed, applied and unapplied conditions, including successful checks with zero proposals;
 - the last reconciliation failure or rejected operations;
 - a manual record/correction form, including treatment, reduction, cleaning and healing.
 
 Manual edits use the existing owned-session debug command pipeline and session mutation lease. They require debug mode and the currently viewed ledger revision; a stale form cannot overwrite a newer ledger. They do not call a model, advance story time, alter inventory or change NPC personality.
 
 Existing sessions start with an empty ledger. Old narration is **not** automatically rescanned. Use the manual form to establish an older condition that is still present. Debug's legacy HP healing command does not resolve narrative injuries; resolve these explicitly in **State**.
+
+The timestamps read the existing authoritative session clock; recording a condition never advances it. `first_recorded_minute` is when the host first registered the fact, not an inferred onset time. `last_changed_minute` changes only on an accepted update. An omitted fact, rejected proposal or repeated check does not refresh either time. Legacy records keep unknown times until an actual change; their original onset is never invented. Full-turn replay restores the historical clock and these fields together; copies and exports preserve them.
+
+A successful extraction with zero proposals is displayed explicitly. It means the model proposed no changes, not that the host proved nothing happened or that an NPC has no physical conditions. A diagnostic-only empty ledger does not become a citable healthy-state observation in CHPM. See [VN time passages](vn-time-passages.md) for explicit multi-day skips and bounded Living World catch-up.
 
 ## Persistence, privacy and failures
 
@@ -62,3 +68,5 @@ The host snapshot keeps its complete typed view within the ledger's existing lim
 - Private body conditions can guide CHPM decisions. The narrator's public projection intentionally does not reveal a private condition just to remind the reader every turn.
 
 Tests cover literal evidence, independent rejection, treatment versus healing, partial removal, subject scoping, capacity and retention, private projections, saved VN turns and the unchanged request count, failed shared extraction, full-turn replay, manual debug revision guards, real copy/export/import, and the debug form in desktop/mobile browsers. Host integration also covers citable self-inspection, explicit negative facts after resolution, legacy source hashes, privacy during fallback, and twelve live-pipeline turns with mocked inference and zero transcript memory followed by reload, treatment and healing. Model understanding still needs separate live tests.
+
+Clock regressions additionally cover same-room waits, omitted changes, zero-candidate diagnostics, timestamp preservation on rejection, legacy unknown dates, manual edits, replay, reload and copy/export/import. No elapsed time automatically heals, cleans or otherwise removes a physical fact.

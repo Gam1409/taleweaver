@@ -142,6 +142,7 @@ async def test_manual_correction_is_scoped_revision_checked_and_does_not_advance
         assert "Enable debug mode" in await DebugEngine.handle_debug_command(db, state, command)
         assert state.entity_states == before
         state.is_debug_enabled = True
+        state.in_game_time = 123
         clock, inventory = state.in_game_time, deepcopy(avatar.inventory)
         bad = "condition " + json.dumps(
             {**PROPOSAL, "target_id": "FOREIGN", "expected_revision": 0}
@@ -154,6 +155,7 @@ async def test_manual_correction_is_scoped_revision_checked_and_does_not_advance
         ledger = read(state.entity_states)
         condition = next(iter(ledger.conditions.values()))
         assert condition.origin.kind == "manual" and condition.origin.message_id is None
+        assert condition.first_recorded_minute == condition.last_changed_minute == 123
         assert "Refresh" in await DebugEngine.handle_debug_command(db, state, command)
         heal = "condition " + json.dumps(
             {"operation": "heal", "condition_id": condition.id, "expected_revision": 1}
