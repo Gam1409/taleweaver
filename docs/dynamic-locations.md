@@ -55,6 +55,33 @@ that a free-form description is spatially truthful. This is not arbitrary contin
 expansion, autonomous world simulation, or a guarantee of Qwen 14B accuracy. Tests
 mock model responses; actual model behavior requires live gameplay evaluation.
 
+## Existing places and RP clarification
+
+The existing confirmation call now compares a proposed place with a bounded
+catalog of canonical scenes, including descriptions, nearby routes and recent
+story context. Short, inflected or translated names do not need to match a map
+label exactly. For example, entering "the laboratory" while delivering clinical
+samples can refer to the existing "Clinical laboratory".
+
+The utility model supplies contextual identity scores. One unambiguous match at
+**0.70 or above** selects the existing scene ID; normal route and access guards
+still decide whether movement is allowed. Multiple qualifying candidates require
+clarification. Unknown IDs and incomplete catalog reviews cannot authorize a new
+place. An uncertain existing destination never becomes an unlocked duplicate.
+
+When clarification is needed, the narrator keeps the player in the current
+location and asks one short question within the RP. It may name only alternatives
+already known to the player or visible through an open local route. It does not
+expose IDs, matching scores or validation instructions. This is a destination
+question, not a request for permission to continue the conversation.
+
+The catalog is limited to 80 places and 6,000 description characters, with current
+and adjacent scenes first. No extra LLM call was added: identity resolution shares
+the existing dynamic-place confirmation. A score is the model's contextual rating,
+not a calibrated probability or a vector-distance percentage. Runtime tests verify
+the threshold, canonical identity and access rules; live interpretation still
+depends on the model.
+
 ## NPC movement in existing sessions
 
 `/debug moveable all true` enables movement for every NPC currently in the session

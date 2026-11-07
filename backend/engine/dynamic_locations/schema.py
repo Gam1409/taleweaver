@@ -33,6 +33,17 @@ class CompanionArrival(BaseModel):
     evidence: str = Field(min_length=4, max_length=600)
 
 
+class ExistingPlaceMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    scene_id: str = Field(min_length=1, max_length=100)
+    score: float = Field(
+        ge=0,
+        le=1,
+        description="Contextual identity match, not label similarity: purpose, setting, route and current action.",
+    )
+
+
 class PlaceDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arrival_now: bool
@@ -45,7 +56,9 @@ class PlaceDecision(BaseModel):
     purpose: Literal["ordinary", "overnight", "investigation", "persistent"]
     action_quote: str = Field(default="", max_length=600)
     purpose_quote: str = Field(default="", max_length=600)
-    existing_scene_id: str | None = Field(default=None, max_length=50)
+    existing_scene_id: str | None = Field(default=None, max_length=100)
+    identity_resolution: Literal["existing", "new", "ambiguous"] = "ambiguous"
+    scene_matches: list[ExistingPlaceMatch] = Field(default_factory=list, max_length=3)
     label: str = Field(default="", max_length=100)
     description: str = Field(default="", max_length=1800)
     companions: list[CompanionArrival] = Field(default_factory=list, max_length=12)

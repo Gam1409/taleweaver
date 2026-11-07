@@ -37,6 +37,7 @@ async def test_confirm_movement_without_language_specific_keywords(message):
             "action_quote": message,
         }
     )
+
     assert await confirm_scene_transition(
         classify,
         user_msg=message,
@@ -44,6 +45,33 @@ async def test_confirm_movement_without_language_specific_keywords(message):
         scenes=[{"id": "CITY", "label": "Город"}],
         exits=[{"to_scene_id": "CITY", "label": "Дорога в город"}],
     )
+
+
+async def test_destination_only_answer_uses_the_immediately_preceding_rp_clarification():
+    answer = "В клиническую."
+    classify = AsyncMock(
+        return_value={
+            "explicit_transition": True,
+            "destination_id": "CLINICAL_LAB",
+            "action_quote": answer,
+        }
+    )
+    history = [
+        {"role": "user", "content": "Мы зашли в лабораторию."},
+        {"role": "assistant", "content": "В клиническую или в исследовательскую?"},
+    ]
+    assert await confirm_scene_transition(
+        classify,
+        user_msg=answer,
+        target_scene_id="CLINICAL_LAB",
+        scenes=[],
+        exits=[{"to_scene_id": "CLINICAL_LAB"}],
+        history=history,
+    )
+    prompt = classify.call_args.args[1]
+    assert "destination-only answer" in prompt
+    assert "В клиническую или в исследовательскую?" in prompt
+    assert classify.await_count == 1
 
 
 @pytest.mark.parametrize(

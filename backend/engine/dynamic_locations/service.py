@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 import asyncio
 import json
 import logging
-import unicodedata
 from uuid import uuid4
 
 from sqlalchemy import or_, select
@@ -25,6 +24,11 @@ from backend.engine.dynamic_locations.companions import (
     finish_arrival,
     present_companions,
     record_arrival,
+)
+from backend.engine.dynamic_locations.identity import (
+    place_catalog,
+    request_clarification,
+    resolve_identity,
 )
 from backend.engine.dynamic_locations.prompts import CONFIRM
 from backend.engine.dynamic_locations.schema import (
@@ -45,10 +49,6 @@ class _SceneIntent(Protocol):
 
 
 logger = logging.getLogger(__name__)
-
-
-def normalized(value: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFKC", value).casefold() if c.isalnum())
 
 
 async def _context(
@@ -101,6 +101,9 @@ async def _context(
         "original_map": [
             {"id": s.id, "label": s.label} for s in scenes if s.id not in data.get("places", {})
         ][:80],
+        "existing_place_catalog": place_catalog(
+            scenes, exits, manager.state.current_scene_id, data
+        ),
         "local_places": {
             sid: p
             for sid, p in data.get("places", {}).items()
@@ -120,7 +123,6 @@ def _confirmed_arrival(decision: PlaceDecision, proposal: PlaceProposal, user_ms
     return (
         decision.arrival_now
         and decision.player_moves
-        and decision.local_to_current_scene
         and decision.access_allowed
         and not decision.contradicts_world
         and bool(proposal.action_quote.strip())
@@ -157,24 +159,6 @@ def _eligible(
     return not (scale == "regional" and decision.granularity == "site" and depth > 1)
 
 
-def _existing(
-    decision: PlaceDecision,
-    proposal: PlaceProposal,
-    scenes: list[WorldScene],
-    exits: list[WorldExit],
-    data: dict[str, Any],
-    parent: str,
-) -> str | None:
-    if decision.existing_scene_id:
-        return decision.existing_scene_id
-    names = {normalized(proposal.label), normalized(decision.label)} - {""}
-    local_ids = {
-        sid for sid, place in data.get("places", {}).items() if place.get("parent_id") == parent
-    }
-    local_ids.update(e.to_scene_id if e.from_scene_id == parent else e.from_scene_id for e in exits)
-    return next((s.id for s in scenes if s.id in local_ids and normalized(s.label) in names), None)
-
-
 def _open_exit(exits: list[WorldExit], current: str, target: str) -> WorldExit | None:
     return next(
         (
@@ -202,6 +186,8 @@ async def materialize(
     recent: str,
     scenes: list[WorldScene],
     exits: list[WorldExit],
+    *,
+    catalog_complete: bool = True,
 ) -> str | None:
     state = manager.state
     if state is None:
@@ -211,10 +197,17 @@ async def materialize(
     parent = state.current_scene_id
     if not _confirmed_arrival(decision, proposal, user_msg):
         return None
-    existing = _existing(decision, proposal, scenes, exits, data, parent)
-    if existing:
-        return existing if _open_exit(exits, parent, existing) else None
-    if not _eligible(decision, user_msg, recent, data, selected, parent):
+    identity = resolve_identity(decision, proposal, scenes, exits, data, parent)
+    if identity.scene_id:
+        return identity.scene_id if _open_exit(exits, parent, identity.scene_id) else None
+    if (
+        identity.uncertain
+        or not catalog_complete
+        or not decision.local_to_current_scene
+        or not _eligible(decision, user_msg, recent, data, selected, parent)
+    ):
+        if identity.uncertain or not catalog_complete:
+            request_clarification(manager, decision, scenes, exits)
         return None
     places = dict(data.get("places") or {})
     if (
@@ -271,6 +264,7 @@ async def resolve_proposal(
 ) -> None:
     if manager.state is None or manager.user is None:
         raise RuntimeError("Turn context must be initialized")
+    manager._location_question = None
     raw = getattr(intent, "new_local_place", None)
     if not raw or not policy(manager.state).enabled or getattr(intent, "new_scene_id", None):
         return
@@ -302,7 +296,14 @@ async def resolve_proposal(
         return
     async with manager.db.begin_nested():
         destination = await materialize(
-            manager, proposal, decision, user_msg, recent, scenes, exits
+            manager,
+            proposal,
+            decision,
+            user_msg,
+            recent,
+            scenes,
+            exits,
+            catalog_complete=context["existing_place_catalog"]["complete"],
         )
         cast(_SceneIntent, intent).new_scene_id = destination
         bind_companions(intent, decision, destination, context, user_msg)

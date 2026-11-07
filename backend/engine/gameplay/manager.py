@@ -92,6 +92,7 @@ from backend.engine.turn_replay.stream import run as run_replayable_turn
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.dynamic_locations.prompts import intent_schema, prompt_block
+from backend.engine.dynamic_locations.identity import clarification_block
 from backend.engine.dynamic_locations.service import discard_unentered, resolve_proposal
 from backend.engine.dynamic_locations.images import schedule_images
 from backend.engine.llm_intents import ChatProgressionIntent, MechanicsIntent, to_game_event
@@ -345,6 +346,7 @@ class GameTurnManager:
         self.combat = TurnCombatManager(self)
         self.pending_npc_attacks: list[str] = []
         self._dynamic_scene_images: list[str] = []
+        self._location_question: list[str | None] | None = None
         self.guardrails = TurnGuardrailsManager(self)
         self.interactions = TurnInteractionsManager(self)
         self.state_applier = TurnStateApplier(self)
@@ -1776,6 +1778,7 @@ class GameTurnManager:
                         target_scene_id=progression_intent.new_scene_id,
                         scenes=reduced_scenes,
                         exits=reduced_exits,
+                        history=history,
                     )
                 )
                 if not move_is_valid:
@@ -1932,6 +1935,7 @@ class GameTurnManager:
 
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
+            + clarification_block(self, scene_id_before_turn)
         ]
         if language:
             reminders.append(
