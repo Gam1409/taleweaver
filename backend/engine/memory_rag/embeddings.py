@@ -120,11 +120,13 @@ async def embed_with_settings(
         raise EmbeddingError("Enable memory and configure an embedding URL and model first.")
     if not texts:
         return []
+    if len(texts) > MAX_BATCH_SIZE or any(
+        not isinstance(text, str) or not text.strip() for text in texts
+    ):
+        raise EmbeddingError("Embedding input is empty or exceeds batch/text limits.")
     prefix = settings.query_prefix if purpose == "query" else settings.document_prefix
     texts = [prefix + text for text in texts]
-    if len(texts) > MAX_BATCH_SIZE or any(
-        not isinstance(t, str) or not t.strip() or len(t) > MAX_TEXT_LENGTH for t in texts
-    ):
+    if any(len(text) > MAX_TEXT_LENGTH for text in texts):
         raise EmbeddingError("Embedding input is empty or exceeds batch/text limits.")
     duration = (
         settings.timeout_seconds if timeout is None else min(settings.timeout_seconds, timeout)

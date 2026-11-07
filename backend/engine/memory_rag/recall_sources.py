@@ -1,8 +1,9 @@
 """Bound foreground source loading; full corpus scans belong to idle indexing."""
 
+import json
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from backend.engine.memory_rag.documents import (
@@ -43,12 +44,8 @@ async def _message_ids(db: Any, sid: str, query: str, candidates: list[dict]) ->
         ids.update(
             await db.scalars(
                 base.where(
-                    or_(
-                        *(
-                            func.tw_casefold(ChatMessage.content).contains(term, autoescape=True)
-                            for term in terms
-                        )
-                    )
+                    func.tw_contains_any(ChatMessage.content, json.dumps(terms, ensure_ascii=False))
+                    == 1
                 ).limit(LEXICAL_MESSAGES)
             )
         )

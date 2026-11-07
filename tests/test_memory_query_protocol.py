@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 from sqlalchemy import select
 
 from backend.engine.memory_rag import embeddings, retrieval
@@ -18,6 +19,35 @@ from tests.test_memory_rag_embeddings_store import _mock_transport, _user
 from tests.test_npc_journal import portrait_world
 
 __all__ = ["portrait_world"]
+
+
+@pytest.mark.parametrize("value", [None, 7, "", "   "])
+async def test_embedding_prefix_cannot_mask_invalid_raw_text(monkeypatch, value):
+    remote = AsyncMock()
+    monkeypatch.setattr(embeddings, "_embed", remote)
+    settings = MemoryRagSettings(
+        enabled=True, base_url="http://localhost:11434", model="embed", query_prefix="query: "
+    )
+    with pytest.raises(embeddings.EmbeddingError, match="input"):
+        await embeddings.embed_with_settings(settings, [value], purpose="query")
+    remote.assert_not_awaited()
+
+
+def test_transcript_search_folds_a_long_row_once(monkeypatch):
+    from backend.utils import sqlite_text
+
+    folded = []
+    original = sqlite_text.casefold
+
+    def track(value):
+        folded.append(value)
+        return original(value)
+
+    monkeypatch.setattr(sqlite_text, "casefold", track)
+    text = "Ordinary scene. " * 1000 + "ВАЗА в посольстве"
+    assert sqlite_text.contains_any(text, json.dumps(["колба", "ваза", "образец"])) == 1
+    assert folded == [text]
+    assert sqlite_text.contains_any(None, json.dumps(["ваза"])) == 0
 
 
 async def test_query_and_document_prefixes_are_distinct_and_keep_exact_whitespace(monkeypatch):
