@@ -8,10 +8,12 @@ from typing import Annotated, Any
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, create_model
 
 from backend.engine.clothing.actions import CLOTHING_PROMPT, GarmentCreation, WardrobeAction
-from backend.engine.clothing.context import build_clothing_context
+from backend.engine.clothing.context import actor_records, build_clothing_context
 from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
+from backend.engine.physical_conditions.presentation import context as physical_context
+from backend.engine.physical_conditions.presentation import targets_from_actors
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
@@ -217,10 +219,12 @@ def build_progression_context(
         {"id": state.current_scene_id},
     )
     loose_items = []
+    condition_targets = targets_from_actors(actor_records(manager, entities or []))
     if entities is not None:
         from backend.engine.visual_novel.continuity import SCENE, possession_snapshot
 
         snapshot = possession_snapshot(manager, entities)
+        condition_targets.update(snapshot.items)
         npcs = list(snapshot.npcs.values())
         loose_items = _items(
             [
@@ -242,6 +246,7 @@ def build_progression_context(
         "clothing_context": build_clothing_context(
             manager, entities or [], clothing_scenes or scenes
         ),
+        "physical_conditions": physical_context(state, condition_targets),
         "world_locations": scenes,
         "available_exits": exits,
         "locked_containers": locked_containers or [],

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugNpcTools from './DebugNpcTools.vue'
+import DebugPhysicalConditions from './DebugPhysicalConditions.vue'
 import DebugPlayerLocation from './DebugPlayerLocation.vue'
 import DebugNpcClothing from './DebugNpcClothing.vue'
 import DebugSceneJson from './DebugSceneJson.vue'
@@ -18,7 +19,7 @@ import SessionStateChecks from './immersive/SessionStateChecks.vue'
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import dagre from 'dagre'
 import { getImageUrl, getItemIcon } from '@/utils/game_icons'
-import { Users, Map as MapIcon, Package, Terminal, X, Search, Heart, Zap, Flame, Eye, Sparkles, Lock, Unlock, Maximize2, ZoomIn, ZoomOut, Compass, Copy, Check, Trophy, Swords, Layers } from 'lucide-vue-next'
+import { Users, Map as MapIcon, Package, Terminal, X, Search, Heart, Zap, Flame, Eye, Sparkles, Lock, Unlock, Maximize2, ZoomIn, ZoomOut, Compass, Copy, Check, Trophy, Swords, Layers, HeartPulse } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
@@ -35,7 +36,7 @@ const emit = defineEmits<{
 }>()
 
 // --- Active Tab State ---
-type DebugTab = 'npcs' | 'map' | 'items' | 'diagnostics'
+type DebugTab = 'npcs' | 'map' | 'items' | 'state' | 'diagnostics'
 const activeTab = ref<DebugTab>('npcs')
 
 // --- Data Extraction & Fallbacks ---
@@ -541,6 +542,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               >
                 <Package class="w-4 h-4" />
                 <span>Items ({{ allItems.length }})</span>
+              </button>
+              <button
+                type="button"
+                @click="activeTab = 'state'"
+                class="flex h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                :class="activeTab === 'state' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200'"
+              >
+                <HeartPulse class="w-4 h-4" /> State
               </button>
               <button
                 type="button"
@@ -1228,6 +1237,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <!-- ========================================================= -->
             <!-- TAB 4: DIAGNOSTICS & RAW JSON INSPECTOR -->
             <!-- ========================================================= -->
+            <DebugPhysicalConditions v-else-if="activeTab === 'state'" :data="sessionDebug?.physical_conditions" :busy="commandBusy" @command="runCmd" />
+
             <section v-else-if="activeTab === 'diagnostics'" class="flex-1 flex flex-col min-h-0 p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6">
               <SessionStateChecks v-if="sessionDebug?.session?.id || sheet?.session_id" :session-id="sessionDebug?.session?.id || sheet?.session_id" />
               <!-- Quick Action Triggers Grid -->

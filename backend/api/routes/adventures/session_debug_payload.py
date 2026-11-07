@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from backend.engine.debug_npc_tools import wardrobe_info
+from backend.engine.physical_conditions.debug import view as condition_view
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -410,6 +411,7 @@ async def build_session_debug_payload(
     return {
         "session": _session_section(state, adventure, scene_names),
         "avatar": _avatar_section(avatar),
+        "physical_conditions": condition_view(state, npcs_data, items_data, avatar),
         "npcs": npcs_data,
         "scene_npcs": scene_npcs,
         "items": items_data,

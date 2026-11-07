@@ -16,6 +16,7 @@ from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
+from backend.engine.physical_conditions.ledger import remap as remap_conditions
 from backend.engine.scene_illustrations.snapshots import remap_illustrations
 from backend.engine.session_archive_access import accessible_template
 from backend.engine.visual_novel.lifecycle import remap_social_state
@@ -231,7 +232,10 @@ class SessionImporter:
                 restore_memory(session_state, session_state_data, message_ids)
                 session_state.entity_states = fork_chpm(
                     remap_illustrations(
-                        remap_social_state(session_state.entity_states, message_ids), message_ids
+                        remap_social_state(
+                            remap_conditions(session_state.entity_states, message_ids), message_ids
+                        ),
+                        message_ids,
                     ),
                     message_ids,
                     new_session_id,

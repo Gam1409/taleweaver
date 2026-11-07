@@ -82,6 +82,7 @@ from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
+from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
 from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.turn_replay.service import mark_committed, record_input
 from backend.engine.turn_replay import drafts as turn_drafts
@@ -2169,6 +2170,11 @@ class GameTurnManager:
             },
         )
         self.db.add(assistant_chat)
+        if policy.vn:
+            await self.db.flush()
+            for condition_message in finish_physical_conditions(self, assistant_chat):
+                await self._save_chat_message("system", condition_message)
+                yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': condition_message})}\n\n"
 
         # Post-narration scripts (on_narration_done)
         if script_runner.scripts:

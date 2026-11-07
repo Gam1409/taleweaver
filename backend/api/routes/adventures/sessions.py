@@ -28,6 +28,7 @@ from backend.engine.memory_rag.lifecycle import (
     restore_memory,
 )
 from backend.engine.npc_journal.messages import copy_messages
+from backend.engine.physical_conditions.ledger import remap as remap_conditions
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.session_importer import SessionImporter
 from backend.engine.visual_novel.lifecycle import copy_vn_state
@@ -1009,7 +1010,9 @@ async def copy_session(
             ),
         )
         cloned_state.entity_states = fork_chpm(
-            cloned_state.entity_states, message_ids, copied_session.id
+            remap_conditions(cloned_state.entity_states, message_ids),
+            message_ids,
+            copied_session.id,
         )
 
     from .session_copy_world import clone_saved_world

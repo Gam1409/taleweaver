@@ -14,6 +14,7 @@ from backend.engine.clothing.recovery_correction import debug_wardrobe_correct
 from backend.engine.clothing.wardrobe_preferences import debug_wardrobe_settings
 from backend.engine.debug_player_location import debug_move_player
 from backend.engine.gameplay.snapshot import AdventureSnapshot
+from backend.engine.physical_conditions.debug import command as debug_condition
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -43,6 +44,7 @@ _HANDLERS = {
     "moveable": debug_movement.debug_moveable,
     "move_npc": debug_npc_tools.debug_move_npc,
     "move_player": debug_move_player,
+    "condition": debug_condition,
     "npc_clothing": debug_npc_tools.debug_npc_clothing,
     "wardrobe_preview": debug_wardrobe_preview,
     "wardrobe_apply": debug_wardrobe_apply,

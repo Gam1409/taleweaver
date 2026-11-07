@@ -16,6 +16,9 @@ from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
+from backend.engine.physical_conditions import runtime as physical_conditions
+from backend.engine.physical_conditions.presentation import context as condition_context
+from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_snapshot
 
@@ -51,6 +54,7 @@ async def reconcile_items(
     resolution: str,
     blocked: bool = False,
 ) -> list[str]:
+    physical_conditions.discard(manager)
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
     if (
@@ -60,6 +64,9 @@ async def reconcile_items(
         or message_id in ledger.get("processed_message_ids", [])
     ):
         return []
+    pending_conditions = physical_conditions.stage(
+        manager, [], set(), error="The shared item/state check did not complete."
+    )
     if blocked or len(narration) > MAX_NARRATION:
         _status(
             manager,
@@ -89,6 +96,9 @@ async def reconcile_items(
             "items": item_context(snapshot.items),
             "owners": snapshot.owners,
             "detailed_clothing": detailed,
+            "physical_conditions": condition_context(
+                manager.state, set(actors) | set(snapshot.items)
+            ),
         },
         ensure_ascii=False,
     )
@@ -109,7 +119,7 @@ async def reconcile_items(
         llm = GameMasterLLM.for_role(manager.user, "small")
         result = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                INSTRUCTIONS,
+                INSTRUCTIONS + CONDITION_INSTRUCTIONS,
                 payload,
                 ItemExtraction,
                 llm.model,
@@ -144,6 +154,7 @@ async def reconcile_items(
         )
         return [failure.message()]
     _store_changes(manager, changed, accepted, snapshot.catalog)
+    pending_conditions.complete(extraction.condition_updates, set(actors) | set(snapshot.items))
     _status(manager, message_id, narration, "complete", accepted=accepted, rejected=errors)
     messages = [
         f"{changed[entry['destination_owner']]['name']}: {entry['item']['name']} ({entry['disposition']})."

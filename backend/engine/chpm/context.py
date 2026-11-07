@@ -8,6 +8,7 @@ from backend.engine.chpm.schema import Decision, MemoryEntry, Observation
 from backend.engine.chpm.state import load
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
+from backend.engine.physical_conditions.presentation import own_conditions
 from backend.models.chat import ChatMessage
 
 
@@ -71,12 +72,18 @@ async def actor_context(
             and digest(reply.content) == previous.reply_hash
         ):
             speech = previous.spoken_evidence
+    physical = own_conditions(getattr(manager, "state", None), actor.id)
     return {
         "actor_id": actor.id,
         "name": str(actor.name),
         "authored_character": str(getattr(actor, "character", "") or ""),
         "authored_goal": str(getattr(actor, "goal", "") or ""),
         "personality": personality_context(actor),
+        **(
+            {"own_physical_conditions": physical}
+            if physical.get("active") or physical["status"] == "unavailable"
+            else {}
+        ),
         "own_previous_words": speech,
         "witnessed_utterances_not_world_facts": [entry.model_dump() for entry in memories or []],
     }

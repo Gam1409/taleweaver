@@ -103,6 +103,7 @@ Results depend on the models you choose. More active characters and deeper check
 - **Items from the story:** VN can register supported acquisitions, gifts, transfers, and clothing changes from completed narration, with ownership and evidence checks.
 - **Descriptions worth reading:** generate fuller item descriptions about the object itself, alongside its equipment and clothing metadata.
 - **Review and repair:** inspect outfits in **Debug → NPCs → Clothing**, recover missing garments from recent history, and select which validated entries to restore.
+- **Persistent physical state:** keep injuries, dirt and fluid traces across VN turns; review sources and correct conditions in **Debug → State**. Treatment and partial cleaning keep the remaining condition. [How it works](docs/persistent-physical-state.md).
 - **Improve an existing item:** preview and apply description, technical-field, and image repairs separately. An unsuccessful image request preserves the previous image.
 
 Detailed clothing and mature-content preferences are configurable; inner garments remain subject to the saved clothing settings and established adult age requirements.

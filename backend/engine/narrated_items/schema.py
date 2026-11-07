@@ -1,11 +1,16 @@
 """Bounded, evidence-backed possession reconciliation after completed narration."""
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.engine.clothing.schema import Garment
+from backend.engine.physical_conditions.schema import (
+    MAX_PROPOSALS,
+    ConditionProposal,
+    candidate_values,
+)
 from backend.schemas.authoring_completion import EquipmentSlot
 
 
@@ -58,6 +63,10 @@ class NewItemAction(ItemAction):
 class ItemExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     actions: list[ExistingItemAction | NewItemAction] = Field(default_factory=list, max_length=6)
+
+    condition_updates: Annotated[
+        list[Any], BeforeValidator(candidate_values, json_schema_input_type=list[ConditionProposal])
+    ] = Field(default_factory=list, json_schema_extra={"maxItems": MAX_PROPOSALS})
 
     @field_validator("actions", mode="before")
     @classmethod

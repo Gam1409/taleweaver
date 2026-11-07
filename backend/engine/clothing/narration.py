@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.visuals import character_visuals
+from backend.engine.physical_conditions.presentation import narration_block
 
 
 class _NarratedNPC:
@@ -35,8 +36,14 @@ def narration_clothing(
         for entity in visible
     ]
     facts = [visual for visual in visuals.values() if visual is not None]
+    conditions = narration_block(
+        manager.state,
+        actors,
+        detailed=detailed,
+        visible_item_ids={entity.id for entity in visible if entity.entity_type == "OBJECT"},
+    )
     if not facts:
-        return entities, ""
+        return entities, conditions
     return entities, (
         "\nAUTHORITATIVE CURRENT APPEARANCE AND VISIBLE CLOTHING:\n"
         + json.dumps(facts, ensure_ascii=False)
@@ -44,4 +51,5 @@ def narration_clothing(
         "Describe only visible layers. Carried possessions are not automatically worn. "
         "Unspecified clothing does not establish undress or reveal hidden garments. "
         "The continuity outcome decides changes; do not invent new clothes or clothing actions.\n"
+        + conditions
     )
