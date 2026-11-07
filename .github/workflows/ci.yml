@@ -91,7 +91,7 @@ jobs:
         run: |
           poetry run python -c "from importlib.metadata import version; assert version('gdm-concordia') == '2.4.0'"
           mkdir -p reports
-          poetry run pytest tests/test_living_world_decisions.py tests/test_living_world_acceptance.py -q --tb=short --junitxml=reports/concordia.xml 2>&1 | tee reports/concordia.txt
+          poetry run pytest tests/test_living_world_decisions.py tests/test_living_world_acceptance.py tests/test_vn_time_passage_world.py -q --tb=short --junitxml=reports/concordia.xml 2>&1 | tee reports/concordia.txt
 
       - name: Upload check reports
         if: always() && matrix.check != 'lint'
