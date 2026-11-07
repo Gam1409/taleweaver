@@ -82,10 +82,15 @@ async def _run(
     started = time.monotonic()
     settings = simulation.settings
     await compile_slot(db, state, simulation)
-    limit = min(
-        slot_limit(simulation),
-        simulation.cursor + int(settings.max_catchup_game_hours * 60),
-        budget.game_limit,
+    # Reconciliation can skip an empty interval between phases of one cycle.
+    # A previously allocated request budget must not rewind that validated cursor.
+    limit = max(
+        simulation.cursor,
+        min(
+            slot_limit(simulation),
+            simulation.cursor + int(settings.max_catchup_game_hours * 60),
+            budget.game_limit,
+        ),
     )
     if settings.mode == "PAUSE":
         # Normal play can advance the game clock while connected. Never use UTC

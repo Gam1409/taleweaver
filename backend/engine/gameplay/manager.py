@@ -83,6 +83,7 @@ from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
+from backend.engine.visual_novel.time_passage import apply as apply_time_passage
 from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.turn_replay.service import mark_committed, record_input
 from backend.engine.turn_replay import drafts as turn_drafts
@@ -1773,6 +1774,9 @@ class GameTurnManager:
                 progression_intent = prepare_intent(self, progression_intent, all_entities)
             game_event = self._build_progression_event(progression_intent)
             if policy.vn:
+                apply_time_passage(
+                    self, game_event, getattr(clothing_proposal, "time_passage", None), user_msg
+                )
                 await prepare_wardrobe_plan(
                     self, game_event, clothing_proposal, user_msg, all_entities, all_scenes
                 )

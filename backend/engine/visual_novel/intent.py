@@ -22,6 +22,9 @@ from backend.engine.visual_novel.story_director import (
     optional_beat,
 )
 from backend.engine.visual_novel.story_prompts import DIRECTOR_INSTRUCTION
+from backend.engine.visual_novel.time_passage import INSTRUCTION as TIME_PASSAGE_INSTRUCTION
+from backend.engine.visual_novel.time_passage import TimePassage
+from backend.engine.visual_novel.time_passage import candidate as time_candidate
 
 _ITEM_FIELDS = frozenset(
     {"id", "name", "description", "item_type", "spatial_position", "condition_note"}
@@ -109,6 +112,13 @@ VNProgressionIntent = create_model(
             description="Total elapsed minutes for this completed VN action, including conversation or travel; not an addition to a base turn. Use 0 for brief exchanges or mere time references.",
         ),
     ),
+    time_passage=(
+        Annotated[Any, BeforeValidator(time_candidate, json_schema_input_type=TimePassage | None)],
+        Field(
+            default=None,
+            description="An explicit player-declared completed duration with exact current-message evidence; never a future appointment or recalled episode.",
+        ),
+    ),
     narrative_description=(str, Field(default="", max_length=800)),
 )
 
@@ -174,6 +184,7 @@ to one brief internal sentence. Leave unsupported or uncertain changes empty.
     + CLOTHING_PROMPT
     + "\n"
     + DIRECTOR_INSTRUCTION
+    + TIME_PASSAGE_INSTRUCTION
 )
 
 
