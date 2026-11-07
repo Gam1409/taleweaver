@@ -197,13 +197,13 @@ Memory recall has a separate **embedding endpoint**. Image and voice providers a
 
 Your saves and assets live on your TaleWeaver host. Story context is sent to the providers you select; a fully local setup uses your own inference endpoints. Saved provider keys are encrypted at rest.
 
-[OpenAI-compatible setup](docs/custom-openai-compatible.md) · [Ollama roles](docs/ollama-roles.md) · [Provider network policy](docs/provider-network-policy.md)
+[OpenAI-compatible setup](docs/custom-openai-compatible.md) · [Ollama roles](docs/ollama-roles.md) · [Generation controls](docs/llm-sampling.md) · [Provider network policy](docs/provider-network-policy.md)
 
 ## 🚀 Get Started
 
-### Desktop Apps · Preview
+### Desktop Apps · Beta
 
-Download a completed build from **[Desktop distributions → Artifacts](https://github.com/Gam1409/taleweaver/actions/workflows/desktop.yml?query=event%3Aworkflow_dispatch)**, extract the archive, and launch the application.
+Download the matching archive from **[v0.7.0-beta](https://github.com/Gam1409/taleweaver/releases/tag/v0.7.0-beta)**, extract the complete folder, and launch the application. Development builds remain available under [Desktop distributions → Artifacts](https://github.com/Gam1409/taleweaver/actions/workflows/desktop.yml?query=event%3Aworkflow_dispatch).
 
 | Platform | Launch | Notes |
 | --- | --- | --- |
