@@ -246,7 +246,7 @@ def build_progression_context(
         "clothing_context": build_clothing_context(
             manager, entities or [], clothing_scenes or scenes
         ),
-        "physical_conditions": physical_context(state, condition_targets),
+        "physical_conditions": physical_context(state, condition_targets, include_resolved=True),
         "world_locations": scenes,
         "available_exits": exits,
         "locked_containers": locked_containers or [],

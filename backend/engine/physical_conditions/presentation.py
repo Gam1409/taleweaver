@@ -29,26 +29,40 @@ def context(
     *,
     public_only: bool = False,
     known_private: set[str] | None = None,
+    include_resolved: bool = False,
 ) -> dict:
     try:
         ledger = read(getattr(state, "entity_states", None))
     except ValueError:
         return {"status": "unavailable", "note": "Existing conditions are not confirmed resolved."}
-    rows = [
-        {
-            key: getattr(row, key)
-            for key in ("id", "target_id", "kind", "part", "status", "detail", "visibility")
-        }
+    visible = [
+        row
         for row in ledger.conditions.values()
         if row.target_id in targets
-        and row.status != "resolved"
         and (
             not public_only
             or row.visibility == "public"
             or row.target_id in (known_private or {PLAYER})
         )
     ]
-    return {"status": "available", "active": rows}
+    rows = [
+        {
+            key: getattr(row, key)
+            for key in ("id", "target_id", "kind", "part", "status", "detail", "visibility")
+        }
+        for row in visible
+        if row.status != "resolved"
+    ]
+    result = {"status": "available", "active": rows}
+    if include_resolved:
+        # Keep explicit negative facts compact; an old "open wound" detail is no
+        # longer its current description. Missing records do not prove resolution.
+        result["resolved"] = [
+            {key: getattr(row, key) for key in ("id", "target_id", "kind", "part", "status")}
+            for row in visible
+            if row.status == "resolved"
+        ]
+    return result
 
 
 def own_conditions(state: Any, actor_id: str) -> dict:
@@ -77,14 +91,21 @@ def narration_block(
         )
         if visual:
             public_targets.update(row["item_id"] for row in visual["clothing"])
-    data = context(state, public_targets, public_only=True, known_private=player_targets)
-    if not data.get("active") and data["status"] == "available":
+    data = context(
+        state,
+        public_targets,
+        public_only=True,
+        known_private=player_targets,
+        include_resolved=True,
+    )
+    if not data.get("active") and not data.get("resolved") and data["status"] == "available":
         return ""
     return (
         "\nPERSISTENT PHYSICAL CONDITIONS (current saved facts):\n"
         + json.dumps(data, ensure_ascii=False)
         + "\nOmission from recent prose does not heal, clean or remove these conditions. "
         "Treatment is not complete healing; partial removal leaves a remaining condition. "
+        "Explicit resolved records supersede older descriptions of that condition. "
         "These facts do not establish currently exposed skin or another NPC's private knowledge. "
         "Respect current clothing and perspective. Mention conditions when relevant, not as a repeated checklist.\n"
     )

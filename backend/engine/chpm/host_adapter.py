@@ -82,6 +82,15 @@ def context(mind: Mind) -> dict:
     }
 
 
+def add_context(supplied: dict, mind: Mind) -> None:
+    supplied["psychological_state"] = context(mind)
+    facts = host_observations.previous(mind)
+    if facts is not None and facts.physical_conditions is not None:
+        # The citable current frame already carries these facts and its omissions.
+        # Keep the standalone warning if the physical ledger is unavailable.
+        supplied.pop("own_physical_conditions", None)
+
+
 def narrative_identity(mind: Mind) -> dict:
     actor = actor_view(SimpleNamespace(id=mind.genesis.scope.observer_id, name=""), mind)
     return {

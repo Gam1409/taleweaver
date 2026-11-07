@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+from backend.engine.chpm import physical_observations
 from backend.engine.chpm.host_observation_contracts import HostFacts, Possession
 from backend.engine.chpm.host_state import Mind
 from backend.engine.clothing.profiles import load_profile, owned_items
@@ -27,6 +28,7 @@ def capture(state: Any, actor: Any, present: dict[str, str]) -> HostFacts:
         )
         if known_inventory
         else None,
+        physical_conditions=physical_observations.capture(state, actor.id, set(possessions)),
         # Invalid/missing profiles are unknown, never proof of undressing.
         worn_item_ids=tuple(sorted(w.item_id for w in profile.worn))
         if profile and known_inventory and all(w.item_id in possessions for w in profile.worn)
@@ -65,6 +67,7 @@ def difference(before: HostFacts | None, after: HostFacts) -> str | None:
                 changes[label] = [values[key].model_dump() for key in sorted(keys)]
     if before.worn_item_ids is not None and after.worn_item_ids is not None:
         _sets(changes, "own_worn_items", before.worn_item_ids, after.worn_item_ids)
+    changes.update(physical_observations.difference(before, after))
     if not changes:
         return None
     return _bounded(

@@ -262,8 +262,11 @@ async def test_live_chpm_receives_own_private_body_state_without_extra_phase(mon
             async for event in GameTurnManager(db, "session-1", user).process_turn("Что дальше?")
         ]
         assert final_payload(events)["status"] == "success", "".join(events)
-        facts = roles.proposal_inputs[0]["own_physical_conditions"]["active"]
+        supplied = roles.proposal_inputs[0]
+        frame = supplied["psychological_state"]["current_host_observations"][0]
+        facts = json.loads(frame["text"])["physical_conditions"]
         assert facts[0]["detail"] == "PRIVATE_BODY_FACT"
+        assert "own_physical_conditions" not in supplied
         assert roles.chpm_calls == ["perception", "proposal", "validation"]
         assert "PRIVATE_BODY_FACT" not in json.dumps(roles.prompts, ensure_ascii=False, default=str)
 

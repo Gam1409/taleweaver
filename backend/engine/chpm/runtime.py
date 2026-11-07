@@ -283,7 +283,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     )
     supplied = await context.actor_context(manager, authored, legacy, retained)
     if actor.id in turn.minds:
-        supplied["psychological_state"] = host_adapter.context(turn.minds[actor.id])
+        host_adapter.add_context(supplied, turn.minds[actor.id])
     supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
     supplied["causal_continuity_not_world_facts"] = causal_memory.view(
         turn.causal_threads.get(actor.id, []), turn.minds.get(actor.id)

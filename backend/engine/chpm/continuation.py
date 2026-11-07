@@ -69,9 +69,9 @@ def identities(manager: Any, state: KernelState, actors: list[Any]) -> dict:
         result[actor.id] = {
             "name": actor.name,
             "authored_identity": profile,
-            "current_host_state": host_observations.capture(
-                manager.state, actor, names
-            ).model_dump(),
+            "current_host_state": host_observations.capture(manager.state, actor, names).model_dump(
+                exclude={"physical_conditions"}
+            ),
         }
     return result
 
