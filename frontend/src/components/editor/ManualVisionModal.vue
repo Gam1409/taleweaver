@@ -7,6 +7,7 @@ const props = defineProps<{
   visualPrompt: string
   isSuggestingPrompt: boolean
   isRegenerating: boolean
+  errorMessage?: string
   useAdvancedModel: boolean
   useCurrentImage: boolean
   uploadLimits: any
@@ -52,6 +53,7 @@ watch(localPrompt, (newVal) => {
             </div>
 
             <div class="space-y-6">
+              <p v-if="errorMessage" role="alert" class="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">{{ errorMessage }}</p>
               <div class="p-6 bg-black/40 rounded-3xl border border-white/5 space-y-4">
                 <div class="flex items-start gap-4">
                   <i class="ra ra-crystal-ball text-2xl text-cyan-500/50"></i>
@@ -100,15 +102,15 @@ watch(localPrompt, (newVal) => {
             </div>
 
             <label class="flex items-start gap-3 text-xs text-slate-300">
-              <input type="checkbox" :checked="useCurrentImage" :disabled="isRegenerating" @change="emit('update:useCurrentImage', ($event.target as HTMLInputElement).checked)" />
+              <input type="checkbox" :checked="useCurrentImage" :disabled="isRegenerating || isSuggestingPrompt" @change="emit('update:useCurrentImage', ($event.target as HTMLInputElement).checked)" />
               <span>Use current image with ComfyUI image workflow.<br /><span class="text-slate-500">Requires an image workflow in the selected profile. The workflow controls reference / img2img behavior.</span></span>
             </label>
 
             <div class="flex justify-end gap-6 pt-4">
-              <button @click="isRegenerating ? emit('cancelRegen') : emit('close')" class="px-8 py-3 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">
-                {{ isRegenerating ? 'Abort' : 'Discard' }}
+              <button @click="isRegenerating || isSuggestingPrompt ? emit('cancelRegen') : emit('close')" class="px-8 py-3 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">
+                {{ isRegenerating || isSuggestingPrompt ? 'Abort' : 'Discard' }}
               </button>
-              <button @click="emit('regenerate')" :disabled="isRegenerating" class="px-10 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-cyan-900/20 disabled:opacity-50 flex items-center gap-3">
+              <button @click="emit('regenerate')" :disabled="isRegenerating || isSuggestingPrompt" class="px-10 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-cyan-900/20 disabled:opacity-50 flex items-center gap-3">
                 <i v-if="isRegenerating" class="ra ra-cycle animate-spin"></i>
                 <span>{{ isRegenerating ? 'Weaving...' : 'Generate Vision' }}</span>
               </button>

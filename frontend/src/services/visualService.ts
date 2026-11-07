@@ -82,10 +82,11 @@ export const visualService = {
     }, adventureId, signal)
   },
 
-  async suggestPrompt(adventureId: string, kind: VisualKind, id: string, useAdvancedModel?: boolean): Promise<string> {
+  async suggestPrompt(adventureId: string, kind: VisualKind, id: string, useAdvancedModel?: boolean, signal?: AbortSignal): Promise<string> {
     const res = await apiFetch(
       `/adventures/${adventureId}/visuals/suggest-prompt`,
       { timeoutMs: null,
+        signal,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify({

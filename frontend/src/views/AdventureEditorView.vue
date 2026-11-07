@@ -38,6 +38,7 @@ import EditEntityModal from '@/components/editor/EditEntityModal.vue'
 import ItemTypeSelectorModal from '@/components/editor/ItemTypeSelectorModal.vue'
 import AddExistingItemModal from '@/components/editor/AddExistingItemModal.vue'
 import ManualVisionModal from '@/components/editor/ManualVisionModal.vue'
+import { useManualVision } from '@/composables/useManualVision'
 import DataDebugModal from '@/components/editor/DataDebugModal.vue'
 import CreateSceneForm from '@/components/editor/CreateSceneForm.vue'
 import SceneRoutePanel from '@/components/editor/SceneRoutePanel.vue'
@@ -62,7 +63,7 @@ const isBatchGenerating = ref<Record<string, boolean>>({})
 const isGeneratingField = ref<Record<string, boolean>>({})
 const activeAbortControllers = ref<Map<string, AbortController>>(new Map())
 const isGenerating = computed(() => {
-  return isRegenerating.value || 
+  return isRegenerating.value || isSuggestingPrompt.value ||
          Object.values(isQuickGenerating.value).some(Boolean) || 
          Object.values(isBatchGenerating.value).some(Boolean)
 })
@@ -426,10 +427,15 @@ const selectedVisual = ref<{ kind: VisualKind; id: string; label: string; descri
 const selectedUploadTarget = ref<{ kind: VisualKind; id: string; label: string } | null>(null)
 const visualPrompt = ref('')
 const showPromptDialog = ref(false)
-const isRegenerating = ref(false)
-const isSuggestingPrompt = ref(false)
 const useAdvancedModel = ref(false)
 const useCurrentImage = ref(false)
+const { isRegenerating, isSuggestingPrompt, error: manualVisionError,
+  regenerate: regenerateVisual, suggest: suggestPrompt, cancel: closeManualVision } = useManualVision({
+  adventureId: () => props.adventureId, target: selectedVisual, open: showPromptDialog,
+  prompt: visualPrompt, advanced: useAdvancedModel, reference: useCurrentImage,
+  controllers: activeAbortControllers,
+  refresh: fetchDebugInfo, notify: addNotification,
+})
 const showRegenerateAllConfirmDialog = ref(false)
 const pendingBatchRegeneration = ref<{ kind: string; missingOnly: boolean } | null>(null)
 type PendingDeleteTarget = {
@@ -962,13 +968,18 @@ async function fetchAdventure() {
 
 const { exportEntity, importEntity } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
 
+let debugInfoRevision = 0
 async function fetchDebugInfo() {
+  const revision = ++debugInfoRevision
+  const adventureId = props.adventureId
   if (!props.adventureId) return
   try {
-    const payload = await adventureService.fetchDebugInfo(props.adventureId)
+    const payload = await adventureService.fetchDebugInfo(adventureId)
+    if (revision !== debugInfoRevision || adventureId !== props.adventureId) return
     debugData.value = adventureService.normalizeDebugPayload(payload)
     visualsCacheVersion.value += 1
   } catch (error) {
+    if (revision !== debugInfoRevision || adventureId !== props.adventureId) return
     console.error('Failed to fetch debug info:', error)
     debugData.value = null
     errorMsg.value = 'Failed to load world assets/debug data.'
@@ -1596,7 +1607,7 @@ function openUploadPicker(kind: any, id: string, label: string) {
   }
 }
 
-async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean = false) {
+async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean = false): Promise<boolean> {
   const key = `${kind}_${id}`
   isQuickGenerating.value[key] = true
   
@@ -1608,7 +1619,9 @@ async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean =
   
   try {
      await visualService.quickRegenerateVisual(props.adventureId, kind, id, controller.signal)
+    if (controller.signal.aborted || activeAbortControllers.value.get(key) !== controller) return false
     if (!skipFetch) await fetchDebugInfo()
+    return true
   } catch (error: any) {
     if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
       console.log('Quick regen aborted for', key)
@@ -1616,9 +1629,12 @@ async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean =
     }
     console.error('Quick regen error:', error)
     addNotification(error.message, 'error')
+    return false
   } finally {
-    isQuickGenerating.value[key] = false
-    activeAbortControllers.value.delete(key)
+    if (activeAbortControllers.value.get(key) === controller) {
+      isQuickGenerating.value[key] = false
+      activeAbortControllers.value.delete(key)
+    }
   }
 }
 
@@ -1696,8 +1712,9 @@ async function regenerateAll(kind: any, missingOnly: boolean = false) {
   for (const item of targets) {
     try {
       const apiKind = (kind === 'container' || kind === 'text-log' || kind === 'switch') ? 'object' : kind
-      await quickRegenerateVisual(apiKind, item.id || props.adventureId)
-      successCount += 1
+      const generated = await quickRegenerateVisual(apiKind, item.id || props.adventureId)
+      if (generated) successCount += 1
+      else errorCount += 1
     } catch (error: any) {
       if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
         addNotification('Batch generation stopped.', 'info')
@@ -1715,83 +1732,14 @@ async function regenerateAll(kind: any, missingOnly: boolean = false) {
   isBatchGenerating.value[kind] = false
 }
 
-async function regenerateVisual() {
-  if (!selectedVisual.value || isRegenerating.value) return
-  isRegenerating.value = true
-  promptError.value = ''
-  
-  const key = `${selectedVisual.value.kind}_${selectedVisual.value.id}`
-  if (activeAbortControllers.value.has(key)) {
-    activeAbortControllers.value.get(key)?.abort()
-  }
-  const controller = new AbortController()
-  activeAbortControllers.value.set(key, controller)
-  
-  try {
-     await visualService.regenerateVisual(
-       props.adventureId,
-       selectedVisual.value.kind,
-       selectedVisual.value.id,
-       visualPrompt.value,
-       useAdvancedModel.value,
-       controller.signal,
-       useCurrentImage.value
-     )
-     showPromptDialog.value = false
-     await fetchDebugInfo()
-     addNotification(`Visual for ${selectedVisual.value.label} re-woven.`, 'success')
-  } catch (error: any) {
-    if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
-      console.log('Regen aborted for', key)
-      return
-    }
-    promptError.value = error.message
-    addNotification(error.message, 'error')
-  } finally {
-    isRegenerating.value = false
-    activeAbortControllers.value.delete(key)
-  }
-}
-
-async function suggestPrompt() {
-  if (!selectedVisual.value || isSuggestingPrompt.value) return
-  isSuggestingPrompt.value = true
-  promptError.value = ''
-  try {
-     const suggested = await visualService.suggestPrompt(
-       props.adventureId,
-       selectedVisual.value.kind,
-       selectedVisual.value.id,
-       useAdvancedModel.value
-     )
-     if (suggested) {
-       visualPrompt.value = suggested
-       addNotification('AI suggested a prompt based on the description.', 'success')
-     } else {
-       addNotification('AI returned an empty suggestion.', 'info')
-     }
-  } catch (error: any) {
-    promptError.value = error.message
-    addNotification(error.message, 'error')
-  } finally {
-    isSuggestingPrompt.value = false
-  }
-}
-
 function cancelRegeneration() {
-  if (selectedVisual.value) {
-    const key = `${selectedVisual.value.kind}_${selectedVisual.value.id}`
-    if (activeAbortControllers.value.has(key)) {
-      activeAbortControllers.value.get(key)?.abort()
-    }
-  }
-  isRegenerating.value = false
-  showPromptDialog.value = false
+  closeManualVision()
   addNotification('Generation request abandoned.', 'info')
 }
 
 function stopAllGenerations() {
-  if (activeAbortControllers.value.size === 0) return
+  if (activeAbortControllers.value.size === 0 && !isRegenerating.value && !isSuggestingPrompt.value) return
+  closeManualVision()
   
   for (const controller of activeAbortControllers.value.values()) {
     try {
@@ -1804,7 +1752,6 @@ function stopAllGenerations() {
   
   isQuickGenerating.value = {}
   isBatchGenerating.value = {}
-  isRegenerating.value = false
   showPromptDialog.value = false
   
   addNotification('All visual generations stopped.', 'info')
@@ -2848,10 +2795,11 @@ watch(
       v-model:use-current-image="useCurrentImage"
       :is-suggesting-prompt="isSuggestingPrompt"
       :is-regenerating="isRegenerating"
+      :error-message="manualVisionError"
       :upload-limits="visualService.UPLOAD_LIMITS"
       :format-bytes="formatBytes"
       :fix-newlines="fixNewlines"
-      @close="showPromptDialog = false"
+      @close="closeManualVision"
       @suggest="suggestPrompt"
       @regenerate="regenerateVisual"
       @cancel-regen="cancelRegeneration"
