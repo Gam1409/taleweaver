@@ -151,7 +151,15 @@ function describeTarget(targetType: string, targetId?: string | null): string {
           class="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300"
         >
           <ShieldAlert class="w-6 h-6 mx-auto text-slate-400 mb-2" />
-          The AI declined to suggest a fix for this finding. Try fixing it manually or rerun the AI validation.
+          <p>No usable fix was proposed. You can request fresh suggestions or edit the affected fields manually.</p>
+          <button
+            type="button"
+            :disabled="props.applying"
+            class="mx-auto mt-3 flex items-center gap-2 rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs font-bold text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+            @click="emit('retry')"
+          >
+            <RefreshCw class="w-3 h-3" /> Generate fresh suggestions
+          </button>
         </div>
 
         <div v-else class="space-y-3">

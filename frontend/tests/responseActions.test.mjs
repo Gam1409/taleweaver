@@ -10,7 +10,7 @@ const source = readFileSync(new URL('../src/components/game/ResponseActions.vue'
   .replace(/import[^\n]+\n/g, '')
   .replace(/const props = defineProps<[^\n]+\n/, '')
   .replace('const socket = useGameSocket()', '')
-const code = ts.transpileModule(`import {computed,ref,watch} from '${import.meta.resolve('vue')}';
+const code = ts.transpileModule(`import {computed,ref,watch,onScopeDispose} from '${import.meta.resolve('vue')}';
 import {isStoryMessage} from '${storyMessageModule}';
 export function setup(props, socket, apiFetch) { ${source}; return {available,latest,replay}; }`, {
   compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}
@@ -25,7 +25,7 @@ test('full replay after debug toggles resends the story action and uses its save
     {id: 'toggle', role: 'user', content: '/debug on'},
     {id: 'notice', role: 'system', content: 'Enabled.', is_debug: true},
   ])
-  const socket = {messages, status: ref('connected'), sheet: ref({}), sendMessage: async (...args) => calls.push(args)}
+  const socket = {messages, status: ref('connected'), sheet: ref({}), inputLocked: ref(false), sendMessage: async (...args) => calls.push(args)}
   const scope = effectScope()
   t.after(() => scope.stop())
   const f = scope.run(() => setup(reactive({gameId: 'session'}), socket, async () =>

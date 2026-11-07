@@ -84,11 +84,21 @@ async function open() {
   selected.value = ['text']
   await nextTick()
   dialog.value?.showModal()
+  await load()
+}
+async function load() {
   const data = await request('')
   if (data) {
     baseline.value = data.before_hash
+    image.value = ''
+    selected.value = ['text']
     fill(data.item)
   }
+}
+async function reload() {
+  if (busy.value) return
+  if (baseline.value && !window.confirm('Reload the saved item? This discards the current repair draft and image preview.')) return
+  await load()
 }
 async function generate() {
   const data = await request('/preview', {
@@ -184,6 +194,15 @@ onScopeDispose(stop)
       >
         {{ error }}
       </p>
+      <button
+        v-if="error || baseline"
+        type="button"
+        :disabled="busy"
+        class="mb-4 rounded-lg border border-cyan-600 px-3 py-2 text-xs text-cyan-200 disabled:opacity-40"
+        @click="reload"
+      >
+        {{ baseline ? 'Reload saved item' : 'Retry loading item' }}
+      </button>
       <p v-if="notice" role="status" class="mb-4 text-emerald-300">{{ notice }}</p>
       <fieldset :disabled="busy || !baseline" class="space-y-5 disabled:opacity-50">
         <div class="flex flex-wrap gap-3">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { RotateCcw } from 'lucide-vue-next'
 import { apiFetch } from '@/services/http'
 import { useGameSocket } from '@/composables/useGameSocket'
@@ -9,15 +9,22 @@ import { isStoryMessage } from '@/utils/storyMessages'
 const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean }>()
 const socket = useGameSocket()
 const latest = computed(() => [...socket.messages.value].reverse().find(isStoryMessage))
-const busy = computed(() => ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
+const busy = computed(() => props.disabled || socket.inputLocked.value || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
 const available = ref(false)
+const checking = ref(false)
+const checkFailed = ref(false)
 const reason = ref('Checking whether this turn can be regenerated…')
 let version = 0
-watch(() => [props.gameId, latest.value?.id, socket.status.value], async () => {
+async function checkTurn() {
   const token = ++version
   available.value = false
+  checking.value = false
+  checkFailed.value = false
+  reason.value = 'Complete a story turn before regenerating it.'
   if (!props.gameId || latest.value?.role !== 'assistant' || !latest.value.id) return
   if (!['connected', 'completed', 'game_over'].includes(socket.status.value)) return
+  checking.value = true
+  reason.value = 'Checking whether this turn can be regenerated…'
   try {
     const response = await apiFetch(`/adventures/${encodeURIComponent(props.gameId)}/chat/replay`)
     if (!response.ok) throw new Error('Could not check turn snapshot.')
@@ -26,9 +33,15 @@ watch(() => [props.gameId, latest.value?.id, socket.status.value], async () => {
     available.value = data.available && data.message_id === latest.value?.id
     reason.value = data.reason || 'Repeat your last action with new mechanics and narration.'
   } catch {
-    if (token === version) reason.value = 'Could not check the turn snapshot. Reopen the session to retry.'
+    if (token !== version) return
+    checkFailed.value = true
+    reason.value = 'Could not check the turn snapshot. Retry the check to enable regeneration.'
+  } finally {
+    if (token === version) checking.value = false
   }
-}, { immediate: true })
+}
+watch(() => [props.gameId, latest.value?.id, socket.status.value], checkTurn, { immediate: true })
+onScopeDispose(() => { version++ })
 
 async function replay() {
   if (!available.value || busy.value || !latest.value?.id) return
@@ -49,5 +62,10 @@ async function replay() {
       <RotateCcw :size="15" /> <span :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Regenerate' : 'Regenerate turn' }}</span>
     </button>
     <span v-if="!compact && !available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
+    <button v-if="checkFailed" type="button" :disabled="busy || checking"
+      class="flex items-center gap-1 rounded-lg border border-amber-400/40 px-3 py-1.5 text-xs text-amber-200 disabled:opacity-40"
+      @click="checkTurn">
+      <RotateCcw :size="13" /> Retry turn check
+    </button>
   </div>
 </template>
