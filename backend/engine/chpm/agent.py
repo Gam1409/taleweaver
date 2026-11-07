@@ -31,7 +31,15 @@ async def investigate(
         if getattr(turn, "input_id", None) == observation.message_id
         else {}
     )
-    tools = Tools(mind, observation, clothing, pins=dict(pinned or {}))
+    hits = getattr(turn, "semantic_hits", {}).get(mind.genesis.scope.observer_id, [])
+    tools = Tools(
+        mind,
+        observation,
+        clothing,
+        pins=dict(pinned or {}),
+        semantic_scores={hit.record_id: hit.score for hit in hits},
+        episode_contexts={hit.record_id: hit.context for hit in hits},
+    )
     facts = host_observations.previous(mind)
     transcript: list[dict] = []
     audit: list[dict] = []

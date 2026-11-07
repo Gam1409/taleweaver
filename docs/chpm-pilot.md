@@ -1,10 +1,15 @@
 # NPC Personality — optional CHPM dialogue module
 
-Module release **1.1.0**: start with [the player and recovery guide](chpm-continuation.md).
+Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
 
 The [causal continuity guide](chpm-causal-memory.md) explains how unfinished
 purposes retain their initiating events, concrete consequences and remaining steps.
 See [release history](chpm-changelog.md) for module versions independent of data contracts.
+
+Optional [semantic NPC memory](chpm-semantic-memory.md) combines the existing
+observer-scoped evidence with administrator-configured embeddings. It defaults
+to off and adds no generative model calls. Other references to lexical-only
+retrieval below describe the default path.
 
 CHPM is an opt-in Visual Novel session feature. Existing sessions default to
 **Standard** and make no CHPM model requests. No separate inference server or

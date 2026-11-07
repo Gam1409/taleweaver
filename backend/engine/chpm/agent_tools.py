@@ -11,7 +11,7 @@ from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCE
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source, identifier, record
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.schema import Observation
+from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
 
@@ -36,6 +36,8 @@ class Tools:
     pins: dict[str, tuple[str, Source, str]] = field(default_factory=dict)
     exposed: dict[str, tuple[str, Source]] = field(default_factory=dict)
     beliefs: dict[str, Belief] = field(default_factory=dict)
+    semantic_scores: dict[str, float] = field(default_factory=dict)
+    episode_contexts: dict[str, EpisodeContext] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
@@ -81,11 +83,16 @@ class Tools:
             )
             for key, (index, source) in available.items()
         ]
-        ranked = rank_documents(documents, query, set(), "")
+        ranked = rank_documents(documents, query, set(), "", self.semantic_scores)
         results = [self.expose(doc.id, available[doc.id][1], query=query) for doc in ranked[:2]]
         return {
             "status": "partial" if any(row["status"] != "ok" for row in results) else "ok",
-            "mode": "lexical_observer_rag",
+            "mode": "hybrid_observer_rag" if self.semantic_scores else "lexical_observer_rag",
+            **(
+                {"semantic_query": "current observer interaction; argument refines lexical ranking"}
+                if self.semantic_scores
+                else {}
+            ),
             "matches": len(ranked),
             "omitted_matches": max(0, len(ranked) - 2),
             "results": results,
@@ -139,6 +146,11 @@ class Tools:
             "current_turn": source.message_id == self.observation.message_id,
             "text": text,
             "excerpted": text != source.text,
+            **(
+                {"context": self.episode_contexts[key].model_dump(exclude_none=True)}
+                if key in self.episode_contexts
+                else {}
+            ),
         }
 
     def inspect_self(self) -> dict:

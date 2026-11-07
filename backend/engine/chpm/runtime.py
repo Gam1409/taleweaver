@@ -23,6 +23,7 @@ from backend.engine.chpm import (
     perception,
     prompts,
     roster,
+    semantic_recall,
 )
 from backend.engine.chpm.causal_contracts import Thread
 from backend.engine.chpm.core import relationships
@@ -70,6 +71,7 @@ class Turn:
     gap_cursors: dict[str, int] = field(default_factory=dict)
     causal_threads: dict[str, list[Thread]] = field(default_factory=dict)
     reconciled_minds: dict[str, Mind] = field(default_factory=dict)
+    semantic_hits: dict[str, list[semantic_recall.Hit]] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -245,6 +247,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     )
     if turn.initial.settings.mode == "live" and turn.initial.settings.agent_steps:
         turn.agent_clothing = await agent_views.capture(manager)
+    await semantic_recall.prepare(manager, turn, active_ids, observed)
     for actor in sorted(active, key=lambda item: item.id):
         await _prepare_actor(manager, turn, actor, observed)
     from backend.engine.chpm.rendering import preflight

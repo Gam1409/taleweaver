@@ -5,12 +5,18 @@ from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import (
     AgentEvidence,
     Decision,
+    EpisodeContext,
     Observation,
     validate_agent_evidence,
 )
 
 
-def collect(pins: dict[str, tuple[str, Source, str]], observed: Observation) -> list[AgentEvidence]:
+def collect(
+    pins: dict[str, tuple[str, Source, str]],
+    observed: Observation,
+    *,
+    contexts: dict[str, EpisodeContext] | None = None,
+) -> list[AgentEvidence]:
     evidence = [
         AgentEvidence(
             source_id=alias,
@@ -22,6 +28,7 @@ def collect(pins: dict[str, tuple[str, Source, str]], observed: Observation) -> 
             kind="reported" if source.reported else "witnessed",
             text=text,
             current_turn=source.message_id == observed.message_id,
+            context=(contexts or {}).get(key),
         )
         for alias, (key, source, text) in pins.items()
     ]
@@ -42,8 +49,17 @@ def present(decision: Decision, mind: Mind) -> list[dict]:
         source = mind.sources.get(entry.record_id)
         if source is None or not _matches(entry, source, decision.observation):
             raise ChpmError("Agent evidence is stale or differs from its observed source.")
+        if entry.context and entry.context.evidence_order != next(
+            (
+                index
+                for index, evidence in enumerate(mind.snapshot.evidence)
+                if evidence.event_id == entry.record_id
+            ),
+            -1,
+        ):
+            raise ChpmError("Retrieved episode order differs from its observer ledger.")
     return [
-        entry.model_dump(exclude={"source_hash", "source_revision_id"})
+        entry.model_dump(exclude={"source_hash", "source_revision_id"}, exclude_none=True)
         for entry in decision.agent_evidence
     ]
 

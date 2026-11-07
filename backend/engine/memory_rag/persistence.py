@@ -4,16 +4,26 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from backend.engine.memory_rag import scheduling
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
+from backend.models.memory_rag import MemoryIndexState
 
 logger = logging.getLogger(__name__)
 RETRY_DELAYS = (0.2, 0.5, 1.0, 2.0)
 P = ParamSpec("P")
 T = TypeVar("T")
+
+
+def claim_fence(claim: Any) -> tuple:
+    return (
+        MemoryIndexState.session_id == claim.session_id,
+        MemoryIndexState.user_id == claim.user_id,
+        MemoryIndexState.epoch == claim.epoch,
+        MemoryIndexState.lease_token == claim.token,
+    )
 
 
 def retry_transaction(operation: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:

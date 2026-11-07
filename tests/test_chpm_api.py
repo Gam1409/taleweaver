@@ -1,6 +1,7 @@
 """Settings ownership, concurrency, legacy defaults, and snapshot preservation."""
 
 from copy import deepcopy
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy import select
@@ -73,6 +74,31 @@ async def test_foreign_busy_stale_and_unknown_actor_rejected(auth_client, chpm_w
 async def test_non_vn_cannot_enable(auth_client, portrait_world):
     response = await auth_client.patch(PATH, json=update())
     assert response.status_code == 409
+
+
+async def test_semantic_memory_is_explicit_and_only_rewarms_when_needed(
+    auth_client, chpm_world, monkeypatch
+):
+    from backend.engine.memory_rag import worker
+
+    mark, schedule = AsyncMock(), Mock()
+    monkeypatch.setattr(worker, "mark_dirty", mark)
+    monkeypatch.setattr(worker, "schedule", schedule)
+    assert (await auth_client.get(PATH)).json()["settings"]["semantic_memory"] is False
+    response = await auth_client.patch(PATH, json=update("live", semantic_memory=True))
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"]["semantic_memory"] is True
+    assert mark.await_count == schedule.call_count == 1
+    response = await auth_client.patch(
+        PATH,
+        json=update("live", revision=1, semantic_memory=True, max_output_tokens=1400),
+    )
+    assert response.status_code == 200, response.text
+    assert mark.await_count == schedule.call_count == 1
+    response = await auth_client.patch(PATH, json=update("off", revision=2))
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"]["semantic_memory"] is False
+    assert mark.await_count == schedule.call_count == 1
 
 
 async def test_snapshot_restore_includes_chpm_and_settings_update_fences_replay(

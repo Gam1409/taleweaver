@@ -43,6 +43,26 @@ function fixture(t, fetch) {
   return { session, ...scope.run(() => useChpmSettings(() => session.value)) }
 }
 
+test('semantic memory is opt-in, session-scoped, and does not increase generative calls', async t => {
+  const saved = state(3)
+  saved.settings.semantic_memory = false
+  const f = fixture(t, async (url, options) => {
+    if (options.method === 'GET') return new Response(JSON.stringify(saved))
+    assert.ok(url.includes('/one/chpm'))
+    const body = JSON.parse(options.body)
+    assert.equal(body.settings.semantic_memory, true)
+    return new Response(JSON.stringify({ ...saved, revision: 4, settings: body.settings }))
+  })
+  await tick()
+  assert.equal(f.draft.value.semantic_memory, false)
+  const calls = f.minimumCalls.value
+  f.draft.value.semantic_memory = true
+  assert.equal(f.minimumCalls.value, calls)
+  assert.equal(f.status.value.settings.semantic_memory, false)
+  assert.equal(await f.save(), true)
+  assert.equal(f.status.value.settings.semantic_memory, true)
+})
+
 test('selection stays local and save fences the revision without aliasing the saved array', async t => {
   const calls = []
   const f = fixture(t, async (url, options) => {

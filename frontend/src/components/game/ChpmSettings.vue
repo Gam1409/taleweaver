@@ -54,6 +54,11 @@ defineExpose({ save })
           </select>
         </label>
         <p class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs; Living World private decisions must be disabled.</p>
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
+          <input v-model="draft.semantic_memory" type="checkbox" class="mr-2 accent-cyan-400" />
+          Semantic NPC memory (experimental)
+          <span class="mt-2 block text-slate-400">Requires administrator Memory &amp; recall settings. Combines semantic and exact-word search within each NPC's witnessed sources. Uses one bounded embeddings batch for active NPCs; no extra generative model request. Falls back to lexical memory when unavailable. Disabled by default.</span>
+        </label>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent lookups per active NPC
           <select v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option :value="0">Off — existing decision flow</option>

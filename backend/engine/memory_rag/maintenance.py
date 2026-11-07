@@ -11,7 +11,7 @@ from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
 
-KINDS = ("index", "chronicle", "summary")
+KINDS = ("index", "chronicle", "summary", "observer")
 Job = Callable[[], Awaitable[bool]]
 
 

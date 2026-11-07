@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from backend.engine.memory_rag.ranking import ordered_terms
 
@@ -16,6 +16,13 @@ class Scope:
     session_id: str
     epoch: int
     signature: str
+    namespace: Literal["public", "observer"] = "public"
+
+
+def namespace_filter(scope: Scope) -> str:
+    if scope.namespace not in {"public", "observer"}:
+        raise ValueError("Invalid memory namespace.")
+    return "layer = 'observer'" if scope.namespace == "observer" else "layer != 'observer'"
 
 
 def literal(value: str) -> str:
@@ -31,6 +38,7 @@ def scope_filter(scope: Scope) -> str:
             f"session_id = {literal(scope.session_id)}",
             f"epoch = {scope.epoch}",
             f"signature = {literal(scope.signature)}",
+            namespace_filter(scope),
         ]
     )
 
@@ -81,6 +89,8 @@ def row(scope: Scope, document: dict, vector: list[float]) -> dict[str, str | in
     }
     if not all(result[name] for name in ("id", "layer", "source_id", "source_hash", "text")):
         raise ValueError("Memory document is missing required metadata.")
+    if (result["layer"] == "observer") != (scope.namespace == "observer"):
+        raise ValueError("Memory document belongs to another namespace.")
     for field in ("user_id", "session_id"):
         if document.get(field) is not None and str(document[field]) != getattr(scope, field):
             raise ValueError("Memory document ownership differs from its scope.")

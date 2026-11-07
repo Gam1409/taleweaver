@@ -13,6 +13,7 @@ from backend.engine.memory_rag.store_schema import (
     hybrid_rank,
     lexical_filter,
     literal,
+    namespace_filter,
     query_filter,
     row,
     schema,
@@ -22,6 +23,7 @@ from backend.engine.memory_rag.store_schema import (
 
 _WRITE_LOCK = threading.RLock()
 MAX_CANDIDATES = 128
+HASH_PAGE_SIZE = 4096
 
 
 def _table_names(connection: Any) -> set[str]:
@@ -76,7 +78,7 @@ class LanceMemoryStore:
             if table.schema.field("vector").type.list_size != len(validated[0]):
                 raise ValueError("Embedding dimension differs from the indexed vector space.")
             table.merge_insert(
-                ["user_id", "session_id", "epoch", "signature", "id"]
+                ["user_id", "session_id", "epoch", "signature", "layer", "id"]
             ).when_matched_update_all().when_not_matched_insert_all().execute(rows)
 
     @staticmethod
@@ -130,14 +132,21 @@ class LanceMemoryStore:
         table = self._table(scope)
         if table is None:
             return {}
-        records = (
-            table.search()
-            .where(scope_filter(scope))
-            .select(["id", "source_hash"])
-            .limit(100_000)
-            .to_list()
-        )
-        return {record["id"]: record["source_hash"] for record in records}
+        hashes = {}
+        offset = 0
+        while True:
+            records = (
+                table.search()
+                .where(scope_filter(scope))
+                .select(["id", "source_hash"])
+                .offset(offset)
+                .limit(HASH_PAGE_SIZE)
+                .to_list()
+            )
+            hashes.update({record["id"]: record["source_hash"] for record in records})
+            if len(records) < HASH_PAGE_SIZE:
+                return hashes
+            offset += len(records)
 
     async def prune(self, scope: Scope, valid_ids: list[str] | set[str]) -> int:
         return await mutate_storage(self._prune, scope, set(valid_ids))
@@ -167,6 +176,7 @@ class LanceMemoryStore:
             f"user_id = {literal(scope.user_id)} AND session_id = {literal(scope.session_id)}"
             f" AND (epoch < {scope.epoch} OR"
             f" (epoch = {scope.epoch} AND signature != {literal(scope.signature)}))"
+            f" AND {namespace_filter(scope)}"
         )
         return await mutate_storage(self._delete, predicate, None)
 

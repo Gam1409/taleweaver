@@ -18,6 +18,7 @@ from backend.engine.chpm import (
     proposal_attempt,
     proposal_draft,
     semantic_choice,
+    semantic_recall,
 )
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
@@ -87,6 +88,15 @@ async def deliberate(
     }
     turn = getattr(manager, "_chpm_turn", None)
     pinned = causal_memory.pins(mind, getattr(turn, "causal_threads", {}).get(actor_id, []))
+    hits = getattr(turn, "semantic_hits", {}).get(actor_id, [])
+    pinned = semantic_recall.merge(mind, pinned, hits)
+    episode_contexts = semantic_recall.contexts(pinned, hits)
+    if episode_contexts:
+        supplied["retrieved_episode_context"] = {
+            alias: episode_contexts[key].model_dump(exclude_none=True)
+            for alias, (key, _, _) in pinned.items()
+            if key in episode_contexts
+        }
     pinned_beliefs = {}
     audit: list[dict] = []
     if settings.agent_steps and settings.mode == "live":
@@ -100,6 +110,7 @@ async def deliberate(
             **({"pinned": pinned} if pinned else {}),
         )
         mind, pinned = tools.mind, tools.pins
+        episode_contexts = semantic_recall.contexts(pinned, hits)
         pinned_beliefs = tools.beliefs
         supplied = {
             **supplied,
@@ -110,6 +121,12 @@ async def deliberate(
                 for step in audit
                 for request, result in zip(step["requests"], step["results"], strict=True)
             ],
+        }
+    if episode_contexts:
+        supplied["retrieved_episode_context"] = {
+            alias: episode_contexts[key].model_dump(exclude_none=True)
+            for alias, (key, _, _) in pinned.items()
+            if key in episode_contexts
         }
     instruction = (
         prompts.PROPOSE
@@ -178,7 +195,11 @@ async def deliberate(
             {
                 **decision.model_dump(),
                 "agent_audit": audit,
-                "agent_evidence": agent_context.collect(pinned, observation),
+                "agent_evidence": agent_context.collect(
+                    pinned,
+                    observation,
+                    **({"contexts": episode_contexts} if episode_contexts else {}),
+                ),
                 "interpretation_ids": accepted_ids,
                 "experience_ids": experience_ids,
                 "development_ids": development_ids,

@@ -19,12 +19,20 @@ async def reconcile(manager: Any, mind: Mind) -> Mind:
         )
     )
     messages = {row.id: row for row in rows}
+    return from_messages(mind, messages)
+
+
+def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
+    """Reuse a canonical post-await read without replaying invalid dependent suffixes."""
     hashes = {key: digest(row.content) for key, row in messages.items()}
     invalid = set()
     for source in mind.sources.values():
         row = messages.get(source.message_id)
         if (
             row is None
+            or (getattr(row, "npc_journal", None) or {}).get("status") == "incomplete"
+            or getattr(row, "session_id", mind.genesis.scope.world_id)
+            != mind.genesis.scope.world_id
             or row.role != source.role
             or row.revision_id != source.revision_id
             or hashes[source.message_id] != source.content_hash

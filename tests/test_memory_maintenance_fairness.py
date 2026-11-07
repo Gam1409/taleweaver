@@ -52,6 +52,19 @@ async def test_failed_embedder_does_not_prevent_chronicle_work(monkeypatch):
     summary.assert_awaited_once_with(claim, chronicle=True)
 
 
+async def test_observer_index_advances_while_every_other_phase_has_work(monkeypatch):
+    claim = install(monkeypatch)
+    index, summary, observer = [AsyncMock(return_value=True) for _ in range(3)]
+    monkeypatch.setattr(worker, "_index_batch", index)
+    monkeypatch.setattr(worker, "_summarize", summary)
+    monkeypatch.setattr(worker, "_maybe_observer", observer)
+    for _ in range(4):
+        assert await worker._step(claim)
+    assert index.await_count == 1
+    assert summary.await_count == 2
+    assert observer.await_count == 1
+
+
 @pytest.mark.parametrize("kind", ["queue", "uncertain", "cancel"])
 async def test_admission_and_cancellation_are_never_converted_to_phase_failures(monkeypatch, kind):
     import asyncio

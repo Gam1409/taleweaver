@@ -111,10 +111,16 @@ async def patch(
     replay = await db.get(TurnReplay, game_id)
     if replay is not None and replay.status in {"executing", "replaying"}:
         raise HTTPException(409, "Recover the unfinished turn before changing CHPM settings.")
-    if (current.settings.mode, current.settings.actor_ids) != (
+    roster_changed = (current.settings.mode, current.settings.actor_ids) != (
         payload.settings.mode,
         payload.settings.actor_ids,
-    ):
+    )
+    warm_semantic = (
+        payload.settings.semantic_memory
+        and payload.settings.mode == "live"
+        and (not current.settings.semantic_memory or roster_changed)
+    )
+    if roster_changed:
         current.actors = {}
         current.memories = {}
         current.usage = Usage()
@@ -131,7 +137,15 @@ async def patch(
     if changed.scalar_one_or_none() is None:
         raise HTTPException(409, "Session state changed. Reload before saving.")
     _update_replay(replay, value)
+    if warm_semantic:
+        from backend.engine.memory_rag.worker import mark_dirty
+
+        await mark_dirty(db, game_id, user.id, state.template_id)
     await db.commit()
+    if warm_semantic:
+        from backend.engine.memory_rag.worker import schedule
+
+        schedule(game_id, user.id)
     await db.refresh(state)
     return await _view(db, state, user)
 

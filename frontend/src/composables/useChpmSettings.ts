@@ -12,6 +12,7 @@ export interface ChpmSettings {
   max_calls_per_turn: number
   memory_limit: number
   agent_steps?: number
+  semantic_memory?: boolean
 }
 
 export interface ChpmStatus {

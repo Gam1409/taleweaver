@@ -17,6 +17,7 @@ const defaults: ChpmSettings = {
   max_calls_per_turn: 8,
   memory_limit: 12,
   agent_steps: 0,
+  semantic_memory: false,
   failure_policy: 'continue'
 }
 const draft = computed(() => props.modelValue ?? defaults)
@@ -131,6 +132,11 @@ function selectActor(id: string, selected: boolean) {
         <summary class="cursor-pointer text-sm text-slate-200">
           Request limits & agent lookups
         </summary>
+        <label v-if="draft.mode === 'live'" class="mb-3 mt-4 block text-xs text-slate-300">
+          <input type="checkbox" :checked="draft.semantic_memory ?? false" class="mr-2 accent-cyan-400" @change="update('semantic_memory', ($event.target as HTMLInputElement).checked)" />
+          Semantic NPC memory (experimental)
+          <span class="mt-2 block text-slate-400">Uses the administrator's embeddings with observer-scoped history and lexical fallback. No additional generative model request; disabled by default.</span>
+        </label>
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
           <label v-for="field in limits" :key="field.key" class="text-xs text-slate-300"
             >{{ field.label

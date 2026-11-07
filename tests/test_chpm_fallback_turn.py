@@ -47,7 +47,7 @@ async def test_completed_invalid_analysis_continues_rp_without_committing_psycho
             next(c for c in chunks if c.startswith("event: final")).split("data: ", 1)[1]
         )
         assert final["npc_behavior"]["quality"] == "simplified"
-        assert final["npc_behavior"]["module_version"] == "1.1.0"
+        assert final["npc_behavior"]["module_version"] == "1.2.0"
         assert (await db.get(TurnReplay, "session-1")).status == "ready"
         replies = list(await db.scalars(select(ChatMessage).where(ChatMessage.role == "assistant")))
         assert len(replies) == 2

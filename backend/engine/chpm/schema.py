@@ -26,6 +26,7 @@ class Settings(Contract):
     max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
     agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
+    semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 
     @model_validator(mode="after")
@@ -184,6 +185,11 @@ class ChoicePreference(Contract):
     change_basis: list[ChoiceEvidence] = Field(default_factory=list, max_length=2)
 
 
+class EpisodeContext(Contract):
+    scene_id: str | None = Field(default=None, max_length=100)
+    evidence_order: int = Field(ge=0)
+
+
 class AgentEvidence(Contract):
     source_id: str = Field(min_length=1, max_length=100)
     record_id: str = Field(min_length=1, max_length=100)
@@ -194,6 +200,7 @@ class AgentEvidence(Contract):
     kind: Literal["reported", "witnessed"]
     text: str = Field(min_length=1, max_length=2000)
     current_turn: bool
+    context: EpisodeContext | None = None
 
 
 def validate_agent_evidence(entries: list[AgentEvidence]) -> None:
@@ -296,6 +303,7 @@ class Usage(Contract):
     fallback_requests: int = Field(default=0, ge=0, le=1)
     causal_notes: list[str] = Field(default_factory=list, max_length=MAX_NOTES)
     causal_notes_omitted: int = Field(default=0, ge=0)
+    semantic_recall: dict[str, str] = Field(default_factory=dict, max_length=20)
 
 
 def migrate_kernel_envelope(value: Any) -> Any:

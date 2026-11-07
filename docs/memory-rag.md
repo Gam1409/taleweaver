@@ -60,6 +60,11 @@ messages; old intervals remain available instead of being replaced by only the
 latest summary. Large source groups that cannot fit a summary request remain
 searchable as raw chunks.
 
+When explicitly enabled for NPC Personality, a separate **observer** namespace
+indexes that NPC's saved observations. Public recall cannot query these rows;
+one NPC cannot retrieve another NPC's observations. This is distinct from shared
+narration recall. See [semantic NPC memory](chpm-semantic-memory.md).
+
 ## Turn latency and recall
 
 A turn computes one shared recall result for narration, VN continuity and social
@@ -88,7 +93,8 @@ Journal extraction, index batches and summaries share an idle scheduler. A new
 background unit starts only after a 15-second quiet period; a foreground turn
 prevents additional units from starting. Summary calls use the configured
 **compression** role, with bounded input and that role's configured deadline.
-Indexing, chronicle compression and interval summaries take turns, with at most
+Public indexing, chronicle compression, interval summaries and optional observer
+indexing take turns, with at most
 one model batch per idle unit. A failed phase backs off independently, allowing
 other phases to advance; subsequent session activity can restart deferred work.
 Very slow models can time
@@ -106,6 +112,8 @@ removes that owner's vectors for the adventure and its sessions, preserving
 dialogue, NPC history, summaries and game progress. It pauses indexing for those
 sessions so the next turn does not immediately recreate the cleared vectors.
 Use **Rebuild index** to resume and rebuild from canonical history.
+Clear/rebuild also covers observer vectors; canonical NPC psychology remains in
+the session save.
 
 Changing embedding settings invalidates the old vector space; background work
 rebuilds it without mixing dimensions or model signatures. Explicitly paused

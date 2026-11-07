@@ -133,7 +133,7 @@ def test_public_badge_does_not_replay_private_psychological_journals():
     # The status projection reads metadata only. Admission/load separately
     # reject invalid minds before any use in decisions or a save.
     host.state.entity_states[KEY]["minds"] = {"npc": {"invalid": "private"}}
-    assert runtime.public_status(host.state)["module_version"] == "1.1.0"
+    assert runtime.public_status(host.state)["module_version"] == "1.2.0"
     with pytest.raises(ValueError):
         load(host.state)
 

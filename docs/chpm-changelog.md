@@ -1,8 +1,25 @@
 # NPC Personality release history
 
 NPC Personality (technical module name: CHPM) has its own release version, independent of TaleWeaver's app
-version and persisted data contracts. The current version is **1.1.0**, defined
+version and persisted data contracts. The current version is **1.2.0**, defined
 in `backend/engine/chpm/version.py` and exposed in session settings and status.
+
+## 1.2.0
+
+- Add opt-in semantic NPC memory in Enabled mode. Match paraphrases against each
+  NPC's saved, witnessed or explicitly reported sources, combined with lexical
+  ranking and existing source-bound causal continuity.
+- Index observer sources in idle batches, isolated from public narration memory.
+  One foreground embedding batch covers active interlocutors; it adds no
+  generative model request and falls back to lexical recall when unavailable.
+- Carry exact excerpts, scene IDs and observation order through decisions,
+  narration and review. Similar wording never merges separate episodes.
+- Recheck message revisions, hashes, owner, observer and index generation before
+  using a hit. Editing a source invalidates its dependent history as before.
+- Keep existing request and evidence budgets, original personality, and saved
+  contract versions unchanged. Existing sessions load with the option disabled.
+
+See [semantic NPC memory](chpm-semantic-memory.md) for setup, costs and limits.
 
 ## 1.1.0
 

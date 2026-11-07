@@ -21,7 +21,7 @@ from backend.engine.memory_rag import maintenance
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
 from backend.engine.memory_rag.embeddings import MAX_TEXT_LENGTH, embed_texts
-from backend.engine.memory_rag.persistence import retry_transaction
+from backend.engine.memory_rag.persistence import claim_fence, retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
@@ -149,12 +149,7 @@ async def _claim(session_id: str, user_id: str) -> Claim | None:
 def _fence(claim: Claim) -> tuple:
     # Expiry permits takeover; only a changed token/epoch revokes this writer.
     # A completed batch may wait behind a long foreground turn past its lease.
-    return (
-        MemoryIndexState.session_id == claim.session_id,
-        MemoryIndexState.user_id == claim.user_id,
-        MemoryIndexState.epoch == claim.epoch,
-        MemoryIndexState.lease_token == claim.token,
-    )
+    return claim_fence(claim)
 
 
 @retry_transaction
@@ -290,6 +285,7 @@ async def _step(claim: Claim) -> bool:
             "index": lambda: _maybe_index(enabled, claim, user, documents),
             "chronicle": lambda: _summarize(claim, chronicle=True),
             "summary": lambda: _maybe_summary(enabled, claim, documents),
+            "observer": lambda: _maybe_observer(enabled, claim, user, state),
         }
     )
     if outcome.status == "failed":
@@ -308,6 +304,20 @@ async def _maybe_index(
 
 async def _maybe_summary(enabled: bool, claim: Claim, documents: list[MemoryDocument]) -> bool:
     return await _summarize(claim, chronicle=False, documents=documents) if enabled else False
+
+
+async def _maybe_observer(enabled: bool, claim: Claim, user: User, state: SessionState) -> bool:
+    from backend.engine.chpm.control_settings import read
+    from backend.engine.chpm.state import KEY
+
+    if (
+        not enabled
+        or not read((getattr(state, "entity_states", None) or {}).get(KEY)).semantic_memory
+    ):
+        return False
+    from backend.engine.chpm.semantic_index import index_batch
+
+    return await index_batch(claim, user)
 
 
 async def _failed(claim: Claim, error_code: str = "internal") -> None:
