@@ -14,6 +14,7 @@ from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
+from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_snapshot
@@ -132,10 +133,16 @@ async def reconcile_items(
         raise
     except Exception as exc:
         logger.exception("Completed item reconciliation failed for session %s", manager.game_id)
-        _status(manager, message_id, narration, "failed", error_type=type(exc).__name__)
-        return [
-            "Item reconciliation failed; the narrated item changes have not been confirmed in inventory."
-        ]
+        failure = describe_failure(exc)
+        _status(
+            manager,
+            message_id,
+            narration,
+            "failed",
+            error_type=type(exc).__name__,
+            failure=failure.payload(),
+        )
+        return [failure.message()]
     _store_changes(manager, changed, accepted, snapshot.catalog)
     _status(manager, message_id, narration, "complete", accepted=accepted, rejected=errors)
     messages = [

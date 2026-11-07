@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.engine.clothing.schema import Garment
@@ -43,9 +43,29 @@ class ItemAction(BaseModel):
         return self
 
 
+class ExistingItemAction(ItemAction):
+    item_id: str = Field(min_length=1, max_length=100, description="Exact canonical owned item ID.")
+    new_item: None = None
+
+
+class NewItemAction(ItemAction):
+    item_id: None = None
+    new_item: NewItem = Field(
+        description="Required intrinsic item and garment metadata; never an ID."
+    )
+
+
 class ItemExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    actions: list[ItemAction] = Field(default_factory=list, max_length=6)
+    actions: list[ExistingItemAction | NewItemAction] = Field(default_factory=list, max_length=6)
+
+    @field_validator("actions", mode="before")
+    @classmethod
+    def action_data(cls, value: object) -> object:
+        # Expose identity exclusivity in JSON Schema while retaining internal action callers.
+        if not isinstance(value, list):
+            return value
+        return [entry.model_dump() if isinstance(entry, ItemAction) else entry for entry in value]
 
 
 INSTRUCTIONS = (

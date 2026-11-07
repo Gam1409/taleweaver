@@ -157,7 +157,7 @@ def apply_actions(
     errors: list[str] = []
     seen: set[str] = set()
     for index, proposal in enumerate(extraction.actions):
-        action = proposal
+        action: ItemAction = proposal
         try:
             action = classify_action(resolve_participants(proposal, actors))
             item = _resolve(

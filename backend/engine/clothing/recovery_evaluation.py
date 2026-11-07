@@ -64,7 +64,7 @@ def evaluate(
             continue
         failures: list[ItemFailure] = []
         changed, additions, _ = apply_actions(
-            ItemExtraction(actions=[action]),
+            ItemExtraction.model_validate({"actions": [action]}),
             actors,
             snapshot,
             source["content"],
