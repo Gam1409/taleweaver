@@ -3,6 +3,7 @@ import '../../src/assets/main.css'
 import NpcPortraitModal from '../../src/components/game/NpcPortraitModal.vue'
 import type { PortraitTarget } from '../../src/composables/useSessionPortrait'
 import Stage from '../../src/components/game/immersive/ImmersiveCharacterStage.vue'
+import DebugPlayerLocation from '../../src/components/game/DebugPlayerLocation.vue'
 import SessionPortraitSettings from '../../src/components/game/SessionPortraitSettings.vue'
 import SessionDiagnosticsId from '../../src/components/game/immersive/SessionDiagnosticsId.vue'
 import type { PortraitPreferences } from '../../src/utils/npcPresentation'
@@ -13,6 +14,7 @@ createApp({
     const thoughtsOnly = () => { preferences.value = { ...preferences.value, emotion_palette: false, character_thoughts: true } }
     const off = () => { preferences.value = { ...preferences.value, character_thoughts: false, emotion_palette: false } }
     const settings = ref<InstanceType<typeof SessionPortraitSettings> | null>(null)
+    const manualMove = ref('')
     const clicks = ref(0)
     const hovered = ref(0)
     const portrait = ref<PortraitTarget | null>(null)
@@ -30,6 +32,8 @@ createApp({
           onPortrait: npc => { portrait.value = npc },
         })),
         h('section', { class: 'w-96' }, [
+          h(DebugPlayerLocation, { sceneId: 'RESEARCH_LAB', currentSceneId: 'HOSPITAL_CORRIDOR', busy: false, onCommand: command => { manualMove.value = command } }),
+          h('p', { id: 'manual-player-move' }, manualMove.value),
           h(SessionPortraitSettings, { ref: settings, sessionId: 'fixture' }),
           h('button', { onClick: () => settings.value?.save(), class: 'mt-4 rounded-xl bg-cyan-700 px-4 py-2' }, 'Save presentation'),
           h('button', { onClick: thoughtsOnly, class: 'mt-4 block' }, 'Thoughts only'),

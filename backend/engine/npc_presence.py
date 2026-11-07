@@ -52,3 +52,31 @@ def presence_context(entities: list[Any], state: Any) -> str:
         "or act here. Remembering someone does not bring them back. "
         "A departure or return requires an approved presence update or movement.\n"
     )
+
+
+def movement_resolution(entities: list[Any], state: Any, event: Any) -> str:
+    """Keep the latest approved cast beside narration, after historical dialogue."""
+    moves = getattr(event, "moved_entities", None) or []
+    if not moves:
+        return ""
+    known = {row.id: row for row in entities if row.entity_type == "NPC" and not row.is_hidden}
+    outcomes = []
+    for move in moves:
+        actor = known.get(move.entity_id)
+        override = (state.entity_states or {}).get(move.entity_id) or {}
+        if actor is None or not override.get("remembered"):
+            continue
+        outcomes.append(
+            {
+                "npc_id": actor.id,
+                "name": override.get("name", actor.name),
+                "current_scene_id": override.get("current_scene_id", actor.current_scene_id),
+            }
+        )
+    return (
+        "NPC MOVEMENT RESOLUTION: "
+        + json.dumps(outcomes, ensure_ascii=False)
+        + presence_context(entities, state)
+        + "Use this current cast after movement. Earlier dialogue cannot bring an NPC back. "
+        "Only NPCs in this current scene may act beside the player."
+    )

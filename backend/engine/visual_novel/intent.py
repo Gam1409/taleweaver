@@ -121,8 +121,9 @@ NPC initiatives belong only in story_beat below, not in notes or completed memor
 
 MOVEMENT: Set new_scene_id only for the PLAYER actually traversing a currently
 accessible exit this turn. Use the exact supplied scene ID, never a translated name.
-History, future plans, hypotheticals, invitations and NPC-only motion are not player
-arrivals. Interpret meaning in any language; no fixed movement verb is required.
+Direct immediate group commands include the player's traversal, not just sending
+NPCs ahead. Questions about going, future plans, hypotheticals, invitations to discuss
+travel and NPC-only motion are not player arrivals. Interpret meaning in any language; no fixed movement verb is required.
 Respect direction, locks, physical distance and permissions; do not invent obstacles.
 Use moved_entities for actual NPC movement, preserving existing IDs and known limits.
 Use updated_entities.spatial_position for a change of position within a location.

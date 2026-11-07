@@ -97,6 +97,11 @@ class DebugInteractions(TurnContext):
 
         final_data = jsonable_encoder(
             {
+                "scene_id": self.state.current_scene_id,
+                "map_data": await self._build_map_payload(),
+                "image_url": await AdventureLogic.resolve_scene_image(
+                    self.db, self.state, self.state.current_scene_id
+                ),
                 "sheet": await AdventureLogic.build_sheet_snapshot(
                     self.avatar, self.state, self.db
                 ),

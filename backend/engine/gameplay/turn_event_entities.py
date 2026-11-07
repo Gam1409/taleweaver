@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.gameplay.guardrails.movement_messages import movement_arrival
 from backend.engine.gameplay.turn_context import TurnContext
 from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -51,7 +52,9 @@ class TurnEventEntities(TurnContext):
                 scene_obj = scene_res.scalars().first()
                 if scene_obj:
                     scene_label = scene_obj.label
-                msg = f"{ent_name} moved to {scene_label}."
+                msg = movement_arrival(
+                    ent_name, scene_label, getattr(self.manager, "turn_language", None)
+                )
                 await self._save_chat_message("system", msg)
                 system_messages.append(msg)
 

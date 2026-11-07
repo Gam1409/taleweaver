@@ -10,10 +10,11 @@ from sqlalchemy import select
 from backend.engine.gameplay.guardrails.base import inventory_ids_upper
 from backend.engine.gameplay.guardrails.items import ItemIntegrityMixin
 from backend.engine.gameplay.guardrails.movement_messages import movement_message
+from backend.engine.mutation_targets import TargetIndex
 from backend.engine.npc_movement import allowed_scenes
 from backend.engine.rule_engine import GameEvent
 from backend.engine.switch_service import SwitchService
-from backend.models.world_entity import WorldEntity
+from backend.models.world_entity import WorldEntity, WorldScene
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,10 @@ class WorldRulesMixin(ItemIntegrityMixin):
         entities = await self._session_entities()
         by_id = {e.id.upper(): e for e in entities if e.id}
         by_name = {(e.name or "").strip().lower(): e for e in entities if e.name}
+        scenes = await self.db.scalars(
+            select(WorldScene).where(WorldScene.session_id == self.game_id)
+        )
+        destinations = TargetIndex([{"id": scene.id, "name": scene.label} for scene in scenes])
         messages: list[str] = []
         valid_moves = []
         for move in event.moved_entities:
@@ -194,6 +199,12 @@ class WorldRulesMixin(ItemIntegrityMixin):
             ent = by_id.get(raw_id.upper()) or by_name.get(raw_id.lower())
             violation = None
             if ent and ent.entity_type == "NPC" and move.to_scene_id:
+                destination = destinations.resolve(move.to_scene_id)
+                if destination is None:
+                    messages.append(movement_message(ent.name, True, self.turn_language))
+                    continue
+                move.entity_id = ent.id
+                move.to_scene_id = destination
                 violation = self._npc_move_violation(ent, move)
             if violation:
                 messages.append(violation)

@@ -27,7 +27,7 @@ from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warn
 from backend.engine.npc_presentation import runtime as portrait_presentation
 from backend.engine.narration_correction import append_correction, correction_applied
 from backend.engine.visual_novel.narration import narration_suffix
-from backend.engine.npc_presence import presence_context
+from backend.engine.npc_presence import movement_resolution, presence_context
 from backend.engine.visual_novel.social import plan_interaction
 from backend.engine.clothing.planning import prepare_wardrobe_plan
 from backend.engine.visual_novel.runtime import capture_completed_moment
@@ -60,10 +60,8 @@ from backend.engine.gameplay.turn_pass_flow import (
     run_guardrail_chain,
     turn_anchor,
 )
-from backend.engine.gameplay.scene_transition_intent import (
-    confirm_scene_transition,
-    location_resolution,
-)
+from backend.engine.gameplay.movement_intent import confirm_player_movement
+from backend.engine.gameplay.scene_transition_intent import location_resolution
 from backend.engine.gameplay.turn_prompt_layout import (
     build_exit_description_task,
     build_narration_messages,
@@ -1756,34 +1754,15 @@ class GameTurnManager:
                 raise
 
             yield f"event: status\ndata: {json.dumps({'content': 'Applying progression...'})}\n\n"
-            # Guardrail: avoid accidental teleports from hypothetical/planned statements.
-            if progression_intent.new_scene_id:
-                allowed_open_destinations = {
-                    str(ex.get("to_scene_id") or "").strip()
-                    for ex in reduced_exits
-                    if (
-                        not bool(ex.get("is_locked"))
-                        or any(
-                            up.to_scene_id == ex.get("to_scene_id") and not up.is_locked
-                            for up in (getattr(progression_intent, "updated_exits", None) or [])
-                        )
-                    )
-                    and str(ex.get("to_scene_id") or "").strip()
-                }
-                move_is_valid = (
-                    progression_intent.new_scene_id in allowed_open_destinations
-                    and await confirm_scene_transition(
-                        self.adventure_gen.classify_short_intent,
-                        user_msg=user_msg,
-                        target_scene_id=progression_intent.new_scene_id,
-                        scenes=reduced_scenes,
-                        exits=reduced_exits,
-                        history=history,
-                    )
-                )
-                if not move_is_valid:
-                    progression_intent.new_scene_id = None
-                    progression_intent.exit_label = None
+            await confirm_player_movement(
+                self,
+                progression_intent,
+                user_msg=user_msg,
+                scenes=reduced_scenes,
+                exits=reduced_exits,
+                entities=all_entities,
+                history=history,
+            )
 
             if getattr(progression_intent, "new_local_place", None):
                 yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
@@ -1935,7 +1914,9 @@ class GameTurnManager:
 
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
-            + clarification_block(self, scene_id_before_turn)
+            + clarification_block(self, scene_id_before_turn),
+            movement_resolution(all_entities, self.state, game_event),
+            getattr(self, "_group_movement_resolution", ""),
         ]
         if language:
             reminders.append(
@@ -2277,31 +2258,6 @@ class GameTurnManager:
                             yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg})}\n\n"
 
             # 2b. NPC/Entity movement to different scenes
-            if game_event.moved_entities:
-                for move in game_event.moved_entities:
-                    if not move.to_scene_id:
-                        continue
-                    eid = move.entity_id
-                    ent_name = eid  # fallback: entity id, not the generic "Someone"
-                    # Try local entities first, then all entities
-                    match = next((e for e in entities if e.id == eid), None)
-                    if not match:
-                        match = next((e for e in all_entities if e.id == eid), None)
-                    if match:
-                        ent_name = match.name
-                    target_label = move.to_scene_id
-                    scene_res = await self.db.execute(
-                        select(WorldScene).where(
-                            WorldScene.id == move.to_scene_id, WorldScene.session_id == self.game_id
-                        )
-                    )
-                    scene_obj = scene_res.scalars().first()
-                    if scene_obj:
-                        target_label = scene_obj.label
-                    msg = f"{ent_name} moved to {target_label}."
-                    await self._save_chat_message("system", msg)
-                    yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': msg})}\n\n"
-
             # 3. Items
             if game_event.new_inventory_items:
                 for item in game_event.new_inventory_items:
@@ -2381,6 +2337,8 @@ class GameTurnManager:
         # see advance_in_game_turn above.
 
         if policy.vn:
+            # Direction and illustration records require the persisted reply identity.
+            await self.db.flush()
             record_direction(
                 self,
                 assistant_chat.id,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugNpcTools from './DebugNpcTools.vue'
+import DebugPlayerLocation from './DebugPlayerLocation.vue'
 import DebugNpcClothing from './DebugNpcClothing.vue'
 import DebugSceneJson from './DebugSceneJson.vue'
 import DebugVnSettings from './DebugVnSettings.vue'
@@ -860,6 +861,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                 <p v-if="selectedNode.description" class="text-xs text-slate-300 mb-3 leading-relaxed max-h-24 overflow-y-auto custom-scrollbar">
                   {{ selectedNode.description }}
                 </p>
+
+                <DebugPlayerLocation :scene-id="selectedNode.rawId" :current-scene-id="currentSceneId" :busy="commandBusy" @command="runCmd" />
 
                 <!-- NPCs Present at this node -->
                 <div class="border-t border-slate-800 pt-2.5">

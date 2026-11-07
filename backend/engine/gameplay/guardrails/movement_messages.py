@@ -23,3 +23,20 @@ _MESSAGES = {
 
 def movement_message(name: str, restricted: bool, language: str | None) -> str:
     return _MESSAGES[default_language(language)][int(restricted)].format(name=name)
+
+
+_ARRIVALS = {
+    "English": "{name} moved to {place}.",
+    "Russian": "{name} перемещается в локацию «{place}».",
+    "German": "{name} geht nach {place}.",
+    "French": "{name} se rend à {place}.",
+    "Spanish": "{name} se traslada a {place}.",
+    "Italian": "{name} si sposta in {place}.",
+    "Japanese": "{name}は{place}へ移動しました。",
+    "Chinese": "{name}移动到了{place}。",
+    "Portuguese": "{name} vai para {place}.",
+}
+
+
+def movement_arrival(name: str, place: str, language: str | None) -> str:
+    return _ARRIVALS[default_language(language)].format(name=name, place=place)
