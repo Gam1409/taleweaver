@@ -16,6 +16,8 @@ import {
 } from 'lucide-vue-next'
 import { api, GENERATION_SAYINGS } from '@/composables/useApi'
 import { createUuid } from '@/utils/uuid'
+import WorldBriefFields from '@/components/create-adventure/WorldBriefFields.vue'
+import { emptyWorldBrief, hasWorldBrief, briefTitle, worldBriefPayload } from '@/services/worldBrief'
 import { configState } from '@/store/config'
 import type { CatalogTile } from '@/types'
 
@@ -144,6 +146,7 @@ const totalStats = computed(() => {
 const form = ref({
   title: '',
   storyIdea: '',
+  world_brief: emptyWorldBrief(),
   selected_tone_id: '',
   selected_style_id: '',
   generate_scene_images: true,
@@ -458,6 +461,7 @@ async function startGeneration() {
     form.value.scripts_generation_enabled = true
   }
 
+  if (!form.value.title.trim() && hasWorldBrief(form.value.world_brief)) form.value.title = briefTitle(form.value.world_brief)
   if (!form.value.title.trim()) {
     if (form.value.storyIdea.trim()) {
       const clean = form.value.storyIdea.trim().replace(/^(\[.*?\]|\W)+/, '')
@@ -509,46 +513,14 @@ async function startGeneration() {
 
   const pacingVal = form.value.time_system === 'units' ? form.value.units_per_turn : form.value.pacing_minutes
 
-  let promptStr = form.value.storyIdea.trim()
-  let parsedSequences = undefined
-  
-  // Parse [Sequence] tags
-  const seqRegex = /\[Sequence[\s:]*\d*\]/i
-  if (seqRegex.test(promptStr)) {
-    const blocks = promptStr.split(new RegExp('\\[Sequence[\\s:]*\\d*\\]', 'ig'))
-    const sequences = []
-    // The first block is whatever text comes before the first sequence tag
-    // We can keep it in the prompt as the general premise
-    promptStr = blocks[0].trim()
-    
-    for (let i = 1; i < blocks.length; i++) {
-      if (sequences.length >= 30) break // Hard limit
-      const block = blocks[i].trim()
-      const lines = block.split('\n')
-      const title = lines[0].trim() || `Sequence ${i}`
-      const description = lines.slice(1).join('\n').trim() || 'Follow the sequence blueprint.'
-      
-      sequences.push({
-        id: createUuid(),
-        order: i,
-        title: title,
-        description: description.slice(0, 500),
-        walkthrough: description,
-        end_condition: 'Complete the sequence objectives.',
-        exp_reward: 500
-      })
-    }
-    if (sequences.length > 0) {
-      parsedSequences = sequences
-    }
-  }
+  const promptStr = form.value.storyIdea.trim()
 
   const payload: any = {
     ...form.value,
     id: createUuid(),
     title: (form.value.title.trim() || 'A New Reality').slice(0, 50),
     original_prompt: promptStr,
-    sequences: parsedSequences,
+    world_brief: worldBriefPayload(form.value.world_brief),
     selected_image_styles: form.value.selected_style_id ? [fullStyleObj] : [],
     selected_tone: form.value.selected_tone_id ? fullToneObj : null,
     // Time & Pacing
@@ -794,10 +766,13 @@ onBeforeUnmount(() => {
 
             <!-- 1. Basic Info (Title & Story Blueprint) -->
             <GeneratorBasicInfo
+              :blueprint-options="form"
               v-model:title="form.title"
               v-model:story-idea="form.storyIdea"
               v-model:generation-strictness="form.generation_strictness"
             />
+
+            <WorldBriefFields v-model="form.world_brief" />
 
             <!-- 2. Style, Tone & Visual Generation Toggles -->
             <GeneratorStyleTone

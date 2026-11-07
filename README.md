@@ -161,6 +161,8 @@ The browser workbench brings together locations, routes, NPCs, items, quests, to
 
 - Generate new worlds or variations of existing adventures, with supported staged jobs resumable after interruption.
 - Edit character traits, appearance, age, equipment, and clothing data.
+- Supply an open-ended [world blueprint](docs/world-blueprints.md): setting, history, starting facts and bounded reference excerpts.
+- Choose a [narrator style](docs/narrator-styles.md) while preserving each character's own voice.
 - Create item drafts from descriptions and review them before saving.
 - Inspect connected scenes, route requirements, containers, switches, and readable objects.
 - Review validation findings and apply AI-Fix proposals.

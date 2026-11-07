@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Save, X } from 'lucide-vue-next'
+import NarratorSettings from '@/components/game/NarratorSettings.vue'
 
 defineProps<{
   form: any
@@ -16,6 +17,8 @@ defineEmits<{
 </script>
 
 <template>
+  <div class="space-y-6">
+  <NarratorSettings v-if="adventure?.id" :endpoint="`/adventures/${encodeURIComponent(adventure.id)}/narrator-defaults`" author-defaults />
   <section v-if="toneCatalog.length" class="space-y-6 bg-slate-900/40 p-8 rounded-[2rem] border border-white/5 backdrop-blur-md shadow-xl">
      <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
@@ -56,6 +59,7 @@ defineEmits<{
             </button>
        </div>
   </section>
+  </div>
 </template>
 
 <style scoped>

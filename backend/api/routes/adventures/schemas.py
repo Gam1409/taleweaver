@@ -4,6 +4,7 @@ from typing import Any, Literal, Optional
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
+from backend.engine.blueprint.brief import WorldBrief
 from backend.engine.chpm.template_settings import Defaults as NpcPersonalityDefaults
 from backend.engine.chpm.template_settings import ensure_compatible
 from backend.engine.living_world.schema import Settings as LivingWorldSettings
@@ -30,6 +31,7 @@ class CreateAdventureTemplatePayload(BaseModel):
     license_url: Optional[str] = None
     language: Optional[str] = None
     original_prompt: Optional[str] = None
+    world_brief: Optional[WorldBrief] = None
     intro_text: Optional[str] = None
     rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = "rpg"
     generate_scene_images: bool = False

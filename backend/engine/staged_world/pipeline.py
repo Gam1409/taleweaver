@@ -10,6 +10,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from backend.core.game_modes import mode_policy
+from backend.engine.blueprint import apply_blueprint
+from backend.engine.blueprint.models import Blueprint
+from backend.engine.blueprint.stages import bind_detail, bind_plan
 from backend.engine.staged_world.checkpoints import Checkpoints, input_fingerprint
 from backend.engine.staged_world.constraints import validate_constraints
 from backend.engine.staged_world.prompts import DETAIL_INSTRUCTION, PLAN_INSTRUCTION, detail_context
@@ -39,6 +42,7 @@ class StagedGeneration:
         mode: str | None,
         status: Status,
         template_id: str,
+        blueprint: Blueprint | None = None,
     ):
         self.llm = llm
         self.store = store
@@ -48,6 +52,7 @@ class StagedGeneration:
         self.mode = mode
         self.status = status
         self.template_id = template_id
+        self.blueprint = blueprint
 
     async def request(
         self,
@@ -117,6 +122,8 @@ class StagedGeneration:
         )
 
     def check_plan(self, plan: dict) -> None:
+        if self.blueprint:
+            bind_plan(plan, self.blueprint)
         validate_plan(plan)
         validate_constraints(plan, self.metadata, self.mode)
 
@@ -150,6 +157,8 @@ class StagedGeneration:
         await self.status("Checking world references and ownership")
         if mode_policy(self.mode).vn:
             normalize_vn_generated_manifest(manifest)
+        if self.blueprint:
+            manifest = apply_blueprint(manifest, self.blueprint)
         validate_manifest(manifest, plan)
         return WorldManifesto.model_validate(manifest)
 
@@ -166,6 +175,8 @@ class StagedGeneration:
                     )
                 ordering = {seed["id"]: index for index, seed in enumerate(seeds)}
                 rows.sort(key=lambda row: ordering[row[id_field]])
+            if self.blueprint:
+                bind_detail(kind, rows, self.blueprint)
             _bind_ownership(kind, rows, plan)
             validate_batch(kind, rows, plan)
 
@@ -199,6 +210,7 @@ async def generate_manifest(
     mode: str | None,
     status: Status,
     template_id: str,
+    blueprint: Blueprint | None = None,
 ) -> WorldManifesto:
     store = Checkpoints(
         db, adventure, input_fingerprint(system_prompt, user_prompt, metadata, mode)
@@ -212,5 +224,6 @@ async def generate_manifest(
         mode=mode,
         status=status,
         template_id=template_id,
+        blueprint=blueprint,
     )
     return await runner.run()

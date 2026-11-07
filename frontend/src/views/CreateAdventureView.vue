@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { createUuid } from '@/utils/uuid'
+import WorldBriefFields from '@/components/create-adventure/WorldBriefFields.vue'
+import { emptyWorldBrief, hasWorldBrief, briefTitle, worldBriefPayload } from '@/services/worldBrief'
 import { configState, refreshConfig } from '@/store/config'
 import { authState } from '@/store/auth'
 import type { CatalogTile } from '@/types'
@@ -11,6 +13,7 @@ import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpText
 
 // Components
 import AdventureStatusAlerts from '@/components/create-adventure/AdventureStatusAlerts.vue'
+import BlueprintCheck from '@/components/create-adventure/BlueprintCheck.vue'
 import AdventureBasicInfo from '@/components/create-adventure/AdventureBasicInfo.vue'
 import AdventureGameSettings from '@/components/create-adventure/AdventureGameSettings.vue'
 import type { LivingWorldPreferences } from '@/services/livingWorld'
@@ -30,6 +33,7 @@ import type { RuleMode } from '@/types'
 const form = ref({
   title: '',
   storyIdea: '',
+  world_brief: emptyWorldBrief(),
   generation_strictness: 'creative' as 'creative' | 'strict',
   generate_npc_images: true,
   generate_item_images: true,
@@ -211,12 +215,13 @@ async function handleCreate() {
   if (generatorMode.value === 'simple') {
     form.value.scripts_generation_enabled = true
     form.value.time_auto = true
-    if (!form.value.storyIdea.trim()) {
+    if (!form.value.storyIdea.trim() && !hasWorldBrief(form.value.world_brief)) {
       errorMsg.value = 'Please provide a concept prompt for your adventure.'
       return
     }
   }
 
+  if (!form.value.title.trim() && hasWorldBrief(form.value.world_brief)) form.value.title = briefTitle(form.value.world_brief)
   if (!form.value.title.trim()) {
     if (form.value.storyIdea.trim()) {
       const clean = form.value.storyIdea.trim().replace(/^(\[.*?\]|\W)+/, '')
@@ -275,37 +280,7 @@ async function handleCreate() {
     }
   }
 
-  let promptStr = form.value.storyIdea.trim()
-  let parsedSequences = undefined
-
-  // Parse [Sequence] tags
-  const seqRegex = /\[Sequence[\s:]*\d*\]/i
-  if (seqRegex.test(promptStr)) {
-    const blocks = promptStr.split(new RegExp('\\[Sequence[\\s:]*\\d*\\]', 'ig'))
-    const sequences = []
-    promptStr = blocks[0].trim()
-
-    for (let i = 1; i < blocks.length; i++) {
-      if (sequences.length >= 15) break
-      const block = blocks[i].trim()
-      const lines = block.split('\n')
-      const title = lines[0].trim() || `Sequence ${i}`
-      const description = lines.slice(1).join('\n').trim() || 'Follow the sequence blueprint.'
-
-      sequences.push({
-        id: createUuid(),
-        order: i,
-        title: title,
-        description: description.slice(0, 500),
-        walkthrough: description,
-        end_condition: 'Complete the sequence objectives.',
-        exp_reward: 100,
-      })
-    }
-    if (sequences.length > 0) {
-      parsedSequences = sequences
-    }
-  }
+  const promptStr = form.value.storyIdea.trim()
 
   const payload: any = {
     ...form.value,
@@ -317,7 +292,7 @@ async function handleCreate() {
     id: createUuid(),
     title: (form.value.title.trim() || 'Untitled Odyssey').slice(0, 50),
     original_prompt: promptStr,
-    sequences: parsedSequences,
+    world_brief: worldBriefPayload(form.value.world_brief),
     generation_strictness: form.value.generation_strictness,
     clock_enabled: form.value.clock_enabled,
     time_system: timeSystemVal,
@@ -644,9 +619,13 @@ onMounted(() => {
           <textarea
             v-model="form.storyIdea"
             rows="5"
+            maxlength="20000"
             class="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500/80 rounded-xl p-3.5 sm:p-4 text-xs sm:text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all resize-y custom-scrollbar"
             placeholder="e.g. A forgotten star observatory buried beneath a glacial mountain peak. An ancient mechanical astrolabe has reawakened and started transmitting coordinates across the stars..."
           ></textarea>
+
+          <BlueprintCheck :text="form.storyIdea" :options="form" />
+          <WorldBriefFields v-model="form.world_brief" />
 
           <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-2 border-t border-white/5">
             <label class="text-xs font-bold text-slate-400 whitespace-nowrap">Adventure Title (Optional):</label>
@@ -777,6 +756,8 @@ onMounted(() => {
               :can-suggest-story-idea="hasLlmConfig"
               @suggest-story-idea="handleSuggestStoryIdea"
             />
+            <BlueprintCheck :text="form.storyIdea" :options="form" />
+            <WorldBriefFields v-model="form.world_brief" />
 
             <AdventureGameSettings
               v-model="form"

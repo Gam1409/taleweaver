@@ -1,3 +1,4 @@
+import type { WorldBrief } from './worldBrief'
 import type { PortraitPreferences, PortraitState } from '@/utils/npcPresentation'
 
 export type RuleMode = 'rpg' | 'story' | 'chat' | 'vn'
@@ -393,6 +394,7 @@ export interface AdventureTemplateSummary {
 
 /** Payload for creating a new adventure. */
 export interface CreateAdventurePayload {
+  world_brief?: WorldBrief
   show_npc_state?: boolean
   detailed_clothing?: boolean
   nsfw_enabled?: boolean

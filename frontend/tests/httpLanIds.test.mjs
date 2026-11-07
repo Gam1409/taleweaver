@@ -41,7 +41,7 @@ for (const cryptoApi of [
   })
 }
 
-// Execute the actual six ID expressions, including both IDs in each creation UI.
+// Execute every client ID allocation. Chapter IDs now come from the server blueprint parser.
 const files = [
   'services/visualJobs.ts',
   'services/catalogService.ts',
@@ -66,7 +66,7 @@ for (const file of files) {
   }
   visit(tree)
   test(`${file} covers all expected ID allocations`, () => {
-    assert.equal(expressions.length, file.endsWith('.vue') ? 2 : 1)
+    assert.equal(expressions.length, 1)
   })
   expressions.forEach((expression, index) => {
     test(`${file} ID ${index + 1} works without randomUUID`, t => {

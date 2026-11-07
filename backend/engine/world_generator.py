@@ -24,6 +24,8 @@ from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.core.llm_logger import log_structured_event
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.blueprint.brief_context import prepare_brief_context
+from backend.engine.blueprint.generation import prepare_generation_brief
 from backend.engine.clothing.generation import generation_instruction
 from backend.engine.vn_world_generation import normalize_vn_generated_manifest
 from backend.engine.world_generation_persistence import (
@@ -450,6 +452,21 @@ class WorldGenerator:
             can_damage_npcs = npcs_can_damage_protagonist = False
             scripts_generation_enabled = False
 
+        original_prompt, sequences, prepared_blueprint = prepare_generation_brief(
+            original_prompt or "",
+            sequences,
+            {
+                "rule_enforcement_mode": effective_mode,
+                "scripts_generation_enabled": scripts_generation_enabled,
+                "container_generation_enabled": container_generation_enabled,
+                "text_log_generation_enabled": text_log_generation_enabled,
+                "quest_generation_enabled": quest_generation_enabled,
+                "award_generation_enabled": award_generation_enabled,
+                "max_scenes": max_scenes,
+                "max_items": max_items,
+                "max_sequences": max_sequences,
+            },
+        )
         llm = _world_generator_llm(user, provider, model)
         provider, model = llm.provider, llm.model
         tts_settings = user.tts_settings or {}
@@ -472,18 +489,10 @@ class WorldGenerator:
             allow_reuse_source_assets=bool(allow_reuse_source_assets),
         )
 
-        if not sequences and original_prompt:
-            cleaned_prompt, extracted_seqs = WorldGenerator._extract_sequences_from_prompt(
-                original_prompt
-            )
-            if extracted_seqs:
-                sequences = extracted_seqs
-                original_prompt = cleaned_prompt
-
         system_prompt, user_prompt = build_world_generation_prompts(
             rule_enforcement_mode=effective_mode or "rpg",
             title=title,
-            original_prompt=original_prompt,
+            original_prompt=prepared_blueprint.premise if prepared_blueprint else original_prompt,
             sequences=sequences,
             generation_strictness=generation_strictness,
             language=language,
@@ -517,6 +526,9 @@ class WorldGenerator:
             allow_reuse_source_assets=allow_reuse_source_assets,
         )
 
+        if prepared_blueprint:
+            user_prompt += prepared_blueprint.prompt_section(generation_strictness)
+
         system_prompt += generation_instruction(
             getattr(adventure, "original_manifest", None), mode=effective_mode or "rpg"
         )
@@ -528,11 +540,13 @@ class WorldGenerator:
                 db, adventure, message, status_callback=status_callback
             )
 
+        user_prompt += await prepare_brief_context(db, adventure, publish_stage)
         manifesto = await generate_manifest(
             db=db,
             adventure=adventure,
             llm=llm,
             status=publish_stage,
+            **({"blueprint": prepared_blueprint.blueprint} if prepared_blueprint else {}),
             mode=effective_mode or "rpg",
             template_id=template_id,
             system_prompt=system_prompt,

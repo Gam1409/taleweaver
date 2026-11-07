@@ -13,6 +13,7 @@ from backend.engine.adventure_export_assets import (
 )
 from backend.engine.clothing.settings import clothing_settings
 from backend.engine.export_archives import pack_export_adz
+from backend.engine.narrator.settings import manifest_settings as narrator_settings
 from backend.engine.npc_cards.settings import manifest_card_settings
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -481,6 +482,9 @@ class AdventureExporter:
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
             "npc_card_settings": manifest_card_settings(adv.original_manifest),
             "clothing_settings": clothing_settings(adv.original_manifest),
+            "narrator_settings": narrator_settings(adv.original_manifest).model_dump(),
+            "world_brief": (adv.original_manifest or {}).get("world_brief"),
+            "world_brief_sources": (adv.original_manifest or {}).get("world_brief_sources"),
         }
 
         return manifest

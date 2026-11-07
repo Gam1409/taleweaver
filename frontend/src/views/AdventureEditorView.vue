@@ -24,6 +24,7 @@ import ItemsTab from '@/components/editor/ItemsTab.vue'
 import MoveItemToSceneModal from '@/components/editor/MoveItemToSceneModal.vue'
 import VisualsTab from '@/components/editor/VisualsTab.vue'
 import ToneTab from '@/components/editor/ToneTab.vue'
+import WorldBriefEditor from '@/components/editor/WorldBriefEditor.vue'
 import InhabitantsTab from '@/components/editor/InhabitantsTab.vue'
 import ScenesTab from '@/components/editor/ScenesTab.vue'
 import MapTab from '@/components/editor/MapTab.vue'
@@ -2502,6 +2503,7 @@ watch(
           </aside>
 
           <div class="space-y-10 min-w-0 relative">
+            <WorldBriefEditor v-if="activeTab === 'world'" :adventure-id="adventureId" />
             <WorldTab
               v-if="activeTab === 'world'"
               :form="form"

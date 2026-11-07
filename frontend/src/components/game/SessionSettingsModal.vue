@@ -8,6 +8,7 @@ import StoryVisualPresets from '../editor/StoryVisualPresets.vue'
 import LivingWorldSettings from './LivingWorldSettings.vue'
 import ChpmSettings from './ChpmSettings.vue'
 import SessionPortraitSettings from './SessionPortraitSettings.vue'
+import NarratorSettings from './NarratorSettings.vue'
 import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 const dialog = ref<HTMLElement | null>(null)
 useDialogFocus(dialog, () => emit('close'))
 
+const narrator = ref<InstanceType<typeof NarratorSettings> | null>(null)
 const vnNarration = ref<InstanceType<typeof VnNarrationSettings> | null>(null)
 const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(null)
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
@@ -42,6 +44,7 @@ async function saveAll(): Promise<void> {
   try {
     if (contentSettings.value && !await contentSettings.value.save()) return
     if (vnNarration.value && !await vnNarration.value.save()) return
+    if (narrator.value && !await narrator.value.save()) return
     if (exploration.value && !await exploration.value.save()) return
     if (livingWorld.value && !await livingWorld.value.save()) return
     if (portraitSettings.value && !await portraitSettings.value.save()) return
@@ -129,6 +132,7 @@ function handleInput(event: Event) {
         <section aria-labelledby="session-story-settings" class="min-w-0 space-y-5">
         <h4 id="session-story-settings" class="text-xs font-black uppercase tracking-widest text-amber-300">Story & world</h4>
         <VnNarrationSettings v-if="sessionId && mode === 'vn'" ref="vnNarration" :session-id="sessionId" />
+        <NarratorSettings v-if="sessionId" ref="narrator" :endpoint="`/adventures/${encodeURIComponent(sessionId)}/narrator-settings`" />
         <SessionContentSettings v-if="sessionId" ref="contentSettings" :session-id="sessionId" />
         <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
         <StoryVisualPresets v-if="sessionId" ref="visualPresets" :adventure-id="sessionId" session embedded />

@@ -28,6 +28,7 @@ from backend.engine.memory_manager import MemoryManager
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled, without_legacy_journal
 from backend.engine.memory_rag.recent import recent_dialogue
 from backend.engine.memory_rag.retrieval import prepare_recall
+from backend.engine.narrator.prompts import narration_style_block
 from backend.engine.npc_presence import physically_present, presence_context
 from backend.engine.scene_staging.state import narration_block
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -366,7 +367,7 @@ class TurnLlmContextBuilder:
         narration_state_block += await prepare_choice(
             self.manager, user_msg, visible, history=history
         )
-        narration_static_prompt = static_prompt
+        narration_static_prompt = static_prompt + narration_style_block(self.manager.state)
         if language:
             logger.info(
                 "[Turn %s] Bable Fish Active: Target Language = %s", self.manager.game_id, language

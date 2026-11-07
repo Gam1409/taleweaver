@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
+from backend.api.routes.adventures.blueprint_routes import router as blueprint_router
 from backend.api.routes.adventures.checkpoint_policy import router as checkpoint_policy_router
 from backend.api.routes.adventures.chpm import router as chpm_router
 from backend.api.routes.adventures.cloning import router as cloning_router
@@ -41,6 +42,7 @@ from backend.api.routes.adventures.session_visual_presets import (
 )
 from backend.api.routes.adventures.sessions import router as sessions_router
 from backend.api.routes.adventures.state_checks import router as state_checks_router
+from backend.api.routes.adventures.story_authoring import router as authoring_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
 from backend.api.routes.adventures.turn_replay import router as replay_router
@@ -51,6 +53,7 @@ router = APIRouter(prefix="/adventures")
 
 # Include sub-routers in order of specificity.
 # 1. Imports (static paths like /import, /check-defaults)
+router.include_router(blueprint_router)
 router.include_router(living_world_capabilities_router)
 router.include_router(imports_router)
 
@@ -66,6 +69,7 @@ router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
 router.include_router(state_checks_router)
 router.include_router(portrait_settings_router)
+router.include_router(authoring_router)
 router.include_router(scene_debug_router)
 router.include_router(item_repair_router)
 

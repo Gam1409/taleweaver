@@ -204,6 +204,11 @@ def build_template(
     )
 
     normalize_vn_template(template)
+    if payload.world_brief:
+        template.original_manifest = {
+            **(template.original_manifest or {}),
+            "world_brief": payload.world_brief.model_dump(),
+        }
     return template
 
 
@@ -290,6 +295,13 @@ async def create_adventure_records(
     db: AsyncSession, payload: CreateAdventureTemplatePayload, user: User
 ) -> CreatedAdventure:
     """Create template, protagonist, first session and session state (committed)."""
+    from backend.engine.blueprint import BlueprintError
+    from backend.engine.blueprint.generation import prepare_generation_blueprint
+
+    try:
+        prepare_generation_blueprint(payload.original_prompt or "", payload.model_dump())
+    except BlueprintError as exc:
+        raise HTTPException(422, str(exc)) from exc
     await ensure_no_active_generation(db, user.id)
     cover = await resolve_cover_source(db, payload, user.id)
     template_id = payload.id or generate_adventure_id(payload.title)

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Sparkles } from 'lucide-vue-next'
+import BlueprintCheck from '@/components/create-adventure/BlueprintCheck.vue'
 import InfoPopoverButton from '@/components/create-adventure/InfoPopoverButton.vue'
 
 const props = defineProps<{
   title: string
   storyIdea: string
   generationStrictness?: string
+  blueprintOptions: Record<string, unknown>
 }>()
 
 const emit = defineEmits<{
@@ -47,13 +49,13 @@ const emit = defineEmits<{
             <span>Story Blueprint & World Vision</span>
           </label>
           <InfoPopoverButton title="Structured Syntax">
-            <p class="mb-2">Use structured tags to guide the AI linearly (Limit: 15 sequences) or force specific entities.</p>
+            <p class="mb-2">Optional tags establish starting facts and named entities. The story outcome remains open.</p>
             <div class="space-y-1 mb-2 font-mono text-cyan-400">
               <div>[Sequence: 1] Sequence descriptions</div>
-              <div>[Scene: 1] Scene descriptions</div>
-              <div>[NPC: 1] NPC description</div>
-              <div>[Scene: 2] Scene descriptions</div>
-              <div>[NPC: 2] NPC description</div>
+              <div>[Scene: LAB] Observatory</div>
+              <div>[NPC: MIRA] Mira</div>
+              <div>[Scene: HARBOR] Harbour</div>
+              <div>[NPC: ENVOY] The envoy</div>
               <div>[Sequence: 2] ...</div>
             </div>
             <p class="mb-2">Enable <b>Strict Adherence</b> Builder Mode to enforce the structure.</p>
@@ -64,10 +66,12 @@ const emit = defineEmits<{
       <textarea
         :value="props.storyIdea"
         @input="emit('update:storyIdea', ($event.target as HTMLTextAreaElement).value)"
-        rows="3"
+        rows="5"
+        maxlength="20000"
         placeholder="Describe the atmosphere, mystery, factions, and world setting..."
         class="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-900/90 border border-slate-700/80 rounded-xl text-white text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all resize-none custom-scrollbar"
       ></textarea>
+      <BlueprintCheck :text="props.storyIdea" :options="props.blueprintOptions" />
     </div>
 
     <!-- World-Builder Strictness -->

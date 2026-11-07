@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_logger import log_structured_event
+from backend.engine.authoring_settings import preserve_authoring_settings
 from backend.engine.clothing.settings import preserve_clothing_settings
 from backend.engine.npc_cards.settings import preserve_card_settings
 from backend.engine.nsfw.settings import preserve_nsfw_settings
@@ -47,13 +48,19 @@ async def persist_generated_narrative(
             "npc_card_settings",
             "clothing_settings",
             "nsfw_settings",
+            "narrator_settings",
+            "world_brief",
+            "world_brief_sources",
         }:
             from backend.engine.story_visual_presets import preserve_story_presets
 
-            adventure.original_manifest = preserve_nsfw_settings(
-                preserve_clothing_settings(
-                    preserve_card_settings(
-                        preserve_story_presets(manifest_dict, adventure), adventure
+            adventure.original_manifest = preserve_authoring_settings(
+                preserve_nsfw_settings(
+                    preserve_clothing_settings(
+                        preserve_card_settings(
+                            preserve_story_presets(manifest_dict, adventure), adventure
+                        ),
+                        adventure,
                     ),
                     adventure,
                 ),

@@ -259,14 +259,18 @@ def apply_final_adventure_fields(ctx: ApplyContext) -> None:
         getattr(adventure, "scripts_generation_enabled", False),
     )
     adventure.is_ready = False
+    from backend.engine.authoring_settings import preserve_authoring_settings
     from backend.engine.clothing.settings import preserve_clothing_settings
     from backend.engine.npc_cards.settings import preserve_card_settings
     from backend.engine.nsfw.settings import preserve_nsfw_settings
     from backend.engine.story_visual_presets import preserve_story_presets
 
-    adventure.original_manifest = preserve_nsfw_settings(
-        preserve_clothing_settings(
-            preserve_card_settings(preserve_story_presets(ctx.manifest, adventure), adventure),
+    adventure.original_manifest = preserve_authoring_settings(
+        preserve_nsfw_settings(
+            preserve_clothing_settings(
+                preserve_card_settings(preserve_story_presets(ctx.manifest, adventure), adventure),
+                adventure,
+            ),
             adventure,
         ),
         adventure,
