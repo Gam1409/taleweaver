@@ -8,6 +8,7 @@ defineExpose({ save })
 
 <template>
   <section class="space-y-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4" aria-label="Portrait presentation">
+    <p class="text-xs text-slate-400">Works without NPC Personality. The narrator supplies these optional displays on new replies; earlier replies are not reassessed.</p>
     <label class="flex items-center gap-3 cursor-pointer">
       <Palette class="w-5 h-5 shrink-0 text-cyan-300" aria-hidden="true" />
       <span class="flex-1 text-sm font-bold text-slate-200">Палитра эмоций</span>

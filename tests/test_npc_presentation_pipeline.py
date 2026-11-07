@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy import select
 
 from backend.engine.gameplay.manager import GameTurnManager
@@ -82,5 +83,86 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
         )
         assert message.content == body
         assert message.to_client_dict()["portrait_state"]["npcs"]["RIN"]["intensity"] == 65
-        assert "OPTIONAL PORTRAIT PRESENTATION" in llm.stream_simple_task.await_args.args[0]
+        assert "PORTRAIT PRESENTATION" in llm.stream_simple_task.await_args.args[0]
         llm.stream_simple_task.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "preferences,expected",
+    [
+        ({"emotion_palette": True}, {"emotion": "interest", "intensity": 70}),
+        ({"character_thoughts": True}, {"thought": "Наконец-то можно поговорить."}),
+        (
+            {"emotion_palette": True, "character_thoughts": True},
+            {"emotion": "interest", "intensity": 70, "thought": "Наконец-то можно поговорить."},
+        ),
+    ],
+)
+async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
+    setup_test_db, monkeypatch, preferences, expected
+):
+    from backend.engine.chpm.runtime import current
+    from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
+
+    body = 'Лина: "Спасибо. Теперь можно поговорить."'
+    footer = (
+        "<npc-state>"
+        + json.dumps(
+            {
+                "npcs": [
+                    {
+                        "npc_id": "LINA",
+                        "emotion": "interest",
+                        "intensity": 70,
+                        "thought": "Наконец-то можно поговорить.",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        )
+        + "</npc-state>"
+    )
+
+    class PresentationRoles(TurnRoles):
+        async def stream(self, *args, **kwargs):
+            self.prompts.append((args, kwargs))
+
+            async def chunks():
+                for part in (body, footer[:7], footer[7:-5], footer[-5:]):
+                    yield MagicMock(
+                        choices=[MagicMock(delta=MagicMock(content=part), finish_reason="stop")]
+                    )
+
+            return chunks()
+
+    roles = PresentationRoles()
+    install_roles(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, _, state, _ = await seed_vn(db)
+        state.entity_states = {**state.entity_states, KEY: preferences}
+        await db.commit()
+        manager = GameTurnManager(db, "session-1", user)
+        events = [event async for event in manager.process_turn("Давай поговорим.")]
+        final = final_payload(events)
+        assert final["status"] == "success", "".join(events)
+        assert current(manager) is None  # No NPC Personality turn or decisions exist.
+        assert final["sheet"]["portrait_preferences"] == {
+            "emotion_palette": False,
+            "character_thoughts": False,
+            "brightness": 40,
+            **preferences,
+        }
+        message = await db.scalar(
+            select(ChatMessage).where(
+                ChatMessage.session_id == "session-1",
+                ChatMessage.role == "assistant",
+                ChatMessage.content == body,
+            )
+        )
+        assert message is not None
+        assert message.to_client_dict()["portrait_state"]["npcs"]["LINA"] == expected
+        assert "<npc-state>" not in "".join(events)
+        assert len(roles.prompts) == 1
+        prompt = roles.prompts[0][0][0]
+        assert "enabled for this reply" in prompt
+        assert "without NPC Personality" in prompt

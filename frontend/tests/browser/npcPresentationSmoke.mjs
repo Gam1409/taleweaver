@@ -16,6 +16,7 @@ try {
   await page.goto((process.env.FRONTEND_URL || 'http://127.0.0.1:5193') + '/tests/browser/npcPresentation.html')
   const rin = page.locator('[tabindex="0"]').filter({ hasText: 'Dr. Rin' })
   await rin.waitFor()
+  assert.equal(await page.getByText(/Works without NPC Personality/).count(), 1)
   assert.equal(await page.getByText('Item and travel checks').count(), 0)
   assert.match(await rin.getAttribute('style'), /12,\s*10,\s*18/)
   await rin.hover()

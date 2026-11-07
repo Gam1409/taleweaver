@@ -61,16 +61,19 @@ class PresentationTurn:
                 "characters, in the story language; never model reasoning, instructions or analysis"
             )
         return (
-            "OPTIONAL PORTRAIT PRESENTATION: Write the complete story normally, then append exactly "
+            "PORTRAIT PRESENTATION (enabled for this reply): Write the complete story normally, "
+            "then append exactly "
             + OPEN
             + '{"npcs":[...]}'
             + CLOSE
             + ". The footer is private UI data, not spoken dialogue. "
             "Each entry contains " + "; ".join(fields) + ". "
             f"Only include relevant NPCs from this cast, at most {MAX_NPCS}, once each. "
+            "These enabled session display options work without NPC Personality; return the "
+            "requested fields even when no psychological appraisals are provided. "
             "Describe their overall state NOW, whatever its cause; it is not necessarily directed "
-            "at the player. Keep it consistent with established identity and current NPC Personality "
-            "appraisals when provided. General activation is not sexual arousal. "
+            "at the player. Respect established identity and psychological appraisals when provided. "
+            "General activation is not sexual arousal. "
             "Use unknown or omit an entry when unassessed; unknown never means calm. "
             "Do not invent events, possessions, knowledge, agreement or personality changes for "
             "this display. Do not add protagonist thoughts. Do not include disabled fields. "

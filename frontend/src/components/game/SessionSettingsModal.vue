@@ -258,7 +258,7 @@ function handleInput(event: Event) {
 
         </section>
         <section aria-labelledby="session-npc-settings" class="min-w-0 space-y-5 md:col-span-2 xl:col-span-1">
-        <h4 id="session-npc-settings" class="text-xs font-black uppercase tracking-widest text-teal-300">Living World & NPC Personality</h4>
+        <h4 id="session-npc-settings" class="text-xs font-black uppercase tracking-widest text-teal-300">NPC behavior &amp; presentation</h4>
         <LivingWorldSettings v-if="sessionId" ref="livingWorld" :session-id="sessionId" />
         <SessionPortraitSettings v-if="sessionId" ref="portraitSettings" :session-id="sessionId" />
         <ChpmSettings v-if="sessionId && mode === 'vn'" ref="chpm" :session-id="sessionId" />
