@@ -64,6 +64,27 @@ test('cooldown shows the earlier rejection separately and escapes its validation
   assert.doesNotMatch(html, /<script>/)
 })
 
+test('an input-budget failure stays visible without proposal feedback', async () => {
+  const html = await render(2, [], {
+    usage: { status: 'failed', simplified: true, calls: 0, input_chars: 0, output_chars: 0 },
+    last_analysis_failure: {
+      source: 'recent_turn', reason: 'analysis_failed', reply_id: 'reply', proposal_feedback: [],
+      detail: 'CHPM required context exceeds its budget (26800 > 21952 characters).',
+    },
+  })
+  assert.match(html, /Most recent failed NPC analysis/)
+  assert.match(html, /26800 &gt; 21952/)
+  assert.doesNotMatch(html, /Most recent rejected NPC proposal/)
+  assert.match(html, /separate from output tokens and the model&#39;s context window/)
+})
+
+test('saved selections outside the known list remain visible for explicit removal', async () => {
+  const html = await render(1)
+  assert.match(html, /Changing limits keeps them selected/)
+  assert.match(html, /Saved selection: 0/)
+  assert.doesNotMatch(html, /PRIVATE_UNKNOWN_NAME/)
+})
+
 test('capacity warning exposes the explicit standard-mode choice and preserved history', async () => {
   const html = await render(1, [{ id: 'npc', name: 'Lina', status: 'pause_required', used: { events: 8180, beliefs: 20 }, limits: { events: 8192, beliefs: 2048 }, active_events: 244, archived_events: 7936 }])
   assert.match(html, /Needs attention/)

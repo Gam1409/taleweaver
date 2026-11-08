@@ -15,6 +15,14 @@ export interface ChpmSettings {
   semantic_memory?: boolean
 }
 
+export interface AnalysisFailure {
+  reason: string
+  proposal_feedback: string[]
+  detail?: string | null
+  reply_id: string | null
+  source: 'current_turn' | 'recent_turn' | 'previous_turn_snapshot'
+}
+
 export interface ChpmStatus {
   module_version?: string
   continuation?: { quality: string; cooldown_remaining: number; unreviewed_turns: number; total_simplified_turns: number }
@@ -23,10 +31,8 @@ export interface ChpmStatus {
   available: boolean
   characters: { id: string; name: string }[]
   usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number }
-  last_proposal_failure?: {
-    reason: string; proposal_feedback: string[]; reply_id: string | null
-    source: 'current_turn' | 'recent_turn' | 'previous_turn_snapshot'
-  } | null
+  last_analysis_failure?: AnalysisFailure | null
+  last_proposal_failure?: AnalysisFailure | null
   trace: unknown[]
   memory_counts: Record<string, number>
   memory: Record<string, unknown[]>

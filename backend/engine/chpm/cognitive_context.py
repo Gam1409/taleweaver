@@ -82,7 +82,7 @@ def pack(
         if size <= settings.max_input_chars:
             return window, catalogue, payload, ids
     raise ContextBudgetError(
-        f"CHPM required context exceeds its budget ({size} > {settings.max_input_chars} characters). No request was sent; increase the input limit explicitly."
+        f"CHPM required context exceeds its budget ({size} > {settings.max_input_chars} characters). No request was sent for the decision proposal; increase the input limit explicitly."
     )
 
 

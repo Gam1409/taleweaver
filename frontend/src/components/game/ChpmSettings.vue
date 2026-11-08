@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useChpmSettings } from '@/composables/useChpmSettings'
 
 const props = defineProps<{ sessionId: string }>()
 const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, load, save } = useChpmSettings(() => props.sessionId)
+const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
+const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
 defineExpose({ save })
 </script>
 
@@ -41,6 +44,12 @@ defineExpose({ save })
             <input v-model="draft.actor_ids" type="checkbox" :value="actor.id" :disabled="draft.actor_ids.length >= 20 && !draft.actor_ids.includes(actor.id)" class="accent-cyan-400" />
             {{ actor.name }}
           </label>
+          <div v-if="unlistedActors.length" class="space-y-2 text-xs text-amber-200">
+            <p>These saved selections are not currently listed. Changing limits keeps them selected; uncheck one only to remove it from the roster.</p>
+            <label v-for="actorId in unlistedActors" :key="actorId" class="flex items-center gap-2">
+              <input v-model="draft.actor_ids" type="checkbox" :value="actorId" class="accent-amber-400" />Saved selection: {{ actorId }}
+            </label>
+          </div>
         </fieldset>
         <label class="block text-xs text-slate-300">Active NPCs per turn
           <input v-model.number="draft.max_active_npcs" type="number" min="1" max="20" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" />
@@ -74,6 +83,7 @@ defineExpose({ save })
             <label>Requests per turn<input v-model.number="draft.max_calls_per_turn" type="number" :min="Math.max(1, minimumCalls)" max="25" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label>Decision/review output tokens<input v-model.number="draft.max_output_tokens" type="number" min="512" max="8192" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label class="col-span-2">Input size per request (characters, including instructions)<input v-model.number="draft.max_input_chars" type="number" min="8000" max="192000" step="1000" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <p class="col-span-2 text-slate-400">The input limit includes instructions, JSON schema and NPC context. It is separate from output tokens and the model's context window. Saving changed limits lets the next turn retry paused analysis.</p>
             <label class="col-span-2">Remembered observations per NPC<input v-model.number="draft.memory_limit" type="number" min="0" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
           </div>
           <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review and reserves one shared proposal retry plus two calls for narration repair and another review. Minimum for this selection: {{ minimumCalls }}. Reserved calls are used only if needed. A repair uses the Complex model with up to 4,096 output tokens. The ordinary narrator request is separate from this NPC Personality budget. These are logical requests; provider retries may add cost.</p>
@@ -96,11 +106,12 @@ defineExpose({ save })
       <p v-for="(feedback, index) in status.usage.proposal_feedback ?? []" :key="index">{{ feedback }}</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
-    <section v-if="status?.last_proposal_failure && status.last_proposal_failure.source !== 'current_turn'" aria-label="Previous NPC proposal failure" class="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">
-      <h4 class="font-semibold">Most recent rejected NPC proposal</h4>
+    <section v-if="lastFailure && lastFailure.source !== 'current_turn'" aria-label="Previous NPC analysis failure" class="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">
+      <h4 class="font-semibold">{{ lastFailure.proposal_feedback.length ? 'Most recent rejected NPC proposal' : 'Most recent failed NPC analysis' }}</h4>
       <p>Validation feedback from an earlier failed turn. The current turn may be paused and show zero analysis requests.</p>
-      <p v-for="(feedback, index) in status.last_proposal_failure.proposal_feedback" :key="index" class="whitespace-pre-wrap break-words">{{ feedback }}</p>
-      <p v-if="status.last_proposal_failure.source === 'previous_turn_snapshot'" class="text-amber-200/70">Read from the previous turn snapshot; game state is unchanged.</p>
+      <p v-if="lastFailure.detail" class="whitespace-pre-wrap break-words">{{ lastFailure.detail }}</p>
+      <p v-for="(feedback, index) in lastFailure.proposal_feedback" :key="index" class="whitespace-pre-wrap break-words">{{ feedback }}</p>
+      <p v-if="lastFailure.source === 'previous_turn_snapshot'" class="text-amber-200/70">Read from the previous turn snapshot; game state is unchanged.</p>
     </section>
     <details v-if="status && (status.trace.length || status.agenda?.length)" class="mt-3 text-xs text-slate-400">
       <summary class="cursor-pointer">Administrator decision trace</summary>

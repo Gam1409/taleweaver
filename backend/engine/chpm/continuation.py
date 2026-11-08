@@ -10,9 +10,9 @@ from backend.core.system_diagnostics import service
 from backend.engine.chpm import agenda, experience, host_adapter, host_observations
 from backend.engine.chpm.core.contracts import Experience
 from backend.engine.chpm.core.history import events
-from backend.engine.chpm.errors import ChpmError
+from backend.engine.chpm.errors import ChpmError, RecoverableChpmError
 from backend.engine.chpm.kernel import digest
-from backend.engine.chpm.recovery_contracts import RecoveryState, SimplifiedReply
+from backend.engine.chpm.recovery_contracts import RECOVERY_NOTICE, RecoveryState, SimplifiedReply
 from backend.engine.chpm.schema import KernelState, Settings, Usage
 from backend.engine.chpm.state import KEY, save
 from backend.engine.chpm.version import VERSION
@@ -101,7 +101,9 @@ def activate(
     turn.usage.simplified = True
     turn.usage.fallback_reason = reason
     turn.usage.status = "failed"
-    turn.usage.detail = "NPC analysis paused; RP continued with the last confirmed identity."
+    turn.usage.detail = RECOVERY_NOTICE
+    if isinstance(error, RecoverableChpmError) and str(error).strip():
+        turn.usage.detail = f"{RECOVERY_NOTICE} Cause: {error}"[:1200]
     service.emit(
         "npc.behavior_fallback", fallback_reason=reason, count=turn.usage.calls, error=error
     )
@@ -209,6 +211,9 @@ def finish(manager: Any, turn: "Turn", reply: Any) -> None:
         reason=turn.usage.fallback_reason,
         actor_ids=list(turn.fallback_identities),
         proposal_feedback=[entry[:600] for entry in turn.usage.proposal_feedback[-2:]],
+        failure_detail=turn.usage.detail[:1200]
+        if turn.usage.detail != RECOVERY_NOTICE and turn.usage.fallback_reason != "cooldown"
+        else None,
     )
     recovery.recent = [*recovery.recent, record][-8:]
     save(manager.state, result, expected_revision=turn.initial.revision)

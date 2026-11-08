@@ -4,6 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+RECOVERY_NOTICE = "NPC analysis paused; RP continued with the last confirmed identity."
+
 
 class SimplifiedReply(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -16,6 +18,7 @@ class SimplifiedReply(BaseModel):
     proposal_feedback: list[Annotated[str, Field(max_length=600)]] = Field(
         default_factory=list, max_length=2
     )
+    failure_detail: str | None = Field(default=None, max_length=1200)
 
 
 class RecoveryState(BaseModel):

@@ -12,7 +12,7 @@ from backend.api.routes.adventures.session_content_settings import _owned
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.chpm import capacity, failure_report
+from backend.engine.chpm import capacity, control_settings, failure_report
 from backend.engine.chpm.continuation import public_status
 from backend.engine.chpm.schema import Contract, Settings, Usage
 from backend.engine.chpm.state import KEY, load
@@ -43,6 +43,7 @@ async def _characters(db: AsyncSession, state: SessionState) -> list[dict[str, s
 
 async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, Any]:
     current = load(state)
+    last_failure = await failure_report.latest(db, state, current)
     return {
         "module_version": VERSION,
         "continuation": public_status(current),
@@ -51,7 +52,10 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "available": await session_is_vn(db, state),
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
-        "last_proposal_failure": await failure_report.latest(db, state, current),
+        "last_analysis_failure": last_failure,
+        "last_proposal_failure": last_failure
+        if last_failure and last_failure["proposal_feedback"]
+        else None,
         "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
         "history_capacity": {
             actor: capacity.inspect(mind) for actor, mind in current.minds.items()
@@ -125,6 +129,10 @@ async def patch(
         current.actors = {}
         current.memories = {}
         current.usage = Usage()
+    # A deliberately saved configuration change permits the next turn to retry.
+    # The continuity gap and confirmed psychology remain historical until validation.
+    current.recovery.cooldown_remaining = 0
+    current.recovery.consecutive_failures = 0
     current.settings = payload.settings
     current.revision += 1
     value = current.model_dump(mode="json")
@@ -164,8 +172,14 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
             "and in live mode agent rounds, proposal retry, review, narration repair and repeat review.",
         )
     ids = {row["id"] for row in await _characters(db, state)}
-    if not set(settings.actor_ids) <= ids:
-        raise HTTPException(422, "Choose known NPCs from this session.")
+    retained = set(control_settings.read((state.entity_states or {}).get(KEY)).actor_ids)
+    unknown = set(settings.actor_ids) - ids - retained
+    if unknown:
+        raise HTTPException(
+            422,
+            "Choose known NPCs from this session. Unavailable new selections: "
+            + ", ".join(sorted(unknown)),
+        )
     simulation = load_simulation(state)
     if settings.mode == "live" and simulation.settings.deliberation_enabled:
         raise HTTPException(
@@ -196,7 +210,11 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         # The current core may include observations from the completed reply.
         # Never transplant them into the replay's pre-turn snapshot, even on off/on.
         "minds": prior.get("minds", {}),
-        "recovery": prior.get("recovery", {}),
+        "recovery": {
+            **prior.get("recovery", {}),
+            "cooldown_remaining": 0,
+            "consecutive_failures": 0,
+        },
         "usage": Usage().model_dump(),
     }
     state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}

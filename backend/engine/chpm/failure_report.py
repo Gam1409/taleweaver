@@ -1,4 +1,4 @@
-"""Owner-only proposal diagnostics; reading a replay never restores its world or psyche."""
+"""Owner-only analysis diagnostics; reading a replay never restores its world or psyche."""
 
 from typing import Any
 
@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.chpm.continuation import StatusProjection
+from backend.engine.chpm.recovery_contracts import RECOVERY_NOTICE
 from backend.engine.chpm.schema import KernelState
 from backend.engine.chpm.state import KEY
 from backend.models.session_state import SessionState
@@ -17,28 +18,34 @@ def _report(current: KernelState | StatusProjection) -> dict[str, Any] | None:
         return None
     if (
         current.usage.simplified
-        and current.usage.fallback_reason == "analysis_failed"
-        and current.usage.proposal_feedback
+        and current.usage.fallback_reason != "cooldown"
+        and (current.usage.proposal_feedback or _detail(current.usage.detail))
     ):
         return {
-            "reason": "analysis_failed",
+            "reason": current.usage.fallback_reason,
             "proposal_feedback": current.usage.proposal_feedback,
+            "detail": _detail(current.usage.detail),
             "reply_id": current.recovery.recent[-1].reply_id if current.recovery.recent else None,
             "source": "current_turn",
         }
     for record in reversed(current.recovery.recent):
         if (
-            record.reason == "analysis_failed"
-            and record.proposal_feedback
+            record.reason != "cooldown"
+            and (record.proposal_feedback or _detail(record.failure_detail))
             and set(record.actor_ids).issubset(current.settings.actor_ids)
         ):
             return {
                 "reason": record.reason,
                 "proposal_feedback": record.proposal_feedback,
+                "detail": _detail(record.failure_detail),
                 "reply_id": record.reply_id,
                 "source": "recent_turn",
             }
     return None
+
+
+def _detail(value: str | None) -> str | None:
+    return value if value and value != RECOVERY_NOTICE else None
 
 
 def _snapshot(value: Any, session_id: str) -> StatusProjection | None:
