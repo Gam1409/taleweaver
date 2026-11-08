@@ -46,11 +46,34 @@ def _error_summary(response: httpx.Response) -> str:
         payload = response.json()
         nodes = payload.get("node_errors", {})
         names = [
-            f"{key} ({value.get('class_type', 'unknown')})"
+            f"{key} ({value.get('class_type', 'unknown')}){_validation_hint(value)}"
             for key, value in nodes.items()
             if isinstance(value, dict)
         ]
         return re.sub(r"[^a-zA-Z0-9_().,: -]", "", ", ".join(names))[:400]
+    return ""
+
+
+def _validation_hint(node: dict) -> str:
+    """Translate known error codes, never arbitrary provider text or input values."""
+    errors = node.get("errors", [])
+    if not isinstance(errors, list):
+        return ""
+    for error in errors[:8]:
+        if not isinstance(error, dict) or error.get("type") != "value_not_in_list":
+            continue
+        info = error.get("extra_info")
+        name = info.get("input_name") if isinstance(info, dict) else None
+        if isinstance(name, str) and name in {
+            "unet_name",
+            "ckpt_name",
+            "vae_name",
+            "clip_name",
+            "clip_name1",
+            "clip_name2",
+            "clip_name3",
+        }:
+            return f": {name} is not available on this server"
     return ""
 
 

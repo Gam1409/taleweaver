@@ -2,14 +2,17 @@
 
 import asyncio
 import io
+import logging
 import secrets
 from pathlib import Path
 
 from PIL import Image
 
 from backend.core.comfyui_config import ComfySettings, select_workflow
+from backend.core.comfyui_errors import ComfyRequestError
 from backend.core.visual_trace import record
 from backend.engine.comfyui_client import ComfyClient
+from backend.engine.comfyui_diagnostics import workflow_context
 from backend.engine.comfyui_output import bounded_dimensions, prepare_generated_image
 from backend.engine.image_prompt_adapter import prepare_prompt
 from backend.engine.visual_progress import report
@@ -18,6 +21,8 @@ from backend.utils.path_security import (
     ensure_within_data_dir,
     local_path_to_data_url,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def reference_png(url: str) -> bytes:
@@ -53,6 +58,7 @@ async def generate_comfy_image(
     settings = ComfySettings.model_validate(options)
     reference = options.get("reference_image_url")
     workflow = select_workflow(options, reference=bool(reference))
+    logger.info("ComfyUI image selection: %s", workflow_context(options, workflow))
     prepared_prompt = await prepare_prompt(prompt, options)
     render_options = dict(options)
     if options.get("width") is None and options.get("height") is None:
@@ -109,6 +115,12 @@ async def generate_comfy_image(
                 client.execute(graph, workflow.output_node, settings.comfyui_timeout),
                 timeout=settings.comfyui_timeout,
             )
+        except ComfyRequestError as exc:
+            raise ComfyRequestError(
+                exc.status_code,
+                exc.rejected_nodes,
+                workflow_context=workflow_context(options, workflow),
+            ) from exc
         except TimeoutError as exc:
             raise TimeoutError(
                 f"ComfyUI generation timed out (limit: {settings.comfyui_timeout}s). "

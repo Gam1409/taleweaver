@@ -2812,6 +2812,7 @@ watch(
 
     <ManualVisionModal 
       :show="showPromptDialog"
+      :adventure-id="adventureId"
       :selected-visual="selectedVisual"
       v-model:visual-prompt="visualPrompt"
       v-model:use-advanced-model="useAdvancedModel"

@@ -6,13 +6,17 @@ import { visualService } from '../../src/services/visualService'
 
 createApp({
   setup() {
-    const target = ref({ kind: 'npc' as const, id: 'ALICE', label: 'Alice', description: 'A physician.', hint: 'Portrait.' })
+    const imageSettings = new URLSearchParams(window.location.search).has('image-settings')
+    const target = ref(imageSettings
+      ? { kind: 'scene' as const, id: 'LAB', label: 'Laboratory', description: 'An empty laboratory.', hint: 'Landscape.' }
+      : { kind: 'npc' as const, id: 'ALICE', label: 'Alice', description: 'A physician.', hint: 'Portrait.' })
     const open = ref(true), prompt = ref('My manual prompt.'), advanced = ref(false), reference = ref(false)
     const notices = ref<string[]>([])
     const vision = useManualVision({ adventureId: () => 'adventure', target, open, prompt,
       advanced, reference, refresh: async () => {}, notify: message => notices.value.push(message) })
     return () => h('main', { class: 'min-h-screen bg-slate-950 p-8 text-white' }, [
       h(ManualVisionModal, {
+        adventureId: imageSettings ? 'adventure' : undefined,
         show: open.value, selectedVisual: target.value, visualPrompt: prompt.value,
         isSuggestingPrompt: vision.isSuggestingPrompt.value, isRegenerating: vision.isRegenerating.value,
         errorMessage: vision.error.value, useAdvancedModel: advanced.value, useCurrentImage: reference.value,
