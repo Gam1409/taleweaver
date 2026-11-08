@@ -2,7 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import ComfyPurposeAssignments from './ComfyPurposeAssignments.vue'
 import ComfySettingsEditor from './ComfySettingsEditor.vue'
-import type { ComfyOptions } from '@/types/comfyui'
+import type { ComfyOptions, ComfyTestOptions } from '@/types/comfyui'
 
 const props = defineProps<{
   t2iForm: any
@@ -215,7 +215,7 @@ const handleSave = () => {
   emit('save', localForm.value)
 }
 
-const testSimple = (options?: ComfyOptions) => {
+const testSimple = (options?: ComfyTestOptions) => {
   const presetTest = Boolean(options)
   options ??= testOptions('simple')
   emit('test', { 
@@ -234,7 +234,7 @@ const testSimple = (options?: ComfyOptions) => {
   })
 }
 
-const testAdvanced = (options?: ComfyOptions) => {
+const testAdvanced = (options?: ComfyTestOptions) => {
   const presetTest = Boolean(options)
   options ??= testOptions('advanced')
   emit('test', { 

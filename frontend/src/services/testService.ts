@@ -1,4 +1,4 @@
-import type { ComfyOptions } from '@/types/comfyui'
+import type { ComfyTestOptions } from '@/types/comfyui'
 import { ref } from 'vue'
 import type { OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import type { SamplingProfile } from '@/services/llmSampling'
@@ -119,7 +119,7 @@ class TestService {
     samplerName?: string | null,
     scheduler?: string | null,
     minLongEdge?: number | null,
-    comfyOptions?: ComfyOptions
+    comfyOptions?: ComfyTestOptions
   ) {
     this.testResults.value[key] = { status: 'loading', message: 'Generating test image...' }
 

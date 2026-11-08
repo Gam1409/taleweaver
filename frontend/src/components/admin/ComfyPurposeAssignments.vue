@@ -5,7 +5,7 @@ import ComfyPresetModal from './ComfyPresetModal.vue'
 import ComfyPresetBrowser from './ComfyPresetBrowser.vue'
 import { imagePurposes, type PresetAssignment } from '@/services/imagePurposes'
 import { clonePresetData } from '@/services/comfyPresetDraft'
-import type { ComfyOptions } from '@/types/comfyui'
+import type { ComfyOptions, ComfyTestOptions } from '@/types/comfyui'
 const props = defineProps<{
   modelValue: ComfyOptions
   settings: Record<string, unknown>
@@ -13,7 +13,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: ComfyOptions): void
-  (e: 'test', value: { options: ComfyOptions; profile: 'simple' | 'advanced' }): void
+  (e: 'test', value: { options: ComfyTestOptions; profile: 'simple' | 'advanced' }): void
 }>()
 const open = ref(false)
 const editing = ref(false)

@@ -48,11 +48,11 @@ const emit = defineEmits<{
     <div class="space-y-4 rounded-xl border border-slate-700 bg-slate-950/40 p-5">
       <h4 class="text-sm font-semibold">Test image</h4>
       <p class="text-sm leading-relaxed text-slate-400">
-        Run the selected preset with this window's draft settings. This does not save your changes.
+        Uses the example description on the left, reusing its current prepared preview when available. Runs this window's draft settings and does not save your changes.
       </p>
       <button
         type="button"
-        :disabled="!ready || loading"
+        :disabled="!ready || loading || previewing"
         class="primary-button"
         @click="emit('generate')"
       >
@@ -60,7 +60,7 @@ const emit = defineEmits<{
       </button>
       <div v-if="testResult" aria-live="polite" class="space-y-3">
         <p
-          class="text-sm"
+          class="text-sm whitespace-pre-wrap break-words"
           :class="testResult?.status === 'error' ? 'text-rose-300' : 'text-slate-300'"
         >
           {{ testResult?.message }}

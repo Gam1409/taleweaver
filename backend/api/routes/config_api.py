@@ -3,11 +3,11 @@ import os
 import re
 import time
 import uuid
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1024,6 +1024,14 @@ async def test_llm_connection(
 
 
 class TestVisionPayload(ComfySettings):
+    test_prompt: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12000)]
+        | None
+    ) = None
+    prepared_body: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12000)]
+        | None
+    ) = None
     image_purpose: ImagePurpose | None = None
     comfyui_profile: str = "simple"
     model: str
@@ -1108,7 +1116,9 @@ async def test_vision_connection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> dict[str, Any]:
-    """Tests the connection to an image provider by generating a wizard portrait."""
+    """Generate the supplied preset example, or the profile's default smoke-test image."""
+    from backend.engine.vision_test_context import configuration, result_message, test_input
+
     user = await _resolve_global_settings_owner(db, current_user)
     provider_key = payload.provider.lower()
     if provider_key == "comfyui" and current_user.role != "admin":
@@ -1118,30 +1128,33 @@ async def test_vision_connection(
         return error_response
 
     try:
+        prompt, prompt_source = test_input(payload)
+        options = {
+            **_build_vision_provider_options(payload, provider_key),
+            "_prompt_user": user,
+            "_prompt_prepared": payload.prepared_body is not None,
+        }
         test_dir = _safe_data_path("scratch", "test_connection")
         await run_file_operation(os.makedirs, test_dir, exist_ok=True)
         img_url = await MediaEngine.generate_image(
-            prompt={
-                "object": "A brass lantern, isolated on a simple background",
-                "background": "An empty stone courtyard at dawn",
-                "illustration": "A traveler hands a lantern to a guard in a courtyard",
-                "cover": "A cinematic view of a castle above the clouds",
-                "catalog": "A small woodland cottage in soft watercolor",
-            }.get(payload.image_purpose or "npc", "A Wizard portrait"),
+            prompt=prompt,
             model=payload.model,
             api_key=api_key,
             provider=payload.provider,
             target_dir=test_dir,
-            provider_options={
-                **_build_vision_provider_options(payload, provider_key),
-                "_prompt_user": user,
-            },
+            provider_options=options,
         )
         if img_url:
+            report = (
+                configuration(options, user.t2i_settings, prompt_source)
+                if provider_key == "comfyui"
+                else None
+            )
             return {
                 "status": "success",
-                "message": "Image generation successful!",
+                "message": result_message(report) if report else "Image generation successful!",
                 "image_url": img_url,
+                **({"test_configuration": report} if report else {}),
             }
         return {"status": "error", "message": "Image generation failed."}
     except Exception as exc:

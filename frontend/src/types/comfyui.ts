@@ -58,3 +58,8 @@ export interface ComfyOptions {
   comfyui_presets?: Record<string, ComfyPreset>
   comfyui_assignments?: Partial<Record<PresetAssignment, string>>
 }
+
+export interface ComfyTestOptions extends ComfyOptions {
+  test_prompt?: string
+  prepared_body?: string
+}

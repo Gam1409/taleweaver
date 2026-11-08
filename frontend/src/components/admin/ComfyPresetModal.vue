@@ -18,7 +18,7 @@ import ComfyPresetPrompt from './ComfyPresetPrompt.vue'
 import ComfyPresetTest from './ComfyPresetTest.vue'
 import { imagePurposes, type ImagePurpose } from '@/services/imagePurposes'
 import { useComfyPresetWorkspace } from '@/composables/useComfyPresetWorkspace'
-import type { ComfyOptions } from '@/types/comfyui'
+import type { ComfyOptions, ComfyTestOptions } from '@/types/comfyui'
 
 const props = defineProps<{
   open: boolean
@@ -30,7 +30,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'close'): void
   (event: 'apply', options: ComfyOptions): void
-  (event: 'test', options: ComfyOptions): void
+  (event: 'test', options: ComfyTestOptions): void
 }>()
 const {
   workspace,
@@ -48,6 +48,7 @@ const {
   ready,
   add,
   result,
+  testOptions,
   setAutomatic,
   setRules,
   previewPrompt,
@@ -91,7 +92,9 @@ const signature = computed(() =>
     workspace.value.selectedId,
     draft.value,
     workspace.value.url,
-    workspace.value.timeout
+    workspace.value.timeout,
+    example.value,
+    preview.value?.body,
   ])
 )
 const showTestResult = computed(() => testSignature.value === signature.value && props.testResult)
@@ -135,9 +138,9 @@ function navigate(event: KeyboardEvent): void {
   void nextTick(() => document.getElementById(`${id}-tab-${tab.value}`)?.focus())
 }
 function testImage(): void {
-  if (!ready.value || props.testResult?.status === 'loading') return
+  if (!ready.value || !example.value.trim() || previewing.value || props.testResult?.status === 'loading') return
   testSignature.value = signature.value
-  emit('test', result())
+  emit('test', testOptions())
 }
 function apply(): void {
   if (!ready.value) return
@@ -326,7 +329,7 @@ function create(copy = false): void {
           >
             <ComfyPresetTest
               v-model:example="example"
-              :ready="ready"
+              :ready="ready && Boolean(example.trim())"
               :previewing="previewing"
               :preview="preview"
               :loading="testResult?.status === 'loading'"

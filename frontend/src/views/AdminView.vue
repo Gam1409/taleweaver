@@ -120,7 +120,7 @@ const handleTestVision = async (payload: any) => {
     payload.sampler_name,
     payload.scheduler,
     payload.min_long_edge,
-    { image_purpose: payload.image_purpose, comfyui_url: payload.comfyui_url, comfyui_timeout: payload.comfyui_timeout, comfyui_profiles: payload.comfyui_profiles, comfyui_profile: payload.comfyui_profile, comfyui_presets: payload.comfyui_presets, comfyui_assignments: payload.comfyui_assignments }
+    { image_purpose: payload.image_purpose, test_prompt: payload.test_prompt, prepared_body: payload.prepared_body, comfyui_url: payload.comfyui_url, comfyui_timeout: payload.comfyui_timeout, comfyui_profiles: payload.comfyui_profiles, comfyui_profile: payload.comfyui_profile, comfyui_presets: payload.comfyui_presets, comfyui_assignments: payload.comfyui_assignments }
   )
 }
 

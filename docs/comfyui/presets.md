@@ -166,6 +166,19 @@ The test preset, global task assignments and a saved adventure selection are sep
 A successful test of Nova Anima does not assign it to backgrounds, items or portraits.
 Adventures store preset IDs; their workflows come from the current preset library.
 
+The preset editor's **Generate test image** uses its **Example description**. If a
+current prompt preview is available, the image uses that prepared body without a
+second adaptation request. Changing the example or workflow invalidates the old
+preview and test image. The generic profile Test Generation buttons keep their
+default smoke-test examples.
+
+A successful ComfyUI test reports the preset, workflow and model files that ran.
+It compares that draft with the saved global settings for the selected task and
+flags different model files or a different server connection. A test does not save
+its draft: click **Apply to form → Apply assignments → Save Visuals Settings** to
+use those changes outside the editor. Test descriptions and prepared preview bodies
+are not stored in the preset configuration.
+
 Open the image editor and check **Image settings for this adventure**. It displays
 the active provider, preset, workflow variant and model filenames for that specific
 image task. To follow the administrator's current assignments, choose **Use current
