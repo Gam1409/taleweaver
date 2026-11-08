@@ -8,6 +8,7 @@ const props = defineProps<{
   fixedSlots: string[]
   disabled?: boolean
   contextVersion?: number
+  reviewLocation?: 'below' | 'editor'
 }>()
 const emit = defineEmits<{
   (e: 'draft', value: ItemDraft): void
@@ -60,7 +61,7 @@ async function generate() {
         placeholder="A silver locket containing Miki's photograph. Worn around the neck. No magical properties."
       />
     </label>
-    <p class="text-xs text-slate-400">Describe one item. The selected type ({{ itemType }}) is kept. Review the generated fields below, then click Create Object to save. Images are generated separately.</p>
+    <p class="text-xs text-slate-400">Describe one item. The selected type ({{ itemType }}) is kept. Review the generated fields {{ reviewLocation === 'editor' ? 'in the editor' : 'below' }}, then click Create Object to save. Images are generated separately.</p>
     <button type="button" :disabled="busy || disabled || !brief.trim()" @click="generate"
       class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-500 disabled:opacity-50">
       {{ busy ? 'Generating draft...' : 'Generate item draft' }}

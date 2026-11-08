@@ -21,6 +21,9 @@ import type { ChpmSettings } from '@/composables/useChpmSettings'
 import SequencesSection from '@/components/editor/SequencesSection.vue'
 import ProtagonistTab from '@/components/editor/ProtagonistTab.vue'
 import ItemsTab from '@/components/editor/ItemsTab.vue'
+import ItemCreateDialog from '@/components/editor/ItemCreateDialog.vue'
+import type { ItemDraft } from '@/services/itemGeneration'
+import { itemDraftFields } from '@/services/itemDraftFields'
 import MoveItemToSceneModal from '@/components/editor/MoveItemToSceneModal.vue'
 import VisualsTab from '@/components/editor/VisualsTab.vue'
 import ToneTab from '@/components/editor/ToneTab.vue'
@@ -76,6 +79,25 @@ const createEntitySceneId = ref<string | null>(null)
 const createEntityType = ref<'npc' | 'object' | null>(null)
 const pendingProtagonistAssignment = ref<{ type: 'equipment' | 'inventory'; key?: string; index?: number } | null>(null)
 const showItemTypeSelector = ref(false)
+const showItemCreateDialog = ref(false)
+const itemCreateInitialScene = ref<string | null>(null)
+watch(() => props.adventureId, () => { showItemCreateDialog.value = false })
+
+function openItemCreateDialog(sceneId: string | null) {
+  itemCreateInitialScene.value = sceneId || debugData.value?.adventure?.start_scene_id || null
+  showItemCreateDialog.value = true
+}
+
+function reviewNewItem(draft: ItemDraft, sceneId: string) {
+  if (!editorScenes.value.some(scene => scene.id === sceneId)) {
+    addNotification('The selected location is no longer available. Choose another location.', 'error')
+    return
+  }
+  createEntitySceneId.value = sceneId
+  handleItemTypeSelected(draft.item_type)
+  Object.assign(editForm.value, itemDraftFields(draft))
+  showItemCreateDialog.value = false
+}
 
 const showAddExistingItemModal = ref(false)
 const addExistingItemKind = ref<'items' | 'switch' | 'container' | 'text-log' | 'npc'>('items')
@@ -2560,6 +2582,7 @@ watch(
               :editor-scenes="editorScenes"
               :active-map-scene-id="activeMapSceneId"
               :adventure-scripts="adventure?.scripts || debugData?.adventure?.scripts || []"
+              @add-item="openItemCreateDialog"
               @quick-regen="quickRegenerateVisual"
               @regen-all="requestRegenerateAll"
               @open-regen-dialog="openRegenerateDialog"
@@ -2804,6 +2827,10 @@ watch(
       @regenerate="regenerateVisual"
       @cancel-regen="cancelRegeneration"
     />
+
+    <ItemCreateDialog v-if="showItemCreateDialog" :key="adventureId" :adventure-id="adventureId"
+      :scenes="editorScenes" :initial-scene-id="itemCreateInitialScene"
+      @close="showItemCreateDialog = false" @draft="reviewNewItem" />
 
     <EditEntityModal 
       :show="showEditModal"

@@ -6,6 +6,7 @@ import type { ClothingDraft } from '@/services/clothingAuthoring'
 import NpcPersonalityDetails from '@/components/editor/NpcPersonalityDetails.vue'
 import ItemDraftGenerator from '@/components/editor/ItemDraftGenerator.vue'
 import { generateItemDescription, type ItemDraft } from '@/services/itemGeneration'
+import { itemDraftFields } from '@/services/itemDraftFields'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
@@ -95,13 +96,7 @@ const itemDraftContextVersion = ref(0)
 const clothingBusy = ref(false)
 const itemDescriptionError = ref('')
 function applyItemDraft(draft: ItemDraft) {
-  Object.assign(localForm.value, {
-    name: draft.name, description: draft.description,
-    is_portable: draft.is_portable,
-    wearable_slots_input: draft.wearable_slots,
-    text_log_content: draft.text_log_content,
-    clothing: draft.clothing,
-  })
+  Object.assign(localForm.value, itemDraftFields(draft))
 }
 
 const activeTab = ref<'simple' | 'advanced'>('simple')

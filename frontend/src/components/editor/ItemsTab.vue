@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Brain } from 'lucide-vue-next'
+import { Brain, Plus } from 'lucide-vue-next'
 import { hasAnyScript } from '@/utils/editor_utils'
 
 interface SceneOption {
@@ -42,6 +42,7 @@ const emit = defineEmits<{
   (e: 'request-delete-item', itemId: string, name: string): void
   (e: 'export-entity', kind: 'item', id: string, label: string): void
   (e: 'import-entity', kind: 'item'): void
+  (e: 'add-item', sceneId: string | null): void
 }>()
 
 const isContainerLocked = (obj: any): boolean => {
@@ -118,7 +119,10 @@ const activeFilterLabel = computed(() => {
 
 <template>
   <div class="space-y-6">
-  <div class="flex items-center justify-end">
+  <div class="flex items-center justify-end gap-5">
+    <button type="button" @click="emit('add-item', sceneFilter || activeMapSceneId || null)" class="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500">
+      <Plus class="h-4 w-4" /> Add
+    </button>
     <button @click="emit('import-entity', 'item')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Import an item from a .twe file">
       <i class="ra ra-load"></i> Import Item
     </button>
