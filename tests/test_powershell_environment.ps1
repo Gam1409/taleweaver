@@ -56,12 +56,15 @@ try {
 
     # Exercise the actual runner without opening windows, running setup, or using the network.
     Copy-Item (Join-Path $repo "run.ps1") $testRoot
-    New-Item -ItemType Directory -Path (Join-Path $testRoot "scripts"), (Join-Path $testRoot "frontend/node_modules/.bin") -Force | Out-Null
+    Copy-Item (Join-Path $repo "run-local.ps1") $testRoot
+    New-Item -ItemType Directory -Path (Join-Path $testRoot "scripts"), (Join-Path $testRoot "frontend/node_modules/.bin"), (Join-Path $testRoot ".git") -Force | Out-Null
     Set-Content (Join-Path $testRoot "frontend/node_modules/.bin/vite") "placeholder"
     Set-Content (Join-Path $testRoot ".env") "PROJECT_NAME=TaleWeaver"
     $helper = Join-Path $testRoot "scripts/powershell-environment.ps1"
     Copy-Item (Join-Path $repo "scripts/powershell-environment.ps1") $helper
     $stubLiteral = $script:PoetryForTest.Replace("'", "''")
+    $gitLog = Join-Path $testRoot "git-arguments.txt"
+    $gitLogLiteral = $gitLog.Replace("'", "''")
     Add-Content $helper @"
 function Get-TaleWeaverPoetry { param([string]`$ProjectRoot); return '$stubLiteral' }
 function Start-TaleWeaverProcesses {
@@ -69,6 +72,10 @@ function Start-TaleWeaverProcesses {
     @{ Root = `$ProjectRoot; Python = `$Python } | ConvertTo-Json | Set-Content (Join-Path `$ProjectRoot 'launch.json')
 }
 function Read-Host { throw 'A ready Poetry installation must not trigger setup prompts.' }
+function git {
+    `$args -join ' ' | Add-Content -LiteralPath '$gitLogLiteral'
+    `$global:LASTEXITCODE = 0
+}
 "@
     Set-Content $script:PoetryForTest "Write-Output '$pythonLiteral'; exit 0"
     $shellExe = (Get-Process -Id $PID).Path
@@ -76,12 +83,23 @@ function Read-Host { throw 'A ready Poetry installation must not trigger setup p
     $launch = Get-Content (Join-Path $testRoot "launch.json") -Raw | ConvertFrom-Json
     Assert-Equal $launch.Python $Python "Runner launches the Poetry interpreter with FastAPI installed"
     Assert-Equal $launch.Root $testRoot "Runner handles a checkout path containing spaces and an apostrophe"
+    Assert-Equal (Get-Content -LiteralPath $gitLog) "pull" "Default runner retains its Git update"
+
+    Remove-Item -LiteralPath $gitLog
+    Invoke-TaleWeaverNative $shellExe @("-NoProfile", "-File", (Join-Path $testRoot "run-local.ps1"))
+    Assert-Equal (Test-Path -LiteralPath $gitLog) $false "Local launcher never calls Git even in a repository"
+    $localLaunch = Get-Content (Join-Path $testRoot "launch.json") -Raw | ConvertFrom-Json
+    Assert-Equal $localLaunch.Python $Python "Local launcher retains the configured Python environment"
+    Assert-Equal $localLaunch.Root $testRoot "Local launcher preserves paths containing spaces and an apostrophe"
 
     Remove-Item (Join-Path $testRoot "frontend/node_modules/.bin/vite")
     Remove-Item (Join-Path $testRoot "launch.json")
     & $shellExe -NoProfile -File (Join-Path $testRoot "run.ps1") *> $null
     Assert-Equal ($LASTEXITCODE -ne 0) $true "Missing Vite triggers the runner's setup check"
     Assert-Equal (Test-Path (Join-Path $testRoot "launch.json")) $false "Runner does not launch without Vite"
+    & $shellExe -NoProfile -File (Join-Path $testRoot "run-local.ps1") *> $null
+    Assert-Equal ($LASTEXITCODE -ne 0) $true "Local launcher propagates an incomplete installation failure"
+    Assert-Equal (Test-Path (Join-Path $testRoot "launch.json")) $false "Local launcher does not bypass dependency checks"
 
     # A failed install must not reach key generation, migrations, or frontend setup.
     Copy-Item (Join-Path $repo "setup.ps1") $testRoot
@@ -120,5 +138,10 @@ function Invoke-TaleWeaverNative {
 } finally {
     $env:PATH = $originalPath
     Set-Location $originalLocation
-    Remove-Item -Recurse -Force $testRoot
+    $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
+    $tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedTestRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing cleanup outside the temporary test directory."
+    }
+    Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
 }

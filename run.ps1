@@ -1,6 +1,8 @@
 # TaleWeaver Run Script (PowerShell)
 # This script pulls the latest Git changes, checks setup status, offers to setup if incomplete, and runs the app.
 
+param([switch]$NoUpdate)
+
 $ErrorActionPreference = "Stop"
 
 # Change directory to the repository root directory
@@ -13,7 +15,9 @@ Write-Host "      TaleWeaver Runner       " -ForegroundColor Green
 Write-Host "==============================" -ForegroundColor Green
 
 # 1. Fetch current stand from Git
-if (Test-Path ".git") {
+if ($NoUpdate) {
+    Write-Host "[*] Starting from local files without checking GitHub." -ForegroundColor Cyan
+} elseif (Test-Path ".git") {
     Write-Host "[*] Fetching latest changes from Git..." -ForegroundColor Cyan
     try {
         git pull

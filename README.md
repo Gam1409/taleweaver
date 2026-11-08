@@ -264,6 +264,8 @@ For later starts, use `.\run.ps1`. From **CMD**:
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
+To start from local files without checking GitHub or pulling updates, use `.\run-local.ps1` (or `.\run.ps1 -NoUpdate`). From CMD: `powershell -ExecutionPolicy Bypass -File .\run-local.ps1`. Dependency checks and normal application startup remain the same.
+
 **Linux / macOS**
 
 ```bash
