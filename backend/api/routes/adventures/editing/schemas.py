@@ -9,6 +9,7 @@ from backend.api.routes.adventures.editing.exit_fields import ExitBehaviorFields
 from backend.engine.clothing.schema import Garment
 from backend.engine.personality.profile import PersonalityProfile
 from backend.schemas.character_identity import CharacterIdentityFields
+from backend.schemas.character_outfits import CharacterOutfitDraft
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class EntityUpdateRequest(CharacterIdentityFields):
     goal: Optional[str] = None
     character: Optional[str] = None
     personality_profile: Optional[PersonalityProfile] = None
+    outfit_completion: Optional[CharacterOutfitDraft] = None
     is_killable: Optional[bool] = None
     item_type: Optional[str] = None
     is_portable: Optional[bool] = None

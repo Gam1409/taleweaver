@@ -89,9 +89,9 @@ def _outfit_object(
     identifier = (
         proposal.item_id
         or "OUTFIT_"
-        + uuid5(NAMESPACE_URL, f"{actor.template_id}:{actor.id}:{proposal.name.casefold()}").hex[
-            :20
-        ]
+        + uuid5(NAMESPACE_URL, f"{actor.template_id}:{actor.id}:{proposal.name.casefold()}")
+        .hex[:20]
+        .upper()
     )
     if not proposal.item_id:
         existing = next(

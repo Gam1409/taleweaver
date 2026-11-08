@@ -37,7 +37,7 @@ class CharacterCompletion(CharacterIdentityFields):
     outfit_exemption: str | None = Field(default=None, min_length=1, max_length=300)
     personality_profile: PersonalityProfile | None = None
     appearance: Appearance | None = None
-    outfit: list[OutfitItem] = Field(default_factory=list, max_length=8)
+    outfit: list[OutfitItem] = Field(default_factory=list, max_length=16)
 
 
 class WearableCompletion(BaseModel):

@@ -3,7 +3,7 @@ import type { ClothingDraft } from '@/services/clothingAuthoring'
 import type { NpcItemDraft } from '@/services/npcCreation'
 import ClothingItemFields from './ClothingItemFields.vue'
 
-const props = defineProps<{ items: NpcItemDraft[]; selected: boolean[]; disabled: boolean }>()
+const props = defineProps<{ items: NpcItemDraft[]; selected: boolean[]; disabled: boolean; allowWearSelection?: boolean; readonlyIndices?: number[] }>()
 const emit = defineEmits<{
   (e: 'update:items', value: NpcItemDraft[]): void
   (e: 'update:selected', value: boolean[]): void
@@ -22,7 +22,7 @@ function updateClothing(index: number, clothing: ClothingDraft) {
 <template>
   <section aria-label="NPC clothing and belongings" class="space-y-3">
     <h3 class="font-bold text-emerald-300">Clothing &amp; belongings ({{ selected.filter(Boolean).length }}/{{ items.length }})</h3>
-    <p class="text-xs text-slate-400">Only checked items will be created. Worn clothes keep their layers; other items are carried by this NPC. Images can be generated after saving.</p>
+    <p class="text-xs text-slate-400">Only checked items will be added. Worn clothes keep their layers.<template v-if="allowWearSelection !== false"> Other items are carried by this NPC.</template> Images can be generated after saving.</p>
     <p v-if="!items.length" class="text-sm text-slate-400">No clothing or belongings proposed.</p>
     <details v-for="(item, index) in items" :key="index" class="rounded-xl border border-white/10 bg-slate-950/60 p-3">
       <summary class="flex cursor-pointer items-center gap-3 text-sm">
@@ -30,14 +30,15 @@ function updateClothing(index: number, clothing: ClothingDraft) {
         <span class="flex-1 font-bold text-white">{{ item.name }}</span>
         <span class="text-xs text-slate-400">{{ item.worn ? 'Worn' : 'Carried' }}<template v-if="item.clothing"> · Layer {{ item.clothing.layer }}</template></span>
       </summary>
-      <fieldset :disabled="disabled || !selected[index]" class="mt-4 space-y-3 disabled:opacity-50">
+      <p v-if="readonlyIndices?.includes(index)" class="mt-3 text-xs text-slate-400">This registered item will be reused. Missing clothing data can be completed; edit its saved details separately in Items.</p>
+      <fieldset :disabled="disabled || !selected[index] || readonlyIndices?.includes(index)" class="mt-4 space-y-3 disabled:opacity-50">
         <label class="block text-sm text-slate-300">Item name
           <input :value="item.name" maxlength="50" required @input="update(index, { name: ($event.target as HTMLInputElement).value })" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-800 p-3">
         </label>
         <label class="block text-sm text-slate-300">Item description
           <textarea :value="item.description" :maxlength="item.item_type === 'READABLE' ? 200 : 1000" rows="3" required @input="update(index, { description: ($event.target as HTMLTextAreaElement).value })" class="mt-1 w-full resize-y rounded-xl border border-white/10 bg-slate-800 p-3" />
         </label>
-        <label v-if="item.clothing" class="flex items-center gap-2 text-sm text-slate-300">
+        <label v-if="item.clothing && allowWearSelection !== false" class="flex items-center gap-2 text-sm text-slate-300">
           <input type="checkbox" :checked="item.worn" @change="update(index, { worn: ($event.target as HTMLInputElement).checked })" class="accent-emerald-500">Worn by this NPC
         </label>
         <p v-if="item.clothing?.underwear" class="text-xs text-slate-400">Inner clothing. Opaque outer layers hide it from other characters.</p>

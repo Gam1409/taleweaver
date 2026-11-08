@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import CharacterIdentityFields from './CharacterIdentityFields.vue'
+import CharacterOutfitGenerator from './CharacterOutfitGenerator.vue'
+import type { CharacterOutfitDraft } from '@/services/characterOutfits'
 import { computed, nextTick, ref, watch } from 'vue'
 import ClothingItemFields from '@/components/editor/ClothingItemFields.vue'
 import type { ClothingDraft } from '@/services/clothingAuthoring'
@@ -29,6 +31,7 @@ const props = defineProps<{
     gender?: string | null
     age_years?: number | null
     personality_profile?: Record<string, string>
+    outfit_completion?: CharacterOutfitDraft | null
     is_killable: boolean
     item_type: string
     is_portable: boolean
@@ -2030,6 +2033,12 @@ const textLogPreviewClass = computed(() => {
 
               <CharacterIdentityFields v-if="['npc', 'protagonist'].includes(context.type)"
                 v-model:gender="localForm.gender" v-model:age-years="localForm.age_years" />
+              <CharacterOutfitGenerator v-if="adventureId && !isCreateEntityMode && ['npc', 'protagonist'].includes(context.type)"
+                :key="context.type + ':' + context.id" :adventure-id="adventureId" :target-type="context.type" :target-id="context.id"
+                :name="localForm.name" :description="localForm.description" :character="localForm.character" :goal="localForm.goal"
+                :context-version="JSON.stringify([localForm.age_years, localForm.gender, localForm.inventory_input])"
+                :inventory-ids="localForm.inventory_input"
+                :disabled="isSaving" @update:model-value="localForm.outfit_completion = $event" @busy="clothingBusy = $event" />
               <div class="space-y-3">
                 <div class="flex justify-between items-center">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Description / Biography <span class="text-red-400">*</span></label>

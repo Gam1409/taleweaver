@@ -1394,6 +1394,7 @@ async function saveEntityText(data: any) {
       gender: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.gender : undefined,
       age_years: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.age_years : undefined,
       personality_profile: editEntityContext.value.type === 'npc' ? data.personality_profile : undefined,
+      outfit_completion: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.outfit_completion || undefined : undefined,
       is_killable: editEntityContext.value.type === 'npc' ? data.is_killable : undefined,
       moveable: editEntityContext.value.type === 'npc' ? data.moveable : undefined,
       allowed_scenes: editEntityContext.value.type === 'npc' ? data.allowed_scenes : undefined,

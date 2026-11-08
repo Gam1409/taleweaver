@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.editing.character_outfits import apply_character_outfit
 from backend.api.routes.adventures.editing.common import _get_owned_adventure_or_404
 from backend.api.routes.adventures.editing.entity_update.entity_common import (
     apply_common_fields,
@@ -24,6 +25,7 @@ from backend.api.routes.adventures.editing.entity_update.scene_exit import (
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.authoring_concurrency import npc_publication_lease
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
@@ -66,7 +68,22 @@ async def update_editor_entity(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    async with npc_publication_lease(template_id):
+        return await _save_entity(template_id, payload, db, current_user)
+
+
+async def _save_entity(
+    template_id: str, payload: EntityUpdateRequest, db: AsyncSession, current_user: User
+) -> dict:
     adv = await _get_owned_adventure_or_404(db, template_id, current_user.id)
     await _HANDLERS[payload.target_type](db, template_id, adv, payload)
+    if payload.outfit_completion is not None:
+        await apply_character_outfit(
+            db,
+            adv,
+            payload.target_type,
+            payload.new_id or payload.target_id,
+            payload.outfit_completion,
+        )
     await db.commit()
     return {"status": "success"}

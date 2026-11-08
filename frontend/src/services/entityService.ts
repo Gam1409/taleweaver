@@ -1,4 +1,5 @@
 import type { ClothingDraft } from '@/services/clothingAuthoring'
+import type { CharacterOutfitDraft } from '@/services/characterOutfits'
 import { apiFetch, authHeaders } from '@/services/http'
 
 export interface ExitBehaviorData {
@@ -39,6 +40,7 @@ export interface EntityEditData extends ExitBehaviorData {
   gender?: string | null
   age_years?: number | null
   personality_profile?: Record<string, string>
+  outfit_completion?: CharacterOutfitDraft | null
   is_killable?: boolean
   moveable?: boolean
   allowed_scenes?: string[]

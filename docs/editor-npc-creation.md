@@ -29,3 +29,13 @@ does not retroactively insert characters into already-started sessions.
 Repeated publication of the same draft uses an idempotency key to avoid
 duplicate characters after a lost HTTP response. Concurrent publications from
 this dialog are serialized per adventure in the supported single-worker runtime.
+
+## Complete an existing character's outfit
+
+Open an existing NPC or protagonist in the character editor and click
+**Generate clothing**. The generator reads worn clothing, carried garments and
+items added to the current inventory form. It proposes missing pieces and can
+reuse a carried garment by ID. Review or edit the suggestions and uncheck any
+unwanted pieces, then click **Apply Changes** to save the character and selected
+clothes together. Existing garments, possessions and appearance are preserved.
+Generating or discarding a draft does not change the adventure.

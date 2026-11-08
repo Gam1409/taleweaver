@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from backend.api.routes.adventures.editing import (
     ai_fix_apply,
     ai_fix_suggest,
+    character_outfits,
     garment_generation,
     generation,
     item_generation,
@@ -43,6 +44,7 @@ for _module in (
     validation,
     ai_fix_suggest,
     ai_fix_apply,
+    character_outfits,
     world_crud,
     story_crud,
     entity_update,
