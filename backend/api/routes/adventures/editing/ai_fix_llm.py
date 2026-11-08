@@ -133,18 +133,25 @@ async def _call_provider(
     timeout_seconds: Optional[float],
 ) -> Any:
     """One LLM call; a timeout is re-raised as ``TimeoutError`` naming the provider."""
+    cap = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else float(getattr(gm, "request_timeout", settings.INTELLIGENCE_TIMEOUT))
+    )
     coro = gm.aexecute_complex_task(
         system_prompt=gm_kwargs["system_prompt"],
         user_prompt=user_prompt,
         response_model=response_model,
         model=model,
+        operation=gm_kwargs.get("operation"),
+        phase=gm_kwargs.get("phase"),
+        adventure_id=gm_kwargs.get("adventure_id"),
     )
     try:
-        if timeout_seconds and timeout_seconds > 0:
-            return await asyncio.wait_for(coro, timeout=timeout_seconds)
+        if cap > 0:
+            return await asyncio.wait_for(coro, timeout=cap)
         return await coro
     except asyncio.TimeoutError as exc:
-        cap = timeout_seconds or 0
         raise TimeoutError(f"AI request to '{provider}' exceeded the {cap:.0f}s cap") from exc
 
 
@@ -153,10 +160,10 @@ def _call_failure_outcome(
 ) -> _AIAttemptOutcome:
     if isinstance(exc, TimeoutError):
         logger.warning(
-            "AI call to '%s' (model '%s') timed out after %.0fs",
+            "AI call to '%s' (model '%s') timed out (watchdog override=%s)",
             provider,
             model,
-            timeout_seconds or 0,
+            timeout_seconds,
         )
         return _AIAttemptOutcome(_AIAttemptOutcome.TIMEOUT, provider=provider, detail=str(exc))
     logger.warning("AI call to '%s' (model '%s') raised: %s", provider, model, exc)

@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from backend.core.config import settings
-from backend.core.inference.registry import InferenceQueueError, Registry, Ticket
+from backend.core.inference import events
+from backend.core.inference.registry import (
+    InferenceQueueError,
+    InferenceUncertainError,
+    Registry,
+    Ticket,
+)
 
 request_deadline: ContextVar[float | None] = ContextVar("inference_deadline", default=None)
 
@@ -42,6 +48,25 @@ def rejected(error: BaseException) -> bool:
 class Lease:
     deadline: float
     certain: bool = False
+    deferred: bool = False
+    reason: str = "completion_unconfirmed"
+    finalize: Callable[[bool, str], None] | None = None
+    reservation_id: str | None = None
+
+
+def failure_reason(error: BaseException) -> str:
+    if isinstance(error, asyncio.CancelledError):
+        return "caller_cancelled"
+    if isinstance(error, TimeoutError) or "timeout" in type(error).__name__.lower():
+        return "request_timeout"
+    if isinstance(error, InferenceUncertainError):
+        return "incomplete_stream"
+    if (
+        isinstance(error, (ConnectionError, OSError))
+        or "connection" in type(error).__name__.lower()
+    ):
+        return "connection_failure"
+    return "provider_or_processing_error"
 
 
 @asynccontextmanager
@@ -50,7 +75,13 @@ async def reserve(key: str, timeout: float) -> AsyncIterator[Lease]:
     ticket = owner.enqueue(key)
     deadline = time.monotonic() + timeout
     acquired = False
-    lease = Lease(deadline)
+    lease = Lease(
+        deadline,
+        finalize=lambda certain, reason: owner.finish(ticket, certain=certain, reason=reason),
+        reservation_id=ticket.token,
+    )
+    started = time.monotonic()
+    events.emit("queued", reservation_id=ticket.token, timeout_seconds=timeout)
     try:
         while not acquired:
             if time.monotonic() >= deadline:
@@ -58,15 +89,34 @@ async def reserve(key: str, timeout: float) -> AsyncIterator[Lease]:
             acquired = owner.try_acquire(ticket, background_ready=ready(ticket))
             if not acquired:
                 await asyncio.sleep(0.025)
+        events.emit(
+            "admitted", reservation_id=ticket.token, duration_ms=(time.monotonic() - started) * 1000
+        )
         try:
             yield lease
         except BaseException as error:
             lease.certain = lease.certain or rejected(error)
+            lease.reason = failure_reason(error)
             raise
+    except BaseException as error:
+        if not acquired:
+            events.emit(
+                "blocked",
+                reservation_id=ticket.token,
+                error=error,
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
+        raise
     finally:
         owner.forget(ticket)
-        if acquired:
-            owner.finish(ticket, certain=lease.certain)
+        if acquired and not lease.deferred:
+            owner.finish(ticket, certain=lease.certain, reason=lease.reason)
+            events.emit(
+                "completed" if lease.certain else "uncertain",
+                reservation_id=ticket.token,
+                duration_ms=(time.monotonic() - started) * 1000,
+                inference_reason=lease.reason,
+            )
 
 
 @contextmanager
@@ -88,11 +138,12 @@ def reserve_sync(key: str, timeout: float) -> Iterator[Lease]:
             yield lease
         except BaseException as error:
             lease.certain = lease.certain or rejected(error)
+            lease.reason = failure_reason(error)
             raise
     finally:
         owner.forget(ticket)
         if acquired:
-            owner.finish(ticket, certain=lease.certain)
+            owner.finish(ticket, certain=lease.certain, reason=lease.reason)
 
 
 def _check_sync_wait() -> None:

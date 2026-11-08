@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from backend.core.custom_openai_roles import resolve_url
 from backend.core.inference.admission import timeout_for
+from backend.core.inference.events import sent
 from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
@@ -151,7 +152,7 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         response_format=kwargs.get("response_format"),
     )
     async with (
-        httpx.AsyncClient(follow_redirects=False) as transport,
+        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
             base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
@@ -162,7 +163,9 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         response = await router._get_litellm().acompletion(
             **kwargs, client=client, request_timeout=timeout_for(router)
         )
-        record("custom_openai.response", content=response.choices[0].message.content)
+        choices = getattr(response, "choices", None) or []
+        message = getattr(choices[0], "message", None) if choices else None
+        record("custom_openai.response", content=getattr(message, "content", None))
         return response
 
 
@@ -170,7 +173,7 @@ async def _stream(router: Any, kwargs: dict) -> Any:
     from openai import AsyncOpenAI
 
     async with (
-        httpx.AsyncClient(follow_redirects=False) as transport,
+        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
             base_url=await asyncio.to_thread(validate_custom_url, router.api_base),

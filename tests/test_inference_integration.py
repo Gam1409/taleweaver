@@ -116,10 +116,15 @@ async def test_late_result_after_cancellation_is_never_delivered(reservations):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert reservations.status()[0]["status"] == "UNCERTAIN"
+    assert reservations.status()[0]["status"] == "RUNNING"
     finish.set()
     await late.wait()
-    assert reservations.status()[0]["status"] == "UNCERTAIN"
+    for _ in range(10):
+        await asyncio.sleep(0.01)
+        if not reservations.status():
+            break
+    assert task.cancelled()  # Completion releases the slot, never the canceled caller's text.
+    assert reservations.status() == []
 
 
 async def test_closing_filtered_stream_releases_all_layers_immediately(reservations):

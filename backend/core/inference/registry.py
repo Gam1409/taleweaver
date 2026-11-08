@@ -17,6 +17,14 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+REASONS = {
+    "completion_unconfirmed",
+    "caller_cancelled",
+    "request_timeout",
+    "incomplete_stream",
+    "connection_failure",
+    "provider_or_processing_error",
+}
 
 concurrent_call: ContextVar[bool] = ContextVar("inference_concurrent", default=False)
 
@@ -131,7 +139,9 @@ class Registry:
             self.waiters.remove(ticket)
             return True
 
-    def finish(self, ticket: Ticket, *, certain: bool) -> None:
+    def finish(
+        self, ticket: Ticket, *, certain: bool, reason: str = "completion_unconfirmed"
+    ) -> None:
         with self.lock:
             records = self._load()
             current = records.get(ticket.record_key)
@@ -144,6 +154,17 @@ class Registry:
             )
             if certain and current and current["token"] == ticket.token:
                 self._write({key: row for key, row in records.items() if key != ticket.record_key})
+            elif current and current["token"] == ticket.token:
+                self._write(
+                    {
+                        **records,
+                        ticket.record_key: {
+                            **current,
+                            "reason": reason if reason in REASONS else "completion_unconfirmed",
+                            "uncertain_at": time.time(),
+                        },
+                    }
+                )
 
     def status(self) -> list[dict]:
         with self.lock:

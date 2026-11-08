@@ -1,16 +1,19 @@
 """Content-free LLM lifecycle events, independent of optional raw LLM telemetry."""
 
 import asyncio
+import logging
 import math
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine
-from contextlib import aclosing
+from contextlib import AbstractContextManager, asynccontextmanager
 from functools import wraps
 from inspect import signature
 from typing import Any, ParamSpec, TypeVar, cast
 from uuid import UUID, uuid4
 
 from backend.core.diagnostic_fields import ENUMS
+
+logger = logging.getLogger(__name__)
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -65,13 +68,38 @@ _PROVIDERS = {
     "bfl",
     "black_forest_labs",
 }
-_ROLES = {"small", "complex", "generator", "compression"}
+_ROLES = {"small", "complex", "generator", "compression", "play_agent"}
 
 
 def emit(event: str, **fields: Any) -> None:
     from backend.core.system_diagnostics import service
 
     service.emit(event, **fields)
+    if event in {"llm.started", "llm.completed", "llm.failed", "llm.cancelled"}:
+        from backend.core.diagnostic_fields import safe_error
+
+        fields = {**service.current_context(), **fields}
+        error = fields.get("error")
+        logger.info(
+            "%s request=%s call=%s role=%s purpose=%s phase=%s timeout=%s max_tokens=%s thinking=%s elapsed_ms=%s error=%s",
+            event,
+            fields.get("request_id", "-"),
+            fields.get("call_id", "-"),
+            fields.get("role", "-"),
+            fields.get("purpose", "-"),
+            fields.get("phase", "-"),
+            fields.get("timeout_seconds", "-"),
+            fields.get("max_tokens", "-"),
+            fields.get("thinking", "-"),
+            fields.get("duration_ms", "-"),
+            safe_error(error) if isinstance(error, BaseException) else "-",
+        )
+
+
+def _scope(context: dict) -> AbstractContextManager[None]:
+    from backend.core.system_diagnostics import service
+
+    return service.context(**context)
 
 
 def _identifiers(fields: dict) -> dict:
@@ -137,6 +165,9 @@ def _context(router: Any, kind: str, kwargs: dict) -> dict:
         **_purpose(kwargs),
         "operation": kind,
         "call_id": str(uuid4()),
+        "timeout_seconds": getattr(router, "request_timeout", None),
+        "max_tokens": getattr(router, "max_tokens", None),
+        "thinking": getattr(router, "enable_thinking", None),
     }
     provider = getattr(router, "provider", None)
     if isinstance(provider, str) and provider in _PROVIDERS:
@@ -164,14 +195,34 @@ def _finish(
 
 async def _stream(stream: Any, context: dict, start: float) -> AsyncIterator:
     try:
-        async with aclosing(stream):
-            async for chunk in stream:
+        async with _owned_scope(stream, context):
+            async for chunk in _scoped_chunks(stream, context):
                 yield chunk
     except BaseException as error:
         _finish(context, start, error)
         raise
     else:
         _finish(context, start)
+
+
+@asynccontextmanager
+async def _owned_scope(stream: Any, context: dict) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        with _scope(context):
+            await stream.aclose()
+
+
+async def _scoped_chunks(stream: Any, context: dict) -> AsyncIterator:
+    iterator = aiter(stream)
+    while True:
+        try:
+            with _scope(context):
+                chunk = await anext(iterator)
+        except StopAsyncIteration:
+            return
+        yield chunk
 
 
 def async_call(kind: str) -> Callable[[_F], _F]:
@@ -183,7 +234,8 @@ def async_call(kind: str) -> Callable[[_F], _F]:
             context, start = _context(router, kind, kwargs), time.perf_counter()
             emit("llm.started", **context)
             try:
-                result = await method(router, *args, **kwargs)
+                with _scope(context):
+                    result = await method(router, *args, **kwargs)
             except BaseException as error:
                 _finish(context, start, error)
                 raise
@@ -204,7 +256,8 @@ def sync_call(kind: str) -> Callable[[_F], _F]:
             context, start = _context(router, kind, kwargs), time.perf_counter()
             emit("llm.started", **context)
             try:
-                result = method(router, *args, **kwargs)
+                with _scope(context):
+                    result = method(router, *args, **kwargs)
             except BaseException as error:
                 _finish(context, start, error)
                 raise

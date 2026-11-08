@@ -2,7 +2,15 @@
 import { onMounted, ref } from 'vue'
 import { apiFetch } from '@/services/http'
 
-type Reservation = { endpoint_id: string; token: string; started: number; status: string }
+type Reservation = { endpoint_id: string; token: string; started: number; status: string; reason?: string; uncertain_at?: number }
+const reasons: Record<string, string> = {
+  caller_cancelled: 'The caller stopped waiting before transport completion was confirmed. This can also happen after an internal deadline.',
+  request_timeout: 'The request deadline expired before transport completion was confirmed.',
+  incomplete_stream: 'The response stream ended without a completion marker.',
+  connection_failure: 'The connection failed before transport completion was confirmed.',
+  provider_or_processing_error: 'A provider or response-processing error left completion unconfirmed.',
+  completion_unconfirmed: 'Completion was not confirmed.',
+}
 const enabled = ref(false)
 const reservations = ref<Reservation[]>([])
 const error = ref('')
@@ -42,13 +50,15 @@ onMounted(load)
 <template>
   <section class="rounded-xl border border-teal-500/30 p-4 space-y-3">
     <h3 class="font-bold text-teal-300">Inference queue · Experimental</h3>
-    <p class="text-sm text-slate-400">{{ enabled ? 'Enabled' : 'Disabled' }}. Enable with INFERENCE_SERIALIZATION_ENABLED=true in backend configuration and restart. Applies to Ollama, OpenAI-compatible servers and configured embeddings.</p>
+    <p class="text-sm text-slate-400">{{ enabled ? 'Enabled.' : 'Disabled. Set INFERENCE_SERIALIZATION_ENABLED=true in backend configuration and restart to enable.' }} Applies to Ollama, OpenAI-compatible servers and configured embeddings.</p>
     <p class="text-sm text-slate-400">A timeout does not prove the remote model stopped. Check or restart that inference server before clearing an uncertain request. This button does not cancel remote generation.</p>
     <p v-if="!reservations.length" class="text-sm">No outstanding reservations.</p>
     <div v-for="row in reservations" :key="row.token" class="rounded border border-white/10 p-3 space-y-2">
       <p class="text-sm">{{ row.status }} · {{ new Date(row.started * 1000).toLocaleString() }}</p>
       <p class="text-xs break-all text-slate-400">Endpoint fingerprint: {{ row.endpoint_id }}</p>
       <template v-if="row.status === 'UNCERTAIN'">
+        <p v-if="row.uncertain_at" class="text-xs text-slate-400">Became uncertain: {{ new Date(row.uncertain_at * 1000).toLocaleString() }} · {{ Math.max(0, Math.round(row.uncertain_at - row.started)) }} seconds after admission.</p>
+        <p class="text-xs text-amber-200">{{ reasons[row.reason || ''] || 'No cause was recorded for this reservation by the previous backend process or application version.' }}</p>
         <label class="flex gap-2 text-sm"><input v-model="confirmed[row.token]" type="checkbox"> I verified that remote generation has stopped.</label>
         <button type="button" class="rounded bg-teal-800 px-3 py-2 text-sm disabled:opacity-40" :disabled="busy || !confirmed[row.token]" @click="acknowledge(row)">Clear stopped request</button>
       </template>

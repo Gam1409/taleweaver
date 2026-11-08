@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack
 from functools import wraps
 from typing import Any
 
-from backend.core.inference import admission
+from backend.core.inference import admission, receipts
 from backend.core.inference.registry import InferenceUncertainError, endpoint_key
 
 
@@ -48,7 +48,7 @@ def guarded_async(method: Callable) -> Callable:
             return _stream(method, router, kwargs, key)
         async with admission.reserve(key, float(router.request_timeout)) as lease:
             with admission.deadline_scope(lease):
-                result = await _outcome(method(router, {**kwargs, "num_retries": 0}))
+                result = await _outcome(method(router, {**kwargs, "num_retries": 0}), lease)
             lease.certain = True
             return result
 
@@ -81,19 +81,13 @@ async def owned_stream(output: Any, *sources: Any) -> AsyncIterator[Any]:
             yield chunk
 
 
-def _discard_late(task: asyncio.Task) -> None:
-    if not task.cancelled():
-        task.exception()
-
-
-async def _outcome(request: Coroutine) -> Any:
+async def _outcome(request: Coroutine, lease: admission.Lease) -> Any:
     """A cancellation-resistant SDK must not return a late result to its caller."""
     task = asyncio.create_task(request)
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
-        task.cancel()
-        task.add_done_callback(_discard_late)
+        receipts.follow(task, lease)
         raise
 
 

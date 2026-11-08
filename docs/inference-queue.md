@@ -50,7 +50,20 @@ completion paths. Retrying the game, changing the model role, or restarting Tale
 cannot bypass the unresolved reservation. New work on that origin fails before it is
 sent. Cancellation of a waiting caller leaves the running request untouched. Late
 non-stream results from a cancellation-resistant transport are discarded, not delivered
-for application to the world.
+for application to the world. A submitted non-stream request whose caller was
+canceled remains owned while its transport is still being monitored. New callers
+wait behind it. A confirmed complete response releases that exact reservation,
+even if the old caller no longer needs the text. The response is never delivered
+back into a canceled operation. Monitoring is bounded by the existing deadline;
+if completion remains unknown, the reservation becomes UNCERTAIN. A later
+confirmed transport receipt can clear only its matching token.
+
+The queue card records a content-free failure category and the time it became
+uncertain. This is distinct from the admission/start timestamp. Older records
+without this metadata remain recoverable but cannot explain their original cause.
+Malformed application output is not evidence that a fully received transport
+response is still generating. A broken response must fail its own validation
+without creating an unrelated permanent reservation.
 
 Recovery requires an administrator:
 
@@ -69,11 +82,36 @@ To identify a configured URL's fingerprint locally without contacting it:
 poetry run python -c 'from backend.core.inference.registry import endpoint_key; print(endpoint_key("http://127.0.0.1:11434"))'
 ```
 
+## Reading a request chain
+
+The backend console records `llm.started`, queue admission, actual OpenAI-compatible
+POST dispatch, transport completion and the final application outcome. The same
+events are included in `log/system-debug.jsonl` when system diagnostics are enabled.
+Use `request=` to identify the HTTP operation and `call=` to follow one model call.
+`reservation=` identifies its queue slot. Role, purpose, phase, timeout, output cap,
+thinking mode and elapsed milliseconds distinguish narration, AI Fix, image-prompt
+preparation and background work. Errors include their type and source frames.
+The logs omit prompts, response text, credentials and endpoint URLs.
+
+A completed transport followed by `llm.failed` means processing or validation failed
+after the response arrived. `inference.blocked` without `inference.sent` means no
+new provider POST was sent. HTTP 200 from AI Fix can still carry a JSON error; it is
+not evidence that suggestions were produced. Ollama uses the common admission and
+completion events; its SDK does not expose the custom HTTP dispatch hook.
+
+AI Fix now inherits the selected role deadline. If your existing `.env` contains
+`AI_FIX_SUGGEST_TIMEOUT_SECONDS=90`, remove that override or deliberately set its
+new value, then restart the backend. Local configuration is not overwritten by
+updating the repository. Reverse-proxy timeouts remain outside this setting.
+
+Thumbnail checks are local resizing of existing images, not image-model generation.
+Their log reports available/failed previews after checking the image library.
+
 ## Persistence and boundaries
 
 The runtime journal is `${DATA_DIR}/inference-reservations.json`, written with file
 flush/fsync and atomic replacement. It contains endpoint hashes, request UUIDs and
-start timestamps only: no URLs, API keys, prompts, responses, NPC memories or private
+start/failure timestamps and fixed failure categories only: no URLs, API keys, prompts, responses, NPC memories or private
 thoughts. It is runtime coordination, separate from SQL world state and LanceDB.
 The public `/data` mount denies this JSON file and its temporary replacement files;
 only media extensions are served. Keep the journal in place to preserve recovery fences.

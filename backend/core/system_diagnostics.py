@@ -85,6 +85,9 @@ class DiagnosticService:
             "write_error": "Diagnostic storage is unavailable." if self.write_failed else None,
         }
 
+    def current_context(self) -> dict:
+        return dict(_context.get() or {})
+
     @contextmanager
     def context(self, **fields: object) -> Iterator[None]:
         token = _context.set({**(_context.get() or {}), **safe_fields(fields)})

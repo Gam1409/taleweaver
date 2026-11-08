@@ -294,9 +294,18 @@ class MediaEngine:
 
         if tasks:
             logger.info(
-                "Generating %d missing thumbnails for adventure %s", len(tasks), adventure_id
+                "Checking thumbnails for %d existing images in adventure %s (local resize, no image model)",
+                len(tasks),
+                adventure_id,
             )
-            await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks)
+            available = sum(result is not None for result in results)
+            logger.info(
+                "Thumbnail check complete for adventure %s: %d available, %d failed",
+                adventure_id,
+                available,
+                len(results) - available,
+            )
 
     @classmethod
     def _get_litellm(cls) -> Any:

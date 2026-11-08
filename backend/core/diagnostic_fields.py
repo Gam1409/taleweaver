@@ -5,6 +5,12 @@ from pathlib import Path
 from uuid import UUID
 
 EVENTS = {
+    "inference.queued",
+    "inference.admitted",
+    "inference.sent",
+    "inference.completed",
+    "inference.uncertain",
+    "inference.blocked",
     "npc.learning.phase",
     "http.started",
     "http.completed",
@@ -52,6 +58,7 @@ EVENTS = {
     "llm_interaction",
 }
 IDENTIFIERS = {
+    "reservation_id",
     "request_id",
     "session_id",
     "game_id",
@@ -111,7 +118,16 @@ ENUMS = {
         "PRAGMA",
         "OTHER",
     },
-    "role": {"small", "complex", "generator", "compression", "narration", "mechanics", "utility"},
+    "role": {
+        "small",
+        "complex",
+        "generator",
+        "compression",
+        "play_agent",
+        "narration",
+        "mechanics",
+        "utility",
+    },
     "provider": {
         "bfl",
         "black_forest_labs",
@@ -142,8 +158,19 @@ ENUMS = {
 
 ENUMS["retrieval_method"] = {"disabled", "hybrid", "sql_lexical"}
 ENUMS["audience"] = {"narrator", "vn_continuity", "vn_social"}
+ENUMS["inference_reason"] = {
+    "completion_unconfirmed",
+    "caller_cancelled",
+    "request_timeout",
+    "incomplete_stream",
+    "connection_failure",
+    "provider_or_processing_error",
+}
 
 ENUMS["purpose"] = {
+    "chpm",
+    "image_prompt",
+    "ai_fix",
     "generate_world",
     "translate_text_log",
     "vn_social",
@@ -158,6 +185,14 @@ ENUMS["purpose"] = {
     "memory_summary",
 }
 ENUMS["phase"] = {
+    "proposal",
+    "proposal_repair",
+    "perception",
+    "review",
+    "narration_repair",
+    "agent",
+    "prompt_preparation",
+    "suggestions",
     "preparing",
     "extracting",
     "waiting_to_save",
@@ -199,7 +234,7 @@ def safe_fields(fields: dict) -> dict:
             or key in ENUMS
             and isinstance(value, str)
             and value in ENUMS[key]
-            or key in {"final_sent", "streaming", "success"}
+            or key in {"final_sent", "streaming", "success", "thinking"}
             and type(value) is bool
         ):
             result[key] = value

@@ -91,7 +91,11 @@ async def adapt_body(
     try:
         body = await asyncio.wait_for(
             llm.aexecute_simple_task(
-                system_prompt=system, user_prompt=description, model=llm.model
+                system_prompt=system,
+                user_prompt=description,
+                model=llm.model,
+                operation="image_prompt",
+                phase="prompt_preparation",
             ),
             timeout=timeout,
         )

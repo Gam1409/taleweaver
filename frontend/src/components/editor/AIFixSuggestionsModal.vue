@@ -132,7 +132,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
           <div class="flex-1 space-y-2 text-sm text-rose-100 leading-relaxed">
             <p class="font-bold">{{ props.errorMessage }}</p>
             <p class="text-[11px] text-rose-200/80">
-              The fix could not be applied. Try generating fresh suggestions, then pick a different option.
+              {{ props.proposals.length ? 'The selected fix was not applied. Resolve the error above before trying again.' : 'No suggestions were generated. Resolve the error above, then retry.' }}
             </p>
             <button
               type="button"

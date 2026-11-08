@@ -105,7 +105,7 @@ def test_default_ai_fix_suggest_timeout_is_generous():
     Regression guard: bumping the default back to a too-aggressive value would
     re-trigger the timeout cascade users were hitting.
     """
-    assert app_settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS >= 60.0
+    assert app_settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS is None
 
 
 @pytest.fixture

@@ -144,7 +144,7 @@ def _failure_message(exc: Exception, template_id: str) -> str:
         return _summarize_outcomes(exc.outcomes)
     if isinstance(exc, TimeoutError):
         logger.warning(
-            "AI fix suggestion timed out for %s after %.0fs: %s",
+            "AI fix suggestion timed out for %s (watchdog override=%s): %s",
             template_id,
             settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS,
             exc,
@@ -227,7 +227,12 @@ async def generate_fix_proposals(
             user_prompt=user_prompt,
             current_user=current_user,
             response_model=AISuggestFixWrapperResponse,
-            gm_kwargs={"system_prompt": AI_FIX_SUGGESTIONS_SYSTEM_PROMPT},
+            gm_kwargs={
+                "system_prompt": AI_FIX_SUGGESTIONS_SYSTEM_PROMPT,
+                "operation": "ai_fix",
+                "phase": "suggestions",
+                "adventure_id": template_id,
+            },
             timeout_seconds=settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS,
             allow_fallback=True,
         )
