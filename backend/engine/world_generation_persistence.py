@@ -45,6 +45,7 @@ async def persist_generated_narrative(
             adventure.origin_id = manifest_dict.get("origin_id") or template_id
         if not adventure.original_manifest or set(adventure.original_manifest) <= {
             "visual_presets",
+            "visual_preset_source",
             "npc_card_settings",
             "clothing_settings",
             "nsfw_settings",

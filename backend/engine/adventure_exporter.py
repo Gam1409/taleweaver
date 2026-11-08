@@ -480,6 +480,9 @@ class AdventureExporter:
             "sequences": adv.sequences or [],
             "scripts": (adv.original_manifest or {}).get("scripts", []),
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
+            "visual_preset_source": (adv.original_manifest or {}).get(
+                "visual_preset_source", "saved"
+            ),
             "npc_card_settings": manifest_card_settings(adv.original_manifest),
             "clothing_settings": clothing_settings(adv.original_manifest),
             "narrator_settings": narrator_settings(adv.original_manifest).model_dump(),
