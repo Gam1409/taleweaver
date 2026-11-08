@@ -1,4 +1,5 @@
 import { apiFetch, authHeaders } from '@/services/http'
+import { responseError } from '@/services/apiErrors'
 import type { ItemDraft } from '@/services/itemGeneration'
 import type { PersonalityProfile } from '@/services/npcPersonality'
 
@@ -33,8 +34,7 @@ async function post<T>(adventureId: string, endpoint: string, payload: object): 
     method: 'POST', headers: authHeaders(true), body: JSON.stringify(payload), timeoutMs: null,
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'Could not prepare or save this NPC. Check the draft and try again.')
+    throw await responseError(response, endpoint === 'generate-npc-draft' ? 'Could not generate NPC' : 'Could not save NPC')
   }
   return response.json()
 }

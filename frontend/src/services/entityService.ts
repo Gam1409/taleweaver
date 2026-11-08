@@ -1,6 +1,7 @@
 import type { ClothingDraft } from '@/services/clothingAuthoring'
 import type { CharacterOutfitDraft } from '@/services/characterOutfits'
 import { apiFetch, authHeaders } from '@/services/http'
+import { apiErrorMessage } from '@/services/apiErrors'
 
 export interface ExitBehaviorData {
   unlock_expression?: string | null
@@ -200,7 +201,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const respData = await res.json().catch(() => ({}))
-      throw new Error(respData.detail || 'Failed to save entity text')
+      throw new Error(apiErrorMessage(respData, 'Failed to save entity text', res.status))
     }
   },
 
@@ -211,7 +212,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to clone entity')
+      throw new Error(apiErrorMessage(data, 'Failed to clone entity', res.status))
     }
     const payload = await res.json()
     return { new_id: payload.new_id, source_id: payload.source_id }
@@ -227,7 +228,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to export entity')
+      throw new Error(apiErrorMessage(data, 'Failed to export entity', res.status))
     }
     return await res.blob()
   },
@@ -244,7 +245,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to import entity')
+      throw new Error(apiErrorMessage(data, 'Failed to import entity', res.status))
     }
     return await res.json()
   },
@@ -262,7 +263,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate traits')
+      throw new Error(apiErrorMessage(data, 'Failed to generate traits', res.status))
     }
     return await res.json()
   },
@@ -281,7 +282,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate biography')
+      throw new Error(apiErrorMessage(data, 'Failed to generate biography', res.status))
     }
     return await res.json()
   },
@@ -297,7 +298,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate scene description')
+      throw new Error(apiErrorMessage(data, 'Failed to generate scene description', res.status))
     }
     return await res.json()
   },
@@ -320,7 +321,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate decorative items')
+      throw new Error(apiErrorMessage(data, 'Failed to generate decorative items', res.status))
     }
     return await res.json()
   },
@@ -337,7 +338,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate quest description')
+      throw new Error(apiErrorMessage(data, 'Failed to generate quest description', res.status))
     }
     return await res.json()
   },
@@ -353,7 +354,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to generate new quest')
+      throw new Error(apiErrorMessage(data, 'Failed to generate new quest', res.status))
     }
     return await res.json()
   },
@@ -366,7 +367,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to create scene')
+      throw new Error(apiErrorMessage(payload, 'Failed to create scene', res.status))
     }
     return await res.json()
   },
@@ -378,7 +379,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to delete scene')
+      throw new Error(apiErrorMessage(payload, 'Failed to delete scene', res.status))
     }
   },
 
@@ -390,7 +391,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to create exit')
+      throw new Error(apiErrorMessage(payload, 'Failed to create exit', res.status))
     }
     return await res.json()
   },
@@ -402,7 +403,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to delete exit')
+      throw new Error(apiErrorMessage(payload, 'Failed to delete exit', res.status))
     }
   },
 
@@ -414,7 +415,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to create entity')
+      throw new Error(apiErrorMessage(payload, 'Failed to create entity', res.status))
     }
     return await res.json()
   },
@@ -426,7 +427,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to delete entity')
+      throw new Error(apiErrorMessage(payload, 'Failed to delete entity', res.status))
     }
   },
 
@@ -438,7 +439,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to create quest')
+      throw new Error(apiErrorMessage(payload, 'Failed to create quest', res.status))
     }
     return await res.json()
   },
@@ -450,7 +451,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to delete quest')
+      throw new Error(apiErrorMessage(payload, 'Failed to delete quest', res.status))
     }
   },
 
@@ -462,7 +463,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to create award')
+      throw new Error(apiErrorMessage(payload, 'Failed to create award', res.status))
     }
     return await res.json()
   },
@@ -474,7 +475,7 @@ export const entityService = {
     })
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}))
-      throw new Error(payload.detail || 'Failed to delete award')
+      throw new Error(apiErrorMessage(payload, 'Failed to delete award', res.status))
     }
   },
 }

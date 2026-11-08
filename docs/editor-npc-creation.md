@@ -39,3 +39,9 @@ reuse a carried garment by ID. Review or edit the suggestions and uncheck any
 unwanted pieces, then click **Apply Changes** to save the character and selected
 clothes together. Existing garments, possessions and appearance are preserved.
 Generating or discarding a draft does not change the adventure.
+
+If generation or saving fails, the editor reports the operation and HTTP status.
+Request validation errors identify the affected field, including an item index
+for nested outfit fields. Structured server messages remain readable; raw
+validation inputs are not printed. Reporting an error does not retry the model
+request or publish the draft automatically.

@@ -1,5 +1,6 @@
 import type { ClothingData } from '@/services/clothingAuthoring'
 import { authHeaders, apiFetch } from '@/services/http'
+import { responseError } from '@/services/apiErrors'
 
 export interface ItemDraft {
   name: string
@@ -16,8 +17,7 @@ async function generate<T>(adventureId: string, endpoint: string, input: object)
     method: 'POST', headers: authHeaders(true), body: JSON.stringify(input),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'Item generation failed. Please try again.')
+    throw await responseError(response, 'Item generation failed')
   }
   return response.json()
 }

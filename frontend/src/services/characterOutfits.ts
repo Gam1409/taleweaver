@@ -1,4 +1,5 @@
 import { apiFetch, authHeaders } from '@/services/http'
+import { responseError } from '@/services/apiErrors'
 import type { ClothingData } from '@/services/clothingAuthoring'
 
 export interface OutfitItem {
@@ -23,8 +24,7 @@ async function read<T>(url: string, body?: object): Promise<T> {
     method: 'POST', headers: authHeaders(true), body: JSON.stringify(body), timeoutMs: null,
   } : {})
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not prepare clothing. Check the character and try again.')
+    throw await responseError(response, body ? 'Could not generate clothing' : 'Could not read existing clothing')
   }
   return response.json()
 }
