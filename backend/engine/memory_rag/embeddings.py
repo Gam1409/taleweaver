@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from backend.core.inference import admission
+from backend.core.inference import admission, receipts
 from backend.core.inference.registry import (
     InferenceQueueError,
     InferenceUncertainError,
@@ -149,19 +149,28 @@ async def _embed(
     settings: MemoryRagSettings, texts: list[str], duration: float, api_key: str
 ) -> list[list[float]]:
     base = await asyncio.to_thread(validate_embedding_url, settings.base_url)
-    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    body = {"model": settings.model, "input": texts}
-    async with httpx.AsyncClient(timeout=duration, follow_redirects=False) as client:
-        if admission.enabled():
-            async with admission.reserve(endpoint_key(base), duration) as lease:
-                response = await client.post(
-                    _request_url(settings, base), json=body, headers=headers
-                )
-                lease.certain = True
-        else:
-            response = await client.post(_request_url(settings, base), json=body, headers=headers)
+    if admission.enabled():
+        async with admission.reserve(endpoint_key(base), settings.timeout_seconds) as lease:
+            response = await receipts.wait_for_response(
+                _post(settings, base, texts, api_key, settings.timeout_seconds), lease
+            )
+            lease.certain = True
+    else:
+        response = await _post(settings, base, texts, api_key, duration)
     response.raise_for_status()
     return _parse_vectors(response.json(), settings.provider, len(texts))
+
+
+async def _post(
+    settings: MemoryRagSettings, base: str, texts: list[str], api_key: str, duration: float
+) -> httpx.Response:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with httpx.AsyncClient(timeout=duration, follow_redirects=False) as client:
+        return await client.post(
+            _request_url(settings, base),
+            json={"model": settings.model, "input": texts},
+            headers=headers,
+        )
 
 
 def _credential_key(user: Any) -> str:

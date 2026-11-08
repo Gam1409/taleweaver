@@ -40,10 +40,14 @@ waiting for a busy endpoint; it must use the asynchronous API or a worker thread
 
 Before dispatch, the queue durably records the request token. A complete non-stream
 response or a stream completion marker permits release. Closing a stream early,
-EOF without a completion marker, a connection failure, or an ambiguous timeout leaves
+EOF without a completion marker, a connection lost after submission, or an ambiguous timeout leaves
 an **UNCERTAIN** reservation. Explicit request rejections such as HTTP 400/401 release
 it; 5xx exceptions remain conservative. A truncated stream without a completion
 marker raises an error rather than silently looking like a completed response.
+Direct HTTPX `ConnectError`, `ConnectTimeout` and `PoolTimeout` failures release the
+reservation: no connection was established or acquired to send that request. They
+do not trigger an automatic retry. Read/write failures and generic SDK connection
+errors remain uncertain because they do not establish whether submission occurred.
 
 Automatic connection/timeout retries, including SDK retries, are disabled on guarded
 completion paths. Retrying the game, changing the model role, or restarting TaleWeaver
@@ -57,6 +61,16 @@ even if the old caller no longer needs the text. The response is never delivered
 back into a canceled operation. Monitoring is bounded by the existing deadline;
 if completion remains unknown, the reservation becomes UNCERTAIN. A later
 confirmed transport receipt can clear only its matching token.
+
+Foreground memory recall has a short caller wait (currently 1.5 seconds). That
+wait is separate from the configured embedding transport deadline. If admission
+has not occurred, an expired recall sends no embedding request. Once dispatched,
+the embedding HTTP client remains owned until a response or its configured deadline,
+even when recall has already fallen back to authoritative SQL. A late response
+releases the matching reservation without applying stale vectors or retrying the
+embedding. An unconfirmed connection failure still requires verified recovery.
+This prevents a nearly exhausted recall wait from immediately quarantining the
+chat server after dispatch. Successful completion events omit an uncertainty reason.
 
 The queue card records a content-free failure category and the time it became
 uncertain. This is distinct from the admission/start timestamp. Older records

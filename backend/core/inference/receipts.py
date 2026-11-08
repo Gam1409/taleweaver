@@ -3,12 +3,23 @@
 import asyncio
 import logging
 import time
+from collections.abc import Coroutine
 from typing import Any
 
 from backend.core.inference import admission, events
 
 logger = logging.getLogger(__name__)
 _monitors: set[asyncio.Task] = set()
+
+
+async def wait_for_response(request: Coroutine, lease: admission.Lease) -> Any:
+    """Keep the submitted transport and its resources alive after a caller deadline."""
+    task = asyncio.create_task(request)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        follow(task, lease)
+        raise
 
 
 def completed(task: asyncio.Task, lease: admission.Lease) -> bool:
@@ -30,7 +41,7 @@ def _finish(lease: admission.Lease, certain: bool) -> None:
         events.emit(
             "completed" if certain else "uncertain",
             reservation_id=lease.reservation_id,
-            inference_reason=lease.reason,
+            inference_reason=None if certain else lease.reason,
         )
     except (OSError, ValueError):
         logger.exception("Could not record inference completion; the durable reservation remains.")

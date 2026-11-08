@@ -37,6 +37,15 @@ TestSessionLocal = async_sessionmaker(
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_inference_registry(tmp_path, monkeypatch):
+    """Keep mocked transports away from the running application's durable queue."""
+    from backend.core.inference import admission
+    from backend.core.inference.registry import Registry
+
+    monkeypatch.setattr(admission, "_registry", Registry(tmp_path / "inference-reservations.json"))
+
+
 async def override_get_db():
     """FastAPI dependency override that yields a test DB session."""
     async with TestSessionLocal() as session:

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from backend.core.config import settings
 from backend.core.inference import events
 from backend.core.inference.registry import (
@@ -40,8 +42,10 @@ def ready(ticket: Ticket) -> bool:
 
 
 def rejected(error: BaseException) -> bool:
-    """Explicit request rejection is safe; timeouts, disconnects and 5xx are uncertain."""
-    return getattr(error, "status_code", None) in {400, 401, 403, 404, 405, 413, 415, 422, 429}
+    """Release on explicit rejection or failure before a connection can send the request."""
+    return isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)) or (
+        getattr(error, "status_code", None) in {400, 401, 403, 404, 405, 413, 415, 422, 429}
+    )
 
 
 @dataclass
@@ -62,7 +66,7 @@ def failure_reason(error: BaseException) -> str:
     if isinstance(error, InferenceUncertainError):
         return "incomplete_stream"
     if (
-        isinstance(error, (ConnectionError, OSError))
+        isinstance(error, (ConnectionError, OSError, httpx.ConnectError))
         or "connection" in type(error).__name__.lower()
     ):
         return "connection_failure"
@@ -115,7 +119,7 @@ async def reserve(key: str, timeout: float) -> AsyncIterator[Lease]:
                 "completed" if lease.certain else "uncertain",
                 reservation_id=ticket.token,
                 duration_ms=(time.monotonic() - started) * 1000,
-                inference_reason=lease.reason,
+                inference_reason=None if lease.certain else lease.reason,
             )
 
 
@@ -126,6 +130,8 @@ def reserve_sync(key: str, timeout: float) -> Iterator[Lease]:
     deadline = time.monotonic() + timeout
     acquired = False
     lease = Lease(deadline)
+    started = time.monotonic()
+    events.emit("queued", reservation_id=ticket.token, timeout_seconds=timeout)
     try:
         while not acquired:
             if time.monotonic() >= deadline:
@@ -134,12 +140,24 @@ def reserve_sync(key: str, timeout: float) -> Iterator[Lease]:
             if not acquired:
                 _check_sync_wait()
                 time.sleep(0.025)
+        events.emit(
+            "admitted", reservation_id=ticket.token, duration_ms=(time.monotonic() - started) * 1000
+        )
         try:
             yield lease
         except BaseException as error:
             lease.certain = lease.certain or rejected(error)
             lease.reason = failure_reason(error)
             raise
+    except BaseException as error:
+        if not acquired:
+            events.emit(
+                "blocked",
+                reservation_id=ticket.token,
+                error=error,
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
+        raise
     finally:
         owner.forget(ticket)
         if acquired:

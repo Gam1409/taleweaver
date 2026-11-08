@@ -34,7 +34,7 @@ def emit(
         safe.get("phase", "-"),
         safe.get("timeout_seconds", "-"),
         safe.get("duration_ms", "-"),
-        safe.get("inference_reason", "-"),
+        safe.get("inference_reason") or "-",
         safe_error(error) if error else "-",
     )
 

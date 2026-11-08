@@ -1,6 +1,5 @@
 """Transport boundaries: keep reservations until a response is known to have ended."""
 
-import asyncio
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack
 from functools import wraps
@@ -83,12 +82,7 @@ async def owned_stream(output: Any, *sources: Any) -> AsyncIterator[Any]:
 
 async def _outcome(request: Coroutine, lease: admission.Lease) -> Any:
     """A cancellation-resistant SDK must not return a late result to its caller."""
-    task = asyncio.create_task(request)
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        receipts.follow(task, lease)
-        raise
+    return await receipts.wait_for_response(request, lease)
 
 
 async def _chunks(stream: Any, lease: admission.Lease) -> AsyncIterator[Any]:
