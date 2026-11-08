@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 
 export interface ChpmSettings {
+  npc_concurrency?: number
   failure_policy?: 'continue' | 'strict'
   mode: 'off' | 'shadow' | 'live'
   actor_ids: string[]
@@ -13,6 +14,17 @@ export interface ChpmSettings {
   memory_limit: number
   agent_steps?: number
   semantic_memory?: boolean
+}
+
+export interface RequestTiming {
+  actor_id: string
+  phase: string
+  duration_ms: number
+  queue_ms: number | null
+  ttft_ms: number | null
+  prefill_ms: number | null
+  server_generation_ms: number | null
+  cached_prompt_tokens: number | null
 }
 
 export interface AnalysisFailure {
@@ -30,7 +42,7 @@ export interface ChpmStatus {
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number }
+  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number; preparation_ms?: number | null; timings?: RequestTiming[] }
   last_analysis_failure?: AnalysisFailure | null
   last_proposal_failure?: AnalysisFailure | null
   trace: unknown[]

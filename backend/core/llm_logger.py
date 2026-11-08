@@ -119,6 +119,9 @@ def log_llm_interaction(
     from backend.core.llm_completion_capture import record_completion
 
     record_completion(raw_response)
+    from backend.core.llm_timing import record_response
+
+    record_response(raw_response)
     counts = (
         {
             key: usage.get(key)

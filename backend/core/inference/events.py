@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from backend.core import system_diagnostics
+from backend.core import llm_timing, system_diagnostics
 from backend.core.diagnostic_fields import safe_error
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,9 @@ def emit(
     error: BaseException | None = None,
     **fields: object,
 ) -> None:
+    duration = fields.get("duration_ms")
+    if stage in {"admitted", "blocked"} and isinstance(duration, (int, float)):
+        llm_timing.queued(duration)
     service = system_diagnostics.service
     context = service.current_context()
     safe = {**context, **fields}

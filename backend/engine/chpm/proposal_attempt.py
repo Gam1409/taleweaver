@@ -5,7 +5,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from backend.engine.chpm import choice_grounds, inference, proposal_repair
+from backend.engine.chpm import choice_grounds, inference, parallel_budget, proposal_repair
 from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
@@ -59,7 +59,9 @@ async def request(
             )
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
-        reserve = remaining * (1 + settings.agent_steps) + (3 if settings.mode == "live" else 0)
+        reserve = parallel_budget.remaining(remaining * (1 + settings.agent_steps)) + (
+            3 if settings.mode == "live" else 0
+        )
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
             raise RecoverableChpmError(
                 "CHPM proposal retry has no reserved request budget. " + feedback

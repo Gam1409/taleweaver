@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -12,7 +13,6 @@ from backend.engine.chpm import (
     agent_views,
     capacity,
     causal_memory,
-    cognition,
     context,
     continuation,
     development_context,
@@ -29,7 +29,7 @@ from backend.engine.chpm.causal_contracts import Thread
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
 from backend.engine.chpm.errors import RecoverableChpmError
-from backend.engine.chpm.host_state import Mind, removed_messages
+from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError, digest
 from backend.engine.chpm.schema import (
     AgendaEntry,
@@ -189,7 +189,11 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
                 state,
                 [actor.id for actor in selected[: state.settings.max_active_npcs]],
             )
-        await _prepare(manager, turn, message, selected)
+        started = time.perf_counter()
+        try:
+            await _prepare(manager, turn, message, selected)
+        finally:
+            turn.usage.preparation_ms = (time.perf_counter() - started) * 1000
     except Exception as exc:
         _preparation_failed(manager, turn, exc)
     if turn.usage.status != "failed":
@@ -248,90 +252,21 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     if turn.initial.settings.mode == "live" and turn.initial.settings.agent_steps:
         turn.agent_clothing = await agent_views.capture(manager)
     await semantic_recall.prepare(manager, turn, active_ids, observed)
-    for actor in sorted(active, key=lambda item: item.id):
-        await _prepare_actor(manager, turn, actor, observed)
+    from backend.engine.chpm import parallel
+
+    await parallel.prepare(manager, turn, active, observed, _prepare_actor)
     from backend.engine.chpm.rendering import preflight
 
     preflight(turn)
 
 
 async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:
-    previous = continuation.previous(turn.initial, actor.id)
-    retained = await memory.recall(
-        manager,
-        actor.id,
-        turn.initial.memories.get(actor.id, []),
-        turn.initial.settings.memory_limit,
-    )
-    entries = await agenda.recall(manager, actor.id, turn.initial.agenda)
-    invalid: set[str] = set()
-    authored = actor
-    if turn.initial.settings.mode == "live":
-        turn.minds[actor.id] = await host_adapter.prepare(manager, turn, actor, observed)
-        continuation.rebase_gap(turn, actor.id)
-        authored = host_adapter.actor_view(actor, turn.minds[actor.id])
-        if actor.id in turn.initial.minds:
-            invalid = removed_messages(turn.initial.minds[actor.id], turn.minds[actor.id])
-    retained = [entry for entry in retained if entry.source_message_id not in invalid]
-    for message_id in sorted(invalid):
-        entries = agenda.retract(entries, message_id)
-    causal_memory.invalidate(turn, actor.id, invalid)
-    turn.memories[actor.id] = retained
-    turn.agendas[actor.id] = entries
-    legacy = (
-        previous if not invalid and not retained and turn.initial.settings.memory_limit else None
-    )
-    supplied = await context.actor_context(manager, authored, legacy, retained)
-    if actor.id in turn.minds:
-        host_adapter.add_context(supplied, turn.minds[actor.id])
-    supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
-    supplied["causal_continuity_not_world_facts"] = causal_memory.view(
-        turn.causal_threads.get(actor.id, []), turn.minds.get(actor.id)
-    )
-    supplied["agenda_creation_available"] = (
-        len(turn.initial.agenda) < agenda.MAX_RECORDS
-        and len(supplied["declared_agenda_not_world_facts"]) < agenda.MAX_ACTIVE
-    )
-    if turn.initial.recovery.pending_gap_turns:
-        supplied["continuity_gap"] = continuation.gap_context(turn.initial)
-    supplied["_chpm_gap_cursors"] = turn.gap_cursors
-    perceived = turn.perceptions[actor.id]
-    actor_observation = observed.model_copy(
-        update={
-            "player_request": "\n".join(perceived.quotes),
-            "perception_uncertain": perceived.uncertain,
-            "perception_kinds": perceived.quote_kinds,
-        }
-    )
-    supplied["observation"] = actor_observation.model_dump()
-    # Recall and core-source reconciliation opened a read transaction after the
-    # initial release. The session lease protects the snapshot while inference runs.
+    from backend.engine.chpm import actor_preparation
+
+    job = await actor_preparation.prepare(manager, turn, actor, observed)
     await release_for_model(manager)
-    if actor.id in turn.minds:
-        turn.decisions[actor.id], turn.minds[actor.id] = await cognition.deliberate(
-            manager,
-            turn.initial.settings,
-            turn.usage,
-            actor.id,
-            actor_observation,
-            supplied,
-            turn.agendas[actor.id],
-            turn.minds[actor.id],
-            previous,
-        )
-        turn.decisions[actor.id].perception_audit = perceived.coverage
-        return
-    turn.decisions[actor.id] = await cognition.decide(
-        manager,
-        turn.initial.settings,
-        turn.usage,
-        actor.id,
-        actor_observation,
-        supplied,
-        turn.agendas[actor.id],
-        previous,
-    )
-    turn.decisions[actor.id].perception_audit = perceived.coverage
+    result = await actor_preparation.run(manager, turn, job)
+    actor_preparation.apply(turn, actor.id, result)
 
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:

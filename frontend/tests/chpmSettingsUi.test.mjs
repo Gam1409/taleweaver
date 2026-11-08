@@ -16,10 +16,10 @@ const compiled = ts.transpileModule(script, {
   .replace(/import .* from ['"]@\/composables\/useChpmSettings['"];?/, 'const useChpmSettings = () => globalThis.__chpmSettingsFixture;')
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 
-async function render(count, warnings = [], statusFields = {}) {
+async function render(count, warnings = [], statusFields = {}, draftFields = {}) {
   globalThis.__chpmSettingsFixture = {
     status: ref({ available: true, characters: [], usage: { status: 'idle' }, trace: [], ...statusFields }),
-    draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 8 }),
+    draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 8, ...draftFields }),
     busy: ref(false), error: ref(''), minimumCalls: ref(count + 5),
     budgetWarning: ref(false), historyWarnings: ref(warnings),
     load() {}, save() {}, selectStandard() {},
@@ -38,6 +38,29 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
   assert.match(html, /Minimum for this selection: 8/)
   assert.match(html, /Later card edits do not replace/)
   assert.doesNotMatch(await render(1), /processed sequentially/)
+})
+
+test('parallel analysis is an explicit saved setting with unchanged request limits', async () => {
+  const html = await render(3, [], {}, { npc_concurrency: 2 })
+  assert.match(html, /up to 2 NPCs at once/)
+  assert.doesNotMatch(html, /processed sequentially/)
+  assert.match(html, /shared request budget stay the same/)
+  assert.match(html, /Changes apply after Save/)
+  assert.match(html, /failed turns can spend more/)
+})
+
+test('saved timings distinguish unknown input processing from a measured zero queue', async () => {
+  const html = await render(2, [], { usage: { status: 'validated', preparation_ms: 2000, timings: [{
+    actor_id: '<script>NPC</script>', phase: 'proposal', duration_ms: 1000, queue_ms: 0,
+    ttft_ms: null, prefill_ms: null, server_generation_ms: 500, cached_prompt_tokens: 42,
+  }] } })
+  assert.match(html, /Last NPC analysis timings/)
+  assert.match(html, /2\.000 s/)
+  assert.match(html, /0\.000 s/)
+  assert.match(html, /0\.500 s/)
+  assert.match(html, /Unavailable/)
+  assert.match(html, /&lt;script&gt;NPC/)
+  assert.doesNotMatch(html, /<script>/)
 })
 
 test('large casts expose focused processing and an explicit all-present choice', async () => {

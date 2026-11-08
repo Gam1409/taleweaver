@@ -6,6 +6,7 @@ const props = defineProps<{ sessionId: string }>()
 const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, load, save } = useChpmSettings(() => props.sessionId)
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
 const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
+const elapsed = (value: number | null | undefined): string => value == null ? 'Unavailable' : `${(value / 1000).toFixed(3)} s`
 defineExpose({ save })
 </script>
 
@@ -56,7 +57,14 @@ defineExpose({ save })
         </label>
         <p class="text-xs text-slate-400">Default: 3. In larger casts, process direct participants without filling spare places. With no direct participants, keep the current conversation; choose another group when its participants leave. Inactive characters keep their state and do not receive new dialogue or psychological updates. If direct participants exceed this limit, Keep playing uses standard RP and Strict stops for inspection. Set 20 to process every present selected NPC, and raise the request budget accordingly. Attribution is model-based and can be mistaken.</p>
         <p v-if="draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 25 NPC Personality requests with agent lookups off including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
-        <p v-if="draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200">Selected NPCs are processed sequentially. With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
+        <p v-if="draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><span v-if="(draft.npc_concurrency ?? 1) === 1">Selected NPCs are processed sequentially.</span><span v-else>Independent NPC analysis may overlap, up to {{ draft.npc_concurrency }} NPCs at once.</span> With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
+        <label class="block text-xs text-slate-300">Concurrent NPC analyses (experimental)
+          <select v-model.number="draft.npc_concurrency" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+            <option :value="1">1 — sequential baseline</option>
+            <option :value="2">2 NPCs</option><option :value="3">3 NPCs</option><option :value="4">4 NPCs</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Start with 2 and compare the saved timings below. Context, output limits and the shared request budget stay the same. The server and local inference queue may still serialize requests. Already-started analyses may finish even when another NPC fails, so failed turns can spend more of the existing request budget. Changes apply after Save.</span>
+        </label>
         <label class="block text-xs text-slate-300">Use existing model configuration
           <select v-model="draft.model_role" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option value="complex">Complex model</option><option value="small">Small model</option>
@@ -106,6 +114,21 @@ defineExpose({ save })
       <p v-for="(feedback, index) in status.usage.proposal_feedback ?? []" :key="index">{{ feedback }}</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
+    <details v-if="status?.usage.timings?.length" class="mt-3 space-y-2 text-xs text-slate-400">
+      <summary class="cursor-pointer">Last NPC analysis timings</summary>
+      <p>NPC preparation wall time: {{ elapsed(status.usage.preparation_ms) }}. Request times may overlap.</p>
+      <p>Host queue is TaleWeaver admission waiting. First token includes network/server waiting and input processing; it is unavailable for non-streamed responses. Input processing and server generation appear only when the provider reports them. These measurements do not add model requests.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead><tr><th>Phase</th><th>NPC</th><th>Total</th><th>Host queue</th><th>First token</th><th>Input processing</th><th>Server generation</th><th>Cached input tokens</th></tr></thead>
+          <tbody><tr v-for="(timing, index) in status.usage.timings" :key="index">
+            <td class="p-1">{{ timing.phase }}</td><td class="p-1">{{ status.characters.find(actor => actor.id === timing.actor_id)?.name ?? (timing.actor_id || 'Shared') }}</td>
+            <td class="p-1">{{ elapsed(timing.duration_ms) }}</td><td class="p-1">{{ elapsed(timing.queue_ms) }}</td><td class="p-1">{{ elapsed(timing.ttft_ms) }}</td>
+            <td class="p-1">{{ elapsed(timing.prefill_ms) }}</td><td class="p-1">{{ elapsed(timing.server_generation_ms) }}</td><td class="p-1">{{ timing.cached_prompt_tokens ?? 'Unavailable' }}</td>
+          </tr></tbody>
+        </table>
+      </div>
+    </details>
     <section v-if="lastFailure && lastFailure.source !== 'current_turn'" aria-label="Previous NPC analysis failure" class="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">
       <h4 class="font-semibold">{{ lastFailure.proposal_feedback.length ? 'Most recent rejected NPC proposal' : 'Most recent failed NPC analysis' }}</h4>
       <p>Validation feedback from an earlier failed turn. The current turn may be paused and show zero analysis requests.</p>

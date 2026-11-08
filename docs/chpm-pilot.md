@@ -6,6 +6,9 @@ The [causal continuity guide](chpm-causal-memory.md) explains how unfinished
 purposes retain their initiating events, concrete consequences and remaining steps.
 See [release history](chpm-changelog.md) for module versions independent of data contracts.
 
+See [performance measurements and parallel NPC analysis](chpm-performance.md) for
+request timings and the optional concurrency experiment.
+
 Optional [semantic NPC memory](chpm-semantic-memory.md) combines the existing
 observer-scoped evidence with administrator-configured embeddings. It defaults
 to off and adds no generative model calls. Other references to lexical-only

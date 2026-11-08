@@ -9,6 +9,7 @@ from backend.engine.chpm.causal_audit import MAX_NOTES
 from backend.engine.chpm.causal_contracts import Memory as CausalMemory
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
+from backend.engine.chpm.performance import RequestTiming
 from backend.engine.chpm.recovery_contracts import RecoveryState
 
 
@@ -17,6 +18,7 @@ class Contract(BaseModel):
 
 
 class Settings(Contract):
+    npc_concurrency: int = Field(default=1, ge=1, le=4, strict=True)
     mode: Literal["off", "shadow", "live"] = "off"
     actor_ids: list[str] = Field(default_factory=list, max_length=20)
     max_active_npcs: int = Field(default=3, ge=1, le=20, strict=True)
@@ -293,6 +295,8 @@ class Decision(Contract):
 
 
 class Usage(Contract):
+    preparation_ms: float | None = Field(default=None, ge=0)
+    timings: list[RequestTiming] = Field(default_factory=list, max_length=25)
     calls: int = 0
     input_chars: int = 0
     output_chars: int = 0

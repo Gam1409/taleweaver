@@ -70,6 +70,13 @@ IDENTIFIERS = {
     "call_id",
 }
 NUMBERS = {
+    "queue_ms",
+    "provider_attempts",
+    "ttft_ms",
+    "stream_generation_ms",
+    "prefill_ms",
+    "server_generation_ms",
+    "model_load_ms",
     "delay_ms",
     "duration_ms",
     "elapsed_ms",

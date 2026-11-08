@@ -4,13 +4,14 @@ import asyncio
 import logging
 import math
 import time
-from collections.abc import AsyncIterator, Callable, Coroutine
-from contextlib import AbstractContextManager, asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from inspect import signature
 from typing import Any, ParamSpec, TypeVar, cast
 from uuid import UUID, uuid4
 
+from backend.core import llm_timing
 from backend.core.diagnostic_fields import ENUMS
 
 logger = logging.getLogger(__name__)
@@ -96,10 +97,12 @@ def emit(event: str, **fields: Any) -> None:
         )
 
 
-def _scope(context: dict) -> AbstractContextManager[None]:
+@contextmanager
+def _scope(context: dict, measurement: llm_timing.Measurement | None = None) -> Iterator[None]:
     from backend.core.system_diagnostics import service
 
-    return service.context(**context)
+    with service.context(**context), llm_timing.activate(measurement):
+        yield
 
 
 def _identifiers(fields: dict) -> dict:
@@ -179,9 +182,17 @@ def _context(router: Any, kind: str, kwargs: dict) -> dict:
 
 
 def _finish(
-    context: dict, start: float, error: BaseException | None = None, *, namespace: str = "llm"
+    context: dict,
+    start: float,
+    error: BaseException | None = None,
+    *,
+    namespace: str = "llm",
+    measurement: llm_timing.Measurement | None = None,
 ) -> None:
     fields = {**context, "duration_ms": round((time.perf_counter() - start) * 1000, 3)}
+    if measurement is not None:
+        fields.update(measurement.fields())
+        llm_timing.publish(fields)
     event = f"{namespace}.completed"
     if error is not None:
         event = (
@@ -193,33 +204,40 @@ def _finish(
     emit(event, **fields)
 
 
-async def _stream(stream: Any, context: dict, start: float) -> AsyncIterator:
+async def _stream(
+    stream: Any, context: dict, start: float, measurement: llm_timing.Measurement
+) -> AsyncIterator:
     try:
-        async with _owned_scope(stream, context):
-            async for chunk in _scoped_chunks(stream, context):
+        async with _owned_scope(stream, context, measurement):
+            async for chunk in _scoped_chunks(stream, context, measurement):
                 yield chunk
     except BaseException as error:
-        _finish(context, start, error)
+        _finish(context, start, error, measurement=measurement)
         raise
     else:
-        _finish(context, start)
+        _finish(context, start, measurement=measurement)
 
 
 @asynccontextmanager
-async def _owned_scope(stream: Any, context: dict) -> AsyncIterator[None]:
+async def _owned_scope(
+    stream: Any, context: dict, measurement: llm_timing.Measurement
+) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        with _scope(context):
+        with _scope(context, measurement):
             await stream.aclose()
 
 
-async def _scoped_chunks(stream: Any, context: dict) -> AsyncIterator:
+async def _scoped_chunks(
+    stream: Any, context: dict, measurement: llm_timing.Measurement
+) -> AsyncIterator:
     iterator = aiter(stream)
     while True:
         try:
-            with _scope(context):
+            with _scope(context, measurement):
                 chunk = await anext(iterator)
+                llm_timing.first_chunk(chunk)
         except StopAsyncIteration:
             return
         yield chunk
@@ -232,16 +250,17 @@ def async_call(kind: str) -> Callable[[_F], _F]:
         @wraps(method)
         async def observed(router: Any, *args: Any, **kwargs: Any) -> Any:
             context, start = _context(router, kind, kwargs), time.perf_counter()
+            measurement = llm_timing.Measurement()
             emit("llm.started", **context)
             try:
-                with _scope(context):
+                with _scope(context, measurement):
                     result = await method(router, *args, **kwargs)
             except BaseException as error:
-                _finish(context, start, error)
+                _finish(context, start, error, measurement=measurement)
                 raise
             if kind == "stream":
-                return _stream(result, context, start)
-            _finish(context, start)
+                return _stream(result, context, start, measurement)
+            _finish(context, start, measurement=measurement)
             return result
 
         return cast(_F, observed)
@@ -254,14 +273,15 @@ def sync_call(kind: str) -> Callable[[_F], _F]:
         @wraps(method)
         def observed(router: Any, *args: Any, **kwargs: Any) -> Any:
             context, start = _context(router, kind, kwargs), time.perf_counter()
+            measurement = llm_timing.Measurement()
             emit("llm.started", **context)
             try:
-                with _scope(context):
+                with _scope(context, measurement):
                     result = method(router, *args, **kwargs)
             except BaseException as error:
-                _finish(context, start, error)
+                _finish(context, start, error, measurement=measurement)
                 raise
-            _finish(context, start)
+            _finish(context, start, measurement=measurement)
             return result
 
         return cast(_F, observed)

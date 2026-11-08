@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import json_contract
+from backend.engine.chpm import json_contract, parallel_budget, performance
 from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
@@ -91,11 +91,12 @@ async def request(
 ) -> T:
     prompt, content = compose(instruction, payload, schema, identifiers)
     reserve(settings, usage, len(prompt) + len(content))
+    parallel_budget.dispatched(phase)
     llm = model_for(manager, settings.model_role, GameMasterLLM)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens)
     llm.enable_thinking = False
     try:
-        with capture_completions() as completions:
+        with performance.measure(usage, phase), capture_completions() as completions:
             result = await asyncio.wait_for(
                 llm.aexecute_simple_task(
                     prompt,

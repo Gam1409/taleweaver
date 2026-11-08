@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack
 from functools import wraps
 from typing import Any
 
+from backend.core import llm_timing
 from backend.core.inference import admission, receipts
 from backend.core.inference.registry import InferenceUncertainError, endpoint_key
 
@@ -18,6 +19,7 @@ def target(router: Any) -> str | None:
 async def _stream(method: Callable, router: Any, kwargs: dict, key: str) -> AsyncIterator[Any]:
     async with admission.reserve(key, float(router.request_timeout)) as lease:
         with admission.deadline_scope(lease):
+            llm_timing.dispatched()
             stream = await method(router, {**kwargs, "num_retries": 0})
         try:
             async for chunk in _chunks(stream, lease):
@@ -42,11 +44,13 @@ def guarded_async(method: Callable) -> Callable:
     async def guarded(router: Any, kwargs: dict) -> Any:
         key = target(router)
         if key is None:
+            llm_timing.dispatched()
             return await method(router, kwargs)
         if kwargs.get("stream"):
             return _stream(method, router, kwargs, key)
         async with admission.reserve(key, float(router.request_timeout)) as lease:
             with admission.deadline_scope(lease):
+                llm_timing.dispatched()
                 result = await _outcome(method(router, {**kwargs, "num_retries": 0}), lease)
             lease.certain = True
             return result
@@ -59,9 +63,11 @@ def guarded_sync(method: Callable) -> Callable:
     def guarded(router: Any, kwargs: dict) -> Any:
         key = target(router)
         if key is None:
+            llm_timing.dispatched()
             return method(router, kwargs)
         with admission.reserve_sync(key, float(router.request_timeout)) as lease:
             with admission.deadline_scope(lease):
+                llm_timing.dispatched()
                 result = method(router, {**kwargs, "num_retries": 0})
             lease.certain = True
             return result
