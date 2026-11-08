@@ -94,9 +94,9 @@ DEFAULT_IMAGE_STYLES: list[dict[str, Any]] = [
     },
     {
         "id": "shonen-anime",
-        "name": "Modern Shonen Anime",
-        "description": "Sharp lines, dynamic digital lighting, and high-energy animation style.",
-        "instruction": "Modern shonen anime style, crisp line art, dynamic cinematic lighting, vibrant cel-shading, high-octane energy, digital animation aesthetic, sharp focus, vivid special effects.",
+        "name": "Anime",
+        "description": "Anime illustration with clean lines, expressive characters, and balanced cel shading.",
+        "instruction": "Anime style, clean line art, expressive character design, balanced cel shading, detailed backgrounds, coherent composition.",
         "image_url": "/assets/catalog/styles/modern-shonen-anime_7417820f.jpg",
     },
     {

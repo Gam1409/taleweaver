@@ -65,6 +65,7 @@ from backend.core.ollama_role_config import (
     validate_role_urls,
 )
 from backend.core.security import encryption_util
+from backend.core.style_catalog import normalize_image_styles_catalog
 from backend.engine.media_engine import MediaEngine
 from backend.engine.tts_engine import TTSEngine, TTSModelSwitchSuggestionError
 from backend.models.user import User
@@ -683,9 +684,11 @@ async def get_settings(
         "t2i_settings": _normalize_t2i_settings(user.t2i_settings),
         "is_llm_configured": _is_llm_configured(user, user.encrypted_api_keys),
         "is_t2i_configured": _is_t2i_configured(user, user.encrypted_api_keys),
-        "image_styles_catalog": _normalize_catalog(
-            user.image_styles_catalog,
-            fallback=_default_image_styles_catalog(),
+        "image_styles_catalog": normalize_image_styles_catalog(
+            _normalize_catalog(
+                user.image_styles_catalog,
+                fallback=_default_image_styles_catalog(),
+            )
         ),
         "tone_catalog": _normalize_catalog(
             user.tone_catalog,
@@ -1232,8 +1235,8 @@ async def update_image_styles_catalog(
     user = await _resolve_global_settings_owner(db, current_user)
 
     raw_items = [item.model_dump() for item in payload.items]
-    user.image_styles_catalog = _normalize_catalog(
-        raw_items, fallback=_default_image_styles_catalog()
+    user.image_styles_catalog = normalize_image_styles_catalog(
+        _normalize_catalog(raw_items, fallback=_default_image_styles_catalog())
     )
     await _broadcast_global_settings(db, user, fields=("image_styles_catalog",))
     await db.commit()
