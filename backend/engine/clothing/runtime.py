@@ -16,6 +16,7 @@ from backend.engine.clothing.profiles import (
     reconcile_profile,
     validate_profile,
 )
+from backend.engine.clothing.resolution_facts import inner_details_allowed, item_facts
 from backend.engine.clothing.schema import VisualProfile, WornItem
 from backend.engine.visual_novel.continuity import PLAYER
 from backend.models.world_entity import WorldEntity
@@ -24,13 +25,7 @@ LEDGER_KEY = "__vn_wardrobe__"
 
 
 def _detail_allowed(actor: dict, manager: Any) -> bool:
-    profile = load_profile(actor["visual_profile"])
-    return bool(
-        detail_settings(manager)["detailed"]
-        and profile
-        and profile.appearance.age_years is not None
-        and profile.appearance.age_years >= 18
-    )
+    return inner_details_allowed(actor["visual_profile"], detail_settings(manager)["detailed"])
 
 
 def _store_actor(manager: Any, states: dict, actor: dict) -> None:
@@ -174,10 +169,10 @@ def _create_garment(
     completed = {
         "actor_id": creation.actor_id,
         "item_id": identifier,
-        "name": creation.name,
         "acquisition": creation.acquisition,
         "source_id": creation.source_id,
         "worn": creation.wear,
+        **item_facts(item, include_inner=_detail_allowed(candidate, manager)),
     }
     return candidate, completed
 
@@ -243,6 +238,7 @@ async def apply_wardrobe(manager: Any, event: Any, states: dict) -> bool:
                     "item_id": action.item_id,
                     "operation": action.operation,
                     "uncovered_regions": action.uncovered_regions,
+                    **item_facts(item, include_inner=_detail_allowed(candidate, manager)),
                 }
             )
         except ValueError as error:
@@ -259,6 +255,10 @@ async def apply_wardrobe(manager: Any, event: Any, states: dict) -> bool:
         "\nAUTHORITATIVE CLOTHING RESOLUTION (internal IDs, do not print): "
         + json.dumps({"completed": accepted, "not_completed": errors}, ensure_ascii=False)
     )
-    event.narrative_description += " Describe only completed clothing changes, do not convert rejected requests into successful dressing or acquisition."
+    event.narrative_description += (
+        " Describe only completed clothing changes, do not convert rejected requests into successful dressing or acquisition."
+        " Item names and descriptions above are canonical for these actions. Preserve their color, material and cut;"
+        " wearing, removing or adjusting a garment does not change its identity. Do not invent unspecified attributes."
+    )
     manager._vn_wardrobe_changed = changed
     return True

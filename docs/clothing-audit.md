@@ -49,6 +49,19 @@ old outfit over an intentional removal or invent ownership/garments without revi
 
 ## Operational constraints
 
+Completed wear/remove/adjust actions now pass the resolved item's canonical name
+and description to the narrator. This keeps a removed garment's attributes available
+after it leaves the visible worn-layer projection. Canonical object records override
+stale inventory copies; legacy garment descriptions remain a fallback. The same
+handoff covers newly acquired garments. Instructions require unchanged color,
+material and cut, and leave unspecified attributes unknown.
+
+These facts accompany only confirmed wardrobe actions. Rejected changes do not
+publish item details. Inner-garment details retain the explicit detail preference
+and known-adult checks. Full wardrobe descriptions are not duplicated into every
+continuity request, and this handoff adds no model calls. Supplying the correct
+facts does not certify that a particular live model will follow them.
+
 - Detailed clothing is a preference, not an on/off switch for all outer clothing tracking.
 - Editing template preferences does not retroactively alter an existing session's frozen
   snapshot. Investigate the session's own settings and actor profiles.

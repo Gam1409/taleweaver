@@ -42,6 +42,9 @@ outfit: carried gifts remain carried unless the recipient independently chooses
 to wear them. wardrobe_actions changes only wear/remove/adjust for existing owned
 clothing IDs. Removing a garment keeps it in its owner's inventory. Adjust supplies
 the complete set of uncovered regions for that garment, restricted to its coverage.
+Canonical item names and descriptions preserve color, material and cut. Dressing,
+undressing and adjusting do not recolor or replace an item. Do not invent attributes
+that are unspecified in these records.
 Do not infer nakedness, underwear or an outfit from missing clothing information.
 Underwear tracking requires clothing_context.settings.detailed=true and a known
 adult age (18+) already in the actor profile; otherwise do not create or newly
