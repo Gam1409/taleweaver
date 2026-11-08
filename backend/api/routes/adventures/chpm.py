@@ -12,7 +12,7 @@ from backend.api.routes.adventures.session_content_settings import _owned
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.chpm import capacity
+from backend.engine.chpm import capacity, failure_report
 from backend.engine.chpm.continuation import public_status
 from backend.engine.chpm.schema import Contract, Settings, Usage
 from backend.engine.chpm.state import KEY, load
@@ -51,6 +51,7 @@ async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, 
         "available": await session_is_vn(db, state),
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
+        "last_proposal_failure": await failure_report.latest(db, state, current),
         "memory_counts": {actor: len(entries) for actor, entries in current.memories.items()},
         "history_capacity": {
             actor: capacity.inspect(mind) for actor, mind in current.minds.items()

@@ -45,7 +45,8 @@ async def request(
                 return accept(raw)
             except (ChpmError, TransitionError, ValidationError) as exc:
                 feedback = inference.validation_feedback(exc)
-        usage.proposal_feedback.append(feedback[:600])
+        # This is a two-entry diagnostic window, not canonical story history.
+        usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
             raise RecoverableChpmError(
                 "CHPM proposal remains invalid; no decision applied. " + feedback

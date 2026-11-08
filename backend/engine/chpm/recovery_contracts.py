@@ -1,5 +1,7 @@
 """Additive, bounded diagnostics for unreviewed RP intervals; never new beliefs."""
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -11,6 +13,9 @@ class SimplifiedReply(BaseModel):
     reply_hash: str
     reason: str = Field(max_length=80)
     actor_ids: list[str] = Field(default_factory=list, max_length=20)
+    proposal_feedback: list[Annotated[str, Field(max_length=600)]] = Field(
+        default_factory=list, max_length=2
+    )
 
 
 class RecoveryState(BaseModel):

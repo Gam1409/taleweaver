@@ -208,6 +208,7 @@ def finish(manager: Any, turn: "Turn", reply: Any) -> None:
         reply_hash=digest(reply.content),
         reason=turn.usage.fallback_reason,
         actor_ids=list(turn.fallback_identities),
+        proposal_feedback=[entry[:600] for entry in turn.usage.proposal_feedback[-2:]],
     )
     recovery.recent = [*recovery.recent, record][-8:]
     save(manager.state, result, expected_revision=turn.initial.revision)

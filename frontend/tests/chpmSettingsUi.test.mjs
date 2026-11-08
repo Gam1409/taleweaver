@@ -16,9 +16,9 @@ const compiled = ts.transpileModule(script, {
   .replace(/import .* from ['"]@\/composables\/useChpmSettings['"];?/, 'const useChpmSettings = () => globalThis.__chpmSettingsFixture;')
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 
-async function render(count, warnings = []) {
+async function render(count, warnings = [], statusFields = {}) {
   globalThis.__chpmSettingsFixture = {
-    status: ref({ available: true, characters: [], usage: { status: 'idle' }, trace: [] }),
+    status: ref({ available: true, characters: [], usage: { status: 'idle' }, trace: [], ...statusFields }),
     draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 8 }),
     busy: ref(false), error: ref(''), minimumCalls: ref(count + 5),
     budgetWarning: ref(false), historyWarnings: ref(warnings),
@@ -46,6 +46,22 @@ test('large casts expose focused processing and an explicit all-present choice',
   assert.match(html, /Active NPCs per turn/)
   assert.match(html, /Twenty active NPCs require 25 NPC Personality requests/)
   assert.match(html, /Attribution is model-based and can be mistaken/)
+})
+
+test('cooldown shows the earlier rejection separately and escapes its validation text', async () => {
+  const html = await render(2, [], {
+    usage: { status: 'failed', simplified: true, calls: 0, input_chars: 0, output_chars: 0 },
+    last_proposal_failure: {
+      source: 'previous_turn_snapshot', reason: 'analysis_failed', reply_id: 'reply',
+      proposal_feedback: ['candidates.refuse.preconditions: Field required', '<script>not markup</script>'],
+    },
+  })
+  assert.match(html, /Most recent rejected NPC proposal/)
+  assert.match(html, /candidates.refuse.preconditions: Field required/)
+  assert.match(html, /earlier failed turn/)
+  assert.match(html, /previous turn snapshot/)
+  assert.match(html, /&lt;script&gt;/)
+  assert.doesNotMatch(html, /<script>/)
 })
 
 test('capacity warning exposes the explicit standard-mode choice and preserved history', async () => {

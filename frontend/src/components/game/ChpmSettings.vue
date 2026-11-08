@@ -96,6 +96,12 @@ defineExpose({ save })
       <p v-for="(feedback, index) in status.usage.proposal_feedback ?? []" :key="index">{{ feedback }}</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
+    <section v-if="status?.last_proposal_failure && status.last_proposal_failure.source !== 'current_turn'" aria-label="Previous NPC proposal failure" class="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">
+      <h4 class="font-semibold">Most recent rejected NPC proposal</h4>
+      <p>Validation feedback from an earlier failed turn. The current turn may be paused and show zero analysis requests.</p>
+      <p v-for="(feedback, index) in status.last_proposal_failure.proposal_feedback" :key="index" class="whitespace-pre-wrap break-words">{{ feedback }}</p>
+      <p v-if="status.last_proposal_failure.source === 'previous_turn_snapshot'" class="text-amber-200/70">Read from the previous turn snapshot; game state is unchanged.</p>
+    </section>
     <details v-if="status && (status.trace.length || status.agenda?.length)" class="mt-3 text-xs text-slate-400">
       <summary class="cursor-pointer">Administrator decision trace</summary>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.trace, null, 2) }}</pre>
