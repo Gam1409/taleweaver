@@ -84,6 +84,15 @@ to the normal narrator. Agent lookup rounds and needed repairs add requests.
 The settings panel shows the required request reserve for the selected cast.
 Unused reserve is not spent. Provider-level attempts may add cost.
 
+The existing single proposal retry receives the complete rejected JSON object when
+it fits the unchanged input budget, together with field errors and the preferred
+candidate's exact permitted motive IDs. Structurally invalid proposals can report
+both a text-length error and mismatched choice grounds in that same feedback.
+The rejected object remains unvalidated data; it is never applied as psychology.
+Ambiguous or incomplete JSON is excluded. An oversized rejected object is omitted
+explicitly, preserving all required context. No extra retry is added and the
+300-character choice explanation cap remains unchanged.
+
 Enabled replies are buffered until review and the recoverable save boundary.
 The interface shows progress while waiting; generated prose does not stream in
 this mode. Several active NPCs on a slow local model can take minutes. A roster

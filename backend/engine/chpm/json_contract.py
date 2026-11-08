@@ -54,19 +54,23 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
             properties[key]["enum"] = (
                 [None] if null_only else [*allowed, None] if nullable else allowed
             )
-            properties[key]["description"] = "Use an exact enum value, not a display name."
     for child in node.values():
         _bind_ids(child, identifiers)
 
 
 def parse(schema: type[T], text: str) -> T:
+    return schema.model_validate(decode(text))
+
+
+def decode(text: str) -> dict:
+    """Retain only complete, unambiguous objects for a possible proposal repair."""
     lines = text.strip().splitlines()
     if len(lines) >= 3 and lines[0] in {"```json", "```"} and lines[-1] == "```":
         text = "\n".join(lines[1:-1])
     value = json.loads(text, object_pairs_hook=_unique_keys, parse_constant=_invalid_number)
     if not isinstance(value, dict):
         raise ValueError("CHPM needs one JSON object.")
-    return schema.model_validate(value)
+    return value
 
 
 def _unique_keys(pairs: list[tuple[str, Any]]) -> dict:

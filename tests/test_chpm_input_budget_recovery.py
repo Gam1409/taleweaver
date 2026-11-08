@@ -27,15 +27,12 @@ def test_lossless_wire_encoding_fits_without_raising_the_saved_input_limit():
     instruction = "Preserve the supplied words and every schema constraint."
     payload = {"quote": "Рин: «Два  пробела и новая\nстрока». ⟨text⟩", "padding": ""}
     schema = json_contract.response_schema(proposal_draft.Draft, {})
-    prefix = (
-        instruction
-        + "\nReturn one JSON object only, without Markdown fences or commentary.\nJSON schema:\n"
+    initial_system, initial_content = inference.compose(
+        instruction, payload, proposal_draft.Draft, {}
     )
+    prefix = initial_system.split("JSON schema:\n", 1)[0] + "JSON schema:\n"
 
-    def compact(value):
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-    base = len(prefix + compact(schema)) + len(compact(payload))
+    base = len(initial_system) + len(initial_content)
     payload["padding"] = "P" * (24000 - base - 8)
     legacy_size = len(prefix + json.dumps(schema, ensure_ascii=False)) + len(
         json.dumps(payload, ensure_ascii=False)

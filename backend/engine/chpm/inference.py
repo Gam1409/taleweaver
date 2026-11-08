@@ -18,6 +18,10 @@ T = TypeVar("T", bound=BaseModel)
 class InvalidResponseError(RecoverableChpmError):
     """A completed model response failed validation; transport failures are separate."""
 
+    def __init__(self, message: str, *, candidate: dict | None = None) -> None:
+        super().__init__(message)
+        self.candidate = candidate
+
 
 class OutputBudgetError(RecoverableChpmError):
     """Do not repeat a cut-off response with the same output budget."""
@@ -57,8 +61,8 @@ def compose(
     instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict | None
 ) -> tuple[str, str]:
     prompt = (
-        instruction
-        + "\nReturn one JSON object only, without Markdown fences or commentary.\nJSON schema:\n"
+        instruction + "\nReturn one JSON object only, without Markdown fences or commentary. "
+        "Use exact enum values for identifiers, never display names.\nJSON schema:\n"
         + json.dumps(
             json_contract.response_schema(schema, identifiers),
             ensure_ascii=False,
@@ -109,14 +113,16 @@ async def request(
             f"CHPM {phase} failed ({type(exc).__name__}). No decision was applied."
         ) from exc
     check_output_budget(completions, llm.max_tokens, phase)
+    candidate = None
     try:
-        return json_contract.parse(schema, result)
+        candidate = json_contract.decode(result)
+        return schema.model_validate(candidate)
     except ValueError as exc:
         check_output_budget(
             completions, llm.max_tokens, phase, invalid_json=isinstance(exc, json.JSONDecodeError)
         )
         raise InvalidResponseError(
-            f"CHPM {phase} response invalid: {validation_feedback(exc)}"
+            f"CHPM {phase} response invalid: {validation_feedback(exc)}", candidate=candidate
         ) from exc
 
 

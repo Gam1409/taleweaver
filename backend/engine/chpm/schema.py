@@ -179,7 +179,11 @@ class ChoiceEvidence(Contract):
 
 class ChoicePreference(Contract):
     preferred: ActionKind
-    motive_ids: list[str] = Field(min_length=1, max_length=3)
+    motive_ids: list[str] = Field(
+        min_length=1,
+        max_length=3,
+        json_schema_extra={"uniqueItems": True},
+    )
     reason: str = Field(min_length=1, max_length=300)
     continuity: Literal["new", "maintain", "revise"]
     change_basis: list[ChoiceEvidence] = Field(default_factory=list, max_length=2)

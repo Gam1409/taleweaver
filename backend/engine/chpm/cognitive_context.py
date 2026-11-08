@@ -60,6 +60,7 @@ def pack(
         catalogue = motivation.build(mind, entries, window)
         ids = window.identifiers()
         ids["motive_id"] = list(catalogue.sources)
+        ids["motive_ids"] = list(catalogue.sources)
         ids["personal_motive_ids"] = [
             key
             for key, source in catalogue.sources.items()

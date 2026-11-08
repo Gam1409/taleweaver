@@ -1,6 +1,6 @@
 """Source-bound model preference replaces metadata tie-breaking for live cognition."""
 
-from backend.engine.chpm import initiative, preference
+from backend.engine.chpm import choice_grounds, initiative, preference
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError
@@ -101,11 +101,7 @@ def select(
             "Maintaining an intention must preserve its conditions; revise explicitly with new evidence."
         )
     cited = {m.source.id: m for m in motives[selected.kind]}
-    if (
-        len(set(choice.motive_ids)) != len(choice.motive_ids)
-        or not set(choice.motive_ids) <= cited.keys()
-    ):
-        raise ChpmError("Choice grounds must be distinct motives of the preferred candidate.")
+    choice_grounds.validate(choice.preferred, choice.motive_ids, cited.keys())
     if not any(
         cited[key].effect == "supports"
         and cited[key].source.subject_id == actor_id
@@ -158,8 +154,9 @@ def _continuity(choice: ChoicePreference, prior: PreviousIntention | None, windo
 
 
 INSTRUCTIONS = """
-CHOICE: Return choice.preferred (candidate key), motive_ids (its own cited grounds,
-including personal support), reason (brief situational tradeoff), continuity and
+CHOICE: Return choice.preferred (candidate key), motive_ids (distinct motive_id values
+copied from candidates[preferred].motives, including personal support), reason
+(brief situational tradeoff), continuity and
 change_basis (exact source_id/quote pairs). Choose what this NPC prefers now.
 Goal alignment and motive counts are annotations, not automatic rankings. Explain
 why the selected personal motive matters more here, including real tradeoffs.

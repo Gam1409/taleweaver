@@ -5,10 +5,11 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from backend.engine.chpm import inference
+from backend.engine.chpm import choice_grounds, inference, proposal_repair
 from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
@@ -40,7 +41,12 @@ async def request(
             )
         except inference.InvalidResponseError as exc:
             feedback = str(exc)
+            candidate = exc.candidate
+            hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
+            if hint:
+                feedback = f"{feedback}; {hint}"[:600]
         else:
+            candidate = raw.model_dump(mode="json")
             try:
                 return accept(raw)
             except (ChpmError, TransitionError, ValidationError) as exc:
@@ -58,16 +64,15 @@ async def request(
             raise RecoverableChpmError(
                 "CHPM proposal retry has no reserved request budget. " + feedback
             )
-        payload = {
-            **payload,
-            "proposal_feedback": {
-                "error": feedback,
-                "required_top_level_fields": [
-                    key for key, field in schema.model_fields.items() if field.is_required()
-                ],
-                "instruction": "Return the complete corrected object with all required fields. Keep explanations to one short clause below their character caps. Preserve exact citations, conditions and identity; do not invent facts or replace fields with obsolete appraisal.",
-            },
-        }
+        payload = proposal_repair.payload_for(
+            payload,
+            schema,
+            feedback,
+            candidate,
+            instruction=instruction,
+            identifiers=identifiers,
+            limit=settings.max_input_chars,
+        )
         prompt, content = inference.compose(instruction, payload, schema, identifiers)
         if len(prompt) + len(content) > settings.max_input_chars:
             raise RecoverableChpmError(
