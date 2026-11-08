@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ClothingDraft } from '@/services/clothingAuthoring'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adventureService } from '@/services/adventureService'
 import type { LivingWorldPreferences } from '@/services/livingWorld'
@@ -487,11 +487,9 @@ const tooltipAlignTop = ref(false)
 const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 1000)
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1000)
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => {
-    windowHeight.value = window.innerHeight
-    windowWidth.value = window.innerWidth
-  })
+function updateViewportSize() {
+  windowHeight.value = window.innerHeight
+  windowWidth.value = window.innerWidth
 }
 
 function toggleMenu(id: string, event: MouseEvent) {
@@ -504,9 +502,15 @@ function toggleMenu(id: string, event: MouseEvent) {
   }
 }
 
+function dismissMenu() {
+  activeMenuId.value = null
+}
 if (typeof window !== 'undefined') {
-  window.addEventListener('click', () => {
-    activeMenuId.value = null
+  window.addEventListener('resize', updateViewportSize)
+  window.addEventListener('click', dismissMenu)
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateViewportSize)
+    window.removeEventListener('click', dismissMenu)
   })
 }
 
@@ -2384,7 +2388,7 @@ watch(
 </script>
 
 <template>
-  <div class="h-screen bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
+  <div tabindex="0" role="region" aria-label="Adventure editor" class="h-full min-h-0 bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
     <!-- Ambient Background -->
     <div v-if="debugData?.adventure?.image_url" class="absolute inset-0 pointer-events-none z-0 opacity-20">
       <img :src="ASSET_BASE + debugData.adventure.image_url" class="w-full h-full object-cover blur-3xl scale-110" />
@@ -2583,6 +2587,7 @@ watch(
               :active-map-scene-id="activeMapSceneId"
               :adventure-scripts="adventure?.scripts || debugData?.adventure?.scripts || []"
               @add-item="openItemCreateDialog"
+              @close-menu="activeMenuId = null"
               @quick-regen="quickRegenerateVisual"
               @regen-all="requestRegenerateAll"
               @open-regen-dialog="openRegenerateDialog"

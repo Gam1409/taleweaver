@@ -15,6 +15,7 @@ const props = () => ({
   visualsCacheVersion: 1, editorScenes: [{ id: 'LAB', name: 'Laboratory' }], activeMapSceneId: null,
 })
 const dependencies = {
+  './EditorActionMenu.vue': stubComponent,
   'lucide-vue-next': { Brain: stubComponent, Plus: stubComponent },
   '@/utils/editor_utils': { hasAnyScript: () => false },
 }
