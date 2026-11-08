@@ -1922,10 +1922,11 @@ class GameTurnManager:
             + clarification_block(self, scene_id_before_turn),
             movement_resolution(all_entities, self.state, game_event),
             getattr(self, "_group_movement_resolution", ""),
+            portrait_turn.reminder,
         ]
         if language:
             reminders.append(
-                f"Respond in {language.upper()} only (except voice tags like [curious], which MUST always remain in English)."
+                f"Write story prose in {language.upper()} only. Voice tags like [curious] and private metadata keys and enum identifiers MUST retain their schema-defined English spelling."
             )
 
         exits_task = ""
@@ -2367,6 +2368,7 @@ class GameTurnManager:
         self._committed_response_id = (
             assistant_chat.id if not getattr(self, "_replaying", False) else None
         )
+        portrait_presentation.diagnose(self, response_text, completed=narration_completed)
         if narration_warning:
             logger.warning(
                 "Committed incomplete narration: session=%s turn_id=%s reason=%s chars=%d",

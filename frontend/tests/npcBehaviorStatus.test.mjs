@@ -54,3 +54,28 @@ test('invalid or missing metadata clears the indicator', async () => {
   updateNpcBehaviorStatus('one', null)
   assert.doesNotMatch(await render('one'), /NPC Personality/)
 })
+
+test('the recovery indicator explains its reason without publishing arbitrary backend text', async () => {
+  const reasons = {
+    analysis_failed: 'NPC analysis could not be completed',
+    review_unavailable: 'The reply check could not be completed',
+    review_rejected: 'The reply failed character checks; no validated repair was available',
+    narration_incomplete: 'The narrator response was incomplete',
+    cooldown: 'Analysis is paused after repeated failures',
+  }
+  for (const [reason, explanation] of Object.entries(reasons)) {
+    updateNpcBehaviorStatus('one', { ...status(), reason })
+    assert.ok((await render('one')).includes(explanation), reason)
+  }
+  updateNpcBehaviorStatus('one', { ...status(), reason: 'PRIVATE_PROVIDER_ERROR' })
+  const html = await render('one')
+  assert.doesNotMatch(html, /PRIVATE_PROVIDER_ERROR/)
+  assert.match(html, /New psychological updates were not confirmed/)
+})
+
+test('one remaining recovery turn uses the singular form', async () => {
+  updateNpcBehaviorStatus('one', { ...status(), cooldown_remaining: 1 })
+  const html = await render('one')
+  assert.match(html, /after 1 turn</)
+  assert.doesNotMatch(html, /after 1 turns/)
+})

@@ -1,7 +1,6 @@
 """Capture presentation from the same narrator call, never from rejected prose."""
 
 import json
-import logging
 from typing import Any
 
 from pydantic import ValidationError
@@ -15,10 +14,9 @@ from backend.core.npc_presentation import (
     source_hash,
 )
 from backend.engine.npc_presence import presence
+from backend.engine.npc_presentation.diagnostics import report
 from backend.engine.npc_presentation.settings import effective
-from backend.engine.npc_presentation.stream import CLOSE, OPEN, FooterStream, split
-
-logger = logging.getLogger(__name__)
+from backend.engine.npc_presentation.stream import CLOSE, OPEN, FooterStream
 
 
 def _catalog(manager: Any, entities: list[Any]) -> dict[str, str]:
@@ -43,6 +41,28 @@ class PresentationTurn:
         self.body = ""
         self.output_chars = 0
         self.candidates: dict[str, dict] = {}
+        self.outcomes: dict[str, str] = {}
+
+    @property
+    def reminder(self) -> str:
+        if not self.preferences.enabled or not self.catalog:
+            return ""
+        keys = ["npc_id"]
+        if self.preferences.emotion_palette:
+            keys.extend(("emotion", "intensity"))
+        if self.preferences.character_thoughts:
+            keys.append("thought")
+        return (
+            "PORTRAIT OUTPUT: After the visible story append the private footer "
+            + OPEN
+            + '{"npcs":[...]}'
+            + CLOSE
+            + ". Use JSON keys "
+            + ", ".join(keys)
+            + " and schema-defined enum identifiers in English exactly as specified. "
+            "Natural-language values follow the story language. Use exact IDs from the supplied "
+            "cast. Prose-only formatting applies to the visible story, not this private footer."
+        )
 
     @property
     def prompt(self) -> str:
@@ -67,6 +87,9 @@ class PresentationTurn:
             + '{"npcs":[...]}'
             + CLOSE
             + ". The footer is private UI data, not spoken dialogue. "
+            "JSON keys and schema-defined enum identifiers remain in English, regardless of "
+            "the requested story language. Prose-only formatting and private-guidance rules "
+            "apply to the visible story, not these explicitly enabled UI fields. "
             "Each entry contains " + "; ".join(fields) + ". "
             f"Only include relevant NPCs from this cast, at most {MAX_NPCS}, once each. "
             "These enabled session display options work without NPC Personality; return the "
@@ -90,29 +113,55 @@ class PresentationTurn:
     def finish(self) -> str:
         tail = self.stream.finish() if self.preferences.enabled else ""
         self.body += tail
-        if self.stream.complete and not self.stream.overflow:
-            self._capture(self.body, self.stream.footer)
+        if self.preferences.enabled:
+            self._collect(self.body, self.stream)
         return tail
 
     def clean(self, text: str) -> str:
         if not self.preferences.enabled:
             return text
-        visible, footer = split(text)
-        if footer is not None:
-            self._capture(visible, footer)
+        stream = FooterStream()
+        visible = stream.feed(text) + stream.finish()
+        self._collect(visible, stream)
         return visible
 
     def payload(self, text: str) -> dict | None:
         return self.candidates.get(source_hash(text))
 
+    def diagnostic(self, text: str, *, completed: bool) -> str:
+        if not self.preferences.enabled:
+            return "disabled"
+        if not self.catalog:
+            return "no_visible_cast"
+        if not completed:
+            return "incomplete_narration"
+        if self.payload(text):
+            return "available"
+        return self.outcomes.get(
+            source_hash(text), "source_mismatch" if self.candidates else "missing_footer"
+        )
+
+    def _note(self, text: str, reason: str) -> None:
+        if len(self.outcomes) < 8:
+            self.outcomes.setdefault(source_hash(text), reason)
+
+    def _collect(self, text: str, stream: FooterStream) -> None:
+        if stream.overflow:
+            self._note(text, "footer_too_large")
+        elif stream.complete:
+            self._capture(text, stream.footer)
+        else:
+            self._note(text, "incomplete_footer" if stream.started else "missing_footer")
+
     def _capture(self, text: str, footer: str) -> None:
         try:
             data = json.loads(footer)
         except (ValueError, TypeError, RecursionError):
-            logger.info("Narrator portrait metadata was invalid; story retained.")
+            self._note(text, "invalid_json")
             return
         entries = data.get("npcs") if isinstance(data, dict) else None
         if not isinstance(entries, list) or len(entries) > MAX_NPCS:
+            self._note(text, "invalid_entries")
             return
         states = {}
         for entry in entries:
@@ -122,6 +171,8 @@ class PresentationTurn:
         if states and len(self.candidates) < 4:
             key = source_hash(text)
             self.candidates[key] = {"version": 1, "source_hash": key, "npcs": states}
+        if not states:
+            self._note(text, "no_valid_entries")
 
     def _entry(self, entry: Any) -> tuple[str | None, dict | None]:
         if not isinstance(entry, dict) or not isinstance(entry.get("npc_id"), str):
@@ -164,3 +215,14 @@ def prepare(manager: Any, entities: list[Any]) -> PresentationTurn:
 def clean_candidate(manager: Any, text: str) -> str:
     turn = getattr(manager, "_portrait_presentation", None)
     return turn.clean(text) if isinstance(turn, PresentationTurn) else text
+
+
+def output_reminder(manager: Any) -> str:
+    turn = getattr(manager, "_portrait_presentation", None)
+    return turn.reminder if isinstance(turn, PresentationTurn) else ""
+
+
+def diagnose(manager: Any, text: str, *, completed: bool) -> None:
+    turn = getattr(manager, "_portrait_presentation", None)
+    if isinstance(turn, PresentationTurn):
+        report(manager, turn, text, completed=completed)

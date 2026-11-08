@@ -8,7 +8,7 @@ from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import continuation, inference
 from backend.engine.chpm.errors import ChpmError
-from backend.engine.npc_presentation.runtime import clean_candidate
+from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
 
 if TYPE_CHECKING:
     from backend.engine.chpm.runtime import Turn
@@ -30,6 +30,7 @@ async def generate(
     messages = [dict(row) for row in (narration_messages or [])[:-1]]
     if not messages:
         messages = [{"role": "system", "content": system_prompt}]
+    portrait_output = output_reminder(manager)
     messages.append(
         {
             "role": "user",
@@ -39,6 +40,7 @@ async def generate(
                     "player_request": turn.player_request,
                     "rp_continuation": continuation.contract(turn),
                     "review_issues_to_avoid": turn.fallback_issues,
+                    **({"portrait_output": portrait_output} if portrait_output else {}),
                 },
                 ensure_ascii=False,
             ),

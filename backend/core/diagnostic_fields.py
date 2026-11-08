@@ -12,6 +12,8 @@ EVENTS = {
     "inference.uncertain",
     "inference.blocked",
     "npc.learning.phase",
+    "npc.presentation",
+    "npc.behavior_fallback",
     "http.started",
     "http.completed",
     "http.failed",
@@ -158,6 +160,26 @@ ENUMS = {
 
 ENUMS["retrieval_method"] = {"disabled", "hybrid", "sql_lexical"}
 ENUMS["audience"] = {"narrator", "vn_continuity", "vn_social"}
+ENUMS["fallback_reason"] = {
+    "analysis_failed",
+    "review_unavailable",
+    "review_rejected",
+    "narration_incomplete",
+    "cooldown",
+}
+ENUMS["presentation_reason"] = {
+    "disabled",
+    "no_visible_cast",
+    "incomplete_narration",
+    "missing_footer",
+    "incomplete_footer",
+    "footer_too_large",
+    "invalid_json",
+    "invalid_entries",
+    "no_valid_entries",
+    "source_mismatch",
+    "available",
+}
 ENUMS["inference_reason"] = {
     "completion_unconfirmed",
     "caller_cancelled",

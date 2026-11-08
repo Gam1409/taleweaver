@@ -1,10 +1,12 @@
 """Visible RP degradation preserves confirmed psychology and records continuity gaps."""
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from backend.core.system_diagnostics import service
 from backend.engine.chpm import agenda, experience, host_adapter, host_observations
 from backend.engine.chpm.core.contracts import Experience
 from backend.engine.chpm.core.history import events
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from backend.engine.chpm.runtime import Turn
 
 COOLDOWN_TURNS = 3
+logger = logging.getLogger(__name__)
 
 INSTRUCTION = """Continue this RP turn using ordinary character narration.
 NPC analysis is temporarily unavailable. Use the pinned identities, current host
@@ -87,12 +90,22 @@ async def recalled_identities(manager: Any, state: KernelState, actors: list[Any
     return result
 
 
-def activate(turn: "Turn", reason: str, issues: list[str] | None = None) -> None:
+def activate(
+    turn: "Turn",
+    reason: str,
+    issues: list[str] | None = None,
+    *,
+    error: BaseException | None = None,
+) -> None:
     turn.simplified = True
     turn.usage.simplified = True
     turn.usage.fallback_reason = reason
     turn.usage.status = "failed"
     turn.usage.detail = "NPC analysis paused; RP continued with the last confirmed identity."
+    service.emit(
+        "npc.behavior_fallback", fallback_reason=reason, count=turn.usage.calls, error=error
+    )
+    logger.info("NPC Personality fallback: reason=%s calls=%d", reason, turn.usage.calls)
     turn.fallback_issues = (issues or [])[:8]
     # All proposed psychological updates remain turn-local and are abandoned together.
     turn.decisions = {}

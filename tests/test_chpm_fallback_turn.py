@@ -1,6 +1,7 @@
 """RP continuity never turns rejected cognitive output into confirmed psychology."""
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.chpm import continuation_writer, inference, rendering
 from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.state import KEY, load
+from backend.engine.npc_presentation.settings import KEY as PORTRAIT_KEY
 from backend.models.chat import ChatMessage
 from backend.models.turn_replay import TurnReplay
 from tests.conftest import TestSessionLocal
@@ -17,14 +19,45 @@ from tests.test_vn_turn_integration import ACTION, install_roles, seed_vn
 
 
 @pytest.mark.parametrize("phase", ["perception", "proposal", "validation"])
+@pytest.mark.parametrize("presentation", [False, True])
 async def test_completed_invalid_analysis_continues_rp_without_committing_psychology(
-    monkeypatch, phase
+    monkeypatch, phase, presentation
 ):
     class Broken(ChpmRoles):
         async def simple(self, system, payload, model, **kwargs):
             if kwargs.get("phase") == phase:
                 return '{"broken":'
             return await super().simple(system, payload, model, **kwargs)
+
+        async def stream(self, *args, **kwargs):
+            original = await super().stream(*args, **kwargs)
+
+            async def chunks():
+                async for chunk in original:
+                    yield chunk
+                if presentation:
+                    footer = (
+                        "<npc-state>"
+                        + json.dumps(
+                            {
+                                "npcs": [
+                                    {
+                                        "npc_id": "LINA",
+                                        "emotion": "interest",
+                                        "intensity": 70,
+                                        "thought": "Наконец-то можно поговорить.",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "</npc-state>"
+                    )
+                    yield MagicMock(
+                        choices=[MagicMock(delta=MagicMock(content=footer), finish_reason="stop")]
+                    )
+
+            return chunks()
 
     roles = Broken()
     install_roles(monkeypatch, roles)
@@ -34,6 +67,14 @@ async def test_completed_invalid_analysis_continues_rp_without_committing_psycho
         user, _, state, _ = await seed_vn(db)
         before = KernelState(settings=Settings(mode="live", actor_ids=["LINA"]))
         state.entity_states = {**state.entity_states, KEY: before.model_dump()}
+        if presentation:
+            state.entity_states = {
+                **state.entity_states,
+                PORTRAIT_KEY: {
+                    "emotion_palette": True,
+                    "character_thoughts": True,
+                },
+            }
         await db.commit()
         manager = GameTurnManager(db, "session-1", user)
         chunks = [chunk async for chunk in manager.process_turn(ACTION)]
@@ -51,6 +92,20 @@ async def test_completed_invalid_analysis_continues_rp_without_committing_psycho
         assert (await db.get(TurnReplay, "session-1")).status == "ready"
         replies = list(await db.scalars(select(ChatMessage).where(ChatMessage.role == "assistant")))
         assert len(replies) == 2
+        if presentation:
+            assessed = [
+                reply.to_client_dict()["portrait_state"]
+                for reply in replies
+                if reply.portrait_state
+            ]
+            assert len(assessed) == 1
+            assert assessed[0]["npcs"]["LINA"] == {
+                "emotion": "interest",
+                "intensity": 70,
+                "thought": "Наконец-то можно поговорить.",
+            }
+            assert "<npc-state>" not in "".join(chunks)
+            assert len(roles.prompts) == 1
 
 
 def test_legacy_settings_gain_continuity_without_a_saved_schema_bump():

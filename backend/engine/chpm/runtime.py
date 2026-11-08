@@ -207,7 +207,7 @@ def _preparation_failed(manager: Any, turn: Turn, exc: Exception) -> None:
         "CHPM preparation failed: session=%s error=%s", manager.game_id, type(exc).__name__
     )
     if isinstance(exc, RecoverableChpmError) and continuation.enabled(turn):
-        continuation.activate(turn, "analysis_failed")
+        continuation.activate(turn, "analysis_failed", error=exc)
     elif turn.initial.settings.mode == "live":
         raise ChpmError("CHPM could not prepare this turn. " + turn.usage.detail) from exc
     else:

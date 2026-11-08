@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy import select
 
+from backend.core.system_diagnostics import service
 from backend.engine.gameplay.manager import GameTurnManager
 from backend.engine.npc_presentation.settings import KEY
 from backend.engine.rule_engine import GameEvent
@@ -17,6 +18,8 @@ from tests.test_game_loop import _seed_game_context
 
 
 async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test_db, monkeypatch):
+    diagnostics = MagicMock()
+    monkeypatch.setattr(service, "emit", diagnostics)
     body = "[RIN]: I can manage."
     footer = (
         "<npc-state>"
@@ -85,6 +88,11 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
         assert message.to_client_dict()["portrait_state"]["npcs"]["RIN"]["intensity"] == 65
         assert "PORTRAIT PRESENTATION" in llm.stream_simple_task.await_args.args[0]
         llm.stream_simple_task.assert_awaited_once()
+        event = next(
+            call for call in diagnostics.call_args_list if call.args == ("npc.presentation",)
+        )
+        assert event.kwargs["presentation_reason"] == "available"
+        assert event.kwargs["selected_count"] == 1
 
 
 @pytest.mark.parametrize(
@@ -166,3 +174,8 @@ async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
         prompt = roles.prompts[0][0][0]
         assert "enabled for this reply" in prompt
         assert "without NPC Personality" in prompt
+        assert "JSON keys" in prompt and "English" in prompt
+        last_input = roles.prompts[0][1]["messages"][-1]["content"]
+        assert "PORTRAIT OUTPUT" in last_input
+        assert "private metadata keys and enum identifiers" in last_input
+        assert "RUSSIAN" in last_input
