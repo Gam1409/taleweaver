@@ -997,8 +997,13 @@ def test_agent_ollama_does_not_inherit_another_small_provider(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("num_ctx", [None, 8192])
-async def test_all_ollama_request_paths_use_shared_options(monkeypatch, num_ctx):
+@pytest.mark.parametrize("serialized", [False, True])
+async def test_all_ollama_request_paths_use_shared_options(monkeypatch, num_ctx, serialized):
     from types import SimpleNamespace
+
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "INFERENCE_SERIALIZATION_ENABLED", serialized)
 
     class Answer(BaseModel):
         value: int
@@ -1035,7 +1040,9 @@ async def test_all_ollama_request_paths_use_shared_options(monkeypatch, num_ctx)
         )
 
     async def chunks():
-        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="hello"))])
+        yield SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="hello"), finish_reason="stop")]
+        )
 
     async def async_response(**kwargs):
         if kwargs.get("stream"):
@@ -1055,11 +1062,15 @@ async def test_all_ollama_request_paths_use_shared_options(monkeypatch, num_ctx)
         await router.aexecute_complex_task("sys", "hi", Answer, "role-model:latest")
     ).value == 42
     assert len(calls) == len(helper_calls) == 5
+    assert router.request_timeout == 60
     for call in calls:
         assert call["api_base"] == "http://role:11434"
         assert call["custom_llm_provider"] == "ollama"
         assert call["think"] is False
-        assert call["request_timeout"] == 60
+        if serialized:
+            assert 0 < call["request_timeout"] <= router.request_timeout
+        else:
+            assert call["request_timeout"] == 60
         assert call["max_tokens"] == 777
         assert "extra_body" not in call
         assert call.get("num_ctx") == num_ctx

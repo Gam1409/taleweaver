@@ -85,14 +85,19 @@ def test_sync_and_structured_routing(monkeypatch, local_policy, key):
 
 
 @pytest.mark.asyncio
-async def test_async_and_streaming_routing(monkeypatch, local_policy):
+@pytest.mark.parametrize("serialized", [False, True])
+async def test_async_and_streaming_routing(monkeypatch, local_policy, serialized):
+    monkeypatch.setattr(settings, "INFERENCE_SERIALIZATION_ENABLED", serialized)
     router = make_router()
     captured = []
 
     async def chunks():
         yield SimpleNamespace(
             choices=[
-                SimpleNamespace(delta=SimpleNamespace(content="hello", reasoning_content=None))
+                SimpleNamespace(
+                    delta=SimpleNamespace(content="hello", reasoning_content=None),
+                    finish_reason="stop",
+                )
             ]
         )
 
