@@ -13,6 +13,7 @@ from backend.core.comfyui_starter_models import (
 from backend.core.comfyui_starters import starter_workflow
 from backend.core.image_prompt_templates import template_rules
 from backend.core.image_purposes import ImagePurpose, purpose_target
+from backend.core.item_image_prompts import ITEM_ADAPTER_INSTRUCTION
 from backend.core.visual_limits import visual_limits
 
 TASKS = {
@@ -36,7 +37,7 @@ TASKS = {
     ),
     "object": (
         "Inventory item",
-        "Show the supplied object clearly as an isolated inventory asset. Preserve its stated count, material, cut and proportions; a matching pair remains a pair. For clothing, describe the empty garment itself, not its owner wearing it; do not add a body or mannequin. Avoid hands, people, labels and UI frames unless explicitly requested.",
+        ITEM_ADAPTER_INSTRUCTION,
         "One brass lantern, isolated object, neutral background, clear silhouette",
         "brass lantern, single object, isolated, simple background, no humans",
     ),

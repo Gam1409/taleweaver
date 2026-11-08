@@ -61,6 +61,8 @@ Template dimensions derive from the shared backend limits and target aspect rati
 
 Each preset includes its family prompt policy and task-specific composition guidance. Existing mature-content policy is unchanged and templates do not enable mature content. Optional reference variants use VAEEncode and denoise 0.3: **img2img is not identity conditioning** and is not a Qwen Image Edit workflow. No reference workflow runs without an explicit image supplied by the task.
 
+**Items** also applies a shared composition rule independently of the chosen preset: show the requested object itself on a suitable surface or background. Clothing is unworn and laid flat, without people, living creatures, mannequins or hangers. The rule reaches prompt adaptation, task-aware previews and final generation; supported providers also receive matching negative terms. It adds no LLM requests and leaves portraits, backgrounds and story illustrations unchanged. A checkpoint can still ignore these instructions, so prompt enforcement does not certify the generated image's contents.
+
 ## Sources reviewed
 
 Reviewed on 2026-11-04. ComfyUI_examples tree: `f9431bb000ce792094ff345446e22cac1ea6cef3`; ComfyUI core tree: `7f09d3fa4a783868fe39d4d63cf4f815e58abecd`.

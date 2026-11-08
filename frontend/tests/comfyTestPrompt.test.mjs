@@ -66,6 +66,7 @@ test('the generated image reuses the current prepared preview body', async t => 
   await f.previewPrompt()
   const input = f.testOptions()
   assert.equal(f.calls[0].body.description, 'A traveler by a bridge.')
+  assert.equal(f.calls[0].body.image_purpose, 'background')
   assert.equal(input.prepared_body, 'One red-coated traveler beside a stone bridge.')
   assert.equal(input.test_prompt, 'A traveler by a bridge.')
 })
@@ -84,6 +85,17 @@ test('changing the preset cannot reuse a preview prepared for its previous workf
   await f.previewPrompt()
   f.draft.value.generate.graph.text.inputs.text = 'Changed graph'
   assert.equal(f.testOptions().prepared_body, undefined)
+})
+
+test('switching an image task cannot reuse composition prepared for the previous task', async t => {
+  const f = await fixture(t)
+  await f.previewPrompt()
+  f.props.purpose = 'object'
+  assert.equal(f.testOptions().prepared_body, undefined)
+  await settle()
+  assert.equal(f.preview.value, null)
+  await f.previewPrompt()
+  assert.equal(f.calls.at(-1).body.image_purpose, 'object')
 })
 
 test('the admin handler forwards both test input fields to the HTTP test service', async () => {

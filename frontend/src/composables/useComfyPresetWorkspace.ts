@@ -94,7 +94,7 @@ export function useComfyPresetWorkspace(props: {
     { immediate: true }
   )
   watch(
-    () => JSON.stringify([workspace.value.selectedId, draft.value, example.value]),
+    () => JSON.stringify([workspace.value.selectedId, draft.value, example.value, props.purpose]),
     () => {
       preview.value = null
       previewVersion++
@@ -144,12 +144,15 @@ export function useComfyPresetWorkspace(props: {
     draft.value.auto_prompt_template = false
     draft.value.prompt_rules = value
   }
+  function previewInput() {
+    return { preset: draft.value, description: example.value, image_purpose: props.purpose }
+  }
   async function previewPrompt(): Promise<void> {
     const version = ++previewVersion
     previewing.value = true
     error.value = ''
     preview.value = null
-    const payload = JSON.stringify({ preset: draft.value, description: example.value })
+    const payload = JSON.stringify(previewInput())
     try {
       const result = await comfyRequest<{ body?: string; positive: string; negative: string }>(
         'preview-prompt',
@@ -158,7 +161,7 @@ export function useComfyPresetWorkspace(props: {
       if (
         props.open &&
         version === previewVersion &&
-        payload === JSON.stringify({ preset: draft.value, description: example.value })
+        payload === JSON.stringify(previewInput())
       ) {
         preview.value = result
         previewSource = payload
@@ -179,7 +182,7 @@ export function useComfyPresetWorkspace(props: {
     return { ...applyPresetWorkspace(props.modelValue, workspace.value, props.purpose ?? props.profile), image_purpose: props.purpose }
   }
   function testOptions(): ComfyTestOptions {
-    const reusable = previewSource === JSON.stringify({ preset: draft.value, description: example.value })
+    const reusable = previewSource === JSON.stringify(previewInput())
     return { ...result(), test_prompt: example.value.trim(),
       ...(reusable && preview.value?.body ? { prepared_body: preview.value.body } : {}),
     }

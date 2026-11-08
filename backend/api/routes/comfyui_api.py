@@ -41,6 +41,7 @@ class NodeSchemaRequest(BaseModel):
 class PromptPreview(BaseModel):
     preset: ComfyPreset
     description: str = Field(min_length=1, max_length=12000)
+    image_purpose: ImagePurpose | None = None
 
 
 @router.get("/prompt-templates", response_model=None)
@@ -162,6 +163,7 @@ async def preview_prompt(
         "comfyui_presets": {"preview": payload.preset.model_dump()},
         "comfyui_assignments": {"simple": "preview"},
         "_prompt_user": user,
+        "image_purpose": payload.image_purpose,
     }
     try:
         return await prepare_prompt(payload.description, options)

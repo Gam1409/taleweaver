@@ -5,6 +5,7 @@ better maintainability and documentation.
 """
 
 from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
+from backend.core.item_image_prompts import ITEM_COMPOSITION
 from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION
@@ -211,7 +212,8 @@ NPC_IMAGE_PROMPT_TEMPLATE = (
 )
 
 OBJECT_IMAGE_PROMPT_TEMPLATE = (
-    "Item asset: {name}. {description}. Centered, isolated on simple background."
+    "Item asset: {name}. {description}. Centered, isolated on simple background. "
+    + ITEM_COMPOSITION
 )
 ITEM_IMAGE_PROMPT_TEMPLATE = OBJECT_IMAGE_PROMPT_TEMPLATE
 """

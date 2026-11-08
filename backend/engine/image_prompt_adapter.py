@@ -9,6 +9,12 @@ from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.image_purposes import image_provider, purpose_for
+from backend.core.item_image_prompts import (
+    ITEM_ADAPTER_INSTRUCTION,
+    item_composition,
+    item_negative,
+    item_purpose,
+)
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompt_preparation_error import PromptPreparationError
@@ -63,6 +69,7 @@ async def adapt_body(
     mature_themes: bool = False,
     nsfw_enabled: bool = False,
     nsfw_level: str = "hard",
+    purpose: str | None = None,
 ) -> str:
     if not rules.adapt_with_llm:
         return description.strip()
@@ -86,6 +93,8 @@ async def adapt_body(
         addendum = mature_content_prompts.image_prompt_addendum(nsfw_level)
         if addendum:
             system += "\n" + addendum
+    if purpose_for(purpose or "") == "object":
+        system += "\nITEM TASK COMPOSITION: " + ITEM_ADAPTER_INSTRUCTION
     record("prompt.request", system=system, user=description)
     timeout = role_timeout(user, "small")
     try:
@@ -141,9 +150,15 @@ def negative_prompt(options: dict, extra: str = "") -> str:
 
 
 async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
+    purpose = item_purpose(options)
     rules = prompt_rules(options)
     if not rules:
-        return {"body": description, "positive": description, "negative": negative_prompt(options)}
+        body = item_composition(description, purpose)
+        return {
+            "body": body,
+            "positive": body,
+            "negative": item_negative(negative_prompt(options), purpose),
+        }
     body = description
     if not options.get("_prompt_prepared"):
         body = await adapt_body(
@@ -153,9 +168,11 @@ async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
             mature_themes=getattr(select_profile(options), "mature_themes", False),
             nsfw_enabled=bool(options.get("_nsfw_enabled", False)),
             nsfw_level=str(options.get("_nsfw_level") or "hard"),
+            purpose=purpose,
         )
+    body = item_composition(body, purpose)
     return {
         "body": body,
         "positive": assemble_prompt(body, rules),
-        "negative": negative_prompt(options, rules.negative_prompt),
+        "negative": item_negative(negative_prompt(options, rules.negative_prompt), purpose),
     }

@@ -71,6 +71,7 @@ async def suggest_preset_prompt(
             mature_themes=getattr(select_profile(options), "mature_themes", False),
             nsfw_enabled=nsfw["enabled"],
             nsfw_level=nsfw["level"],
+            purpose=payload.target_type,
         )
     except Exception as exc:
         raise HTTPException(

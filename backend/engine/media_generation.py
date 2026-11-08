@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from backend.core.comfyui_config import prompt_rules
 from backend.core.config import settings
+from backend.core.item_image_prompts import item_composition, item_provider_options, item_purpose
 
 if TYPE_CHECKING:
     from backend.engine.media_engine import MediaEngine
@@ -40,6 +41,7 @@ async def generate_image(
         raise ValueError("Missing prompt or model for image generation.")
 
     model = model or ""
+    provider_options = item_provider_options(provider_options, provider_key)
     prompt = _prepare_prompt(engine, prompt, provider_key, provider_options, style_instruction)
 
     from backend.engine.scene_illustrations.plan_artifact import verify_media
@@ -307,6 +309,7 @@ def _prepare_prompt(
 
     if not adapted:
         prompt = engine._apply_no_text_instruction(prompt)
+    prompt = item_composition(prompt, item_purpose(provider_options))
     logger.info("Image prompt prepared (%s)", _safe_prompt_summary(prompt))
 
     return prompt
