@@ -16,6 +16,20 @@ Unregistered cosmetic acquisitions proposed before narration are deferred rather
 
 The session header exposes **Item and travel checks** to the session owner. It shows the latest persisted item result, rejected actions or failure category, and confirmed local-arrival companion results. It explicitly identifies sessions outside VN mode, where this item reconciler does not run. Results describe the latest check, not a complete history.
 
+Rejected item actions distinguish an incomplete action basis from a quote that does not occur exactly in the completed narration. **Rejected proposal details** preserves the proposed basis and quote for each of the existing maximum six actions, including quotes at the 800-character limit. These are rejected model proposals, not confirmed story facts. Inspection makes no model request. Older saved checks retain their original error text and show no invented proposal details.
+
+The live new-item wire contract distinguishes ordinary objects from clothing by
+`kind`. Clothing requires garment metadata and at least one wearable slot in both
+JSON Schema and host validation; ordinary items cannot carry clothing metadata.
+Existing valid payloads keep their data shape. Invalid responses retain up to five
+safe field paths and constraint explanations for owner inspection. Older failed
+checks expose their recorded field paths without inventing missing explanations.
+Diagnostics exclude raw model inputs, unknown custom error messages and provider
+text. Schema failures still apply no item changes; they do not infer garment data
+or dispatch another model request.
+
+Skipped checks distinguish an earlier rules/ownership rejection from narration exceeding the existing 16,000-character limit. The saved reason and system notification retain known host rejection details; unexpected internal errors use a safe generic explanation. Length failures report the actual character count and unchanged limit. The boundary is inclusive, no narration is truncated, and no extra model request is dispatched. Turn-local rejection details cannot carry over to a different input, while the completed check remains in the normal saved session state. Older generic warnings cannot recover details that were not recorded.
+
 Dynamic-location confirmation includes currently present NPCs and evidence for co-arrival from the current action. Confirmed companions are bound to the server-created destination ID before normal movement validation. Stationary NPC and access restrictions still apply; recorded results distinguish moved, not moved and rejected companions. This does not retroactively relocate NPCs based on unsupported assertions.
 
 Explicit current worn-garment descriptions now use `observed_wear`. They must cite the completed response and identify the wearer as both source and destination; observations cannot transfer or remove possessions. A missing appearance profile can be initialized without inventing appearance details. Malformed existing profiles still require review. Repeated observations preserve existing worn coverage. Later changes in the response take precedence; recognizing their semantics remains a model responsibility.

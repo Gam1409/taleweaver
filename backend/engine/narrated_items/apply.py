@@ -113,8 +113,14 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
 def _resolve(
     action: ItemAction, actors: dict, snapshot: Possessions, narration: str, **creation_options: Any
 ) -> dict:
-    if action.basis not in {"completed", "observed_wear"} or action.evidence not in narration:
-        raise ValueError("No exact evidence of a completed item action.")
+    if action.basis not in {"completed", "observed_wear"}:
+        raise ValueError(
+            f"Action basis '{action.basis}' is not a completed action or current wear observation."
+        )
+    if action.evidence not in narration:
+        raise ValueError(
+            "Item quote is not an exact contiguous substring of the completed narration."
+        )
     if action.basis == "observed_wear" and (
         action.source_owner != action.destination_owner or action.disposition != "worn"
     ):
@@ -203,7 +209,11 @@ def apply_actions(
         except ValueError as exc:
             label = action.new_item.name if action.new_item else action.item_id
             failure = ItemFailure(
-                str(label), str(exc), exc.code if isinstance(exc, ItemPolicyError) else None
+                str(label),
+                str(exc),
+                exc.code if isinstance(exc, ItemPolicyError) else None,
+                basis=action.basis,
+                evidence=action.evidence,
             )
             errors.append(failure.message())
             if failures is not None:

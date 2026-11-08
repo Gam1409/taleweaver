@@ -34,6 +34,7 @@ async def state_checks(
             "status": items.get("status", "not_run"),
             "reason": items.get("reason", ""),
             "error_type": items.get("error_type", ""),
+            "failure": items.get("failure"),
             "message_id": items.get("message_id", ""),
             "accepted": [
                 {
@@ -44,6 +45,7 @@ async def state_checks(
                 for row in items.get("accepted", [])
             ],
             "rejected": items.get("rejected", []),
+            "rejected_details": items.get("rejected_details", []),
         },
         "arrival": registry(state).get("last_arrival"),
     }

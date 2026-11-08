@@ -48,6 +48,18 @@ class ItemAction(BaseModel):
         return self
 
 
+class NewOrdinaryItem(NewItem):
+    kind: Literal["ordinary"]
+    clothing: None = None
+    wearable_slots: list[EquipmentSlot] = Field(default_factory=list, max_length=0)
+
+
+class NewClothingItem(NewItem):
+    kind: Literal["clothing"]
+    clothing: Garment
+    wearable_slots: list[EquipmentSlot] = Field(min_length=1, max_length=4)
+
+
 class ExistingItemAction(ItemAction):
     item_id: str = Field(min_length=1, max_length=100, description="Exact canonical owned item ID.")
     new_item: None = None
@@ -55,8 +67,8 @@ class ExistingItemAction(ItemAction):
 
 class NewItemAction(ItemAction):
     item_id: None = None
-    new_item: NewItem = Field(
-        description="Required intrinsic item and garment metadata; never an ID."
+    new_item: Annotated[NewOrdinaryItem | NewClothingItem, Field(discriminator="kind")] = Field(
+        description="Required intrinsic metadata. Clothing requires garment metadata and at least one wearable slot; never an ID."
     )
 
 

@@ -15,6 +15,8 @@ from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
+from backend.engine.narrated_items.errors import ItemFailure
+from backend.engine.narrated_items.preflight import skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
@@ -53,6 +55,7 @@ async def reconcile_items(
     completed: bool,
     resolution: str,
     blocked: bool = False,
+    blocked_reason: str = "",
 ) -> list[str]:
     physical_conditions.discard(manager)
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
@@ -67,15 +70,13 @@ async def reconcile_items(
     pending_conditions = physical_conditions.stage(
         manager, [], set(), error="The shared item/state check did not complete."
     )
-    if blocked or len(narration) > MAX_NARRATION:
-        _status(
-            manager,
-            message_id,
-            narration,
-            "needs_review",
-            reason="Guardrail rejection or oversized narration.",
-        )
-        return ["Item reconciliation needs review; no additional inventory changes were applied."]
+    skipped = skipped_check(
+        narration, blocked=blocked, blocked_reason=blocked_reason, limit=MAX_NARRATION
+    )
+    if skipped is not None:
+        pending_conditions.error = skipped.reason
+        _status(manager, message_id, narration, "needs_review", **skipped.details())
+        return [skipped.message()]
     rows = await session_objects(manager.db, manager.state.session_id)
     actors = actor_records(manager, rows)
     identities = {
@@ -130,6 +131,7 @@ async def reconcile_items(
             timeout=min(60, role_timeout(manager.user, "small")),
         )
         extraction = ItemExtraction.model_validate(result)
+        failures: list[ItemFailure] = []
         changed, accepted, errors = apply_actions(
             extraction,
             actors,
@@ -138,6 +140,7 @@ async def reconcile_items(
             detailed=detailed,
             session_id=manager.state.session_id,
             message_id=message_id,
+            failures=failures,
         )
     except asyncio.CancelledError:
         raise
@@ -155,7 +158,15 @@ async def reconcile_items(
         return [failure.message()]
     _store_changes(manager, changed, accepted, snapshot.catalog)
     pending_conditions.complete(extraction.condition_updates, set(actors) | set(snapshot.items))
-    _status(manager, message_id, narration, "complete", accepted=accepted, rejected=errors)
+    _status(
+        manager,
+        message_id,
+        narration,
+        "complete",
+        accepted=accepted,
+        rejected=errors,
+        rejected_details=[failure.payload() for failure in failures],
+    )
     messages = [
         f"{changed[entry['destination_owner']]['name']}: {entry['item']['name']} ({entry['disposition']})."
         for entry in accepted

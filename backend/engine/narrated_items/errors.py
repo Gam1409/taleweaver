@@ -25,6 +25,17 @@ class ItemFailure:
     label: str
     reason: str
     code: PolicyCode | None = None
+    basis: str = ""
+    evidence: str = ""
 
     def message(self) -> str:
         return f"{self.label}: {self.reason}"
+
+    def payload(self) -> dict:
+        return {
+            "label": self.label,
+            "reason": self.reason,
+            "code": self.code,
+            "basis": self.basis,
+            "evidence": self.evidence,
+        }

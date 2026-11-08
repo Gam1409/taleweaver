@@ -9,6 +9,7 @@ from pydantic import ConfigDict
 from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
+from backend.engine.visual_novel.item_rejections import clear, remember
 from backend.engine.visual_novel.pending_items import defer_unregistered_items, pending_item_context
 
 PLAYER = "__player__"
@@ -278,6 +279,7 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
     """Return an engine-ready intent; reject an invalid possession batch without losing items."""
     from backend.engine.visual_novel.intent import VNProgressionIntent, to_chat_progression_intent
 
+    clear(manager)
     raw = intent.model_dump(exclude_none=True) if hasattr(intent, "model_dump") else intent
     proposal = VNProgressionIntent.model_validate(raw)
     result = to_chat_progression_intent(proposal)
@@ -305,7 +307,8 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
             )
         ):
             result.narrative_description += " Existing item identity, type and base description remain unchanged; only explicit condition notes may change."
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as error:
+        reason = remember(manager, error)
         result.new_inventory_items = []
         result.updated_inventory_items = []
         result.removed_inventory_item_ids = []
@@ -314,6 +317,6 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         for update in result.updated_entities or []:
             update.inventory = None
         result.narrative_description = (
-            "The attempted item change did not occur; possessions remain unchanged."
+            "The attempted item change did not occur; possessions remain unchanged. " + reason
         )
     return result

@@ -9,9 +9,16 @@ interface Checks {
     status: string
     reason: string
     error_type: string
+    failure?: {
+      code: string
+      reason: string
+      validation_fields?: string[]
+      validation_details?: { field: string; code: string; reason: string }[]
+    } | null
     message_id: string
     accepted: { name: string; destination: string; disposition: string }[]
     rejected: string[]
+    rejected_details?: { label: string; reason: string; basis: string; evidence: string }[]
   }
   arrival: {
     destination: string
@@ -96,6 +103,17 @@ onBeforeUnmount(() => {
           </p>
           <p v-if="result.items.reason">{{ result.items.reason }}</p>
           <p v-if="result.items.error_type">Failure: {{ result.items.error_type }}</p>
+          <div v-if="result.items.failure" class="space-y-2 rounded border border-amber-500/30 p-3 text-amber-300">
+            <p>{{ result.items.failure.reason }}</p>
+            <ul v-if="result.items.failure.validation_details?.length" class="space-y-2">
+              <li v-for="(detail, index) in result.items.failure.validation_details" :key="index">
+                <code class="break-all">{{ detail.field }}</code>: {{ detail.reason }}
+              </li>
+            </ul>
+            <p v-else-if="result.items.failure.validation_fields?.length" class="break-all">
+              Validation fields: {{ result.items.failure.validation_fields.join(', ') }}
+            </p>
+          </div>
           <p
             v-if="
               result.items.status === 'complete' &&
@@ -120,6 +138,21 @@ onBeforeUnmount(() => {
               Not applied: {{ reason }}
             </li>
           </ul>
+          <details v-if="result.items.rejected_details?.length" class="rounded border border-amber-500/30 p-3">
+            <summary class="cursor-pointer font-semibold text-amber-300">Rejected proposal details</summary>
+            <p class="mt-2 text-xs text-slate-400">
+              These quotes were proposed by the model and were not accepted as evidence.
+              Compare them with the original narration before correcting a clothing record.
+            </p>
+            <ul class="mt-3 space-y-4">
+              <li v-for="(proposal, index) in result.items.rejected_details" :key="index" class="space-y-1 break-words">
+                <p class="font-semibold">{{ proposal.label }}</p>
+                <p class="text-amber-300">{{ proposal.reason }}</p>
+                <p class="text-xs text-slate-400">Action basis: {{ proposal.basis }}</p>
+                <blockquote class="whitespace-pre-wrap border-l-2 border-slate-600 pl-3">{{ proposal.evidence }}</blockquote>
+              </li>
+            </ul>
+          </details>
           <p v-if="result.items.message_id" class="break-all font-mono text-xs text-slate-400">
             Source turn: {{ result.items.message_id }}
           </p>
