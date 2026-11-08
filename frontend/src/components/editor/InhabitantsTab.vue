@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Brain } from 'lucide-vue-next'
+import { Brain, Plus } from 'lucide-vue-next'
 import { getItemIcon } from '@/utils/game_icons'
 import { hasAnyScript } from '@/utils/editor_utils'
 
@@ -32,6 +32,7 @@ const emit = defineEmits<{
   (e: 'clear-hover'): void
   (e: 'request-move-npc-to-scene', npcId: string, name: string, currentSceneId: string): void
   (e: 'open-create-npc'): void
+  (e: 'new-npc'): void
   (e: 'open-special-attacks', npc: any): void
   (e: 'export-entity', kind: 'npc', id: string, label: string): void
   (e: 'import-entity', kind: 'npc'): void
@@ -51,6 +52,10 @@ function getSceneLabel(sceneId?: string | null): string {
 
 <template>
   <div class="space-y-8 animate-page-in">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-xs text-slate-400">Create a character from a description, with optional clothes and belongings.</p>
+      <button type="button" @click="emit('new-npc')" class="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-500"><Plus class="h-4 w-4" />New</button>
+    </div>
     <!-- NPCs -->
     <section v-if="editorNpcs.length" class="space-y-6">
       <div class="flex items-center justify-between">

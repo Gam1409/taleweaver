@@ -22,6 +22,7 @@ import SequencesSection from '@/components/editor/SequencesSection.vue'
 import ProtagonistTab from '@/components/editor/ProtagonistTab.vue'
 import ItemsTab from '@/components/editor/ItemsTab.vue'
 import ItemCreateDialog from '@/components/editor/ItemCreateDialog.vue'
+import NpcCreateDialog from '@/components/editor/NpcCreateDialog.vue'
 import type { ItemDraft } from '@/services/itemGeneration'
 import { itemDraftFields } from '@/services/itemDraftFields'
 import MoveItemToSceneModal from '@/components/editor/MoveItemToSceneModal.vue'
@@ -80,6 +81,8 @@ const createEntityType = ref<'npc' | 'object' | null>(null)
 const pendingProtagonistAssignment = ref<{ type: 'equipment' | 'inventory'; key?: string; index?: number } | null>(null)
 const showItemTypeSelector = ref(false)
 const showItemCreateDialog = ref(false)
+const showNpcCreateDialog = ref(false)
+watch(() => props.adventureId, () => { showNpcCreateDialog.value = false })
 const itemCreateInitialScene = ref<string | null>(null)
 watch(() => props.adventureId, () => { showItemCreateDialog.value = false })
 
@@ -2628,6 +2631,7 @@ watch(
               @clear-hover="clearHover"
               @request-move-npc-to-scene="requestMoveNpcToScene"
               @open-create-npc="() => openCreateNpc()"
+              @new-npc="showNpcCreateDialog = true"
               @open-special-attacks="(npc: any) => (specialAttacksNpc = npc)"
               @export-entity="(kind, id, label) => { activeMenuId = null; exportEntity(kind, id, label) }"
               @import-entity="importEntity"
@@ -2837,6 +2841,11 @@ watch(
     <ItemCreateDialog v-if="showItemCreateDialog" :key="adventureId" :adventure-id="adventureId"
       :scenes="editorScenes" :initial-scene-id="itemCreateInitialScene"
       @close="showItemCreateDialog = false" @draft="reviewNewItem" />
+
+    <NpcCreateDialog v-if="showNpcCreateDialog" :key="adventureId" :adventure-id="adventureId"
+      :scenes="editorScenes" :initial-scene-id="activeMapSceneId || debugData?.adventure?.start_scene_id"
+      :inner-clothing-enabled="adventure?.detailed_clothing === true && adventure?.nsfw_enabled === true"
+      @close="showNpcCreateDialog = false" @created="showNpcCreateDialog = false; fetchDebugInfo(); addNotification('NPC and selected belongings created.', 'success')" />
 
     <EditEntityModal 
       :show="showEditModal"

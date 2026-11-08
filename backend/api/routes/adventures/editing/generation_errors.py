@@ -6,7 +6,7 @@ from litellm.exceptions import AuthenticationError, PermissionDeniedError, RateL
 from backend.core.inference.player_errors import player_message
 
 
-def generation_error(error: Exception) -> HTTPException:
+def generation_error(error: Exception, *, subject: str = "item") -> HTTPException:
     admission_message = player_message(error)
     if admission_message:
         return HTTPException(503, admission_message)
@@ -21,4 +21,4 @@ def generation_error(error: Exception) -> HTTPException:
         )
     if isinstance(error, (Timeout, TimeoutError)):
         return HTTPException(504, "The AI provider timed out. Check its status before retrying.")
-    return HTTPException(502, "Could not generate a valid item draft. Please try again.")
+    return HTTPException(502, f"Could not generate a valid {subject} draft. Please try again.")

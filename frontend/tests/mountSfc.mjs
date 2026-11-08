@@ -37,6 +37,13 @@ export function mountSfc(path, initialProps, dependencies = {}) {
       return element
     },
     createText: text => node('text', text), createComment: () => node('comment'),
+    insertStaticContent(content, parent, anchor) {
+      const child = node('static', content)
+      const index = anchor ? parent.children.indexOf(anchor) : -1
+      parent.children.splice(index < 0 ? parent.children.length : index, 0, child)
+      child.parent = parent
+      return [child, child]
+    },
     insert(child, parent, anchor) {
       remove(child)
       const index = anchor ? parent.children.indexOf(anchor) : -1
