@@ -12,6 +12,7 @@ from backend.core.database import get_db
 from backend.engine.visual_novel.concurrency import (
     BUSY_DETAIL,
     SessionBusyError,
+    SessionLease,
     session_write_lease,
 )
 from backend.models.game_session import GameSession
@@ -22,7 +23,7 @@ async def session_mutation_lease(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> AsyncIterator[None]:
+) -> AsyncIterator[SessionLease | None]:
     """Authorize before rejecting busy sessions; acquire before loading mutable state.
 
     This nonblocking lease matches the standard single-worker launcher. It lasts
@@ -32,14 +33,14 @@ async def session_mutation_lease(
     endpoint = request.scope.get("endpoint")
     if game_id and getattr(endpoint, "__name__", "") == "get_chat_history":
         async with _snapshot_scope(db, game_id):
-            yield
+            yield None
         return
     if (
         not game_id
         or request.method in {"GET", "HEAD", "OPTIONS"}
         or getattr(endpoint, "__name__", "") in {"post_chat_message", "translate_text"}
     ):
-        yield
+        yield None
         return
     owned_id = await db.scalar(
         select(GameSession.id).where(GameSession.id == game_id, GameSession.user_id == user.id)
@@ -47,8 +48,8 @@ async def session_mutation_lease(
     if owned_id is None:
         raise HTTPException(404, "Session not found.")
     try:
-        with session_write_lease(game_id):
-            yield
+        with session_write_lease(game_id) as lease:
+            yield lease
     except SessionBusyError:
         raise HTTPException(409, BUSY_DETAIL) from None
 

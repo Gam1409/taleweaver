@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, aclosing
 from typing import Any
 
 from fastapi import HTTPException
@@ -20,6 +21,8 @@ from backend.engine.gameplay.agent_logic import AgentDecision, AgentService
 from backend.engine.gameplay.agent_settings import build_agent_snapshot
 from backend.engine.gameplay.manager import GameTurnManager
 from backend.engine.gameplay.world import AdventureLogic
+from backend.engine.memory_rag.scheduling import scheduler
+from backend.engine.visual_novel.concurrency import SessionLease, session_write_lease
 from backend.models.chat import ChatMessage
 from backend.models.user import User
 
@@ -138,7 +141,7 @@ async def _final_event(db: AsyncSession, manager: GameTurnManager) -> str:
 
 
 async def _agent_action_events(
-    db: AsyncSession, manager: GameTurnManager, decision: AgentDecision
+    db: AsyncSession, manager: GameTurnManager, decision: AgentDecision, lease: SessionLease
 ) -> AsyncGenerator[str, None]:
     """Announces the agent's decision and plays it as a regular turn."""
     yield _sse("thought", {"content": decision.thoughts})
@@ -163,8 +166,11 @@ async def _agent_action_events(
         return
 
     try:
-        async for chunk in manager.process_turn(outcome.turn_command):
-            yield chunk
+        async with aclosing(
+            manager.process_turn(outcome.turn_command, session_lease=lease)
+        ) as stream:
+            async for chunk in stream:
+                yield chunk
     except asyncio.CancelledError:
         logger.info("Agent turn stream cancelled during gameplay process_turn.")
         await db.rollback()
@@ -193,7 +199,23 @@ async def _agent_finish_events(
     yield _sse("agent_state", build_agent_snapshot(manager.state))
 
 
-async def stream_agent_turn(game_id: str, current_user: User) -> AsyncGenerator[str, None]:
+async def stream_agent_turn(
+    game_id: str, current_user: User, *, lease: SessionLease | None = None
+) -> AsyncGenerator[str, None]:
+    """Hold the same lease through decisions, direct actions, narration and final writes."""
+    async with AsyncExitStack() as stack:
+        owned = stack.enter_context(session_write_lease(game_id, lease=lease))
+        await stack.enter_async_context(scheduler.foreground())
+        stream = await stack.enter_async_context(
+            aclosing(_stream_owned_turn(game_id, current_user, owned))
+        )
+        async for event in stream:
+            yield event
+
+
+async def _stream_owned_turn(
+    game_id: str, current_user: User, lease: SessionLease
+) -> AsyncGenerator[str, None]:
     yield _sse("status", {"content": "Agent is thinking..."})
 
     async with core_database.AsyncSessionLocal() as db:
@@ -204,9 +226,10 @@ async def stream_agent_turn(game_id: str, current_user: User) -> AsyncGenerator[
             if not decision or decision.is_stuck_or_bug:
                 events = _agent_issue_events(db, game_id, manager, decision, decision_failed)
             else:
-                events = _agent_action_events(db, manager, decision)
-            async for event in events:
-                yield event
+                events = _agent_action_events(db, manager, decision, lease)
+            async with aclosing(events):
+                async for event in events:
+                    yield event
         except asyncio.CancelledError:
             logger.info("Agent turn stream cancelled, rolling back db session.")
             await db.rollback()

@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.agent_turn_stream import ensure_agent_active, stream_agent_turn
+from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.stream_transport import heartbeat_stream
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
@@ -19,20 +20,22 @@ from backend.engine.gameplay.agent_settings import (
     build_agent_snapshot,
 )
 from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.visual_novel.concurrency import SessionLease
 from backend.models.user import User
 
-router = APIRouter(tags=["Play-Agent"])
+router = APIRouter(tags=["Play-Agent"], dependencies=[Depends(session_mutation_lease)])
 
 
 @router.post("/{game_id}/agent/turn", response_model=None)
 async def run_agent_turn(
     game_id: str,
+    lease: SessionLease = Depends(session_mutation_lease),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Computes an agent decision based on walkthrough & game state, then executes the turn."""
     await ensure_agent_active(game_id, current_user)
     return StreamingResponse(
-        heartbeat_stream(stream_agent_turn(game_id, current_user)),
+        heartbeat_stream(stream_agent_turn(game_id, current_user, lease=lease)),
         media_type="text/event-stream",
         headers={"X-Taleweaver-Turn-Id": uuid4().hex},
     )

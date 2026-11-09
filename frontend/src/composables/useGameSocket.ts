@@ -186,6 +186,7 @@ export function useGameSocket(): UseGameSocket {
   )
   watch([status, language, languageSaving], () => resetSuggestionsRequest(), { flush: 'sync' })
   let activeAgentController: AbortController | null = null
+  let activeEpilogueController: AbortController | null = null
   let activeChatController: AbortController | null = null
   const agentPaused = ref(false)
   const agentLog = ref<AgentLogEntry[]>([])
@@ -480,6 +481,8 @@ export function useGameSocket(): UseGameSocket {
 
   function haltActiveOperations(): void {
     resetSuggestionsRequest()
+    activeEpilogueController?.abort()
+    activeEpilogueController = null
     if (activeChatController) {
       activeChatController.abort()
       activeChatController = null
@@ -797,13 +800,15 @@ export function useGameSocket(): UseGameSocket {
       }
     } finally {
       window.clearTimeout(timeoutId)
-      if (ownsRequest()) {
-        if (replayMessageId && receivedErrorEvent) {
-          const restored = await fetchSessionSnapshot(gameId)
-          if (ownsRequest() && restored) applySessionSnapshot(restored, true)
+      if (ownsRequest() && replayMessageId && receivedErrorEvent) {
+        const restored = await fetchSessionSnapshot(gameId)
+        if (ownsRequest()) {
+          if (restored) applySessionSnapshot(restored, true)
           turnError.value = null
           lastUserAction.value = ''
         }
+      }
+      if (ownsRequest()) {
         activeChatController = null
         isSceneTransitioning.value = false
         status.value = finalStatus
@@ -861,11 +866,18 @@ export function useGameSocket(): UseGameSocket {
     if (!currentGameId) return false
     if (isBusy || languageSaving.value) return false
 
-    status.value = 'connecting' 
+    const gameId = currentGameId
+    const revision = ++snapshotRevision
+    snapshotPoller.interrupt()
+    status.value = 'connecting'
     statusText.value = 'Agent is thinking...'
     let receivedFinalEvent = false
+    let receivedErrorEvent = false
     const controller = new AbortController()
     activeAgentController = controller
+    const ownsRequest = () => activeAgentController === controller &&
+      currentGameId === gameId && revision === snapshotRevision
+    let finalStatus: ConnectionStatus = 'connected'
     // Idle timeout: an agent turn (decision + full GM turn) can legitimately take long,
     // so only abort when the stream stays silent for too long.
     let timedOut = false
@@ -880,14 +892,16 @@ export function useGameSocket(): UseGameSocket {
     resetIdleTimeout()
 
     try {
-      const res = await apiFetch(`/adventures/${currentGameId}/agent/turn`, { timeoutMs: null,
+      const res = await apiFetch(`/adventures/${gameId}/agent/turn`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(false),
         signal: controller.signal
       })
 
+      if (!ownsRequest()) return false
       if (res.status === 401 && authState.isAuthenticated) {
-                status.value = 'error'
+        finalStatus = 'error'
+        status.value = 'error'
         statusText.value = ''
         return false
       }
@@ -900,7 +914,7 @@ export function useGameSocket(): UseGameSocket {
       }
 
       if (!res.body) throw new Error('No response stream available')
-      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout })) {
+      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout, isCurrent: ownsRequest })) {
         if (event === 'status') {
           statusText.value = data.content
           appendDebugLog({
@@ -932,39 +946,38 @@ export function useGameSocket(): UseGameSocket {
         } else if (event === 'final') {
           receivedFinalEvent = true
           applySessionSnapshot(data, false)
-          if (data.game_over) {
-            status.value = 'game_over'
+          finalStatus = data.game_over ? 'game_over' : data.game_completed && data.input_locked ? 'completed' : 'connected'
+          if (data.game_over || data.game_completed) {
             gameOverReason.value = data.game_over_reason || data.status_note || ''
-            stopSyncTimer()
-          } else if (data.game_completed) {
-            gameOverReason.value = data.status_note || ''
-            status.value = data.input_locked ? 'completed' : 'connected'
-          } else {
-            status.value = 'connected'
-            statusText.value = ''
           }
+          if (data.game_over) stopSyncTimer()
+          // Keep input locked until this request finishes its authoritative reload.
+          status.value = 'connecting'
         } else if (event === 'error') {
+          receivedErrorEvent = true
           const detail = data.detail || 'An error occurred.'
           _pushMessage('system', detail)
           addNotification(detail, 'error')
-          status.value = 'connected'
           statusText.value = ''
         } else if (event === 'checkpoint') {
           triggerCheckpointPulse()
         }
       }
 
+      if (!ownsRequest()) return false
       if (receivedFinalEvent) {
-        const snapshot = await fetchSessionSnapshot(currentGameId)
+        const snapshot = await fetchSessionSnapshot(gameId, controller.signal)
+        if (!ownsRequest()) return false
         if (snapshot) {
           applySessionSnapshot(snapshot, true)
         }
       }
-      if (!receivedFinalEvent && (timedOut || !controller.signal.aborted)) {
+      if (!receivedFinalEvent && !receivedErrorEvent && (timedOut || !controller.signal.aborted)) {
         _pushMessage('system', timedOut ? 'The Agent did not respond in time.' : 'The Agent turn ended unexpectedly without a result.')
       }
-      return receivedFinalEvent
+      return receivedFinalEvent && !receivedErrorEvent
     } catch (err: any) {
+      if (!ownsRequest()) return false
       if (err.name === 'AbortError' && timedOut) {
         _pushMessage('system', 'The Agent did not respond in time.')
       } else if (err.name === 'AbortError') {
@@ -978,9 +991,9 @@ export function useGameSocket(): UseGameSocket {
       return false
     } finally {
       clearTimeout(timeoutId)
-      activeAgentController = null
-      if (((status.value as any) === 'connecting' || (status.value as any) === 'loading') && sheet.value?.agent_active) {
-        status.value = 'connected'
+      if (ownsRequest()) {
+        activeAgentController = null
+        status.value = finalStatus
         statusText.value = ''
       }
     }
@@ -988,25 +1001,39 @@ export function useGameSocket(): UseGameSocket {
 
   async function createTerminalEpilogue(): Promise<void> {
     if (!currentGameId) return
+    const gameId = currentGameId
+    const revision = snapshotRevision
+    activeEpilogueController?.abort()
+    const controller = new AbortController()
+    activeEpilogueController = controller
+    const ownsRequest = () => activeEpilogueController === controller &&
+      currentGameId === gameId && revision === snapshotRevision
     try {
-      const res = await apiFetch(`/adventures/${currentGameId}/terminal-epilogue`, { timeoutMs: null,
+      const res = await apiFetch(`/adventures/${gameId}/terminal-epilogue`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({})
+        body: JSON.stringify({}),
+        signal: controller.signal
       })
 
+      if (!ownsRequest()) return
       if (res.status === 401 && authState.isAuthenticated) {
                 return
       }
       if (!res.ok) return
 
       const data = await res.json()
+      if (!ownsRequest()) return
       if (data.content) {
         _pushMessage('assistant', data.content)
       }
       applySessionSnapshot(data, false)
     } catch (err) {
-      console.error('[Session] Terminal epilogue error:', err)
+      if (ownsRequest() && !controller.signal.aborted) {
+        console.error('[Session] Terminal epilogue error:', err)
+      }
+    } finally {
+      if (activeEpilogueController === controller) activeEpilogueController = null
     }
   }
 

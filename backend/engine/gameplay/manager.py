@@ -41,7 +41,7 @@ from backend.engine.visual_novel.story_director import (
 )
 from backend.engine.visual_novel.story_prompts import PROGRESS_REMINDER
 from backend.engine.visual_novel.continuity import prepare_intent
-from backend.engine.visual_novel.concurrency import guard_session_turn
+from backend.engine.visual_novel.concurrency import SessionLease, guard_session_turn
 from backend.engine.visual_novel.intent import (
     VNProgressionIntent,
     VN_PROGRESSION_PROMPT,
@@ -845,6 +845,8 @@ class GameTurnManager:
         auto_visualize: bool = False,
         language: str | None = None,
         replay_message_id: str | None = None,
+        *,
+        session_lease: SessionLease | None = None,
     ) -> AsyncGenerator[str, None]:
         """Run one replayable turn with the same normal post-turn hooks."""
         from backend.engine.living_world.foreground import check

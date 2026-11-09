@@ -28,6 +28,20 @@ session mutation paths. It does not establish that every possible race is absent
   sessions, purges derived memory and deletes their dependent data; sessions
   created after selection are not swept into that reset.
 
+## Play-Agent ownership
+
+Play-Agent settings and the entire streamed decision/action cycle use the same
+session writer lease as ordinary turns. This includes preflight initialization,
+direct unlock actions, failure bookkeeping and final state persistence. The agent
+passes an explicit, active lease capability to a nested narration turn. The guard
+checks object identity and session ID; unrelated tasks do not inherit access.
+Closing a borrowed turn cannot release its caller's lease.
+
+The full agent stream registers foreground activity with the existing memory
+scheduler. Cancellation closes nested streams before the outer lease is released.
+FastAPI 0.118 or newer is required because request dependency cleanup must run
+[after a streaming response finishes](https://fastapi.tiangolo.com/advanced/advanced-dependencies/#dependencies-with-yield-and-streamingresponse-technical-details).
+
 ## Validation and limits
 
 The final combined regression run passed **522 tests**.

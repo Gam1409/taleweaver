@@ -3,6 +3,9 @@
 The response button rewrites the latest completed assistant message in place. It
 does not replay the player's action, reroll checks, advance time or restore an
 earlier world state. The original response remains intact on model failure.
+Known incomplete completion reasons (`length`, `max_tokens`, `content_filter`,
+`tool_calls`) reject a replacement before archiving or invalidating evidence.
+Providers that omit completion metadata retain the existing nonempty-text check.
 
 The narration role's configured deadline controls the request. OpenAI-compatible
 providers use the same shared provider deadline as normal narration. The browser

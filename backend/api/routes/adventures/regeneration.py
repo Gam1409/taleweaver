@@ -16,6 +16,7 @@ from backend.api.routes.adventures.session_mutations import session_mutation_lea
 from backend.core.auth import get_current_user
 from backend.core.content_language import default_language, prose_language_instruction
 from backend.core.database import get_db
+from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.memory_rag.dirty_queue import queue_refresh
@@ -80,15 +81,21 @@ async def generate_narration(
     )
     system = append_correction(system, correction)
     context = [{"role": item.role, "content": item.content} for item in reversed(history)]
-    result = await llm.aexecute_simple_task(
-        system,
-        json.dumps(context, ensure_ascii=False),
-        llm.model,
-        adventure_id=session.template_id,
-        game_id=session.id,
-        operation="regenerate_narration",
-        phase="narration",
-    )
+    with capture_completions() as completions:
+        result = await llm.aexecute_simple_task(
+            system,
+            json.dumps(context, ensure_ascii=False),
+            llm.model,
+            adventure_id=session.template_id,
+            game_id=session.id,
+            operation="regenerate_narration",
+            phase="narration",
+        )
+    if any(
+        item.finish_reason in {"length", "max_tokens", "content_filter", "tool_calls"}
+        for item in completions
+    ):
+        raise ValueError("The model did not complete the regenerated narration")
     if not isinstance(result, str) or not result.strip():
         raise ValueError("Empty regenerated narration")
     return result.strip()

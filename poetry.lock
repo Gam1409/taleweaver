@@ -6164,4 +6164,4 @@ desktop = ["PyGObject", "filelock", "platformdirs", "pystray"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "32c9e88cef1596ca281b84ea01c79be4ea3d82d39c91eed73782459ac9c9d0a0"
+content-hash = "f3324e8128445f95d19038dbf7d815b2c3efeb2c6db6f6c3b7fd9eaec990f4f2"

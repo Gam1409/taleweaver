@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
 from tests.llm_fakes import RoleLLMFactory
 
@@ -307,15 +309,14 @@ async def test_agent_turn_retry_and_deactivation_on_failure(
         # Clean old issues log if exists
         session_dir = safe_data_path("adventures", "sessions", game_id)
         agents_md_path = ensure_within_data_dir(os.path.join(session_dir, "AGENTS.md"))
-        if os.path.exists(agents_md_path):
-            os.remove(agents_md_path)
+        await run_file_operation(Path(agents_md_path).unlink, missing_ok=True)
 
         # Attempt 1
         resp1 = await auth_client.post(f"/api/adventures/{game_id}/agent/turn")
         print("RESP1 TEXT:", resp1.text)
         assert resp1.status_code == 200
         assert "(Attempt 1/3)" in resp1.text
-        assert os.path.exists(agents_md_path)
+        assert await run_file_operation(Path(agents_md_path).exists)
 
         # Re-fetch and verify failure count using fresh verify DB session
         async with TestSessionLocal() as verify_db:
@@ -345,10 +346,9 @@ async def test_agent_turn_retry_and_deactivation_on_failure(
             assert AgentService.get_agent_state(state).get("active") is False
 
         # Read AGENTS.md content to check format
-        with open(agents_md_path, encoding="utf-8") as f:
-            content = f.read()
-            assert "# TaleWeaver Agent Issues Log" in content
-            assert "Walkthrough mismatch: missing required key" in content
+        content = await run_file_operation(Path(agents_md_path).read_text, encoding="utf-8")
+        assert "# TaleWeaver Agent Issues Log" in content
+        assert "Walkthrough mismatch: missing required key" in content
 
 
 async def test_agent_prompt_includes_scene_items_and_take_name_guidance(setup_test_db, monkeypatch):
@@ -1064,7 +1064,8 @@ async def test_agent_turn_deactivates_agent_when_adventure_is_won(
         AgentService.set_agent_active(state_res.scalars().first(), True)
         await db.commit()
 
-    async def mock_generator(action):
+    async def mock_generator(action, *, session_lease):
+        assert session_lease.session_id == game_id
         yield "event: final\ndata: {}\n\n"
 
     terminal_flags = {"game_over": False, "game_completed": True}
