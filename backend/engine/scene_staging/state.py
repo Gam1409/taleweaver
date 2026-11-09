@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
+from backend.engine.scene_staging import props
 from backend.engine.scene_staging.schema import SceneDelta, SceneExtraction
 from backend.engine.visual_novel.config import read_settings
 
@@ -209,11 +210,15 @@ def narration_block(state: Any, entities: list[Any], avatar: Any) -> str:
             }
         )
     facts = project(state, cast)
-    if not any(facts.values()):
+    items = props.candidates(
+        avatar, entities, state, {entity.id for entity in entities if entity.entity_type == "NPC"}
+    )
+    placed = props.project(state, items)
+    if not any(facts.values()) and not placed:
         return ""
     return (
         "\nESTABLISHED SCENE STAGING (data, not narrative material):\n"
-        + json.dumps(facts, ensure_ascii=False)
+        + json.dumps({"characters": facts, "placed_items": placed}, ensure_ascii=False)
         + "\nKeep these facts consistent without listing or repeating them. Mention only "
         "meaningful changes. Unknown details stay unknown. This does not authorize "
         "movement between scenes, item transfers or clothing changes.\n"

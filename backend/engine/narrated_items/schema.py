@@ -14,6 +14,7 @@ from backend.engine.physical_conditions.schema import (
 from backend.engine.scene_continuity.schema import Action as SceneAction
 from backend.engine.scene_continuity.schema import Update as SceneUpdate
 from backend.engine.scene_continuity.schema import candidates as scene_candidates
+from backend.engine.scene_staging.schema import SceneExtraction
 from backend.schemas.authoring_completion import EquipmentSlot
 
 
@@ -96,6 +97,25 @@ class ItemExtraction(BaseModel):
         if not isinstance(value, list):
             return value
         return [entry.model_dump() if isinstance(entry, ItemAction) else entry for entry in value]
+
+
+class SharedItemExtraction(ItemExtraction):
+    """Preserve independent sections; host revalidates actions before applying them."""
+
+    staging: Annotated[
+        Any,
+        BeforeValidator(
+            lambda value: value.model_dump() if isinstance(value, BaseModel) else value,
+            json_schema_input_type=SceneExtraction | None,
+        ),
+    ] = None
+
+    actions: Annotated[
+        list[Any],
+        BeforeValidator(
+            scene_candidates, json_schema_input_type=list[ExistingItemAction | NewItemAction]
+        ),
+    ] = Field(default_factory=list, json_schema_extra={"maxItems": 6})
 
 
 INSTRUCTIONS = (

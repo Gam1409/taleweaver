@@ -16,13 +16,15 @@ from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.errors import ItemFailure
-from backend.engine.narrated_items.preflight import skipped_check
-from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
+from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
+from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction, SharedItemExtraction
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
 from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
 from backend.engine.scene_continuity import runtime as scene_continuity
 from backend.engine.scene_continuity.prompts import INSTRUCTIONS as SCENE_INSTRUCTIONS
+from backend.engine.scene_staging import shared as shared_staging
+from backend.engine.scene_staging.schema import SHARED_INSTRUCTIONS as STAGING_INSTRUCTIONS
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_snapshot
 
@@ -61,6 +63,7 @@ async def reconcile_items(
 ) -> list[str]:
     physical_conditions.discard(manager)
     manager._pending_scene_continuity = None
+    staging_enabled = shared_staging.begin(manager, narration)
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
     if (
@@ -76,7 +79,7 @@ async def reconcile_items(
     skipped = skipped_check(
         narration, blocked=blocked, blocked_reason=blocked_reason, limit=MAX_NARRATION
     )
-    if skipped is not None:
+    if skipped is not None and (not staging_enabled or skipped.reason_code != "rules_rejected"):
         pending_conditions.error = skipped.reason
         _status(manager, message_id, narration, "needs_review", **skipped.details())
         return [skipped.message()]
@@ -104,6 +107,8 @@ async def reconcile_items(
                 manager.state, set(actors) | set(snapshot.items)
             ),
             "scene_continuity": await scene_continuity.prepare(manager),
+            "scene_staging": shared_staging.prepare(manager, actors, rows),
+            "item_changes_allowed": skipped is None,
         },
         ensure_ascii=False,
     )
@@ -124,9 +129,12 @@ async def reconcile_items(
         llm = GameMasterLLM.for_role(manager.user, "small")
         result = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                INSTRUCTIONS + CONDITION_INSTRUCTIONS + SCENE_INSTRUCTIONS,
+                INSTRUCTIONS
+                + CONDITION_INSTRUCTIONS
+                + SCENE_INSTRUCTIONS
+                + (STAGING_INSTRUCTIONS if staging_enabled else ""),
                 payload,
-                ItemExtraction,
+                SharedItemExtraction if staging_enabled else ItemExtraction,
                 llm.model,
                 game_id=manager.game_id,
                 operation="narrated_items",
@@ -134,23 +142,42 @@ async def reconcile_items(
             ),
             timeout=role_timeout(manager.user, "small"),
         )
-        extraction = ItemExtraction.model_validate(result)
+        shared_staging.propose(manager, result)
+        extraction = ItemExtraction.model_validate(
+            result.model_dump(exclude={"staging"})
+            if isinstance(result, SharedItemExtraction)
+            else result
+        )
         failures: list[ItemFailure] = []
-        changed, accepted, errors = apply_actions(
-            extraction,
-            actors,
-            snapshot,
-            narration,
-            detailed=detailed,
-            session_id=manager.state.session_id,
-            message_id=message_id,
-            failures=failures,
+        changed, accepted, errors = (
+            (actors, [], [])
+            if skipped
+            else apply_actions(
+                extraction,
+                actors,
+                snapshot,
+                narration,
+                detailed=detailed,
+                session_id=manager.state.session_id,
+                message_id=message_id,
+                failures=failures,
+            )
         )
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         logger.exception("Completed item reconciliation failed for session %s", manager.game_id)
         failure = describe_failure(exc)
+        if skipped is not None:
+            _status(
+                manager,
+                message_id,
+                narration,
+                "needs_review",
+                **skipped.details(),
+                staging_failure=failure.payload(),
+            )
+            return [skipped.message()]
         _status(
             manager,
             message_id,
@@ -160,8 +187,41 @@ async def reconcile_items(
             failure=failure.payload(),
         )
         return [failure.message()]
+    return _finish_extraction(
+        manager,
+        extraction,
+        pending_conditions,
+        changed,
+        accepted,
+        errors,
+        snapshot,
+        message_id,
+        narration,
+        failures,
+        skipped,
+    )
+
+
+def _finish_extraction(
+    manager: Any,
+    extraction: ItemExtraction,
+    pending_conditions: Any,
+    changed: dict,
+    accepted: list[dict],
+    errors: list[str],
+    snapshot: Any,
+    message_id: str,
+    narration: str,
+    failures: list[ItemFailure],
+    skipped: SkippedCheck | None,
+) -> list[str]:
     _store_changes(manager, changed, accepted, snapshot.catalog)
-    pending_conditions.complete(extraction.condition_updates, set(actors) | set(snapshot.items))
+    shared_staging.approve_items(manager, accepted)
+    if skipped is not None:
+        pending_conditions.error = skipped.reason
+        _status(manager, message_id, narration, "needs_review", **skipped.details())
+        return [skipped.message()]
+    pending_conditions.complete(extraction.condition_updates, set(changed) | set(snapshot.items))
     scene_continuity.complete(manager, extraction.scene_updates, extraction.final_frame_actions)
     _status(
         manager,

@@ -7,11 +7,11 @@ from typing import Any
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
-from backend.core.reliability_metrics import record_staging
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.schema import INSTRUCTIONS, SceneExtraction
-from backend.engine.scene_staging.state import KEY, digest, project, reconcile
+from backend.engine.scene_staging.shared import apply_extraction, consume
+from backend.engine.scene_staging.state import KEY, digest, project
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.config import read_settings
 
@@ -22,6 +22,8 @@ MAX_CONTEXT = 64000
 
 async def reconcile_narration(manager: Any, narration: str, *, completed: bool) -> None:
     if not read_settings(manager.state).scene_staging:
+        return
+    if consume(manager, narration, completed=completed):
         return
     state = manager.state
     result = {
@@ -70,6 +72,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         return
     # The turn's mutation lease and recovery record protect this short commit.
     await release_for_model(manager)
+    applied = False
     try:
         llm = GameMasterLLM.for_role(manager.user, "small")
         response = await asyncio.wait_for(
@@ -85,14 +88,13 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             timeout=role_timeout(manager.user, "small"),
         )
         extraction = SceneExtraction.model_validate(response)
-        result = reconcile(state, cast, narration, extraction)
-        record_staging(result, len(extraction.changes))
-        props.reconcile(state, narration, extraction.props, items, valid_items=valid_items)
+        apply_extraction(manager, narration, cast, rows, extraction)
+        applied = True
     except asyncio.CancelledError:
         raise
     except Exception:
         logger.exception("Scene staging reconciliation failed for session %s", manager.game_id)
     finally:
-        if result.get("status") != "ready":
+        if not applied:
             props.invalidate(state)
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
+            state.entity_states = {**(state.entity_states or {}), KEY: result}

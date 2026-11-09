@@ -174,14 +174,16 @@ class StagingRoles(TurnRoles):
 
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
-        if schema is not SceneExtraction:
+        from backend.engine.narrated_items.schema import SharedItemExtraction
+
+        if schema is not SharedItemExtraction:
             return await super().structured(*args, **kwargs)
         self.calls.append((schema.__name__, args, kwargs))
         if self.fail:
             raise TimeoutError("Unavailable extractor")
         payload = json.loads(args[1])
-        assert payload["current_narration"] == TEXT
-        return SceneExtraction(
+        assert payload["completed_narration"] == TEXT
+        staging = SceneExtraction(
             changes=[
                 {
                     "entity_id": "LINA",
@@ -190,6 +192,7 @@ class StagingRoles(TurnRoles):
                 }
             ]
         )
+        return SharedItemExtraction(staging=staging)
 
 
 @pytest.mark.asyncio
@@ -211,7 +214,8 @@ async def test_real_turn_saves_narration_and_message_time_pose(monkeypatch, fail
         chunks = [chunk async for chunk in manager.process_turn("Hello")]
         assert not any(chunk.startswith("event: error") for chunk in chunks), "".join(chunks)
         assert any(chunk.startswith("event: final") for chunk in chunks)
-        assert roles.calls[-1][0] == "SceneExtraction"
+        assert roles.calls[-1][0] == "SharedItemExtraction"
+        assert not any(call[0] == "SceneExtraction" for call in roles.calls)
         await db.refresh(session)
         message = await db.scalar(select(ChatMessage).where(ChatMessage.content == TEXT))
         snapshot = session.entity_states[REGISTRY_KEY]["snapshots"][message.id]

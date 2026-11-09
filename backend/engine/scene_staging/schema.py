@@ -100,3 +100,24 @@ participants. Requests, negotiations, negations, hypotheticals, memories and
 dreams are never reported. Omission reports nothing.
 Return empty changes and props lists when no supported visual change occurred.
 """
+
+SHARED_INSTRUCTIONS = (
+    """
+SHARED SCENE STAGING: return the existing SceneExtraction shape under staging.
+scene_staging is the staging context; completed_narration is current_narration below.
+When scene_staging is null, leave staging null. When enabled, return staging even
+when nothing changed: {"changes":[],"props":[],"explicit":[]}. Null means not confirmed.
+All following changes/props/explicit fields belong inside staging, never at the root.
+Use __player__ consistently for the player; the host binds it to the saved actor ID.
+scene_staging.owned_items lists ownership before the item actions; read names from items.
+You may propose placement after an explicitly narrated removal/transfer in the same
+response, but the host permits it only after accepting that item action. Give the
+resulting owner_id. Never assume taking something off puts it anywhere in particular.
+For a new item without a canonical ID, props may use item_action_index (zero-based
+index into actions) instead of item_id. Use exactly one identity. Rejected item
+actions cannot grant placement. Existing IDs remain preferred for known items.
+If item_changes_allowed is false, leave actions, condition_updates and scene_updates
+empty. Only independent supported staging may change; do not bypass rejected outcomes.
+"""
+    + INSTRUCTIONS
+)

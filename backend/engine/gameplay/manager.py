@@ -2119,7 +2119,7 @@ class GameTurnManager:
             yield f"event: chunk\ndata: {json.dumps({'content': fallback})}\n\n"
 
         if policy.vn and narration_completed:
-            yield f"event: status\ndata: {json.dumps({'content': 'Checking item changes...'})}\n\n"
+            yield f"event: status\ndata: {json.dumps({'content': 'Checking items and scene state...'})}\n\n"
             item_messages = await reconcile_items(
                 self,
                 response_text,
@@ -2134,7 +2134,6 @@ class GameTurnManager:
                 yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': item_message})}\n\n"
 
         if policy.vn and read_vn_settings(self.state).scene_staging:
-            yield f"event: status\ndata: {json.dumps({'content': 'Checking scene continuity...'})}\n\n"
             await reconcile_narration(self, response_text, completed=narration_completed)
 
         id_to_name: dict[str, str] = {}

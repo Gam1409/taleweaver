@@ -187,7 +187,7 @@ defineExpose({ save })
         <input v-model="sceneStaging" type="checkbox" class="mt-1 accent-rose-400" />
         <span>
           <span class="block text-sm font-semibold">Track scene poses and placement (experimental)</span>
-          <span class="text-xs text-slate-400">After each reply, check explicit pose and placement changes for continuity and illustrations. Adds one Small / Utility request before the turn finishes. Clothing and inventory remain controlled by the game rules.</span>
+          <span class="text-xs text-slate-400">After each reply, check explicit pose and placement changes for continuity and illustrations. Shares the Small / Utility check with item and state updates. Clothing and inventory remain controlled by the game rules.</span>
         </span>
       </label>
       <div class="space-y-3 rounded-xl border border-white/10 p-3">

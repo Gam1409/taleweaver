@@ -5,6 +5,21 @@ VN turns reuse the existing completed-narration item/physical-state extraction r
 `final_frame_actions` describes the final visible instant. No extra summarization
 request or agent framework is added.
 
+When the existing **scene staging** session option is enabled, its pose and prop
+deltas also use this same request. The `SharedItemExtraction` transport preserves
+independent sections; item actions still pass the original strict `ItemExtraction`
+validation before mutation. A bad item section cannot grant a placement or suppress
+an independently valid pose. A bad staging section does not undo accepted item facts.
+When staging is disabled, the original item response schema is used.
+
+The existing staging registry, quote checks, invalidation and message-source stamps
+remain authoritative. The narrator's staging block includes confirmed placed items
+as well as poses. Worn-item candidates can be proposed for placement, but the host
+rechecks eligibility after accepting removal/transfer. New items may be referenced
+by their original zero-based `item_action_index`; only accepted actions can supply
+an ID. Rejected placements remain diagnostic counts rather than new world facts.
+The shared path never issues a second staging request after timeout or invalid JSON.
+
 The host saves accepted deltas under `__scene_continuity__` after the assistant
 message is flushed, in the same turn transaction. Each record has a canonical
 subject and scene, origin/latest source quote and hash, message revision, game

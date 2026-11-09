@@ -199,6 +199,7 @@ def apply_actions(
             snapshot.owners[identifier] = action.destination_owner
             accepted.append(
                 {
+                    "action_index": index,
                     "item": item,
                     "source_owner": actual_owner,
                     "destination_owner": action.destination_owner,

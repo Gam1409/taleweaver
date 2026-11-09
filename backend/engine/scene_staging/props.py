@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def digest(text: str) -> str:
@@ -18,28 +18,68 @@ KEY = "__scene_props__"
 
 
 class PropDelta(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    item_id: str = Field(min_length=1, max_length=100)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "required": ["item_id"],
+                    "properties": {
+                        "item_id": {"minLength": 1, "pattern": r"\S"},
+                        "item_action_index": {"type": "null"},
+                    },
+                },
+                {
+                    "required": ["item_action_index"],
+                    "properties": {
+                        "item_id": {"pattern": r"^\s*$"},
+                        "item_action_index": {"type": "integer"},
+                    },
+                },
+            ]
+        },
+    )
+    item_id: str = Field(
+        default="",
+        max_length=100,
+        description="Existing canonical item ID; omit when referencing an accepted item action.",
+    )
+    item_action_index: int | None = Field(
+        default=None,
+        ge=0,
+        le=5,
+        strict=True,
+        description="Zero-based index in this response's item actions, instead of item_id. The action must be accepted by the host.",
+    )
     owner_id: str = Field(min_length=1, max_length=100)
     evidence: str = Field(min_length=3, max_length=800)
     spatial_position: str = Field(default="", max_length=120)
     status: Literal["confirmed", "provisional", "clear"] = "provisional"
+
+    @model_validator(mode="after")
+    def one_identity(self) -> "PropDelta":
+        if bool(self.item_id) == (self.item_action_index is not None):
+            raise ValueError("Use an existing item_id or item_action_index, never both.")
+        return self
 
 
 def _ids(values: Iterable[Any] | None) -> set[str]:
     return {str(v.get("id")) if isinstance(v, dict) else str(v) for v in values or []}
 
 
-def candidates(avatar: Any, rows: list[Any], state: Any, cast_ids: set[str]) -> list[dict]:
+def candidates(
+    avatar: Any, rows: list[Any], state: Any, cast_ids: set[str], *, include_worn: bool = False
+) -> list[dict]:
     result = []
     by_id = {row.id: row for row in rows}
     actors = [avatar, *[row for row in rows if row.id in cast_ids and row.id != avatar.id]]
     for actor in actors:
-        result.extend(_actor_items(actor, by_id, state))
+        result.extend(_actor_items(actor, by_id, state, include_worn=include_worn))
     return result
 
 
-def _actor_items(actor: Any, by_id: dict, state: Any) -> list[dict]:
+def _actor_items(actor: Any, by_id: dict, state: Any, *, include_worn: bool = False) -> list[dict]:
     result = []
     override = (state.entity_states or {}).get(actor.id, {})
     inventory = override.get("inventory", getattr(actor, "inventory", []) or [])
@@ -49,12 +89,15 @@ def _actor_items(actor: Any, by_id: dict, state: Any) -> list[dict]:
     equipment = getattr(actor, "equipment", None) or {}
     worn |= _ids(equipment.values())
     items = {str(item.get("id")): item for item in inventory if isinstance(item, dict)}
-    for item_id in sorted(_ids(inventory) - worn):
+    for item_id in sorted(_ids(inventory) if include_worn else _ids(inventory) - worn):
         row = by_id.get(item_id)
         hidden = (
             (state.entity_states or {})
             .get(item_id, {})
-            .get("is_hidden", getattr(row, "is_hidden", False))
+            .get(
+                "is_hidden",
+                getattr(row, "is_hidden", items.get(item_id, {}).get("is_hidden", False)),
+            )
         )
         if hidden:
             continue
@@ -71,7 +114,7 @@ def reconcile(
     items: list[dict],
     *,
     valid_items: list[dict] | None = None,
-) -> None:
+) -> int:
     previous = deepcopy((state.entity_states or {}).get(KEY) or {})
     known = {(item["item_id"], item["owner_id"]): item for item in items}
     eligible = {
@@ -85,6 +128,7 @@ def reconcile(
     ]
     counts = Counter(change.item_id for change in changes)
     seen = set()
+    rejected = 0
     for change in changes:
         key = (change.item_id, change.owner_id)
         valid = (
@@ -99,6 +143,7 @@ def reconcile(
         )
         seen.add(key)
         if not valid:
+            rejected += 1
             continue
         records = [entry for entry in records if entry["item_id"] != change.item_id]
         if change.status == "clear":
@@ -114,6 +159,7 @@ def reconcile(
             }
         )
     state.entity_states = {**(state.entity_states or {}), KEY: {"items": records}}
+    return rejected
 
 
 def stamp(state: Any, message: Any) -> None:
