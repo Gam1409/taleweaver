@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from backend.engine.physical_conditions.wire_contract import operation_rules
+
 KEY = "__physical_conditions__"
 MAX_PROPOSALS = 12
 MAX_ACTIVE = 512
@@ -19,6 +21,8 @@ class Model(BaseModel):
 
 
 class ConditionProposal(Model):
+    model_config = ConfigDict(json_schema_extra=operation_rules)
+
     operation: Operation
     condition_id: str | None = Field(default=None, max_length=100)
     target_id: str | None = Field(default=None, max_length=100)

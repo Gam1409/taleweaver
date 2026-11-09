@@ -20,6 +20,7 @@ from backend.engine.physical_conditions.schema import (
     Source,
     Status,
 )
+from backend.engine.physical_conditions.validation import rejection
 
 _TRANSITIONS: dict[str, tuple[set[str], Status]] = {
     "treat": ({"injury", "pain"}, "treated"),
@@ -181,8 +182,8 @@ def apply(
                 )
             )
             accepted.append(condition.id)
-        except ValidationError:
-            rejected.append(f"Condition proposal {index + 1}: invalid fields.")
+        except ValidationError as exc:
+            rejected.append(rejection(index, exc))
         except ValueError as exc:
             rejected.append(f"Condition proposal {index + 1}: {exc}")
     if accepted:

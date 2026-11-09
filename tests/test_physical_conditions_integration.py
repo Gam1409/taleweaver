@@ -82,6 +82,38 @@ async def test_saved_reply_anchors_condition_and_next_turn_gets_fact_without_ext
 
 
 @pytest.mark.asyncio
+async def test_invalid_field_reason_survives_completed_turn_reload_and_owner_debug(monkeypatch):
+    from backend.engine.physical_conditions.debug import view
+
+    monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", NARRATION)
+    roles = ConditionRoles()
+    roles.proposals = [{**PROPOSAL, "detail": "PRIVATE_INPUT" * 40}, PROPOSAL]
+    install_roles(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, avatar, state, _ = await seed_vn(db)
+        before_inventory = deepcopy(avatar.inventory)
+        events = [
+            event
+            async for event in GameTurnManager(db, "session-1", user).process_turn("Help Lina.")
+        ]
+        assert final_payload(events)["status"] == "success", "".join(events)
+        await db.refresh(state)
+        ledger = read(state.entity_states)
+        assert len(ledger.conditions) == len(ledger.last_check["accepted"]) == 1
+        errors = ledger.last_check["rejected"]
+        assert len(errors) == 1 and "detail" in errors[0] and "320" in errors[0]
+        assert "PRIVATE_INPUT" not in errors[0]
+        assert view(state, [], [], avatar)["last_check"]["rejected"] == errors
+        assert avatar.inventory == before_inventory
+        assert len(roles.calls) == 3 and len(roles.prompts) == 1
+        saved_id, confirmed = state.id, ledger.conditions
+    async with TestSessionLocal() as db:
+        restored = await db.get(SessionState, saved_id)
+        assert read(restored.entity_states).conditions == confirmed
+        assert read(restored.entity_states).last_check["rejected"] == errors
+
+
+@pytest.mark.asyncio
 async def test_full_turn_replay_rewinds_conditions_and_old_message_anchor(monkeypatch):
     monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", NARRATION)
     roles = ConditionRoles()

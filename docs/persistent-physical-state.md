@@ -40,6 +40,15 @@ The unified debug inspector has a **State** tab containing:
 
 Manual edits use the existing owned-session debug command pipeline and session mutation lease. They require debug mode and the currently viewed ledger revision; a stale form cannot overwrite a newer ledger. They do not call a model, advance story time, alter inventory or change NPC personality.
 
+Schema rejections name the affected field and constraint, for example
+`Condition proposal 1: detail: Text must contain at most 320 characters.`
+Conflicting operation fields explain the existing-ID or new-record rule. Diagnostics
+contain at most five field reasons and omit candidate values and unknown field names.
+The extraction schema advertises these operation-dependent requirements as well.
+Historical `invalid fields` messages remain readable; their discarded field details
+cannot be recovered from that message. No extra model request or automatic correction
+is made, and rejected candidates do not replace confirmed facts.
+
 Existing sessions start with an empty ledger. Old narration is **not** automatically rescanned. Use the manual form to establish an older condition that is still present. Debug's legacy HP healing command does not resolve narrative injuries; resolve these explicitly in **State**.
 
 The timestamps read the existing authoritative session clock; recording a condition never advances it. `first_recorded_minute` is when the host first registered the fact, not an inferred onset time. `last_changed_minute` changes only on an accepted update. An omitted fact, rejected proposal or repeated check does not refresh either time. Legacy records keep unknown times until an actual change; their original onset is never invented. Full-turn replay restores the historical clock and these fields together; copies and exports preserve them.
