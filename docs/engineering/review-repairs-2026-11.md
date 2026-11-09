@@ -75,3 +75,16 @@ is not the selected behavior.
 - Confirm the destructive action and reload the authoritative session before
   unlocking input. Navigation fences old responses; an unconfirmed network
   outcome requires session recovery before another action.
+
+## Wave 5: bounded wire correction and finite-key grammars
+
+- Normalize only the demonstrated singular choice-ID alias, using the current
+  observer's exact motive catalogue. Conflicts and unknown IDs remain errors;
+  normal schema, evidence and semantic validation still run before publication.
+- Report local format corrections separately from model requests and retries.
+- Expand finite dictionary keys only in the transport schema for grammar backends
+  that ignore `propertyNames`. Keep the equivalent compact prompt representation
+  and verify that the dense decision fixture still fits its original budget.
+- Live baseline measurements found both a truncated 1,200-token proposal and an
+  independently malformed proposal/retry. These offline repairs do not establish
+  that the complete live NPC pipeline now succeeds; that needs another live run.

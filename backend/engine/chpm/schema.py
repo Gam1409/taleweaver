@@ -305,6 +305,7 @@ class Usage(Contract):
     output_chars: int = 0
     repairs: int = 0
     proposal_repairs: int = 0
+    format_repairs: int = Field(default=0, ge=0)
     proposal_feedback: list[str] = Field(default_factory=list, max_length=2)
     status: Literal["idle", "prepared", "validated", "shadow", "failed"] = "idle"
     detail: str = ""

@@ -39,4 +39,18 @@ The request timeout defaults to 300 seconds and is editable up to 3600 seconds; 
 
 Custom structured requests always include the JSON schema in the prompt. **Structured output support** defaults to **Prompt only** for compatibility. If your server supports it, choose **JSON object** to request JSON syntax or **JSON schema** to request the complete schema through `response_format`. The latter can improve reliability for mechanics and worldbuilding. NPC Personality technical requests honor the same selection, including their observer-specific identifier constraints. Freeform narration does not send `response_format`. Unsupported selected modes produce a server error; change back to Prompt only rather than assuming support from `/models`. No tool-calling support is required. TaleWeaver still parses and validates the response using the requested Pydantic schema, and reports invalid output as an error. This improves compatibility but does not guarantee that every local model can satisfy complex tasks.
 
+NPC requests expand finite dictionary keys into explicit optional properties in
+the transport schema because some grammar backends ignore `propertyNames`.
+The prompt retains its compact equivalent schema and its existing input budget.
+Backend validation still checks candidate counts, unique motives, source ownership
+and literal evidence; a server grammar does not establish semantic correctness.
+
+Before requesting a model retry, the NPC parser can correct a known singular
+`choice.motive_id` into `choice.motive_ids` when the canonical field is absent
+and the exact ID occurs in the observer's current motive catalogue. The correction
+copies the same value into a one-element list and changes no story content.
+Conflicting fields, unknown IDs, malformed JSON and missing decisions are rejected.
+Corrections are logged without story text and counted separately as **Local format
+corrections**; all normal schema and semantic checks still apply afterwards.
+
 Detection errors distinguish authentication failure, missing `/models`, timeout, and invalid/unreachable endpoints. Check the Base URL, the server log, the optional vault key, and container networking before retrying. Detection failure does not disable manual IDs. Requests never fall back to cloud OpenAI or OpenRouter.

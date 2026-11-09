@@ -42,7 +42,7 @@ export interface ChpmStatus {
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number; preparation_ms?: number | null; timings?: RequestTiming[] }
+  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; format_repairs?: number; proposal_feedback?: string[]; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number; preparation_ms?: number | null; timings?: RequestTiming[] }
   last_analysis_failure?: AnalysisFailure | null
   last_proposal_failure?: AnalysisFailure | null
   trace: unknown[]

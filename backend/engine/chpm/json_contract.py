@@ -1,6 +1,7 @@
 """Strict JSON transport: tolerate an outer fence, never ambiguous objects or IDs."""
 
 import json
+from copy import deepcopy
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -8,11 +9,41 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 
-def response_schema(schema: type[BaseModel], identifiers: dict[str, list[str]] | None) -> dict:
+def response_schema(
+    schema: type[BaseModel],
+    identifiers: dict[str, list[str]] | None,
+    *,
+    explicit_keys: bool = False,
+) -> dict:
     contract = schema.model_json_schema()
     _bind_ids(contract, identifiers or {})
+    if explicit_keys:
+        _explicit_enum_maps(contract)
     _strip_titles(contract)
     return contract
+
+
+def _explicit_enum_maps(node: Any) -> None:
+    """Grammar backends can ignore propertyNames; finite keys need real properties."""
+    if isinstance(node, list):
+        for child in node:
+            _explicit_enum_maps(child)
+        return
+    if not isinstance(node, dict):
+        return
+    names = node.get("propertyNames", {}).get("enum")
+    values = node.get("additionalProperties")
+    if (
+        node.get("type") == "object"
+        and isinstance(names, list)
+        and all(isinstance(key, str) for key in names)
+        and isinstance(values, dict)
+        and "properties" not in node
+    ):
+        node["properties"] = {key: deepcopy(values) for key in names}
+        node["additionalProperties"] = False
+    for child in node.values():
+        _explicit_enum_maps(child)
 
 
 def _strip_titles(node: Any) -> None:

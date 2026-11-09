@@ -2,17 +2,19 @@
 
 import asyncio
 import json
+import logging
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import json_contract, parallel_budget, performance
+from backend.engine.chpm import json_contract, parallel_budget, performance, wire_normalization
 from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 class InvalidResponseError(RecoverableChpmError):
@@ -85,7 +87,9 @@ def transport_options(router: Any, schema: type[BaseModel], identifiers: dict | 
     from backend.core.custom_openai import structured_response_format
 
     selected = structured_response_format(
-        router, schema, schema=json_contract.response_schema(schema, identifiers)
+        router,
+        schema,
+        schema=json_contract.response_schema(schema, identifiers, explicit_keys=True),
     )
     return {"response_format": selected} if selected is not None else {}
 
@@ -130,6 +134,10 @@ async def request(
     candidate = None
     try:
         candidate = json_contract.decode(result)
+        candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
+        usage.format_repairs += len(corrections)
+        if corrections:
+            logger.info("CHPM wire format corrected: phase=%s fields=%s", phase, corrections)
         return schema.model_validate(candidate)
     except ValueError as exc:
         check_output_budget(

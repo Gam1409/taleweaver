@@ -111,6 +111,7 @@ defineExpose({ save })
       {{ status.usage.input_chars }} input / {{ status.usage.output_chars }} output characters (not token counts).
       <p v-if="status.usage.memory_evictions">{{ status.usage.memory_evictions }} older quotations left the memory window this turn.</p>
       <p v-if="status.usage.proposal_repairs">Proposal retries: {{ status.usage.proposal_repairs }}</p>
+      <p v-if="status.usage.format_repairs">Local format corrections: {{ status.usage.format_repairs }} (no additional model requests).</p>
       <p v-for="(feedback, index) in status.usage.proposal_feedback ?? []" :key="index">{{ feedback }}</p>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
