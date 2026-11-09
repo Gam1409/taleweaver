@@ -66,7 +66,8 @@ storage rejects additional records visibly rather than discarding existing causa
 history. Projections report omitted records; image snapshots select at most 16
 visual scene facts. These are bounded current-state views, not an unlimited archive.
 
-Tests use deterministic model doubles: persistence across the dialogue window,
+Tests use deterministic model doubles: persistence across 40 intermediate dialogue
+turns with the normal 10-turn history window,
 explicit process endings, surviving effects, game-time horizons, visibility,
 source edits/copy/replay, capacity boundaries, old-source isolation and unchanged
 request count. They do not establish live-model extraction accuracy or image quality.

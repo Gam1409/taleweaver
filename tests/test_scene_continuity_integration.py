@@ -60,7 +60,9 @@ class SceneRoles(TurnRoles):
         return await super().structured(*args, **kwargs)
 
 
-async def test_saved_scene_state_survives_dialogue_and_freezes_source_time_image(monkeypatch):
+async def test_saved_scene_state_survives_forty_dialogue_turns_and_freezes_source_time_image(
+    monkeypatch,
+):
     monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", TEXT)
     roles = SceneRoles()
     install_roles(monkeypatch, roles)
@@ -69,7 +71,7 @@ async def test_saved_scene_state_survives_dialogue_and_freezes_source_time_image
         scene = await db.scalar(select(WorldScene).where(WorldScene.id == "START"))
         scene.description = ROOM
         avatar.visual_profile = {"appearance": {"hair": "brown"}, "worn": []}
-        state.max_memory_turns = 2
+        state.max_memory_turns = 10
         await db.commit()
         events = [
             chunk
@@ -97,7 +99,7 @@ async def test_saved_scene_state_survives_dialogue_and_freezes_source_time_image
         assert len(roles.calls) == 3
         roles.scene_updates, roles.actions = [], []
         monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", 'Lina: "Continue."')
-        for _ in range(5):
+        for _ in range(40):
             events = [
                 chunk
                 async for chunk in GameTurnManager(db, state.session_id, user).process_turn(
@@ -109,5 +111,5 @@ async def test_saved_scene_state_survives_dialogue_and_freezes_source_time_image
         assert read(state.entity_states).records[process.id] == process
         assert "Fire burns in the fireplace" in json.dumps(roles.prompts[-1], default=str)
         assert TEXT not in json.dumps(roles.prompts[-1], default=str)
-        assert len(roles.calls) == 18  # Existing three calls per turn; no new summarizer.
+        assert len(roles.calls) == 123  # Existing three calls per turn; no new summarizer.
         assert registry_of(state.entity_states)["snapshots"][reply.id] == first_snapshot
