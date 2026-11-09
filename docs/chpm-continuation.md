@@ -55,6 +55,12 @@ budget. It is used only after a known rejection; it is not a transport retry.
 Normal router admission and uncertain-request protection still apply. A server
 that cannot produce any usable response cannot be made available by this policy.
 
+The ordinary reply uses the router's non-streaming history-aware request. It keeps
+the existing conversation and replaces the current CHPM-intention message with
+the confirmed host context and recovery instructions. The rejected candidate is
+not appended to that history. Router integration tests mock the completion
+transport while exercising the real method signature and request construction.
+
 ## What is remembered
 
 Simplified RP is saved in the ordinary conversation history. The last confirmed

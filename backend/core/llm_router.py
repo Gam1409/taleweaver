@@ -987,19 +987,19 @@ class GameMasterLLM:
         user_prompt: str,
         model: str,
         *,
+        messages: Optional[list[dict[str, Any]]] = None,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> str:
-        """
-        Async version of execute_simple_task.
-        """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        """Run a narrative task with supplied history or a system/user pair."""
+        if messages is None:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
 
         normalized_model = self._normalize_model(model)
 
