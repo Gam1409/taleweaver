@@ -42,6 +42,7 @@ def refresh_visual_snapshot(state: SessionState, message: ChatMessage) -> None:
         person.pop("posture", None)
         person.pop("placement", None)
     facts.pop("props", None)
+    facts.pop("explicit", None)
     facts.pop("visible_action", None)
     facts.pop("visible_actions", None)
     facts.pop("scene_facts", None)

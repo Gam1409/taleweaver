@@ -46,3 +46,18 @@ causal projections, diagnostics and structured technical model requests.
   staging, simplified RP and narration regeneration.
 - Filter causal pointers against the final bounded audience projection. Omitted,
   stale and needs-confirmation causes cannot remain confirmed causal links.
+
+## Wave 3b: independent source lifecycle
+
+- Source retraction and partial history copies unconfirm only the actors whose
+  pose sources are missing. Other source-backed poses retain their own bindings.
+- Replacing a narration removes its message-local acts from the frozen visual
+  snapshot, while keeping already committed clothing appearance intact.
+
+## Owner clarification: debug deletion is turn undo
+
+Deleting story text must also undo the turn's consequences. Use the existing
+latest-turn snapshot for the last completed turn; use Chronicles checkpoints for
+older history. Refuse deletion when no safe snapshot exists. Do not introduce an
+additional 20-turn snapshot archive. A text-only deletion that keeps consequences
+is not the selected behavior.
