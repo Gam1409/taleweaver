@@ -103,3 +103,14 @@ is not the selected behavior.
 - Record witnessed process changes through the existing world-event mechanism.
   Missing visibility is unavailable, not an inferred ending; changing rooms does
   not establish that a process in the previous room stopped.
+
+## Wave 7: state-only background snapshots
+
+- The existing snapshot endpoint can omit transcript loading and serialization.
+  Periodic and explicit state refreshes use that option, retaining the displayed
+  transcript. Initial loads, stream recovery, agent reload and undo still request
+  complete history.
+- Mark partial responses explicitly and reject one when a full load was requested.
+  Keep session authorization, busy-session read-only behavior, request ownership,
+  cancellation and the full-body deadline intact. No history cursor or parallel
+  history store is introduced for data the background consumer never used.

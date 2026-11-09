@@ -15,8 +15,9 @@ export function snapshotErrorMessage(error: unknown): string {
   return error instanceof SessionSnapshotError ? error.message : unavailable
 }
 
-async function read(gameId: string, signal: AbortSignal): Promise<Record<string, unknown>> {
-  const response = await apiFetch(`/adventures/${encodeURIComponent(gameId)}/chat`, {
+async function read(gameId: string, signal: AbortSignal, includeMessages: boolean): Promise<Record<string, unknown>> {
+  const suffix = includeMessages ? '' : '?include_messages=false'
+  const response = await apiFetch(`/adventures/${encodeURIComponent(gameId)}/chat${suffix}`, {
     signal,
     timeoutMs: null
   })
@@ -27,13 +28,17 @@ async function read(gameId: string, signal: AbortSignal): Promise<Record<string,
       'The server returned unreadable session data. Try again or check the server logs.'
     )
   }
+  if (includeMessages && 'history_included' in data && data.history_included === false) {
+    throw new SessionSnapshotError('The server returned state without the requested history. Reload the session.')
+  }
   return data as Record<string, unknown>
 }
 
 /** The read-only deadline includes both HTTP headers and the entire JSON body. */
 export async function readSessionSnapshot(
   gameId: string,
-  parent?: AbortSignal
+  parent?: AbortSignal,
+  options: { includeMessages?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   if (parent?.aborted) throw new DOMException('Session load cancelled', 'AbortError')
   const controller = new AbortController()
@@ -58,7 +63,7 @@ export async function readSessionSnapshot(
     controller.abort()
   }, 15_000)
   try {
-    return await Promise.race([read(gameId, controller.signal), interrupted])
+    return await Promise.race([read(gameId, controller.signal, options.includeMessages ?? true), interrupted])
   } catch (error) {
     if (
       error instanceof SessionSnapshotError ||

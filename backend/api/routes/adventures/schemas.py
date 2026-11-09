@@ -591,6 +591,7 @@ class ChatResponse(BaseModel):
     system_debug_enabled: bool = False
     language: str = "English"
     messages: list[dict[str, Any]]
+    history_included: bool = True
     sheet: dict[str, Any]
     combat: Optional[dict[str, Any]] = None
     map_data: Optional[dict[str, Any]] = None

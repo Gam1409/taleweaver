@@ -278,11 +278,11 @@ export function useGameSocket(): UseGameSocket {
     return headers
   }
 
-  async function fetchSessionSnapshot(gameId: string, signal?: AbortSignal, strict = false): Promise<any | null> {
+  async function fetchSessionSnapshot(gameId: string, options: { signal?: AbortSignal; strict?: boolean; includeMessages?: boolean } = {}): Promise<any | null> {
     try {
-      return await readSessionSnapshot(gameId, signal)
+      return await readSessionSnapshot(gameId, options.signal, { includeMessages: options.includeMessages })
     } catch (error) {
-      if (strict) throw error
+      if (options.strict) throw error
       return null
     }
   }
@@ -291,7 +291,7 @@ export function useGameSocket(): UseGameSocket {
     if (!currentGameId) return
     const gameId = currentGameId
     const revision = snapshotRevision
-    const data = await fetchSessionSnapshot(gameId)
+    const data = await fetchSessionSnapshot(gameId, { includeMessages: false })
     if (data && currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
       applySessionSnapshot(data, false)
     }
@@ -305,7 +305,7 @@ export function useGameSocket(): UseGameSocket {
       systemDebugEnabled.value = data.system_debug_enabled
     }
 
-    if (updateMessages && Array.isArray(data.messages)) {
+    if (updateMessages && data.history_included !== false && Array.isArray(data.messages)) {
       messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date() }))
     }
 
@@ -374,7 +374,7 @@ export function useGameSocket(): UseGameSocket {
     if (!currentGameId || status.value === 'disconnected' || status.value === 'connecting' || status.value === 'loading') return
     const gameId = currentGameId
     const revision = snapshotRevision
-    const snapshot = await fetchSessionSnapshot(gameId, signal)
+    const snapshot = await fetchSessionSnapshot(gameId, { signal, includeMessages: false })
     if (!signal.aborted && currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
       applySessionSnapshot(snapshot, false)
     }
@@ -406,7 +406,7 @@ export function useGameSocket(): UseGameSocket {
     stopSyncTimer()
     
     try {
-      const data = await fetchSessionSnapshot(gameId, controller.signal, true)
+      const data = await fetchSessionSnapshot(gameId, { signal: controller.signal, strict: true })
       if (currentGameId !== gameId || revision !== snapshotRevision) return
       if (data) {
         language.value = data.language || 'English'
@@ -622,7 +622,7 @@ export function useGameSocket(): UseGameSocket {
       const recoveryTimeout = window.setTimeout(() => recovery.abort(), 15_000)
       let snapshot: any = null
       try {
-        snapshot = await fetchSessionSnapshot(gameId, recovery.signal)
+        snapshot = await fetchSessionSnapshot(gameId, { signal: recovery.signal })
       } finally {
         window.clearTimeout(recoveryTimeout)
       }
@@ -768,7 +768,7 @@ export function useGameSocket(): UseGameSocket {
 
       if (!ownsRequest()) return
       if (receivedFinalEvent && !receivedErrorEvent) {
-        const snapshot = await fetchSessionSnapshot(gameId, controller.signal)
+        const snapshot = await fetchSessionSnapshot(gameId, { signal: controller.signal })
         if (!ownsRequest()) return
         const confirmedAction = !requiresActionReceipt || !snapshot ||
           (savedUserMessageId
@@ -966,7 +966,7 @@ export function useGameSocket(): UseGameSocket {
 
       if (!ownsRequest()) return false
       if (receivedFinalEvent) {
-        const snapshot = await fetchSessionSnapshot(gameId, controller.signal)
+        const snapshot = await fetchSessionSnapshot(gameId, { signal: controller.signal })
         if (!ownsRequest()) return false
         if (snapshot) {
           applySessionSnapshot(snapshot, true)
@@ -1063,7 +1063,7 @@ export function useGameSocket(): UseGameSocket {
       const result = await response.json()
       if (!ownsRequest()) return
       if (!result || typeof result !== 'object' || result.status !== 'undone') throw new Error('The server did not confirm undoing the turn. Refresh the session before retrying.')
-      const snapshot = await fetchSessionSnapshot(gameId, undefined, true)
+      const snapshot = await fetchSessionSnapshot(gameId, { strict: true })
       if (!ownsRequest()) return
       if (!snapshot) throw new Error('The turn was undone, but its restored state could not be loaded. Refresh the session.')
       failedTurnDrafts.clear()

@@ -145,6 +145,7 @@ async def get_session_debug(
 async def get_chat_history(
     game_id: str,
     include_full_world: bool = Query(False),
+    include_messages: bool = Query(True),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
@@ -178,7 +179,7 @@ async def get_chat_history(
     )
     if not read_only:
         await apply_pending_sequence_progress(db, state, adventure, avatar)
-    history = await load_chat_history(db, state.session_id)
+    history = await load_chat_history(db, state.session_id) if include_messages else []
     schedule_npc_journal(state.session_id, current_user.id)
     from backend.engine.memory_rag.worker import schedule as schedule_memory
 
@@ -191,6 +192,7 @@ async def get_chat_history(
         system_debug_enabled=diagnostic_service.enabled,
         language=language,
         messages=history,
+        history_included=include_messages,
         sheet=await AdventureLogic.build_sheet_snapshot(avatar, state, db),
         combat=AdventureLogic.get_combat_snapshot(state),
         map_data=map_dict,
