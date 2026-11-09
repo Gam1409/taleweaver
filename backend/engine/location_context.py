@@ -147,6 +147,8 @@ def _describe_object(e: Any, detail: str) -> str:
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     item_type = str(e.item_type or "DEFAULT").upper()
     type_str = f" [Type: {item_type}]"
+    notes = getattr(e, "notes", None)
+    status_str = f" [Current notes: {notes}]" if notes else ""
 
     extra = ""
     if item_type == "SWITCH":
@@ -160,9 +162,9 @@ def _describe_object(e: Any, detail: str) -> str:
         extra = f' [Format: {fmt}] [Readable text content: "{content}"]'
 
     if detail == "concise":
-        return f"{e.name} (ID: {e.id}){type_str}{pos_str}{hidden_str}{extra}"
+        return f"{e.name} (ID: {e.id}){type_str}{pos_str}{hidden_str}{extra}{status_str}"
     desc_str = f" - Description: {e.description}" if e.description else ""
-    return f"- {e.name} (ID: {e.id}):{type_str}{desc_str}{pos_str}{hidden_str}{extra}"
+    return f"- {e.name} (ID: {e.id}):{type_str}{desc_str}{pos_str}{hidden_str}{extra}{status_str}"
 
 
 def _describe_exits(exits: Sequence[Any], detail: str) -> str:

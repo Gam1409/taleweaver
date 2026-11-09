@@ -149,7 +149,9 @@ def _props(items: list) -> list[Atom]:
                 path,
                 subject,
                 "prop",
-                item.get("name") or "",
+                {key: item[key] for key in ("name", "description") if item.get(key)}
+                if item.get("description")
+                else item.get("name") or "",
                 target=str(item.get("owner_id") or ""),
             )
         )

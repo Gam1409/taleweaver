@@ -17,6 +17,7 @@ from backend.engine.scene_staging import props
 from backend.engine.scene_staging.provenance import stamp
 from backend.engine.scene_staging.state import digest, project, registry
 from backend.engine.visual_novel.config import read_settings
+from backend.engine.visual_novel.environment import room_objects
 from backend.models.world_entity import WorldScene
 
 
@@ -127,7 +128,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
             # Frozen explicit atoms are checked at render time only; narration
             # prompts never receive them.
             facts["explicit"] = deepcopy(saved.get("explicit") or [])
-    facts["props"] = props.project(
+    facts["props"] = room_objects(entities, scene) + props.project(
         manager.state,
         props.candidates(
             manager.avatar,

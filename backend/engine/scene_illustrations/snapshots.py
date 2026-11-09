@@ -45,8 +45,8 @@ def _visible_facts(value: dict | None) -> dict:
     }
     result["props"] = [
         {
-            key: str(item[key])[:200]
-            for key in ("item_id", "owner_id", "name", "spatial_position")
+            key: str(item[key])[: 1000 if key == "description" else 200]
+            for key in ("item_id", "owner_id", "name", "spatial_position", "description")
             if key in item
         }
         for item in (facts.get("props") or [])[:24]
