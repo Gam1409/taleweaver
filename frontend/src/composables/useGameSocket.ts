@@ -1056,7 +1056,7 @@ export function useGameSocket(): UseGameSocket {
       })
       if (!ownsRequest()) return
       if (!response.ok) {
-        requiresReload = false
+        requiresReload = response.status >= 500
         const error = await response.json().catch(() => ({}))
         throw new Error(typeof error.detail === 'string' ? error.detail : 'Could not undo this turn. Use a Chronicles checkpoint.')
       }

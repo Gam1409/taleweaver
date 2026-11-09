@@ -85,3 +85,15 @@ test('a failed reload after undo locks stale state and exposes the session recov
   await f.game.sendMessage('Continue from the old world.')
   assert.equal(f.requests.length, count)
 })
+
+test('a server failure during undo leaves its outcome uncertain and requires recovery', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response(JSON.stringify({ detail: 'Server unavailable.' }), { status: 503 }))
+  await f.game.deleteMessage('reply')
+  assert.equal(f.game.status.value, 'error')
+  assert.equal(f.game.inputLocked.value, true)
+  assert.match(f.game.sessionLoadError.value, /Reload the session/)
+  const count = f.requests.length
+  await f.game.sendMessage('Continue from the old world.')
+  assert.equal(f.requests.length, count)
+})

@@ -197,6 +197,11 @@ ENUMS["inference_reason"] = {
 }
 
 ENUMS["purpose"] = {
+    "wardrobe_recovery",
+    "item_repair",
+    "living_world_decision",
+    "living_world_dialogue_choice",
+    "chpm_evaluation",
     "narrated_items",
     "scene_staging",
     "rp_continuation",
@@ -218,6 +223,12 @@ ENUMS["purpose"] = {
     "memory_summary",
 }
 ENUMS["phase"] = {
+    "preview",
+    "schema_retry",
+    "evidence_retry",
+    "agent_lookup",
+    "repair",
+    "rp_continuation",
     "reconciliation",
     "proposal",
     "proposal_repair",

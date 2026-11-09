@@ -16,7 +16,7 @@ Passing regression tests establishes host contracts, not model reasoning quality
   Final agent history reload keeps input locked until it finishes.
 - Reuse the frontend lifecycle harness across chat and ownership regressions.
 
-The original review's remaining work covers independent scene-delta validation,
+The original review also covers independent scene-delta validation,
 clothing/provenance contracts, NPC host facts, source retraction, history polling,
 causal projections, diagnostics and structured technical model requests.
 
@@ -158,6 +158,20 @@ is not the selected behavior.
 - Update the older item-denial integration test to verify the intentional Wave 8
   behavior: retain the item refusal while exactly one shared extraction checks
   unrelated state. General rules denials still skip the shared request.
+
+## Wave 11: failure-path review follow-ups
+
+- Treat an undo HTTP 5xx as an unknown mutation outcome. Preserve the displayed
+  world, lock input and require authoritative session recovery. An explicit 4xx
+  refusal still leaves the previous usable state available.
+- Retain fixed metadata labels for wardrobe preview/schema/evidence retries,
+  item repair, NPC lookup/narration repair, simplified continuation and Living
+  World decisions. Arbitrary strings, story content and credentials remain
+  excluded from the system diagnostic metadata.
+- Recheck producer contracts and source ownership separately from the lifecycle
+  review: cancellation, stale responses, regeneration, undo, session transfers,
+  item/pose provenance and import/copy paths. Semantic extraction accuracy still
+  requires a future live test; offline coverage is not a model-quality claim.
 
 ## Open illustration consistency decision
 
