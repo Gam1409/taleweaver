@@ -83,11 +83,12 @@ async def test_deepseek_fallback_injects_schema(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_deepseek_fallback_suppresses_thinking_for_structured_json(monkeypatch):
-    """DeepSeek JSON fallback should not send thinking params that can consume the reply channel."""
+@pytest.mark.parametrize("thinking", [False, True])
+async def test_deepseek_json_honors_thinking_without_expanding_output_budget(monkeypatch, thinking):
+    """The explicit mode survives JSON fallback without an unsupported thinking budget."""
     user = _make_user(
         llm_settings={
-            "small_enable_thinking": True,
+            "small_enable_thinking": thinking,
             "small_max_tokens": 100,
             "small_max_thinking_tokens": 50,
         },
@@ -122,14 +123,16 @@ async def test_deepseek_fallback_suppresses_thinking_for_structured_json(monkeyp
 
     monkeypatch.setattr("backend.core.llm_router.litellm.acompletion", fake_acompletion)
 
-    await router.aexecute_complex_task(
+    result = await router.aexecute_complex_task(
         system_prompt="Base sys",
         user_prompt="prompt",
         response_model=MockSchema,
         model="deepseek-v4-flash",
     )
 
-    assert "thinking" not in captured
+    assert result == MockSchema(name="Deep", age=1)
+    assert captured["thinking"] == {"type": "enabled" if thinking else "disabled"}
+    assert captured["response_format"] == {"type": "json_object"}
     assert captured["max_tokens"] == 100
 
 

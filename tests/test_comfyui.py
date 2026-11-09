@@ -437,7 +437,11 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
     assert dimensions == expected_dimensions
     if use_presets:
         assert llm.aexecute_simple_task.await_count == 5
-        assert [g["text"]["inputs"]["text"] for g in graphs] == [
+        from tests.item_image_fixture import ITEM_CARD_COMPOSITION
+
+        expected_prompts = [
             f"{role}_trigger Visual facts"
             for role in ("advanced", "advanced", "simple", "advanced", "simple")
         ]
+        expected_prompts[-1] += f" {ITEM_CARD_COMPOSITION}"
+        assert [g["text"]["inputs"]["text"] for g in graphs] == expected_prompts

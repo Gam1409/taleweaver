@@ -22,6 +22,7 @@ from backend.engine.image_prompt_adapter import (
 )
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
+from tests.item_image_fixture import ITEM_CARD_COMPOSITION
 from tests.test_comfyui import fake_comfy
 from tests.test_comfyui_output import png_bytes
 
@@ -57,7 +58,9 @@ async def test_starters_render_asset_dimensions_without_manual_inputs(
     assert tuple(graph["latent"]["inputs"][key] for key in ("width", "height")) == expected
     assert graph["sampler"]["inputs"]["seed"] == 123
     binding = workflow.bindings["prompt"]
-    assert graph[binding.node_id]["inputs"][binding.input_name] == 'A lantern. "海"'
+    prompt = 'A lantern. "海"'
+    expected_prompt = f"{prompt} {ITEM_CARD_COMPOSITION}" if target == "object" else prompt
+    assert graph[binding.node_id]["inputs"][binding.input_name] == expected_prompt
     assert graph["sampler"]["inputs"]["cfg"] == FAMILIES[family]["cfg"]
     assert options == original
 
