@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from 'vue'
-import { RotateCcw } from 'lucide-vue-next'
+import { RotateCcw, Undo2 } from 'lucide-vue-next'
 import { apiFetch } from '@/services/http'
 import { useGameSocket } from '@/composables/useGameSocket'
 import RegenerateMessageButton from './RegenerateMessageButton.vue'
@@ -11,6 +11,8 @@ const socket = useGameSocket()
 const latest = computed(() => [...socket.messages.value].reverse().find(isStoryMessage))
 const busy = computed(() => props.disabled || socket.inputLocked.value || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
 const available = ref(false)
+const undoBusy = computed(() => props.disabled || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
+const canUndo = computed(() => !!socket.sheet.value?.debug_mode && available.value && !undoBusy.value)
 const checking = ref(false)
 const checkFailed = ref(false)
 const reason = ref('Checking whether this turn can be regenerated…')
@@ -50,6 +52,11 @@ async function replay() {
   const user = [...socket.messages.value].reverse().find(m => m.role === 'user' && isStoryMessage(m))
   if (user) await socket.sendMessage(user.content, true, id)
 }
+async function undo() {
+  if (!canUndo.value || !latest.value?.id) return
+  if (!window.confirm('Undo the entire last turn? This removes your action, its reply and all consequences, and restores characters, clothing, items, locations and game time.')) return
+  await socket.deleteMessage(latest.value.id)
+}
 </script>
 
 <template>
@@ -60,6 +67,11 @@ async function replay() {
       :class="compact ? 'rounded-xl border-slate-700/80 bg-slate-900/90 px-3 py-1.5 font-bold hover:border-amber-400' : 'rounded-lg border-slate-600 px-3 py-2'"
       @click="replay">
       <RotateCcw :size="15" /> <span :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Regenerate' : 'Regenerate turn' }}</span>
+    </button>
+    <button v-if="socket.sheet.value?.debug_mode" type="button" :disabled="!canUndo" :title="available ? 'Undo the whole last turn and its consequences.' : 'Use a Chronicles checkpoint for older turns.'"
+      class="flex shrink-0 items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-200 disabled:opacity-40 disabled:cursor-not-allowed"
+      @click="undo">
+      <Undo2 :size="15" /> Undo turn
     </button>
     <span v-if="!compact && !available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
     <button v-if="checkFailed" type="button" :disabled="busy || checking"

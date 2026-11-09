@@ -21,16 +21,20 @@ from backend.engine.adventure_updates import is_legacy_session
 from backend.engine.chpm.lifecycle import fork as fork_chpm
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.memory_rag.dirty_queue import queue_refresh
 from backend.engine.memory_rag.lifecycle import (
     copy_session_summaries,
     memory_snapshot,
     purge_session_memory,
     restore_memory,
 )
+from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal.messages import copy_messages
 from backend.engine.physical_conditions.ledger import remap as remap_conditions
 from backend.engine.session_checkpoint_service import SessionCheckpointService
 from backend.engine.session_importer import SessionImporter
+from backend.engine.turn_replay.service import ReplayUnavailableError
+from backend.engine.turn_replay.undo import undo_latest
 from backend.engine.visual_novel.lifecycle import copy_vn_state
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -792,7 +796,7 @@ async def delete_chat_message(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Deletes a single chat message from the session history in debug mode."""
+    """Undo the complete latest turn; older history requires a checkpoint."""
     session_res = await db.execute(
         select(GameSession).where(
             (GameSession.id == game_id) & (GameSession.user_id == current_user.id)
@@ -817,9 +821,20 @@ async def delete_chat_message(
     if not message:
         raise HTTPException(status_code=404, detail="Message not found.")
 
-    await db.delete(message)
-    await db.commit()
-    return {"status": "deleted", "message_id": message_id}
+    user_id = current_user.id
+    try:
+        async with scheduler.foreground():
+            count = await undo_latest(db, game_session, message_id)
+            await db.commit()
+    except ReplayUnavailableError as exc:
+        await db.rollback()
+        raise HTTPException(409, str(exc)) from None
+    except (ValueError, KeyError, TypeError):
+        logger.exception("Turn undo snapshot is invalid for session %s", game_id)
+        await db.rollback()
+        raise HTTPException(409, "The turn snapshot needs repair. Nothing was deleted.") from None
+    queue_refresh(game_id, user_id)
+    return {"status": "undone", "message_id": message_id, "deleted_messages": count}
 
 
 @router.get("/sessions/{game_id}/integrity/items", status_code=200)

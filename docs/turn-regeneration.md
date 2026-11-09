@@ -20,3 +20,18 @@ Before rewinding, the completed result is saved as a recovery backup. Errors, in
 Memory-index epochs advance when restoring state so old embedding jobs cannot publish into the new epoch. Restored journal jobs are returned to the queue. Snapshots are internal recovery records, not part of exported adventures.
 
 The application uses its existing single-worker session lease and foreground scheduler. Running multiple backend workers requires shared concurrency control before enabling this operation across workers.
+
+## Undo in debug mode
+
+**Undo turn** removes the latest supported player action, its response and all
+consequences through the same pre-turn snapshot. It restores clothing, items,
+character state, location and game time together. Debug visibility remains on;
+the Play-Agent remains stopped after the manual rewind. The client reloads the
+authoritative state before accepting another action, without automatically
+generating a replacement opening when history becomes empty.
+
+Older turns require restoring an existing **Chronicles** checkpoint from before
+the desired turn; that restores the checkpoint and discards its later branch.
+If no safe snapshot exists, deletion is refused and the current branch is kept.
+Undo consumes the latest-turn snapshot. Play a new supported turn to capture a
+new one; there is no additional archive of turn snapshots.

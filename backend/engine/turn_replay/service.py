@@ -110,16 +110,10 @@ async def mark_committed(manager: Any, message: ChatMessage) -> None:
     row.assistant_id, row.status, row.backup = message.id, "ready", None
 
 
-async def begin(manager: Any, message_id: str) -> str:
-    db: AsyncSession = manager.db
-    sid: str = manager.game_id
-    session = await db.get(GameSession, sid)
-    if session is None or session.user_id != manager.user.id:
-        raise ReplayUnavailableError("Session not found.")
-    if session.status not in {"active", "completed", "game_over"}:
-        raise ReplayUnavailableError("This session cannot replay a turn.")
-    row = await db.get(TurnReplay, sid, populate_existing=True)
-    message = await latest(db, sid)
+async def ready_snapshot(db: AsyncSession, session_id: str, message_id: str) -> TurnReplay:
+    """Validate the exact latest completed response before a rewind or undo."""
+    row = await db.get(TurnReplay, session_id, populate_existing=True)
+    message = await latest(db, session_id)
     if (
         row is None
         or row.status != "ready"
@@ -130,6 +124,18 @@ async def begin(manager: Any, message_id: str) -> str:
         raise ReplayUnavailableError(
             "A pre-turn snapshot is not available for this response. Play a new turn first."
         )
+    return row
+
+
+async def begin(manager: Any, message_id: str) -> str:
+    db: AsyncSession = manager.db
+    sid: str = manager.game_id
+    session = await db.get(GameSession, sid)
+    if session is None or session.user_id != manager.user.id:
+        raise ReplayUnavailableError("Session not found.")
+    if session.status not in {"active", "completed", "game_over"}:
+        raise ReplayUnavailableError("This session cannot replay a turn.")
+    row = await ready_snapshot(db, sid, message_id)
     backup = await capture(db, sid, boundary=row.before["boundary"], backup=True)
     # Debug visibility is a current UI preference, not a consequence to rewind.
     before = {

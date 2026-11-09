@@ -1038,22 +1038,57 @@ export function useGameSocket(): UseGameSocket {
   }
 
   async function deleteMessage(messageId: string): Promise<void> {
-    if (!currentGameId || !messageId) return
+    if (!currentGameId || !messageId || ['loading', 'connecting'].includes(status.value)) return
+    const gameId = currentGameId
+    const revision = ++snapshotRevision
+    const previousStatus = status.value
+    const ownsRequest = () => currentGameId === gameId && snapshotRevision === revision
+    let restored = false
+    let requiresReload = true
+    snapshotPoller.interrupt()
+    status.value = 'loading'
+    statusText.value = 'Undoing the last turn...'
     try {
-      const res = await apiFetch(`/adventures/sessions/${currentGameId}/messages/${messageId}`, { timeoutMs: 60_000,
+      const response = await apiFetch(`/adventures/sessions/${encodeURIComponent(gameId)}/messages/${encodeURIComponent(messageId)}`, {
+        timeoutMs: 60_000,
         method: 'DELETE',
-        headers: authHeaders(false)
+        headers: authHeaders(false),
       })
-      if (res.ok) {
-        messages.value = messages.value.filter(m => (m as any).id !== messageId)
-        addNotification('Message deleted.', 'success')
-      } else {
-        const errData = await res.json().catch(() => ({}))
-        addNotification(errData.detail || 'Failed to delete message.', 'error')
+      if (!ownsRequest()) return
+      if (!response.ok) {
+        requiresReload = false
+        const error = await response.json().catch(() => ({}))
+        throw new Error(typeof error.detail === 'string' ? error.detail : 'Could not undo this turn. Use a Chronicles checkpoint.')
       }
-    } catch (err) {
-      console.error('[Session] Delete message error:', err)
-      addNotification('Failed to delete message.', 'error')
+      const result = await response.json()
+      if (!ownsRequest()) return
+      if (!result || typeof result !== 'object' || result.status !== 'undone') throw new Error('The server did not confirm undoing the turn. Refresh the session before retrying.')
+      const snapshot = await fetchSessionSnapshot(gameId, undefined, true)
+      if (!ownsRequest()) return
+      if (!snapshot) throw new Error('The turn was undone, but its restored state could not be loaded. Refresh the session.')
+      failedTurnDrafts.clear()
+      turnError.value = null
+      sessionLoadError.value = null
+      lastUserAction.value = ''
+      applySessionSnapshot(snapshot, true)
+      restored = true
+      startSyncTimer()
+      addNotification('Turn undone. Its action and consequences were restored to the previous state.', 'success')
+    } catch (error) {
+      if (ownsRequest()) {
+        const detail = error instanceof Error ? error.message : 'Could not undo the turn.'
+        if (requiresReload) {
+          stopSyncTimer()
+          inputLocked.value = true
+          sessionLoadError.value = `${detail} Reload the session before continuing.`
+        }
+        addNotification(detail, 'error')
+      }
+    } finally {
+      if (ownsRequest()) {
+        if (!restored) status.value = requiresReload ? 'error' : previousStatus
+        statusText.value = ''
+      }
     }
   }
 

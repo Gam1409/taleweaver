@@ -1,8 +1,9 @@
 # Session integrity review repairs
 
 The review baseline is `0eb76d04`. Changes are delivered in separately verified
-waves. Model responses in regression tests are mocked; live Pods are offline.
-Passing these tests establishes host contracts, not model reasoning quality.
+waves. Model responses in regression tests are mocked. Separate live benchmarks
+use synthetic data and keep their private endpoints and artifacts out of Git.
+Passing regression tests establishes host contracts, not model reasoning quality.
 
 ## Wave 1: narration and foreground ownership
 
@@ -61,3 +62,16 @@ latest-turn snapshot for the last completed turn; use Chronicles checkpoints for
 older history. Refuse deletion when no safe snapshot exists. Do not introduce an
 additional 20-turn snapshot archive. A text-only deletion that keeps consequences
 is not the selected behavior.
+
+## Wave 4: debug undo through the existing snapshot owner
+
+- Replace arbitrary message deletion with atomic rollback of the latest complete
+  turn. Ownership, debug access and the session writer lease remain mandatory.
+- Reuse full-turn snapshot restoration for character identity and goals, clothing,
+  item ownership, poses, locations, health, journals and the game clock. Preserve
+  current debug visibility, stop the Play-Agent and invalidate late memory jobs.
+- Refuse older or unavailable snapshots with the Chronicles checkpoint path.
+  Invalid snapshots roll back the whole transaction, including prior SQL deletes.
+- Confirm the destructive action and reload the authoritative session before
+  unlocking input. Navigation fences old responses; an unconfirmed network
+  outcome requires session recovery before another action.
