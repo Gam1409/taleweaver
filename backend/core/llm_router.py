@@ -836,12 +836,10 @@ class GameMasterLLM:
 
     def _apply_thinking_settings(self, kwargs: dict) -> None:
         """Inject thinking parameters based on user settings and provider."""
-        # MiniMax defaults to thinking-on server-side, so we must explicitly opt-out
-        # when the user has not enabled thinking in their settings.
-        if self.provider == "minimax":
-            kwargs["thinking"] = (
-                {"type": "adaptive"} if self.enable_thinking else {"type": "disabled"}
-            )
+        # These providers default to thinking-on; omission does not disable it.
+        if self.provider in {"minimax", "deepseek"}:
+            enabled_type = "adaptive" if self.provider == "minimax" else "enabled"
+            kwargs["thinking"] = {"type": enabled_type if self.enable_thinking else "disabled"}
             return
 
         if not self.enable_thinking:
@@ -1154,7 +1152,7 @@ class GameMasterLLM:
             response_format = structured_response_format(self, response_model)
         if response_format is not None:
             kwargs["response_format"] = response_format
-        if not json_mode:
+        if not json_mode or self.provider == "deepseek":
             self._apply_thinking_settings(kwargs)
         self._apply_provider_options(kwargs, model)
         self._apply_openrouter_provider_routing(kwargs)
