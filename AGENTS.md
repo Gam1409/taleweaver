@@ -50,6 +50,26 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
    - Keep each behavior change in a coherent commit. The CHPM pilot has already
      been integrated; do not rewrite published history to follow obsolete hashes.
 
+6. **Existing Functionality Before Design (Owner Requirement)**:
+   - Before choosing a design or implementing a behavior change, complete a search
+     of the relevant existing code, documentation, tests and runtime call sites.
+     Include optional/disabled features, fallback paths and recently added code,
+     including code written by the current agent.
+   - Trace where the required facts are produced, stored, updated, validated and
+     consumed. Check configuration gates and lifecycle paths such as failure,
+     retry, regeneration, copy/import and replay. Distinguish missing functionality
+     from an existing capability whose integration is incomplete or broken.
+   - Make the implementation decision only after that investigation: reuse an
+     existing capability, repair its integration, extend its current owner, or add
+     a component for a demonstrated gap. State the evidence and why an extension
+     would or would not cover the requirement.
+   - Preserve existing sources of truth, identifiers, schemas, provenance,
+     visibility rules, game clocks and transaction boundaries. Do not introduce
+     parallel state stores, extraction requests or prompt layers for behavior
+     already owned by another mechanism without demonstrating the need.
+   - Prefer the smallest coherent change that satisfies the requirement. A new
+     framework, service or registry is not the default solution.
+
 ---
 
 ## 1. Portable project references
