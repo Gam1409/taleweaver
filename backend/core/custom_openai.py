@@ -191,7 +191,9 @@ async def _stream(router: Any, kwargs: dict) -> Any:
             await stream.aclose()
 
 
-def structured_response_format(router: Any, response_model: type[BaseModel]) -> dict | None:
+def structured_response_format(
+    router: Any, response_model: type[BaseModel], *, schema: dict | None = None
+) -> dict | None:
     """Use only the structured-output capability explicitly selected by the administrator."""
     mode = router.custom_response_format
     if mode == "json_object":
@@ -201,7 +203,7 @@ def structured_response_format(router: Any, response_model: type[BaseModel]) -> 
             "type": "json_schema",
             "json_schema": {
                 "name": response_model.__name__,
-                "schema": response_model.model_json_schema(),
+                "schema": schema if schema is not None else response_model.model_json_schema(),
             },
         }
     return None

@@ -78,6 +78,18 @@ def model_for(manager: Any, role: str, router: Any) -> Any:
     return factory(role) if callable(factory) else router.for_role(manager.user, role)
 
 
+def transport_options(router: Any, schema: type[BaseModel], identifiers: dict | None) -> dict:
+    """Honor the custom connection's existing explicit structured-output capability."""
+    if getattr(router, "provider", None) != "custom_openai":
+        return {}
+    from backend.core.custom_openai import structured_response_format
+
+    selected = structured_response_format(
+        router, schema, schema=json_contract.response_schema(schema, identifiers)
+    )
+    return {"response_format": selected} if selected is not None else {}
+
+
 async def request(
     manager: Any,
     settings: Settings,
@@ -105,6 +117,7 @@ async def request(
                     game_id=manager.game_id,
                     operation="chpm",
                     phase=phase,
+                    **transport_options(llm, schema, identifiers),
                 ),
                 timeout=float(llm.request_timeout),
             )

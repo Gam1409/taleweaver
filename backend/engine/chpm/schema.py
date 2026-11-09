@@ -45,6 +45,9 @@ class Settings(Contract):
         return self
 
 
+MAX_OBSERVED_CHARS = 6000
+
+
 class Observation(Contract):
     session_id: str
     message_id: str
@@ -57,7 +60,7 @@ class Observation(Contract):
     source_scene_id: str | None = None
     minute: int = Field(ge=0)
     # This is an unverified request, never a world fact or a belief update.
-    player_request: str = Field(max_length=6000)
+    player_request: str = Field(max_length=MAX_OBSERVED_CHARS)
     perception_uncertain: bool = False
     perception_kinds: list[str] = Field(default_factory=list, max_length=32)
 

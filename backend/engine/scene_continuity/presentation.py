@@ -35,7 +35,6 @@ def project(
         if row.scene_id == state.current_scene_id
         and (include_private or _visible(row, actor_id, targets))
     ]
-    known = {row.id for row in rows if row.status != "unconfirmed"}
     result = []
     for row in sorted(
         rows, key=lambda row: (row.kind == "environment", -row.updated_minute, row.id)
@@ -60,15 +59,24 @@ def project(
             and minute >= row.review_at_minute
         ):
             item["status"] = "needs_confirmation"
-        if row.cause_id in known:
+        if row.cause_id:
             item["cause_id"] = row.cause_id
         result.append(item)
+    selected = _bounded_facts(result)
+    return {"status": "available", "facts": selected, "omitted": len(result) - len(selected)}
+
+
+def _bounded_facts(result: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     for item in result:
         if len(json.dumps([*selected, item], ensure_ascii=False)) > 10000:
             break
         selected.append(item)
-    return {"status": "available", "facts": selected, "omitted": len(result) - len(selected)}
+    known = {item["id"] for item in selected if item["status"] in {"active", "ended"}}
+    for item in selected:
+        if item.get("cause_id") not in known:
+            item.pop("cause_id", None)
+    return selected
 
 
 def _outdated_environment(row: Record, scene_description: str | None) -> bool:

@@ -32,3 +32,17 @@ causal projections, diagnostics and structured technical model requests.
   the same schema version and shape.
 - Diagnostics distinguish partial rejections from a fully unconfirmed frame and
   include schema-invalid pose proposals in both proposal/rejection totals.
+
+## Wave 3a: NPC request boundaries and technical diagnostics
+
+- Reuse the existing recoverable-analysis failure path when an accepted chat input
+  exceeds NPC perception's 6,000-character or 32-fragment limits. Continue mode
+  keeps the full player request for narration and preserves confirmed identity;
+  strict mode still stops. Invalid source ownership remains a hard failure.
+- Reuse the custom endpoint's saved structured-output selection for technical
+  CHPM calls. Prompt, JSON object and JSON schema modes are checked at the actual
+  mocked HTTP boundary, including dynamic allowed IDs. Narration stays freeform.
+- Allowlist content-free operation/phase metadata for shared state reconciliation,
+  staging, simplified RP and narration regeneration.
+- Filter causal pointers against the final bounded audience projection. Omitted,
+  stale and needs-confirmation causes cannot remain confirmed causal links.

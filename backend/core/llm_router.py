@@ -990,13 +990,14 @@ class GameMasterLLM:
         model: str,
         *,
         messages: Optional[list[dict[str, Any]]] = None,
+        response_format: dict[str, Any] | None = None,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> str:
-        """Run a narrative task with supplied history or a system/user pair."""
+        """Run a text task; technical callers may explicitly supply a response format."""
         if messages is None:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -1011,6 +1012,8 @@ class GameMasterLLM:
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
+        if response_format is not None:
+            kwargs["response_format"] = response_format
         self._apply_thinking_settings(kwargs)
 
         self._apply_provider_options(kwargs, model)

@@ -6,11 +6,11 @@ from typing import Literal
 from pydantic import Field
 
 from backend.engine.chpm import passages
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.schema import Contract, Perception
+from backend.engine.chpm.schema import MAX_OBSERVED_CHARS, Contract, Perception
 
 MAX_FRAGMENTS = 32
-MAX_OBSERVED_CHARS = 6000
 KINDS = Literal[
     "speech", "attempt", "action", "intention", "incidental", "private", "unobserved", "uncertain"
 ]
@@ -28,15 +28,17 @@ class Projection(Contract):
 
 
 def index(message: str) -> dict[str, str]:
-    if len(message) > MAX_OBSERVED_CHARS:
-        raise ChpmError("CHPM perception input exceeds 6000 characters; no fragments were dropped.")
+    if len(message.strip()) > MAX_OBSERVED_CHARS:
+        raise RecoverableChpmError(
+            f"CHPM perception input exceeds {MAX_OBSERVED_CHARS} characters; no fragments were dropped."
+        )
     # Isolate paired quotations before sentence splitting. This separates short
     # speech after a parenthetical thought without declaring all quotes public.
     pieces = re.split(r'("[^"\n]+"|«[^»\n]+»|“[^”\n]+”)', message)
     chunks = [chunk for piece in pieces for chunk in passages.index(piece).values()]
     result = {f"p{index}": chunk for index, chunk in enumerate(chunks)}
     if len(result) > MAX_FRAGMENTS:
-        raise ChpmError(
+        raise RecoverableChpmError(
             "CHPM perception needs more than 32 fragments; split this dense message. No fragments were dropped."
         )
     # The splitter may remove whitespace, never non-whitespace source content.

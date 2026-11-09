@@ -3,8 +3,9 @@
 from datetime import timezone
 from typing import Any
 
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError, digest
-from backend.engine.chpm.schema import Decision, MemoryEntry, Observation
+from backend.engine.chpm.schema import MAX_OBSERVED_CHARS, Decision, MemoryEntry, Observation
 from backend.engine.chpm.state import load
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
@@ -27,6 +28,10 @@ async def observation(manager: Any, _request: str) -> Observation:
     source = await manager.db.get(ChatMessage, manager._vn_player_message_id)
     if source is None or source.session_id != manager.game_id or source.role != "user":
         raise ChpmError("CHPM requires a saved player input in this session.")
+    if len(source.content.strip()) > MAX_OBSERVED_CHARS:
+        raise RecoverableChpmError(
+            f"CHPM perception input exceeds {MAX_OBSERVED_CHARS} characters; no input was truncated."
+        )
     created = source.created_at
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)

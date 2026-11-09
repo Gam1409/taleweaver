@@ -197,6 +197,10 @@ ENUMS["inference_reason"] = {
 }
 
 ENUMS["purpose"] = {
+    "narrated_items",
+    "scene_staging",
+    "rp_continuation",
+    "regenerate_narration",
     "chpm",
     "image_prompt",
     "ai_fix",
@@ -214,6 +218,7 @@ ENUMS["purpose"] = {
     "memory_summary",
 }
 ENUMS["phase"] = {
+    "reconciliation",
     "proposal",
     "proposal_repair",
     "perception",
