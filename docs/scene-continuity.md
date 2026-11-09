@@ -29,6 +29,12 @@ end processes. Historical records remain in storage when outside the current sce
 Body/garment injuries, pain, fluids and dirt remain in the existing physical-condition
 ledger; clothing and possessions keep their existing authoritative registries.
 Scene continuity does not duplicate those facts or replace CHPM subjective memory.
+Visible physical traces use optional `visual_detail`/`visual_region` evidence in that
+same ledger. The visible phrase must occur verbatim in the condition's source quote.
+Image projection checks public visibility, current region coverage and visible garment
+identity; it excludes private/internal states, unknown coverage and resolved conditions.
+An opaque higher layer can hide a trace without healing or cleaning it. A prose edit
+revokes the affected visual evidence while retaining canonical physical conditions.
 
 ## One saved state, audience-specific views
 
