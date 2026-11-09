@@ -11,6 +11,9 @@ from backend.engine.physical_conditions.schema import (
     ConditionProposal,
     candidate_values,
 )
+from backend.engine.scene_continuity.schema import Action as SceneAction
+from backend.engine.scene_continuity.schema import Update as SceneUpdate
+from backend.engine.scene_continuity.schema import candidates as scene_candidates
 from backend.schemas.authoring_completion import EquipmentSlot
 
 
@@ -75,6 +78,12 @@ class NewItemAction(ItemAction):
 class ItemExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     actions: list[ExistingItemAction | NewItemAction] = Field(default_factory=list, max_length=6)
+    scene_updates: Annotated[
+        list[Any], BeforeValidator(scene_candidates, json_schema_input_type=list[SceneUpdate])
+    ] = Field(default_factory=list, json_schema_extra={"maxItems": 12})
+    final_frame_actions: Annotated[
+        list[Any], BeforeValidator(scene_candidates, json_schema_input_type=list[SceneAction])
+    ] = Field(default_factory=list, json_schema_extra={"maxItems": 4})
 
     condition_updates: Annotated[
         list[Any], BeforeValidator(candidate_values, json_schema_input_type=list[ConditionProposal])

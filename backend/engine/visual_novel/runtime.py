@@ -12,6 +12,7 @@ from backend.engine.clothing.visuals import (
     detailed_for_state,
     session_objects,
 )
+from backend.engine.scene_continuity.presentation import visual_facts as scene_visual_facts
 from backend.engine.scene_illustrations import capture_scene_snapshot
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.provenance import stamp
@@ -114,6 +115,22 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     if any(person.get("managed_clothing") for person in facts["characters"]):
         # A scene label is enough to ground composition; its prose may describe hidden outfits.
         facts["setting"] = scene.label if scene is not None else ""
+    facts.update(
+        scene_visual_facts(
+            manager.state,
+            {"__player__", manager.state.current_scene_id, *(row["id"] for row in entities)},
+            str(getattr(scene, "description", "") or ""),
+            message.id,
+        )
+    )
+    for action in facts.get("visible_actions", []):
+        action["actor_ids"] = [
+            manager.avatar.id if actor_id == "__player__" else actor_id
+            for actor_id in action["actor_ids"]
+        ]
+    for fact in facts.get("scene_facts", []):
+        if fact["subject_id"] == "__player__":
+            fact["subject_id"] = manager.avatar.id
     if read_settings(manager.state).scene_staging:
         saved = registry(manager.state)
         matches = (
@@ -128,7 +145,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
             # Frozen explicit atoms are checked at render time only; narration
             # prompts never receive them.
             facts["explicit"] = deepcopy(saved.get("explicit") or [])
-    facts["props"] = room_objects(entities, scene) + props.project(
+    facts["props"] = props.project(
         manager.state,
         props.candidates(
             manager.avatar,
@@ -136,5 +153,5 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
             manager.state,
             {row.id for row in rows.values() if row.entity_type == "NPC"},
         ),
-    )
+    ) + room_objects(entities, scene)
     await capture_scene_snapshot(manager.db, manager.state, message, facts)

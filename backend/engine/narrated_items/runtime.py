@@ -21,6 +21,8 @@ from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
 from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
+from backend.engine.scene_continuity import runtime as scene_continuity
+from backend.engine.scene_continuity.prompts import INSTRUCTIONS as SCENE_INSTRUCTIONS
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, possession_snapshot
 
@@ -58,6 +60,7 @@ async def reconcile_items(
     blocked_reason: str = "",
 ) -> list[str]:
     physical_conditions.discard(manager)
+    manager._pending_scene_continuity = None
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
     if (
@@ -100,6 +103,7 @@ async def reconcile_items(
             "physical_conditions": condition_context(
                 manager.state, set(actors) | set(snapshot.items)
             ),
+            "scene_continuity": await scene_continuity.prepare(manager),
         },
         ensure_ascii=False,
     )
@@ -120,7 +124,7 @@ async def reconcile_items(
         llm = GameMasterLLM.for_role(manager.user, "small")
         result = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                INSTRUCTIONS + CONDITION_INSTRUCTIONS,
+                INSTRUCTIONS + CONDITION_INSTRUCTIONS + SCENE_INSTRUCTIONS,
                 payload,
                 ItemExtraction,
                 llm.model,
@@ -158,6 +162,7 @@ async def reconcile_items(
         return [failure.message()]
     _store_changes(manager, changed, accepted, snapshot.catalog)
     pending_conditions.complete(extraction.condition_updates, set(actors) | set(snapshot.items))
+    scene_continuity.complete(manager, extraction.scene_updates, extraction.final_frame_actions)
     _status(
         manager,
         message_id,

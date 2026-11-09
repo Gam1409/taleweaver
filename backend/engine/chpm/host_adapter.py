@@ -31,7 +31,15 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
     # Causal recall already checked this exact observer during the same preparation.
     checked = getattr(turn, "reconciled_minds", {}).get(actor.id)
     mind = checked if checked is not None else await host_sources.reconcile(manager, mind)
-    facts = host_observations.capture(manager.state, actor, turn.present_names)
+    scene_scope = getattr(manager, "_scene_continuity_scope", None)
+    facts = host_observations.capture(
+        manager.state,
+        actor,
+        turn.present_names,
+        scene_targets=scene_scope[1]
+        if scene_scope and scene_scope[0] == observed.scene_id
+        else None,
+    )
     change = host_observations.difference(host_observations.previous(mind), facts)
     anchor = {
         "message_id": observed.message_id,

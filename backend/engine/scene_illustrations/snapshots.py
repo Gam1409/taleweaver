@@ -52,6 +52,23 @@ def _visible_facts(value: dict | None) -> dict:
         for item in (facts.get("props") or [])[:24]
         if isinstance(item, dict)
     ]
+    result["scene_facts"] = [
+        {
+            key: str(row[key])[: 400 if key == "detail" else 100]
+            for key in ("id", "subject_id", "kind", "detail")
+            if key in row
+        }
+        for row in (facts.get("scene_facts") or [])[:16]
+        if isinstance(row, dict) and row.get("detail")
+    ]
+    result["visible_actions"] = [
+        {
+            "actor_ids": [str(identifier)[:100] for identifier in row["actor_ids"][:6]],
+            "detail": str(row["detail"])[:400],
+        }
+        for row in (facts.get("visible_actions") or [])[:4]
+        if isinstance(row, dict) and isinstance(row.get("actor_ids"), list) and row.get("detail")
+    ]
     result["explicit"] = [
         {
             "category": str(atom["category"])[:40],

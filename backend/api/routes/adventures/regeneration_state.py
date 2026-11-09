@@ -11,6 +11,7 @@ from backend.engine.chpm.state import retract as retract_chpm
 from backend.engine.living_world.dialogue_memory import retract as retract_intentions
 from backend.engine.memory_rag.worker import mark_dirty
 from backend.engine.npc_journal.retraction import retract_reply
+from backend.engine.scene_continuity.lifecycle import retract as retract_scene_continuity
 from backend.engine.scene_illustrations.snapshots import (
     MAX_NARRATION,
     REGISTRY_KEY,
@@ -40,6 +41,9 @@ def refresh_visual_snapshot(state: SessionState, message: ChatMessage) -> None:
         person.pop("posture", None)
         person.pop("placement", None)
     facts.pop("props", None)
+    facts.pop("visible_action", None)
+    facts.pop("visible_actions", None)
+    facts.pop("scene_facts", None)
     snapshot.pop("staging_sources", None)
     snapshot.update(
         nonce=uuid4().hex,
@@ -70,6 +74,7 @@ async def refresh_evidence(db: AsyncSession, session: GameSession, message: Chat
     )
     if state is not None:
         retract_chpm(state, message.id)
+        retract_scene_continuity(state, message.id)
         retract(state, message.id)
         retract_intentions(state, message.id)
         props.retract(state, message.id)

@@ -125,13 +125,37 @@ def inventory(facts: dict) -> list[Atom]:
     for index, person in enumerate(people):
         atoms.extend(_character(person, index, set(ids)))
     atoms.extend(_props(facts.get("props") or []))
-    for key in ("setting", "lighting", "visible_action"):
-        if facts.get(key):
-            atoms.append(_atom("/" + key, "scene", key, facts[key], required=False))
+    atoms.extend(_scene_atoms(facts, ids))
     if not atoms or len(atoms) > MAX_ATOMS:
         raise ValueError(
             "The saved visual facts exceed plan limits or are unavailable. Choose another completed moment to illustrate."
         )
+    return atoms
+
+
+def _scene_atoms(facts: dict, ids: list[str]) -> list[Atom]:
+    atoms = []
+    for index, fact in enumerate(facts.get("scene_facts") or []):
+        atoms.append(
+            _atom(
+                f"/scene_facts/{index}",
+                str(fact.get("subject_id") or "scene"),
+                "scene_" + str(fact.get("kind") or "fact"),
+                fact["detail"],
+            )
+        )
+    for key in ("setting", "lighting", "visible_action"):
+        if key == "visible_action" and facts.get("visible_actions"):
+            continue
+        if facts.get(key):
+            atoms.append(
+                _atom("/" + key, "scene", key, facts[key], required=key == "visible_action")
+            )
+    for index, action in enumerate(facts.get("visible_actions") or []):
+        participants = action.get("actor_ids") or []
+        if not participants or not set(participants).issubset(ids):
+            raise ValueError("A saved final-frame action has an unavailable actor.")
+        atoms.append(_atom(f"/visible_actions/{index}", participants[0], "visible_action", action))
     return atoms
 
 

@@ -84,6 +84,7 @@ from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.visual_novel.item_rejections import rejection_reason
 from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
+from backend.engine.scene_continuity.runtime import finish as finish_scene_continuity
 from backend.engine.visual_novel.time_passage import apply as apply_time_passage
 from backend.engine.memory_rag.scheduling import foreground_turn
 from backend.engine.turn_replay.service import mark_committed, record_input
@@ -2180,7 +2181,9 @@ class GameTurnManager:
         self.db.add(assistant_chat)
         if policy.vn:
             await self.db.flush()
-            for condition_message in finish_physical_conditions(self, assistant_chat):
+            for condition_message in finish_physical_conditions(
+                self, assistant_chat
+            ) + finish_scene_continuity(self, assistant_chat):
                 await self._save_chat_message("system", condition_message)
                 yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': condition_message})}\n\n"
 

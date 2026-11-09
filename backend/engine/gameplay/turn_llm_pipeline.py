@@ -30,6 +30,7 @@ from backend.engine.memory_rag.recent import recent_dialogue
 from backend.engine.memory_rag.retrieval import prepare_recall
 from backend.engine.narrator.prompts import narration_style_block
 from backend.engine.npc_presence import physically_present, presence_context
+from backend.engine.scene_continuity.presentation import narration_block as scene_continuity_block
 from backend.engine.scene_staging.state import narration_block
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -285,6 +286,10 @@ class TurnLlmContextBuilder:
         """Returns the (mechanics, narration) CURRENT STATE blocks."""
         state = self.manager.state
         adventure = self.manager.adventure
+        self.manager._scene_continuity_scope = (
+            state.current_scene_id,
+            {"__player__", state.current_scene_id, *(row.id for row in visible)},
+        )
         state_kwargs: dict[str, Any] = {
             "current_scene": world.current_scene,
             "entities": without_legacy_journal(self.manager, visible),
@@ -331,6 +336,11 @@ class TurnLlmContextBuilder:
         mechanics_state_block += availability
         narration_state_block += availability
         if is_vn(adventure):
+            narration_state_block += scene_continuity_block(
+                state,
+                {"__player__", state.current_scene_id, *(entity.id for entity in visible)},
+                str(getattr(world.current_scene, "description", "") or ""),
+            )
             narration_state_block += narration_block(state, world.all_entities, self.manager.avatar)
             narration_state_block += NARRATION_INITIATIVE
         return (

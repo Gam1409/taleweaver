@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from pydantic import ValidationError
 
+from backend.engine.scene_continuity.lifecycle import remap as remap_scene_continuity
 from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY, remap_illustrations
 from backend.engine.scene_staging.provenance import remap
 from backend.engine.visual_novel.schema import STATE_KEY, SocialState
@@ -17,7 +18,7 @@ def remap_social_state(entity_states: dict | None, message_ids: dict[str, str]) 
     Unsupported state is preserved for a compatible reader. Orphaned provenance is
     discarded, while canonical feelings, goals and identity remain unchanged.
     """
-    result = remap(deepcopy(entity_states or {}), message_ids)
+    result = remap_scene_continuity(remap(deepcopy(entity_states or {}), message_ids), message_ids)
     if STATE_KEY not in result:
         return result
     try:
