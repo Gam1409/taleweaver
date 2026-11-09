@@ -289,6 +289,7 @@ class TurnLlmContextBuilder:
         self.manager._scene_continuity_scope = (
             state.current_scene_id,
             {"__player__", state.current_scene_id, *(row.id for row in visible)},
+            str(getattr(world.current_scene, "description", "") or ""),
         )
         state_kwargs: dict[str, Any] = {
             "current_scene": world.current_scene,

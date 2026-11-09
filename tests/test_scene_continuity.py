@@ -122,6 +122,7 @@ def test_environment_has_separate_source_and_frame_action_does_not_persist_by_si
     assert "Cobalt" in str(visual) and "old red dress" not in str(visual)
     assert visual["visible_action"] == action["detail"]
     assert not visual_facts(state(saved), {"LAB", "LINA"}, "Changed room", "reply")["scene_facts"]
+    assert not observations(state(saved), "LINA", {"LAB"}, scene_description="Changed room")
     saved, errors = apply_to(saved, [], reply=message("later", "Lina nods."))
     assert not errors
     assert not visual_facts(state(saved), {"LAB", "LINA"}, ROOM, "later")["visible_action"]
@@ -248,5 +249,45 @@ def test_time_cannot_move_backwards_inside_an_existing_record():
         [{"operation": "end", "record_id": identifier, "evidence": "The kettle stops boiling."}],
         minute=99,
         reply=message("backwards", "The kettle stops boiling."),
+    )
+    assert errors and read(changed).records == read(saved).records
+
+
+@pytest.mark.parametrize("raw", [[], "", 0, False])
+def test_invalid_falsy_registry_is_not_treated_as_a_missing_ledger(raw):
+    broken = {KEY: raw}
+    with pytest.raises(ValueError):
+        apply_to(broken)
+    assert broken == {KEY: raw}
+
+
+def test_crowded_scene_keeps_all_witnesses_and_rejects_an_unsupported_roster_size():
+    witnesses = {f"NPC-{index}" for index in range(20)} | {"__player__"}
+    saved, errors = apply(
+        {},
+        [update()],
+        [],
+        message=message(),
+        scene_id="LAB",
+        scene_description=ROOM,
+        session_id="session",
+        minute=10,
+        targets=witnesses | {"LAB", "KETTLE"},
+        actor_targets=witnesses,
+    )
+    assert not errors
+    assert set(next(iter(read(saved).records.values())).observers) == witnesses
+    excessive = {f"NPC-{index}" for index in range(129)}
+    changed, errors = apply(
+        saved,
+        [update(key="new")],
+        [],
+        message=message("too-many"),
+        scene_id="LAB",
+        scene_description=ROOM,
+        session_id="session",
+        minute=10,
+        targets=excessive | {"LAB", "KETTLE"},
+        actor_targets=excessive,
     )
     assert errors and read(changed).records == read(saved).records

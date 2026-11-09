@@ -132,7 +132,7 @@ async def reconcile_items(
                 operation="narrated_items",
                 phase="reconciliation",
             ),
-            timeout=min(60, role_timeout(manager.user, "small")),
+            timeout=role_timeout(manager.user, "small"),
         )
         extraction = ItemExtraction.model_validate(result)
         failures: list[ItemFailure] = []

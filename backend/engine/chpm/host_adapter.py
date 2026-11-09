@@ -39,6 +39,9 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
         scene_targets=scene_scope[1]
         if scene_scope and scene_scope[0] == observed.scene_id
         else None,
+        scene_description=scene_scope[2]
+        if scene_scope and scene_scope[0] == observed.scene_id
+        else None,
     )
     change = host_observations.difference(host_observations.previous(mind), facts)
     anchor = {

@@ -6,19 +6,20 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.engine.character_identity import describe_character
-from backend.engine.clothing.context import resolved_inventory
+from backend.engine.clothing.context import actor_records, resolved_inventory
 from backend.engine.clothing.visuals import (
     character_visuals,
     detailed_for_state,
     session_objects,
 )
+from backend.engine.physical_conditions.visuals import project as visual_conditions
 from backend.engine.scene_continuity.presentation import visual_facts as scene_visual_facts
 from backend.engine.scene_illustrations import capture_scene_snapshot
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.provenance import stamp
 from backend.engine.scene_staging.state import digest, project, registry
 from backend.engine.visual_novel.config import read_settings
-from backend.engine.visual_novel.environment import room_objects
+from backend.engine.visual_novel.environment import bind_player, room_objects
 from backend.models.world_entity import WorldScene
 
 
@@ -113,7 +114,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
         ],
     }
     if any(person.get("managed_clothing") for person in facts["characters"]):
-        # A scene label is enough to ground composition; its prose may describe hidden outfits.
+        # Raw room prose may contain obsolete outfits; verified environment is added below.
         facts["setting"] = scene.label if scene is not None else ""
     facts.update(
         scene_visual_facts(
@@ -123,14 +124,12 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
             message.id,
         )
     )
-    for action in facts.get("visible_actions", []):
-        action["actor_ids"] = [
-            manager.avatar.id if actor_id == "__player__" else actor_id
-            for actor_id in action["actor_ids"]
-        ]
-    for fact in facts.get("scene_facts", []):
-        if fact["subject_id"] == "__player__":
-            fact["subject_id"] = manager.avatar.id
+    facts["physical_conditions"] = visual_conditions(
+        manager.state,
+        actor_records(manager, list(rows.values())),
+        detailed=detailed,
+    )
+    bind_player(facts, manager.avatar.id)
     if read_settings(manager.state).scene_staging:
         saved = registry(manager.state)
         matches = (

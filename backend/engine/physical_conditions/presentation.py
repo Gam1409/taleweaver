@@ -48,7 +48,17 @@ def context(
     rows = [
         {
             key: getattr(row, key)
-            for key in ("id", "target_id", "kind", "part", "status", "detail", "visibility")
+            for key in (
+                "id",
+                "target_id",
+                "kind",
+                "part",
+                "status",
+                "detail",
+                "visibility",
+                "visual_detail",
+                "visual_region",
+            )
         }
         for row in visible
         if row.status != "resolved"

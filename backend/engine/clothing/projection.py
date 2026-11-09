@@ -81,3 +81,24 @@ def visible_character(
             }
         )
     return result
+
+
+def visible_body_regions(raw_profile: Any, inventory: Any, *, equipment: Any = None) -> set[Region]:
+    """Conservative coverage for already evidenced surface traces, never proof of undress."""
+    profile = load_profile(raw_profile)
+    if profile is None:
+        return set()
+    items = owned_items(inventory, equipment=equipment)
+    if any(worn.item_id not in items for worn in profile.worn):
+        return set()
+    worn = _worn_items(profile, items, equipment)
+    garments = [(entry, garment_for_item(items[entry.item_id])) for entry in worn]
+    if any(garment is None for _, garment in garments):
+        return set()
+    blocked: set[Region] = set()
+    for entry, garment in garments:
+        if garment is None or not set(entry.uncovered_regions).issubset(garment.coverage):
+            return set()
+        if garment.opaque:
+            blocked.update(_covered(garment, entry))
+    return set(REGIONS) - blocked

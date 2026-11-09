@@ -61,6 +61,15 @@ def _visible_facts(value: dict | None) -> dict:
         for row in (facts.get("scene_facts") or [])[:16]
         if isinstance(row, dict) and row.get("detail")
     ]
+    result["physical_conditions"] = [
+        {
+            key: str(row[key])[: 320 if key == "detail" else 100]
+            for key in ("id", "target_id", "detail", "status", "actor_id", "target_name")
+            if key in row
+        }
+        for row in (facts.get("physical_conditions") or [])[:12]
+        if isinstance(row, dict) and row.get("detail")
+    ]
     result["visible_actions"] = [
         {
             "actor_ids": [str(identifier)[:100] for identifier in row["actor_ids"][:6]],

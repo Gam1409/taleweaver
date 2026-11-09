@@ -12,6 +12,8 @@ _FIELDS = {
     "detail",
     "visibility",
     "evidence",
+    "visual_detail",
+    "visual_region",
 }
 _REASONS = {
     "missing": "Required field is missing.",

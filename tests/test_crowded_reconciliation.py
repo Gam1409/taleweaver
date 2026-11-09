@@ -60,6 +60,7 @@ def crowd(monkeypatch):
         monkeypatch.setattr(module, "session_objects", AsyncMock(return_value=people))
         monkeypatch.setattr(module, "release_for_model", AsyncMock())
         monkeypatch.setattr(module, "role_timeout", lambda *_: 10)
+    monkeypatch.setattr(items_runtime.scene_continuity, "prepare", AsyncMock(return_value={}))
     monkeypatch.setattr(
         AdventureLogic,
         "build_session_entities",

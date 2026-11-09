@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 VERSION = 2
-INVENTORY_VERSION = 1
+INVENTORY_VERSION = 2
 MAX_ATOMS = 160
 
 
@@ -135,6 +135,20 @@ def inventory(facts: dict) -> list[Atom]:
 
 def _scene_atoms(facts: dict, ids: list[str]) -> list[Atom]:
     atoms = []
+    for index, condition in enumerate(facts.get("physical_conditions") or []):
+        atoms.append(
+            _atom(
+                f"/physical_conditions/{index}",
+                condition.get("actor_id") or condition["target_id"],
+                "physical_condition",
+                {
+                    key: condition[key]
+                    for key in ("detail", "target_name", "status")
+                    if condition.get(key)
+                },
+                target=condition["target_id"],
+            )
+        )
     for index, fact in enumerate(facts.get("scene_facts") or []):
         atoms.append(
             _atom(
@@ -205,7 +219,19 @@ def assemble(atoms: list[Atom], proposal: Proposal, output_format: str) -> tuple
             unit.section == "tags"
             and cast_size != 1
             and atom.predicate
-            in {"present", "worn", "posture", "placement", "position", "prop", "prop_position"}
+            in {
+                "present",
+                "worn",
+                "posture",
+                "placement",
+                "position",
+                "prop",
+                "prop_position",
+                "visible_action",
+                "physical_condition",
+                "scene_process",
+                "scene_effect",
+            }
         ):
             limitations.append({"atom_id": atom.id, "reason": "global_tag_binding"})
     body = " ".join(sections["description"])

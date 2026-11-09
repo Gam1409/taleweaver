@@ -11,7 +11,12 @@ from backend.engine.scene_continuity.npc import observations as scene_observatio
 
 
 def capture(
-    state: Any, actor: Any, present: dict[str, str], *, scene_targets: set[str] | None = None
+    state: Any,
+    actor: Any,
+    present: dict[str, str],
+    *,
+    scene_targets: set[str] | None = None,
+    scene_description: str | None = None,
 ) -> HostFacts:
     override = (state.entity_states or {}).get(actor.id) or {}
     metadata = getattr(actor, "metadata_json", None) or {}
@@ -36,6 +41,7 @@ def capture(
             state,
             actor.id,
             scene_targets or {state.current_scene_id, actor.id, "__player__", *present},
+            scene_description=scene_description,
         ),
         # Invalid/missing profiles are unknown, never proof of undressing.
         worn_item_ids=tuple(sorted(w.item_id for w in profile.worn))

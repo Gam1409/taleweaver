@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from backend.engine.clothing.schema import Region
 from backend.engine.physical_conditions.wire_contract import operation_rules
 
 KEY = "__physical_conditions__"
@@ -30,6 +31,8 @@ class ConditionProposal(Model):
     part: str = Field(default="", max_length=80)
     detail: str = Field(default="", max_length=320)
     visibility: Literal["public", "private"] | None = None
+    visual_detail: str = Field(default="", max_length=320)
+    visual_region: Region | None = None
     evidence: str = Field(min_length=4, max_length=600)
 
     @model_validator(mode="after")
@@ -75,6 +78,8 @@ class Condition(Model):
     detail: str = Field(min_length=1, max_length=320)
     status: Status = "active"
     visibility: Literal["public", "private"] = "private"
+    visual_detail: str = Field(default="", max_length=320)
+    visual_region: Region | None = None
     origin: Source
     latest: Source
     updated_revision: StrictInt = Field(ge=0)

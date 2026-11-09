@@ -15,8 +15,9 @@ def digest(text: str) -> str:
 
 
 def read(states: dict | None) -> Ledger:
+    raw = (states or {}).get(KEY)
     try:
-        return Ledger.model_validate((states or {}).get(KEY) or {})
+        return Ledger.model_validate({} if raw is None else raw)
     except ValidationError as exc:
         raise ValueError("Stored scene continuity is invalid and was preserved.") from exc
 
@@ -151,7 +152,8 @@ def apply(
                 else _changed(ledger, update, source, minute)
             )
             if row.visibility == "public":
-                row.observers = sorted(actor_targets or {"__player__"})[:12]
+                row.observers = sorted(actor_targets or {"__player__"})
+            row = Record.model_validate(row.model_dump())
             _validate(row, ledger, targets, scene_id)
             ledger.records[row.id] = row
         except (ValueError, ValidationError):

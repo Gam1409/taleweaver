@@ -65,7 +65,7 @@ class Record(Model):
     detail: str = Field(min_length=1, max_length=400)
     visual_detail: str = Field(default="", max_length=400)
     visibility: Literal["public", "private"] = "private"
-    observers: list[str] = Field(default_factory=list, max_length=12)
+    observers: list[str] = Field(default_factory=list, max_length=128)
     cause_id: str = Field(default="", max_length=100)
     status: Literal["active", "ended", "unconfirmed"] = "active"
     origin: Evidence

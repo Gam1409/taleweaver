@@ -82,6 +82,7 @@ def _record(
         part=proposal.part,
         detail=proposal.detail,
         visibility=proposal.visibility or "private",
+        **_visual_fields(proposal),
         origin=source,
         latest=source,
         updated_revision=ledger.revision + 1,
@@ -115,9 +116,23 @@ def _update(
     if proposal.visibility is not None:
         changed.visibility = proposal.visibility
     changed.latest = source
+    visual = _visual_fields(proposal)
+    changed.visual_detail, changed.visual_region = visual["visual_detail"], visual["visual_region"]
     changed.updated_revision = ledger.revision + 1
     changed.last_changed_minute = minute
     return changed
+
+
+def _visual_fields(proposal: ConditionProposal) -> dict[str, Any]:
+    confirmed = bool(
+        proposal.visual_detail
+        and proposal.visual_region
+        and proposal.visual_detail in proposal.evidence
+    )
+    return {
+        "visual_detail": proposal.visual_detail if confirmed else "",
+        "visual_region": proposal.visual_region if confirmed else None,
+    }
 
 
 def _retain(ledger: Ledger) -> None:

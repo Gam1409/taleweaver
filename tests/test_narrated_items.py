@@ -1,5 +1,6 @@
 """Completed item actions preserve ownership, evidence, clothing and replay safety."""
 
+import asyncio
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -155,7 +156,8 @@ def test_already_transferred_item_is_not_duplicated_or_unequipped():
 
 
 @pytest.mark.asyncio
-async def test_runtime_persists_change_and_deduplicates_retries():
+@pytest.mark.parametrize("timeout", [10, 180])
+async def test_runtime_persists_change_and_deduplicates_retries(timeout):
     actors, snapshot = fixtures()
     avatar = SimpleNamespace(**actors[PLAYER])
     npc = SimpleNamespace(id="NPC", entity_type="NPC", age_years=30)
@@ -181,7 +183,14 @@ async def test_runtime_persists_change_and_deduplicates_retries():
             "backend.engine.narrated_items.runtime.detail_settings", return_value={"detailed": True}
         ),
         patch("backend.engine.narrated_items.runtime.release_for_model", AsyncMock()),
-        patch("backend.engine.narrated_items.runtime.role_timeout", return_value=10),
+        patch(
+            "backend.engine.narrated_items.runtime.scene_continuity.prepare",
+            AsyncMock(return_value={}),
+        ),
+        patch("backend.engine.narrated_items.runtime.role_timeout", return_value=timeout),
+        patch(
+            "backend.engine.narrated_items.runtime.asyncio.wait_for", wraps=asyncio.wait_for
+        ) as deadline,
         patch("backend.engine.narrated_items.runtime.GameMasterLLM.for_role", return_value=llm),
     ):
         messages = await reconcile_items(manager, action().evidence, completed=True, resolution="")
@@ -190,6 +199,7 @@ async def test_runtime_persists_change_and_deduplicates_retries():
             await reconcile_items(manager, action().evidence, completed=True, resolution="") == []
         )
     assert llm.aexecute_complex_task.await_count == 1
+    assert deadline.call_args.kwargs["timeout"] == timeout
     assert avatar.inventory[0]["id"] == "SHIRT"
     assert manager.state.entity_states["NPC"]["inventory"] == []
     assert manager.state.entity_states["NPC"]["visual_profile"]["worn"] == []
