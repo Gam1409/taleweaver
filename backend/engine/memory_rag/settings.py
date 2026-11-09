@@ -15,7 +15,7 @@ class MemoryRagSettings(BaseModel):
     provider: Literal["openai", "ollama"] = "openai"
     base_url: str = ""
     model: str = Field(default="", max_length=256)
-    timeout_seconds: float = Field(default=10, ge=1, le=60, allow_inf_nan=False)
+    timeout_seconds: float = Field(default=30, ge=1, le=60, allow_inf_nan=False)
     query_prefix: str = Field(default="", max_length=512)
     document_prefix: str = Field(default="", max_length=512)
 

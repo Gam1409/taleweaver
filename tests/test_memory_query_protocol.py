@@ -113,12 +113,13 @@ async def test_old_russian_source_is_found_after_it_leaves_the_recent_window(por
         )
 
 
-async def test_foreground_query_uses_query_encoding_and_a_short_deadline(monkeypatch):
+@pytest.mark.parametrize("timeout", [10, 30, 60])
+async def test_foreground_query_uses_query_encoding_and_configured_deadline(monkeypatch, timeout):
     user = _user()
     embed = AsyncMock(return_value=[[1.0, 0.0]])
     monkeypatch.setattr(retrieval, "embed_texts", embed)
     settings = MemoryRagSettings(
-        enabled=True, timeout_seconds=60, base_url="http://localhost:11434", model="test-embed"
+        enabled=True, timeout_seconds=timeout, base_url="http://localhost:11434", model="test-embed"
     )
     from types import SimpleNamespace
 
@@ -129,4 +130,4 @@ async def test_foreground_query_uses_query_encoding_and_a_short_deadline(monkeyp
         SimpleNamespace(user=user), "Где проба?", Scope("u", "s", 0, "different"), settings
     )
     assert embed.call_args.kwargs["purpose"] == "query"
-    assert embed.call_args.kwargs["timeout"] <= 2
+    assert embed.call_args.kwargs["timeout"] == timeout

@@ -21,7 +21,6 @@ from backend.models.memory_rag import MemoryIndexState
 
 logger = logging.getLogger(__name__)
 VECTOR_SEARCH_GRACE = 0.5
-FOREGROUND_EMBED_SECONDS = 1.5
 
 
 @dataclass
@@ -80,7 +79,7 @@ async def _query_vectors(manager: Any, query: str, scope: Scope, settings: Any) 
     vectors = await embed_texts(
         manager.user,
         [query[:4000]],
-        timeout=min(settings.timeout_seconds, FOREGROUND_EMBED_SECONDS),
+        timeout=settings.timeout_seconds,
         purpose="query",
     )
     if embedding_signature(settings, len(vectors[0])) != scope.signature:
@@ -103,7 +102,7 @@ async def _semantic_candidates(manager: Any, query: str) -> tuple[list[dict], Sc
     try:
         candidates = await asyncio.wait_for(
             _query_vectors(manager, query, scope, query_settings),
-            min(query_settings.timeout_seconds, FOREGROUND_EMBED_SECONDS) + VECTOR_SEARCH_GRACE,
+            query_settings.timeout_seconds + VECTOR_SEARCH_GRACE,
         )
     except Exception as exc:
         # Provider errors can contain credentials or quoted text. Log only the class.

@@ -186,3 +186,38 @@ async def test_embedding_change_fences_all_users_but_does_not_unpause_cleared_in
         row = await db.get(MemoryIndexState, "portrait-session")
         assert row.epoch == 3 and row.paused is True
         assert row.signature is None and row.lease_token is None
+
+
+async def test_timeout_only_change_preserves_index_generation_and_inflight_claim(
+    auth_client, portrait_world, monkeypatch
+):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr("backend.engine.memory_rag.worker.schedule", Mock())
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(User))
+        user.llm_settings = {**user.llm_settings, "memory_rag": CONFIG}
+        db.add(
+            MemoryIndexState(
+                session_id="portrait-session",
+                user_id=user.id,
+                template_id="portrait-template",
+                epoch=2,
+                desired_revision=5,
+                indexed_revision=5,
+                status="ready",
+                signature="existing-vector-space",
+                lease_token="inflight",
+                lease_until=9999999999,
+            )
+        )
+        await db.commit()
+    response = await auth_client.put(
+        "/api/settings/memory-rag", json={**CONFIG, "timeout_seconds": 30}
+    )
+    assert response.status_code == 200 and response.json()["timeout_seconds"] == 30
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        assert row.epoch == 2 and row.signature == "existing-vector-space"
+        assert row.desired_revision == row.indexed_revision == 5
+        assert row.lease_token == "inflight" and row.status == "ready"

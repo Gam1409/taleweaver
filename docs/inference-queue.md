@@ -62,8 +62,9 @@ back into a canceled operation. Monitoring is bounded by the existing deadline;
 if completion remains unknown, the reservation becomes UNCERTAIN. A later
 confirmed transport receipt can clear only its matching token.
 
-Foreground memory recall has a short caller wait (currently 1.5 seconds). That
-wait is separate from the configured embedding transport deadline. If admission
+Foreground memory recall uses the configured embedding timeout instead of a fixed
+1.5-second caller wait. New settings default to 30 seconds; saved values remain
+unchanged. The wait is still bounded independently of transport ownership. If admission
 has not occurred, an expired recall sends no embedding request. Once dispatched,
 the embedding HTTP client remains owned until a response or its configured deadline,
 even when recall has already fallen back to authoritative SQL. A late response

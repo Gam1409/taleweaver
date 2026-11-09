@@ -73,7 +73,10 @@ async def save_memory_settings(
     owner.encrypted_api_keys = keys
     await _broadcast_global_settings(db, owner, fields=("llm_settings", "encrypted_api_keys"))
     rows = await ensure_index_states(db)
-    if before != after or payload.api_key or payload.clear_api_key:
+    index_changed = any(
+        value != after[key] for key, value in before.items() if key != "timeout_seconds"
+    )
+    if index_changed or payload.api_key or payload.clear_api_key:
         for row in rows:
             await invalidate(db, row)
     result = public_settings(owner)

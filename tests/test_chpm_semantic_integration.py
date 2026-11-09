@@ -273,6 +273,7 @@ async def test_twenty_observers_only_query_the_three_active_ones(semantic_world)
         }
         await semantic_recall.prepare(host, turn, names[:3], observation())
         assert len(calls) == before + 1 and len(calls[-1][0]) == 3
+        assert calls[-1][1]["timeout"] == read_settings(host.user).timeout_seconds
         assert set(turn.semantic_hits) == set(names[:3])
         assert len(turn.initial.minds) == 20
 
@@ -287,10 +288,11 @@ async def test_timeout_leaves_the_callers_session_and_state_usable(semantic_worl
         await asyncio.sleep(1)
 
     monkeypatch.setattr(semantic_recall, "embed_texts", slow)
-    monkeypatch.setattr(semantic_recall, "FOREGROUND_EMBED_SECONDS", 0.02)
     monkeypatch.setattr(semantic_recall, "VECTOR_SEARCH_GRACE", 0.02)
     async with TestSessionLocal() as db:
         host, turn = await _turn(db, owner)
+        config = read_settings(host.user).model_copy(update={"timeout_seconds": 0.02})
+        monkeypatch.setattr(semantic_recall, "read_settings", lambda _: config)
         await semantic_recall.prepare(host, turn, [ACTORS[0]], observation())
         assert not turn.semantic_hits
         assert host.state.session_id == "portrait-session"

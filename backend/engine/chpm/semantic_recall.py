@@ -15,7 +15,7 @@ from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import EpisodeContext
 from backend.engine.memory_rag.embeddings import embed_texts
-from backend.engine.memory_rag.retrieval import FOREGROUND_EMBED_SECONDS, VECTOR_SEARCH_GRACE
+from backend.engine.memory_rag.retrieval import VECTOR_SEARCH_GRACE
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.models.game_session import GameSession
@@ -36,12 +36,13 @@ async def prepare(manager: Any, turn: Any, actor_ids: list[str], observation: An
     if not turn.initial.settings.semantic_memory or turn.initial.settings.mode != "live":
         return
     turn.usage.semantic_recall = {actor: "lexical_fallback" for actor in actor_ids}
-    if not read_settings(manager.user).enabled:
+    settings = read_settings(manager.user)
+    if not settings.enabled:
         return
     try:
         await asyncio.wait_for(
             _read(manager, turn, actor_ids, observation),
-            FOREGROUND_EMBED_SECONDS + VECTOR_SEARCH_GRACE,
+            settings.timeout_seconds + VECTOR_SEARCH_GRACE,
         )
     except ChpmError:
         raise
@@ -88,7 +89,10 @@ async def _prepare(manager: Any, turn: Any, actors: list[str], observation: Any)
     await manager.db.commit()
     queries = [_query(turn, actor, observation.scene_id) for actor, _ in eligible]
     vectors = await embed_texts(
-        manager.user, queries, timeout=FOREGROUND_EMBED_SECONDS, purpose="query"
+        manager.user,
+        queries,
+        timeout=read_settings(manager.user).timeout_seconds,
+        purpose="query",
     )
     base = embedding_signature(read_settings(manager.user), len(vectors[0]))
     if expected[1] != base:

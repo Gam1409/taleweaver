@@ -8,7 +8,7 @@ const settings = reactive<MemoryRagSettings>({
   provider: 'openai',
   base_url: '',
   model: '',
-  timeout_seconds: 10,
+  timeout_seconds: 30,
   query_prefix: '',
   document_prefix: ''
 })
@@ -160,8 +160,9 @@ onMounted(load)
             <p class="mt-3 text-xs text-slate-400">
               Follow your embedding model's instructions. For Snowflake Arctic Embed 2.0, use
               <code>query: </code> (including the trailing space) for queries and leave the document
-              prefix empty. Changing these values rebuilds the index. Foreground recall uses a short
-              deadline; the timeout above applies to connection tests and background work.
+              prefix empty. Changing these values rebuilds the index. The timeout above applies to
+              connection tests, background work and in-turn memory recall, including NPC semantic
+              memory. A larger timeout can make a turn wait longer for a busy server.
             </p>
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
               <label

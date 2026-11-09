@@ -57,9 +57,11 @@ flowchart TD
   a 20-person roster with three active interlocutors embeds three queries, not 20.
   Each query is capped at 3,000 characters and uses perceived current excerpts
   and bounded ongoing circumstances.
-- Embedding time is capped at 1.5 seconds with a 0.5-second storage grace. This is
-  a separate allowance from shared narration recall, so both enabled paths can
-  add approximately four seconds before fallback, plus local SQL processing.
+- Embedding time uses the Memory & RAG request timeout, with a 0.5-second storage
+  grace. New settings default to 30 seconds; explicit saved values are preserved.
+  This is a separate allowance from shared narration recall, so two enabled paths
+  can each wait up to the configured timeout plus grace before fallback. Increase
+  the setting deliberately when a shared server or cold model needs more time.
 - No additional generative LLM call is added. Up to two semantic sources per NPC
   share the existing eight-source / 6,000-character evidence budget with causal
   and agent evidence. Causal sources retain priority; request input limits remain
