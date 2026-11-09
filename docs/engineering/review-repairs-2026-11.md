@@ -129,3 +129,12 @@ is not the selected behavior.
   ledger source, ownership, visibility, operation and clock checks.
 - Rejected state updates are counted and reported; no second extraction request
   or successful replacement for the denied inventory action is introduced.
+
+## Wave 9: outfit producer identity contracts
+
+- Reuse the existing recovery schema pattern to bind outfit drafts to the current
+  character's known garment IDs, with null for new items. Keep the server as the
+  owner of new identities and retain normal already-worn filtering.
+- Clarify the same identity distinction in the shared authoring item description
+  and the producer prompt. Independent actors receive independent schema objects;
+  no shared base schema or saved wardrobe is mutated.

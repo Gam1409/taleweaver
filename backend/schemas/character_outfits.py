@@ -1,8 +1,9 @@
 """Reviewable, additive clothing drafts for existing template characters."""
 
-from typing import Literal
+from types import GenericAlias
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
 from backend.engine.clothing.classification import classify_garment
 from backend.engine.clothing.schema import Appearance
@@ -34,3 +35,25 @@ class CharacterOutfitRequest(BaseModel):
     character: str = Field(default="", max_length=1000)
     goal: str = Field(default="", max_length=1000)
     inventory_ids: list[str] = Field(default_factory=list, max_length=128)
+
+
+def response_schema(owned: list[dict]) -> type[CharacterOutfitDraft]:
+    """Reuse recovery's finite-ID contract without changing the saved draft shape."""
+    identifiers = tuple(sorted({row["id"] for row in owned}))
+    identity: Any = Literal[identifiers] | None if identifiers else type(None)
+    item = create_model(
+        "OwnedOutfitItem",
+        __base__=OutfitItem,
+        item_id=(
+            identity,
+            Field(
+                default=None,
+                description="Exact owned ID from the enum, or null for a new garment. Never invent an ID.",
+            ),
+        ),
+    )
+    return create_model(
+        "CharacterOutfitDraft",
+        __base__=CharacterOutfitDraft,
+        outfit=(GenericAlias(list, item), Field(default_factory=list, max_length=16)),
+    )

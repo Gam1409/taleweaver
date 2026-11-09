@@ -28,7 +28,11 @@ from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
-from backend.schemas.character_outfits import CharacterOutfitDraft, CharacterOutfitRequest
+from backend.schemas.character_outfits import (
+    CharacterOutfitDraft,
+    CharacterOutfitRequest,
+    response_schema,
+)
 
 router = APIRouter(tags=["Editor"])
 PROMPT = (
@@ -40,6 +44,7 @@ Use the character's identity, setting, profession, biography and explicit prefer
 The owned list includes existing worn AND carried garments. Do not propose clothing already
 worn. Reuse item_id for a suitable carried garment instead of inventing a copy. Existing
 garments retain their descriptions and metadata. Do not replace or remove any existing item.
+For a new garment item_id must be null; the engine assigns its ID. Never invent a name or slug in item_id.
 Only propose missing garments/accessories; no ordinary belongings, scripts, stats or events.
 List garments separately, at most 16. Use clothing category clothing, armor or accessory,
 layer 0..4 from inner to outer, coverage=head/torso/arms/pelvis/legs/feet/hands. Accessories
@@ -255,7 +260,7 @@ async def generate_character_outfit(
         raw = await gm.aexecute_complex_task(
             system_prompt=PROMPT,
             user_prompt=json.dumps(source, ensure_ascii=False),
-            response_model=CharacterOutfitDraft,
+            response_model=response_schema(context["owned"]),
             model=gm.model,
         )
         draft = CharacterOutfitDraft.model_validate(raw)

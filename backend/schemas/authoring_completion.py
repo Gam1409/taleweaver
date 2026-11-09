@@ -25,7 +25,11 @@ EquipmentSlot = Literal[
 
 class OutfitItem(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    item_id: str | None = Field(default=None, max_length=100)
+    item_id: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Exact listed owned item ID when reusing a garment. For a new garment item_id must be null; the engine assigns its ID.",
+    )
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=1000)
     wearable_slots: list[EquipmentSlot] = Field(min_length=1, max_length=4)
