@@ -93,12 +93,19 @@ def test_supported_changes_preserve_mechanics_and_survive_silent_turn():
         },
     ],
 )
-def test_invalid_evidence_or_target_marks_staging_unconfirmed(change):
+def test_invalid_evidence_or_target_unconfirms_only_its_actor(change):
     session = state()
     session.entity_states[KEY] = reconcile(session, CAST, TEXT, extraction())
     session.entity_states[KEY] = reconcile(session, CAST, TEXT, SceneExtraction(changes=[change]))
-    assert session.entity_states[KEY]["status"] == "unconfirmed"
-    assert project(session, CAST) == {}
+    assert session.entity_states[KEY]["status"] == "ready"
+    assert session.entity_states[KEY]["rejected"] == 1
+    if change["entity_id"] == "ABSENT":
+        assert project(session, CAST)["hero"]["posture"] == "sitting"
+        assert project(session, CAST)["LINA"]["placement"]["target"] == "hero"
+    else:
+        assert "hero" not in project(session, CAST)
+        assert project(session, CAST)["LINA"] == {"posture": "standing"}
+    assert session.entity_states["LINA"]["inventory"] == ["COAT"]
 
 
 def test_posture_change_does_not_keep_old_support_and_unknown_clears():

@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from .wire_contract import operation_rules
+
 KEY = "__scene_continuity__"
 MAX_UPDATES = 12
 MAX_RECORDS = 256
@@ -14,6 +16,8 @@ class Model(BaseModel):
 
 
 class Update(Model):
+    model_config = ConfigDict(json_schema_extra=operation_rules)
+
     operation: Literal["record", "change", "end"]
     record_id: str = Field(default="", max_length=100)
     key: str = Field(default="", max_length=80)

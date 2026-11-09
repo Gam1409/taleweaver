@@ -13,7 +13,7 @@ from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import PLAYER
 
 from . import bindings, props
-from .schema import SceneExtraction
+from .proposals import validate
 from .state import KEY, digest, project, reconcile
 
 logger = logging.getLogger(__name__)
@@ -130,26 +130,39 @@ def apply_extraction(
     narration: str,
     cast: list[dict],
     rows: list[Any],
-    extraction: SceneExtraction,
+    extraction: Any,
     accepted: list[dict] | None = None,
 ) -> None:
-    extraction, rejected = bindings.resolve(extraction, manager.avatar.id, accepted or [])
-    result = reconcile(manager.state, cast, narration, extraction)
+    validated = validate(extraction)
+    extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
+    result = reconcile(
+        manager.state,
+        cast,
+        narration,
+        extraction,
+        unconfirmed_actors={
+            bindings.actor_id(value, manager.avatar.id) for value in validated.unconfirmed_actors
+        },
+        invalid_changes=validated.rejected["changes"],
+    )
+    result["explicit_rejected"] += validated.rejected["explicit"]
     result["rejected_prop_references"] = rejected
-    record_staging(result, len(extraction.changes))
+    record_staging(result, len(extraction.changes) + validated.rejected["changes"])
     valid = props.candidates(
         manager.avatar, rows, manager.state, {row.id for row in rows if row.entity_type == "NPC"}
     )
     present = {person["id"] for person in cast}
-    result["rejected_props"] = rejected + props.reconcile(
-        manager.state,
-        narration,
-        extraction.props,
-        [item for item in valid if item["owner_id"] in present],
-        valid_items=valid,
+    result["rejected_props"] = (
+        rejected
+        + validated.rejected["props"]
+        + props.reconcile(
+            manager.state,
+            narration,
+            extraction.props,
+            [item for item in valid if item["owner_id"] in present],
+            valid_items=valid,
+        )
     )
-    if result["status"] != "ready":
-        props.invalidate(manager.state)
     manager.state.entity_states = {**(manager.state.entity_states or {}), KEY: result}
 
 
@@ -178,9 +191,8 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         current_cast = _cast(manager, actor_records(manager, pending.rows), pending.rows)
         if current_cast != pending.cast:
             raise ValueError("The present cast or its position changed during extraction.")
-        extraction = SceneExtraction.model_validate(pending.extraction)
         apply_extraction(
-            manager, narration, current_cast, pending.rows, extraction, pending.accepted
+            manager, narration, current_cast, pending.rows, pending.extraction, pending.accepted
         )
     except Exception:
         logger.exception("Shared scene staging failed for session %s", manager.state.session_id)

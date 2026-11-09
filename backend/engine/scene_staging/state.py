@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import Counter
 from copy import deepcopy
 from typing import Any
 
@@ -59,7 +60,7 @@ def _validate_explicit(
     rejected = 0
     for delta in extraction.explicit:
         participants = list(dict.fromkeys(delta.participants))
-        minimum = 1 if delta.category in ("masturbation", "exposure") else 2
+        minimum = 1 if delta.category in ("masturbation", "exposure", "undressing") else 2
         if (
             any(participant not in known for participant in participants)
             or len(participants) < minimum
@@ -78,12 +79,21 @@ def _validate_explicit(
     return atoms, rejected
 
 
-def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExtraction) -> dict:
+def reconcile(
+    state: Any,
+    cast: list[dict],
+    narration: str,
+    extraction: SceneExtraction,
+    *,
+    unconfirmed_actors: set[str] | None = None,
+    invalid_changes: int = 0,
+) -> dict:
     """Quotes ground proposals; semantic accuracy still depends on the extractor."""
     known = {person["id"]: person for person in cast}
     actors = retained(state, cast)
-    seen = set()
-    rejected = 0
+    uncertain = set(unconfirmed_actors or ()) & known.keys()
+    counts = Counter(change.entity_id for change in extraction.changes)
+    rejected = invalid_changes
     moved = set()
     explicit_placements = set()
     source = digest(narration)
@@ -105,13 +115,15 @@ def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExt
         )
         if (
             change.entity_id not in known
-            or change.entity_id in seen
+            or change.entity_id in uncertain
+            or counts[change.entity_id] > 1
             or change.evidence not in narration
             or invalid_target
         ):
             rejected += 1
+            if change.entity_id in known:
+                uncertain.add(change.entity_id)
             continue
-        seen.add(change.entity_id)
         row = {} if change.clear else actors.get(change.entity_id, {})
         if (
             change.clear
@@ -124,6 +136,9 @@ def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExt
         if placement is not None:
             explicit_placements.add(change.entity_id)
         actors[change.entity_id] = _apply_change(row, change, known, source)
+    for actor_id in uncertain:
+        actors.pop(actor_id, None)
+    moved.update(uncertain)
     for actor_id, row in actors.items():
         placement_data = row.get("placement", {})
         if (
@@ -135,10 +150,11 @@ def reconcile(state: Any, cast: list[dict], narration: str, extraction: SceneExt
     explicit, explicit_rejected = _validate_explicit(extraction, known, narration, source)
     return {
         "scene_id": state.current_scene_id,
-        "status": "unconfirmed" if rejected else "ready",
+        "status": "ready",
         "source_hash": source,
         "rejected": rejected,
-        "actors": actors if not rejected else {},
+        "actors": actors,
+        "unconfirmed_actors": sorted(uncertain),
         "explicit": explicit,
         "explicit_rejected": explicit_rejected,
     }

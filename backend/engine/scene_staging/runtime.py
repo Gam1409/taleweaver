@@ -9,7 +9,8 @@ from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.scene_staging import props
-from backend.engine.scene_staging.schema import INSTRUCTIONS, SceneExtraction
+from backend.engine.scene_staging.proposals import StagingProposal
+from backend.engine.scene_staging.schema import INSTRUCTIONS
 from backend.engine.scene_staging.shared import apply_extraction, consume
 from backend.engine.scene_staging.state import KEY, digest, project
 from backend.engine.turn_replay.transactions import release_for_model
@@ -79,7 +80,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             llm.aexecute_complex_task(
                 INSTRUCTIONS,
                 payload,
-                SceneExtraction,
+                StagingProposal,
                 llm.model,
                 operation="scene_staging",
                 phase="reconciliation",
@@ -87,8 +88,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             ),
             timeout=role_timeout(manager.user, "small"),
         )
-        extraction = SceneExtraction.model_validate(response)
-        apply_extraction(manager, narration, cast, rows, extraction)
+        apply_extraction(manager, narration, cast, rows, response)
         applied = True
     except asyncio.CancelledError:
         raise

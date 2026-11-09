@@ -189,7 +189,12 @@ async def test_bad_or_missing_staging_does_not_veto_valid_item_changes(monkeypat
         ]
         assert final_payload(events)["status"] == "success", "".join(events)
         await db.refresh(state)
-        assert len(roles.calls) == 3 and state.entity_states[KEY]["status"] == "unconfirmed"
+        assert len(roles.calls) == 3
+        assert state.entity_states[KEY]["status"] == (
+            "ready" if isinstance(staging, dict) else "unconfirmed"
+        )
+        if isinstance(staging, dict):
+            assert state.entity_states[KEY]["rejected"] == 1
         assert state.entity_states["LINA"]["visual_profile"]["worn"] == []
 
 

@@ -24,8 +24,10 @@ def record_staging(result: dict, proposed: int) -> None:
         _staging["reconciliations"] += 1
         _staging["proposed_deltas"] += proposed
         _staging["rejected_deltas"] += rejected
-        _staging["fail_closed_turns"] += int(rejected > 0)
-        _staging["ready_turns"] += int(result.get("status") == "ready")
+        ready = result.get("status") == "ready"
+        _staging["fail_closed_turns"] += int(not ready)
+        _staging["partial_turns"] += int(ready and rejected > 0)
+        _staging["ready_turns"] += int(ready)
 
 
 def snapshot() -> dict:

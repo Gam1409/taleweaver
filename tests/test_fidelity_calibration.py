@@ -103,7 +103,7 @@ def test_single_character_scenes_do_not_require_a_count_phrase():
     assert fidelity.literal_diff("Lina and Miki wait.", FACTS) == ["2 people"]
 
 
-def test_staging_counters_expose_rejected_delta_and_whole_turn_reset(monkeypatch):
+def test_staging_counters_distinguish_partial_rejection_from_whole_turn_reset(monkeypatch):
     monkeypatch.setattr(reliability_metrics, "_staging", Counter())
     state = SimpleNamespace(current_scene_id="room", entity_states={})
     extraction = SceneExtraction(
@@ -113,15 +113,18 @@ def test_staging_counters_expose_rejected_delta_and_whole_turn_reset(monkeypatch
         ]
     )
     result = reconcile(state, FACTS["characters"], "Emiral stands.", extraction)
-    assert result["rejected"] == 1 and result["actors"] == {}
+    assert result["rejected"] == 1
+    assert result["actors"]["e"]["posture"]["value"] == "standing"
+    assert result["unconfirmed_actors"] == ["m"]
     reliability_metrics.record_staging(result, len(extraction.changes))
     reliability_metrics.record_staging({"status": "ready", "rejected": 0}, 0)
     assert reliability_metrics.snapshot()["staging"] == {
         "reconciliations": 2,
         "proposed_deltas": 2,
         "rejected_deltas": 1,
-        "fail_closed_turns": 1,
-        "ready_turns": 1,
+        "fail_closed_turns": 0,
+        "partial_turns": 1,
+        "ready_turns": 2,
     }
 
 

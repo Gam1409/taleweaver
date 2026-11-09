@@ -60,7 +60,11 @@ Upgrade the database with the normal Alembic migration before starting the new
 backend (`c7e9a1b3d524`). The migration adds narration history columns and hook_runs.
 
 The diagnostics panel also counts completed staging reconciliations, proposed and
-rejected pose/placement deltas, fail-closed turns and ready turns. These counters
-exclude model failures and skipped turns, and reset on process restart. The
-fail-closed policy is unchanged. The scene `adapt_with_llm=false` addendum warning
+rejected pose/placement deltas, partial turns, fail-closed turns and ready turns.
+A partial turn rejects individual proposals while retaining independent confirmed
+facts. An unverifiable pose invalidates only its identified actor and stale
+relations to that actor. Unknown actors cannot invalidate the present cast.
+Malformed prop or explicit-act entries cannot discard valid poses; the complete
+response still respects the existing section limits. These counters exclude model
+failures and skipped turns, and reset on process restart. The scene `adapt_with_llm=false` addendum warning
 remains deferred; NSFW policy and prompts are unchanged.

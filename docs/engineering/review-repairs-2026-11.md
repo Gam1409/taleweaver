@@ -18,3 +18,17 @@ Passing these tests establishes host contracts, not model reasoning quality.
 The original review's remaining work covers independent scene-delta validation,
 clothing/provenance contracts, NPC host facts, source retraction, history polling,
 causal projections, diagnostics and structured technical model requests.
+
+## Wave 2a: independent staging validation and operation schemas
+
+- Reuse the existing staging owner for bounded, per-entry validation. Malformed
+  props/explicit atoms do not invalidate independently valid poses.
+- An invalid or unverifiable pose removes only its identified actor's pose and
+  stale character-relative placements. Unrelated actors retain confirmed facts.
+  This does not authorize movement, teleportation, ownership or clothing edits.
+- Solo undressing uses one participant, consistently with other solo acts.
+- The scene update JSON schema now exposes the host's operation-specific required
+  fields, including the stable key for a new record. Existing saved data retains
+  the same schema version and shape.
+- Diagnostics distinguish partial rejections from a fully unconfirmed frame and
+  include schema-invalid pose proposals in both proposal/rejection totals.
