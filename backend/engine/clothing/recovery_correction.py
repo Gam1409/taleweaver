@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.recovery_context import KEY, recovery_context
@@ -21,12 +21,19 @@ class RecoveryCorrection(BaseModel):
     evidence: str = Field(min_length=4, max_length=800)
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
+    restore_coverage: StrictBool = False
 
     @model_validator(mode="after")
     def coherent(self) -> "RecoveryCorrection":
-        if self.status == "carried" and (self.uncovered_regions or self.placement_evidence):
+        if self.status == "carried" and (
+            self.uncovered_regions or self.placement_evidence or self.restore_coverage
+        ):
             raise ValueError("Removed garments cannot have partial placement.")
-        if bool(self.uncovered_regions) != bool(self.placement_evidence):
+        if self.restore_coverage and (self.uncovered_regions or not self.placement_evidence):
+            raise ValueError("Restoring coverage requires an exact quote and no exposed regions.")
+        if not self.restore_coverage and bool(self.uncovered_regions) != bool(
+            self.placement_evidence
+        ):
             raise ValueError("Partial placement requires both regions and an exact quote.")
         if len(set(self.uncovered_regions)) != len(self.uncovered_regions):
             raise ValueError("Exposed regions must be unique.")
@@ -47,6 +54,7 @@ def _corrected_proposal(
     entry.action.evidence = correction.evidence
     entry.uncovered_regions = correction.uncovered_regions
     entry.placement_evidence = correction.placement_evidence
+    entry.restore_coverage = correction.restore_coverage
     return proposal
 
 
@@ -87,7 +95,7 @@ async def debug_wardrobe_correct(
                 "Correction conflicts with another validated garment; preview unchanged."
             )
     except ValidationError:
-        return "DEBUG ERROR: Invalid correction. Choose worn or carried and provide exact quotes; only worn garments can have exposed regions."
+        return "DEBUG ERROR: Invalid correction. Choose worn or carried and provide exact quotes; only worn garments can change placement."
     except ValueError as exc:
         return f"DEBUG ERROR: {exc}"
     state.entity_states = {

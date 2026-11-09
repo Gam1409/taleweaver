@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from backend.engine.clothing.schema import Garment, Region
 from backend.engine.narrated_items.schema import ItemAction, NewItem
@@ -37,6 +37,10 @@ class RecoveryEntry(BaseModel):
     action: ExistingRecoveryAction | NewRecoveryAction
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
+    restore_coverage: StrictBool = Field(
+        default=False,
+        description="Explicit return to normal garment coverage. Requires worn disposition, no uncovered regions and an exact restoring placement quote. Omission never resets placement.",
+    )
 
     @field_validator("action", mode="before")
     @classmethod

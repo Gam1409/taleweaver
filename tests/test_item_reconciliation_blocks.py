@@ -111,7 +111,7 @@ def test_rule_rejection_takes_precedence_and_bounds_only_the_diagnostic_excerpt(
     assert reason.endswith("[diagnostic excerpt]")
 
 
-async def test_rejected_possession_reason_reaches_the_saved_item_check_without_extra_calls(
+async def test_rejected_possession_reason_is_retained_while_independent_state_is_checked(
     monkeypatch,
 ):
     monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", "Lina continues talking.")
@@ -141,6 +141,15 @@ async def test_rejected_possession_reason_reaches_the_saved_item_check_without_e
         check = state.entity_states[KEY]
         assert check["reason_code"] == "rules_rejected"
         assert "The player does not carry this item." in check["reason"]
-        assert state.entity_states[PHYSICAL_KEY]["last_check"]["reason"] == check["reason"]
-    assert not any(name == "ItemExtraction" for name, *_ in roles.calls)
+        physical = state.entity_states[PHYSICAL_KEY]["last_check"]
+        assert physical["status"] == "complete"
+        assert physical["accepted"] == [] and physical["rejected"] == []
+        assert physical["proposed_count"] == 0
+    calls = [call for name, *call in roles.calls if name == "ItemExtraction"]
+    assert len(calls) == 1
+    import json
+
+    payload = json.loads(calls[0][0][1])
+    assert payload["item_changes_allowed"] is False
+    assert PLAYER in payload["independent_state_scope"]["blocked_subject_ids"]
     assert len(roles.prompts) == 1

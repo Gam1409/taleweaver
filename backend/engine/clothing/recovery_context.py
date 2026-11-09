@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records
+from backend.engine.clothing.history import load_history
 from backend.engine.visual_novel.continuity import possession_snapshot
-from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 
 KEY = "__wardrobe_recovery__"
@@ -24,28 +24,8 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
     npc = next((row for row in entities if row.id == npc_id and row.entity_type == "NPC"), None)
     if npc is None:
         raise ValueError("NPC does not belong to this session.")
-    rows = list(
-        await db.scalars(
-            select(ChatMessage)
-            .where(
-                ChatMessage.session_id == state.session_id,
-                ChatMessage.role.in_(["user", "assistant"]),
-                ~ChatMessage.content.startswith("/debug"),
-            )
-            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-            .limit(81)
-        )
-    )
-    messages = []
-    size = 0
-    for row in rows[:80]:
-        if size + len(row.content) > 48000:
-            break
-        messages.append(
-            {"id": row.id, "role": row.role, "content": row.content, "scene_id": row.scene_id}
-        )
-        size += len(row.content)
-    messages.reverse()
+    history = await load_history(db, state.session_id)
+    messages = history.messages
     states = deepcopy(state.entity_states or {})
     states.pop(KEY, None)
     fingerprint = hashlib.sha256(
@@ -53,7 +33,11 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
             {
                 "states": states,
                 "scene": state.current_scene_id,
-                "avatar": {"inventory": avatar.inventory, "equipment": avatar.equipment},
+                "avatar": {
+                    "inventory": avatar.inventory,
+                    "equipment": avatar.equipment,
+                    "visual_profile": avatar.visual_profile,
+                },
                 "entities": [
                     {
                         "id": row.id,
@@ -63,10 +47,12 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
                         "metadata": row.metadata_json,
                         "scene": row.current_scene_id,
                         "age": row.age_years,
+                        "visual_profile": row.visual_profile,
                     }
                     for row in sorted(entities, key=lambda row: row.id)
                 ],
                 "messages": messages,
+                "message_revisions": history.revisions,
             },
             sort_keys=True,
             ensure_ascii=False,
@@ -79,6 +65,7 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
     proxy = SimpleNamespace(
         avatar=avatar,
         state=SimpleNamespace(
+            session_id=state.session_id,
             entity_states=states,
             current_scene_id=override.get("current_scene_id", npc.current_scene_id),
         ),
@@ -91,5 +78,5 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
         "snapshot": snapshot,
         "messages": messages,
         "fingerprint": fingerprint,
-        "limited": len(rows) > len(messages),
+        "limited": history.limited,
     }

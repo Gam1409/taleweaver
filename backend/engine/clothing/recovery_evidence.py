@@ -21,16 +21,27 @@ def evidence_issues(
         issues.append(
             "observed_wear requires disposition=worn; completed removal uses completed/carried."
         )
-    if not entry.uncovered_regions:
+    return issues + _placement_issues(entry, action, source, garment)
+
+
+def _placement_issues(
+    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment
+) -> list[str]:
+    issues: list[str] = []
+    if not entry.uncovered_regions and not entry.placement_evidence and not entry.restore_coverage:
         return issues
     if action.disposition != "worn":
         issues.append("Partial placement requires a garment that is still worn.")
+    if entry.restore_coverage and entry.uncovered_regions:
+        issues.append("Restored coverage cannot also expose regions.")
+    if entry.placement_evidence and not entry.uncovered_regions and not entry.restore_coverage:
+        issues.append("Confirm restore_coverage before resetting an existing placement.")
     invalid = sorted(set(entry.uncovered_regions) - set(garment.coverage))
     if invalid:
         issues.append(
             f"Exposed regions {', '.join(invalid)} are outside garment coverage {', '.join(garment.coverage)}."
         )
-    if not entry.placement_evidence:
+    if (entry.uncovered_regions or entry.restore_coverage) and not entry.placement_evidence:
         issues.append("Partial placement has no evidence quote.")
     elif entry.placement_evidence not in source["content"]:
         issues.append(
@@ -53,4 +64,5 @@ def rejected_entry(
         "coverage": garment.coverage if garment else [],
         "uncovered_regions": entry.uncovered_regions,
         "reasons": reasons,
+        **({"restore_coverage": True} if entry.restore_coverage else {}),
     }

@@ -41,6 +41,7 @@ def test_large_duplicated_item_metadata_is_omitted_but_garment_and_ownership_sur
     assert facts["owners"] == {"SHIRT": "NPC"}
     assert facts["existing_garments"] == ["SHIRT"]
     assert facts["target_actor"]["worn_item_ids"] == ["SHIRT"]
+    assert facts["target_actor"]["worn_placements"] == {"SHIRT": []}
     assert facts["target_actor"]["age_years"] == 30
     assert "image_prompt" not in payload and "resolved_inventory" not in payload
     assert selected["fingerprint"] == original["fingerprint"]

@@ -27,6 +27,7 @@ export interface WardrobeRecoveryPreview {
     source_message_id: string
     uncovered_regions?: string[]
     placement_evidence?: string
+    restore_coverage?: boolean
   }[]
 }
 const props = defineProps<{
@@ -145,6 +146,7 @@ const emit = defineEmits<{ command: [value: string] }>()
         <p v-if="entry.uncovered_regions?.length">
           Partially displaced — exposed: {{ entry.uncovered_regions.join(', ') }}
         </p>
+        <p v-if="entry.restore_coverage">Restores normal coverage.</p>
         <p v-if="entry.placement_evidence" class="italic">{{ entry.placement_evidence }}</p>
         <blockquote class="border-l-2 border-slate-500 pl-2 italic">
           {{ entry.evidence }}

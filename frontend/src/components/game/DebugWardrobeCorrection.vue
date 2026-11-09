@@ -15,17 +15,21 @@ const status = ref('')
 const evidence = ref(props.entry.evidence)
 const placement = ref(props.entry.placement_evidence)
 const uncovered = ref([...props.entry.uncovered_regions])
+const restoreCoverage = ref(!!props.entry.restore_coverage)
+watch(restoreCoverage, value => { if (value) uncovered.value = [] }, { flush: 'sync' })
+watch(() => uncovered.value.length, value => { if (value) restoreCoverage.value = false }, { flush: 'sync' })
 watch(status, value => {
   if (value === 'carried') {
     uncovered.value = []
     placement.value = ''
+    restoreCoverage.value = false
   }
 })
 const statusError = computed(() => ['worn', 'carried'].includes(status.value) ? '' : 'Choose the clothing state confirmed by the story.')
 const itemError = computed(() => quoteError(props.source, evidence.value))
-const placementError = computed(() => uncovered.value.length
+const placementError = computed(() => uncovered.value.length || restoreCoverage.value
   ? quoteError(props.source, placement.value)
-  : placement.value ? 'Clear the placement quote or select the regions this garment no longer covers.' : '')
+  : placement.value ? 'Clear the placement quote, select exposed regions, or explicitly confirm restored coverage.' : '')
 const regionChoices = computed(() => [...new Set([...props.entry.coverage, ...uncovered.value])])
 const regionError = computed(() => {
   const invalid = uncovered.value.filter(region => !props.entry.coverage.includes(region))
@@ -51,6 +55,7 @@ function submit() {
     evidence: evidence.value.trim(),
     uncovered_regions: uncovered.value,
     placement_evidence: placement.value.trim(),
+    ...(restoreCoverage.value ? { restore_coverage: true } : {}),
   })
   emit('command', `/debug wardrobe_correct ${props.token} ${props.entry.index} ${payload}`)
 }
@@ -71,7 +76,7 @@ function submit() {
       </p>
       <div class="flex flex-wrap gap-2">
         <button type="button" :disabled="!canUseSelection" class="rounded-full border border-cyan-800 px-3 py-1 text-xs disabled:opacity-40" @click="useSelection('item')">Use selection as item quote</button>
-        <button v-if="status === 'worn' && uncovered.length" type="button" :disabled="!canUseSelection" class="rounded-full border border-cyan-800 px-3 py-1 text-xs disabled:opacity-40" @click="useSelection('placement')">Use selection as placement quote</button>
+        <button v-if="status === 'worn' && (uncovered.length || restoreCoverage)" type="button" :disabled="!canUseSelection" class="rounded-full border border-cyan-800 px-3 py-1 text-xs disabled:opacity-40" @click="useSelection('placement')">Use selection as placement quote</button>
       </div>
       <fieldset :disabled="busy" class="space-y-3">
         <label class="block text-sm">
@@ -95,6 +100,10 @@ function submit() {
         <div v-if="status === 'worn'" class="space-y-2 text-sm">
           <p>Exposed regions (optional)</p>
           <p class="text-xs text-slate-400">Select only regions the displaced garment no longer covers.</p>
+          <label class="flex items-center gap-2">
+            <input v-model="restoreCoverage" type="checkbox" /> Restore normal coverage
+          </label>
+          <p class="text-xs text-slate-400">Use restored coverage only when the quote explicitly puts the garment back in place. Leave placement blank to keep it unchanged.</p>
           <div class="flex flex-wrap gap-3">
             <label v-for="region in regionChoices" :key="region" class="flex items-center gap-1">
               <input v-model="uncovered" type="checkbox" :value="region" /> {{ region }}{{ entry.coverage.includes(region) ? '' : ' (outside coverage)' }}
@@ -107,7 +116,7 @@ function submit() {
             <textarea v-model="placement" :aria-invalid="!!placementError" rows="3" maxlength="1600" class="mt-1 block w-full rounded bg-slate-800 p-2" />
           </label>
           <p v-if="placementError" role="status" class="text-xs text-amber-200">{{ placementError }}</p>
-          <button v-if="uncovered.length && !itemError" type="button" class="text-xs text-cyan-200 underline" @click="placement = evidence">Use item quote for placement</button>
+          <button v-if="(uncovered.length || restoreCoverage) && !itemError" type="button" class="text-xs text-cyan-200 underline" @click="placement = evidence">Use item quote for placement</button>
           <div v-if="placementSuggestion" class="space-y-1 text-xs">
             <blockquote class="whitespace-pre-wrap border-l-2 border-cyan-800 pl-2">{{ placementSuggestion }}</blockquote>
             <button type="button" class="text-cyan-200 underline" @click="placement = placementSuggestion">Use exact source wording for placement quote</button>

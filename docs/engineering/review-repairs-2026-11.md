@@ -138,3 +138,35 @@ is not the selected behavior.
 - Clarify the same identity distinction in the shared authoring item description
   and the producer prompt. Independent actors receive independent schema objects;
   no shared base schema or saved wardrobe is mutated.
+
+## Wave 10: recover registered garment placement from evidence
+
+- Repair the existing debug recovery context's missing session identity so scoped
+  possession checks can include the NPC's registered garments. Preserve that
+  ownership check rather than treating unavailable IDs as new acquisitions.
+- Apply reviewed placement evidence to an already-worn garment without creating
+  another item. Restoring normal coverage requires an explicit flag and an exact
+  restoring quotation; omitted placement never resets exposed regions.
+- Preserve original acquisition provenance when correcting placement. Bind preview
+  fingerprints to base visual profiles and message revisions as well as text,
+  so an intervening appearance or history update requires a fresh preview.
+- Reuse the recovery history loader with an optional saved-message cutoff,
+  stable timestamp/ID ordering, whole-message limits and an explicit limited flag.
+  The illustration pipeline does not yet consume this optional history window.
+- Keep preview/apply review, age/detail policy and garment coverage validation.
+  Tests cover the full debug path, not just the isolated evaluator.
+- Update the older item-denial integration test to verify the intentional Wave 8
+  behavior: retain the item refusal while exactly one shared extraction checks
+  unrelated state. General rules denials still skip the shared request.
+
+## Open illustration consistency decision
+
+- F13 remains open: a source-backed visual exposure atom can conflict with the
+  frozen wardrobe after a failed clothing action. Current rendering does not
+  resolve that conflict by consulting historical wardrobe evidence.
+- The owner requested checking history, including earlier adult RP context.
+  Genre is not garment evidence. Review only messages up to the selected moment;
+  current clothing must not replace historical clothing in an older illustration.
+- The existing recovery preview can now correct missed registered-item placement,
+  but it changes current state only after review. Automatic historical image
+  repair and its confirmation policy have not been implemented.

@@ -9,6 +9,7 @@ export interface WardrobeRejection {
   disposition: string
   evidence: string
   placement_evidence: string
+  restore_coverage?: boolean
   coverage: string[]
   uncovered_regions: string[]
   reasons: string[]

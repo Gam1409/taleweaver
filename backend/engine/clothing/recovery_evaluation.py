@@ -5,6 +5,7 @@ from copy import deepcopy
 from backend.engine.clothing.recovery_contract import resolve_garment
 from backend.engine.clothing.recovery_evidence import evidence_issues, rejected_entry
 from backend.engine.clothing.recovery_mentions import mention_checks
+from backend.engine.clothing.recovery_placement import restore as restore_placement
 from backend.engine.clothing.recovery_policy import classify_action, partition_rejections
 from backend.engine.clothing.recovery_schema import RecoveryEntry, RecoveryProposal
 from backend.engine.narrated_items.apply import apply_actions
@@ -73,6 +74,10 @@ def evaluate(
             message_id=f"{entry.source_message_id}:wardrobe:{index}",
             failures=failures,
         )
+        if not additions and not failures:
+            changed, additions, failures = restore_placement(
+                changed, entry, garment, snapshot, detailed
+            )
         actors = changed
         blocking, omitted = partition_rejections(
             failures, detailed=detailed, age=actor.get("age_years")
@@ -83,7 +88,7 @@ def evaluate(
         skipped.extend(omitted)
         for addition in additions:
             addition["proposal_index"] = index
-            _finish_addition(actors[actor["id"]], addition, entry)
+            _finish_addition(actors[actor["id"]], addition, entry, index)
             identifier = addition["item"]["id"]
             snapshot.items[identifier] = addition["item"]
             snapshot.owners[identifier] = actor["id"]
@@ -92,16 +97,22 @@ def evaluate(
     return actors, accepted, errors, list(dict.fromkeys(skipped))
 
 
-def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry) -> None:
+def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry, index: int) -> None:
     addition["source_message_id"] = entry.source_message_id
     addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
     addition["placement_evidence"] = entry.placement_evidence
-    if entry.uncovered_regions:
+    if entry.uncovered_regions or entry.restore_coverage:
         _set_partial_wear(actor, addition)
-    # Keep real source IDs for checkpoint and regeneration provenance.
+    if entry.restore_coverage:
+        addition["restore_coverage"] = True
+    # Only newly recovered acquisitions use the synthetic evaluation source.
+    # Placement updates retain the garment's original acquisition provenance.
     for key in ("item_origin", "clothing_origin"):
-        if key in addition["item"]:
-            addition["item"][key]["source_message_id"] = entry.source_message_id
+        origin = addition["item"].get(key)
+        if isinstance(origin, dict) and origin.get("source_message_id") == (
+            f"{entry.source_message_id}:wardrobe:{index}"
+        ):
+            origin["source_message_id"] = entry.source_message_id
     identifier = addition["item"]["id"]
     for field in ("inventory", "resolved_inventory"):
         actor[field] = [

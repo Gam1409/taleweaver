@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(`import {computed,ref,watch} from '${import.
 import {quoteError,quoteSuggestion} from '${quoteModule}';
 export function setup(props, emit) {
   ${source}
-  return { status, evidence, placement, uncovered, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection };
+  return { status, evidence, placement, uncovered, restoreCoverage, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection };
 }`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
 const { setup } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
@@ -61,6 +61,25 @@ test('paraphrased evidence and regions outside garment coverage cannot be submit
   f.uncovered.value = ['feet']
   f.submit()
   assert.equal(f.calls.length, 0)
+})
+
+test('restored coverage requires an explicit choice and a literal restoring quote', t => {
+  const f = fixture(t)
+  const quote = 'Lina pulls the garment back into place.'
+  f.props.source = quote
+  f.status.value = 'worn'
+  f.evidence.value = quote
+  f.placement.value = quote
+  f.uncovered.value = []
+  assert.equal(f.valid.value, false)
+  f.restoreCoverage.value = true
+  assert.equal(f.valid.value, true)
+  f.submit()
+  const body = JSON.parse(f.calls[0][1].slice('/debug wardrobe_correct preview 2 '.length))
+  assert.equal(body.restore_coverage, true)
+  assert.deepEqual(body.uncovered_regions, [])
+  f.placement.value = 'Not in the source.'
+  assert.equal(f.valid.value, false)
 })
 
 test('choosing fully removed clears partial placement before validating carried clothing', async t => {

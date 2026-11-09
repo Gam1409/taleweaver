@@ -30,6 +30,11 @@ def _facts(context: dict, detailed: bool) -> dict:
             "worn_item_ids": [
                 row["item_id"] for row in worn if isinstance(row, dict) and "item_id" in row
             ],
+            "worn_placements": {
+                row["item_id"]: row.get("uncovered_regions", [])
+                for row in worn
+                if isinstance(row, dict) and "item_id" in row
+            },
         },
         "canonical_items": canonical,
         "owners": snapshot.owners,
