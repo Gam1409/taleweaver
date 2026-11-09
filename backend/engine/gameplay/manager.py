@@ -82,7 +82,7 @@ from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
-from backend.engine.visual_novel.item_rejections import rejection_reason
+from backend.engine.visual_novel.item_rejections import rejected_targets, rejection_reason
 from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
 from backend.engine.scene_continuity.runtime import finish as finish_scene_continuity
 from backend.engine.visual_novel.time_passage import apply as apply_time_passage
@@ -2130,6 +2130,7 @@ class GameTurnManager:
                 blocked=bool(rule_violations)
                 or draft_narration.startswith("The attempted item change did not occur;"),
                 blocked_reason=rejection_reason(self, rule_violations),
+                blocked_targets=rejected_targets(self, rule_violations),
             )
             for item_message in item_messages:
                 await self._save_chat_message("system", item_message)

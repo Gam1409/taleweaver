@@ -1,5 +1,6 @@
 """Copy-on-write item reconciliation; model output never supplies gameplay properties."""
 
+from collections.abc import Sequence
 from copy import deepcopy
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -155,6 +156,7 @@ def apply_actions(
     session_id: str,
     message_id: str,
     failures: list[ItemFailure] | None = None,
+    source_indices: Sequence[int] | None = None,
 ) -> tuple[dict, list[dict], list[str]]:
     """Validate each action on copies; failures never partially remove possessions."""
     actors = deepcopy(actors)
@@ -162,7 +164,14 @@ def apply_actions(
     accepted: list[dict] = []
     errors: list[str] = []
     seen: set[str] = set()
-    for index, proposal in enumerate(extraction.actions):
+    if source_indices is not None and (
+        len(source_indices) != len(extraction.actions)
+        or len(set(source_indices)) != len(source_indices)
+        or any(type(value) is not int or not 0 <= value <= 5 for value in source_indices)
+    ):
+        raise ValueError("Invalid item action source indices.")
+    for position, proposal in enumerate(extraction.actions):
+        index = source_indices[position] if source_indices is not None else position
         action: ItemAction = proposal
         try:
             action = classify_action(resolve_participants(proposal, actors))
@@ -215,6 +224,7 @@ def apply_actions(
                 exc.code if isinstance(exc, ItemPolicyError) else None,
                 basis=action.basis,
                 evidence=action.evidence,
+                action_index=index,
             )
             errors.append(failure.message())
             if failures is not None:

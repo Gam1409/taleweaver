@@ -27,6 +27,7 @@ class ItemFailure:
     code: PolicyCode | None = None
     basis: str = ""
     evidence: str = ""
+    action_index: int | None = None
 
     def message(self) -> str:
         return f"{self.label}: {self.reason}"
@@ -38,4 +39,5 @@ class ItemFailure:
             "code": self.code,
             "basis": self.basis,
             "evidence": self.evidence,
+            **({"action_index": self.action_index} if self.action_index is not None else {}),
         }

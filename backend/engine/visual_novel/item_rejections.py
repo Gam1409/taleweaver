@@ -22,15 +22,54 @@ def clear(manager: Any) -> None:
     manager._vn_item_rejection = None
 
 
-def remember(manager: Any, error: ValueError | TypeError) -> str:
+def remember(
+    manager: Any, error: ValueError | TypeError, *, intent: Any = None, owners: dict | None = None
+) -> str:
     reason = str(error)
     if reason not in _HOST_REASONS:
         reason = "The proposed item changes could not be validated against canonical possessions."
     manager._vn_item_rejection = {
         "message_id": getattr(manager, "_vn_player_message_id", None),
         "reason": reason,
+        "targets": sorted(_targets(intent, owners or {})) if intent is not None else [],
     }
     return reason
+
+
+def _targets(intent: Any, owners: dict) -> set[str]:
+    fields = ("new_inventory_items", "updated_inventory_items", "spawned_items")
+    entries = [entry for field in fields for entry in getattr(intent, field, None) or []]
+    ids = {getattr(entry, "id", None) for entry in entries}
+    ids.update(getattr(intent, "removed_inventory_item_ids", None) or [])
+    ids.update(getattr(intent, "deleted_entities", None) or [])
+    actors = (
+        {"__player__"}
+        if any(
+            getattr(intent, field, None)
+            for field in (*fields, "removed_inventory_item_ids", "deleted_entities")
+        )
+        else set()
+    )
+    for update in getattr(intent, "updated_entities", None) or []:
+        if update.inventory is None:
+            continue
+        actors.add(update.entity_id)
+        ids.update(getattr(entry, "id", None) for entry in update.inventory)
+    actors.update(owners[key] for key in ids if key in owners)
+    ids.update(key for key, owner in owners.items() if owner in actors)
+    return {value for value in ids | actors if isinstance(value, str) and value}
+
+
+def rejected_targets(manager: Any, rule_violations: list[str]) -> set[str] | None:
+    """Only a current localized item denial can admit unrelated state extraction."""
+    rejected = getattr(manager, "_vn_item_rejection", None)
+    if (
+        rule_violations
+        or not rejected
+        or rejected["message_id"] != getattr(manager, "_vn_player_message_id", None)
+    ):
+        return None
+    return set(rejected.get("targets") or ()) or None
 
 
 def rejection_reason(manager: Any, rule_violations: list[str]) -> str:

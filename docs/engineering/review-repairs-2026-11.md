@@ -114,3 +114,18 @@ is not the selected behavior.
   Keep session authorization, busy-session read-only behavior, request ownership,
   cancellation and the full-body deadline intact. No history cursor or parallel
   history store is introduced for data the background consumer never used.
+
+## Wave 8: independent reconciliation after item failures
+
+- Validate shared item proposals independently with the existing strict item
+  contract. Keep original action indices for deterministic new-item IDs and prop
+  references; an invalid entry cannot discard a separate valid item action.
+- A localized canonical item denial records its touched subjects. The existing
+  extraction request may retain source-backed state for unrelated known targets.
+  Related subjects and room-level proxies remain unconfirmed. General rules
+  denials do not gain this exception.
+- Preserve the established independence of valid physical-state candidates when
+  an ordinary item candidate fails. Independent deltas still use the original
+  ledger source, ownership, visibility, operation and clock checks.
+- Rejected state updates are counted and reported; no second extraction request
+  or successful replacement for the denied inventory action is introduced.

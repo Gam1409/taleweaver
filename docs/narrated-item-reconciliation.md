@@ -1,6 +1,13 @@
 # Completed narration and possessions
 
-VN turns reconcile item actions after completed narration and before scene staging and illustration snapshots. This adds one bounded Small-role request (up to 60 seconds); streaming text remains available while the final state is checked. Incomplete narration is never used. Guardrail rejection and canonical possession rejection block reconciliation; failures produce a system notification rather than claiming inventory was updated.
+VN turns reconcile item actions after completed narration and before scene staging and illustration snapshots. This uses one bounded Small-role request with that role's configured deadline. Ordinary narration can stream before the check; reviewed NPC narration waits for validation and the completed state transaction. Incomplete narration is never used. General guardrail rejection blocks state reconciliation; a localized canonical item denial can still admit unrelated state for known accessible targets. Failures produce a system notification rather than claiming inventory was updated.
+
+Shared extraction validates each item proposal with the existing strict item
+contract. Valid proposals keep their original indices for deterministic item IDs
+and placement references when another proposal is invalid. A denied subject, or a
+room-level proxy for it, cannot be restored through independent state updates.
+The original physical/scene validators still check evidence, ownership, audience,
+operations and game time. Rejected independent updates are counted and reported.
 
 Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs existing appearance and valid garment metadata. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
 

@@ -12,6 +12,7 @@ from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
+from backend.engine.narrated_items import independent_state
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
@@ -60,6 +61,7 @@ async def reconcile_items(
     resolution: str,
     blocked: bool = False,
     blocked_reason: str = "",
+    blocked_targets: set[str] | None = None,
 ) -> list[str]:
     physical_conditions.discard(manager)
     manager._pending_scene_continuity = None
@@ -79,7 +81,14 @@ async def reconcile_items(
     skipped = skipped_check(
         narration, blocked=blocked, blocked_reason=blocked_reason, limit=MAX_NARRATION
     )
-    if skipped is not None and (not staging_enabled or skipped.reason_code != "rules_rejected"):
+    independent_allowed = (
+        skipped is not None
+        and skipped.reason_code == "rules_rejected"
+        and blocked_targets is not None
+    )
+    if skipped is not None and (
+        (not staging_enabled and not independent_allowed) or skipped.reason_code != "rules_rejected"
+    ):
         pending_conditions.error = skipped.reason
         _status(manager, message_id, narration, "needs_review", **skipped.details())
         return [skipped.message()]
@@ -109,6 +118,11 @@ async def reconcile_items(
             "scene_continuity": await scene_continuity.prepare(manager),
             "scene_staging": shared_staging.prepare(manager, actors, rows),
             "item_changes_allowed": skipped is None,
+            "independent_state_scope": {
+                "blocked_subject_ids": sorted(blocked_targets | {manager.state.current_scene_id})
+            }
+            if independent_allowed and blocked_targets is not None
+            else None,
         },
         ensure_ascii=False,
     )
@@ -132,6 +146,7 @@ async def reconcile_items(
                 INSTRUCTIONS
                 + CONDITION_INSTRUCTIONS
                 + SCENE_INSTRUCTIONS
+                + independent_state.INSTRUCTIONS
                 + (STAGING_INSTRUCTIONS if staging_enabled else ""),
                 payload,
                 SharedItemExtraction if staging_enabled else ItemExtraction,
@@ -143,12 +158,10 @@ async def reconcile_items(
             timeout=role_timeout(manager.user, "small"),
         )
         shared_staging.propose(manager, result)
-        extraction = ItemExtraction.model_validate(
-            result.model_dump(exclude={"staging"})
-            if isinstance(result, SharedItemExtraction)
-            else result
+        extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
+            result, actors
         )
-        failures: list[ItemFailure] = []
+        failures = list(schema_failures)
         changed, accepted, errors = (
             (actors, [], [])
             if skipped
@@ -161,8 +174,16 @@ async def reconcile_items(
                 session_id=manager.state.session_id,
                 message_id=message_id,
                 failures=failures,
+                source_indices=source_indices,
             )
         )
+        errors = [failure.message() for failure in schema_failures] + errors
+        denied = set(blocked_targets or ()) | set(batch_denied or ())
+        state_rejected = 0
+        if denied:
+            extraction, state_rejected = independent_state.select(
+                manager, extraction, denied, set(actors) | set(snapshot.items)
+            )
     except asyncio.CancelledError:
         raise
     except Exception as exc:
@@ -199,6 +220,8 @@ async def reconcile_items(
         narration,
         failures,
         skipped,
+        independent_allowed,
+        state_rejected,
     )
 
 
@@ -214,15 +237,28 @@ def _finish_extraction(
     narration: str,
     failures: list[ItemFailure],
     skipped: SkippedCheck | None,
+    independent_allowed: bool,
+    state_rejected: int,
 ) -> list[str]:
     _store_changes(manager, changed, accepted, snapshot.catalog)
     shared_staging.approve_items(manager, accepted)
+    if skipped is None or independent_allowed:
+        pending_conditions.complete(
+            extraction.condition_updates, set(changed) | set(snapshot.items)
+        )
+        scene_continuity.complete(manager, extraction.scene_updates, extraction.final_frame_actions)
     if skipped is not None:
-        pending_conditions.error = skipped.reason
-        _status(manager, message_id, narration, "needs_review", **skipped.details())
-        return [skipped.message()]
-    pending_conditions.complete(extraction.condition_updates, set(changed) | set(snapshot.items))
-    scene_continuity.complete(manager, extraction.scene_updates, extraction.final_frame_actions)
+        if not independent_allowed:
+            pending_conditions.error = skipped.reason
+        _status(
+            manager,
+            message_id,
+            narration,
+            "needs_review",
+            **skipped.details(),
+            state_updates_rejected=state_rejected,
+        )
+        return [skipped.message(), *_state_review(state_rejected)]
     _status(
         manager,
         message_id,
@@ -231,6 +267,7 @@ def _finish_extraction(
         accepted=accepted,
         rejected=errors,
         rejected_details=[failure.payload() for failure in failures],
+        state_updates_rejected=state_rejected,
     )
     messages = [
         f"{changed[entry['destination_owner']]['name']}: {entry['item']['name']} ({entry['disposition']})."
@@ -240,7 +277,18 @@ def _finish_extraction(
         messages.append(
             "Some narrated item changes need review and were not applied: " + " ".join(errors)
         )
+    messages.extend(_state_review(state_rejected))
     return messages
+
+
+def _state_review(rejected: int) -> list[str]:
+    return (
+        [
+            "Some physical or scene changes need review: independence from rejected item changes could not be confirmed."
+        ]
+        if rejected
+        else []
+    )
 
 
 def _store_changes(manager: Any, changed: dict, accepted: list[dict], catalog: dict) -> None:

@@ -118,8 +118,9 @@ resulting owner_id. Never assume taking something off puts it anywhere in partic
 For a new item without a canonical ID, props may use item_action_index (zero-based
 index into actions) instead of item_id. Use exactly one identity. Rejected item
 actions cannot grant placement. Existing IDs remain preferred for known items.
-If item_changes_allowed is false, leave actions, condition_updates and scene_updates
-empty. Only independent supported staging may change; do not bypass rejected outcomes.
+If item_changes_allowed is false, leave actions empty. condition_updates and
+scene_updates remain empty unless independent_state_scope explicitly allows
+unrelated targets. Independent supported staging may change; never bypass rejected outcomes.
 """
     + INSTRUCTIONS
 )

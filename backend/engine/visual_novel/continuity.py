@@ -283,6 +283,7 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
     raw = intent.model_dump(exclude_none=True) if hasattr(intent, "model_dump") else intent
     proposal = VNProgressionIntent.model_validate(raw)
     result = to_chat_progression_intent(proposal)
+    snapshot = None
     try:
         snapshot = possession_snapshot(manager, entities)
         pending = defer_unregistered_items(result, snapshot)
@@ -308,7 +309,9 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         ):
             result.narrative_description += " Existing item identity, type and base description remain unchanged; only explicit condition notes may change."
     except (ValueError, TypeError) as error:
-        reason = remember(manager, error)
+        reason = remember(
+            manager, error, intent=proposal, owners=snapshot.owners if snapshot else None
+        )
         result.new_inventory_items = []
         result.updated_inventory_items = []
         result.removed_inventory_item_ids = []
