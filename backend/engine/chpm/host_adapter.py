@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from typing import Any
 
-from backend.engine.chpm import host_observations, host_sources, identity_adapter
+from backend.engine.chpm import host_observations, host_scene, host_sources, identity_adapter
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
 from backend.engine.chpm.host_state import Mind, Source, record_many
@@ -31,18 +31,7 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
     # Causal recall already checked this exact observer during the same preparation.
     checked = getattr(turn, "reconciled_minds", {}).get(actor.id)
     mind = checked if checked is not None else await host_sources.reconcile(manager, mind)
-    scene_scope = getattr(manager, "_scene_continuity_scope", None)
-    facts = host_observations.capture(
-        manager.state,
-        actor,
-        turn.present_names,
-        scene_targets=scene_scope[1]
-        if scene_scope and scene_scope[0] == observed.scene_id
-        else None,
-        scene_description=scene_scope[2]
-        if scene_scope and scene_scope[0] == observed.scene_id
-        else None,
-    )
+    facts = host_scene.capture(manager, actor, turn.present_names)
     change = host_observations.difference(host_observations.previous(mind), facts)
     anchor = {
         "message_id": observed.message_id,

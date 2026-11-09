@@ -7,7 +7,9 @@ from backend.engine.chpm import physical_observations
 from backend.engine.chpm.host_observation_contracts import HostFacts, Possession
 from backend.engine.chpm.host_state import Mind
 from backend.engine.clothing.profiles import load_profile, owned_items
+from backend.engine.scene_continuity.npc import difference as scene_difference
 from backend.engine.scene_continuity.npc import observations as scene_observations
+from backend.engine.scene_staging.npc import observations as staging_observations
 
 
 def capture(
@@ -17,6 +19,9 @@ def capture(
     *,
     scene_targets: set[str] | None = None,
     scene_description: str | None = None,
+    staging_cast: list[dict] | None = None,
+    placed_items: list[dict] | None = None,
+    player_id: str = "",
 ) -> HostFacts:
     override = (state.entity_states or {}).get(actor.id) or {}
     metadata = getattr(actor, "metadata_json", None) or {}
@@ -27,6 +32,11 @@ def capture(
     profile = load_profile(override.get("visual_profile", getattr(actor, "visual_profile", None)))
     possessions = owned_items(inventory)
     known_inventory = isinstance(inventory, (list, tuple, dict))
+    poses, placed, staging_omissions = (
+        staging_observations(state, staging_cast, placed_items or [], actor.id, player_id)
+        if staging_cast is not None
+        else (None, None, None)
+    )
     return HostFacts(
         scene_id=state.current_scene_id,
         visible_actor_ids=tuple(sorted(set(present) - {actor.id})),
@@ -37,6 +47,9 @@ def capture(
         if known_inventory
         else None,
         physical_conditions=physical_observations.capture(state, actor.id, set(possessions)),
+        character_poses=poses,
+        placed_items=placed,
+        staging_omissions=staging_omissions,
         scene_facts=scene_observations(
             state,
             actor.id,
@@ -82,6 +95,7 @@ def difference(before: HostFacts | None, after: HostFacts) -> str | None:
     if before.worn_item_ids is not None and after.worn_item_ids is not None:
         _sets(changes, "own_worn_items", before.worn_item_ids, after.worn_item_ids)
     changes.update(physical_observations.difference(before, after))
+    changes.update(scene_difference(before, after))
     if not changes:
         return None
     return _bounded(

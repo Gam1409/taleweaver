@@ -1,5 +1,18 @@
 # Scene continuity
 
+NPC cognition and simplified narration share an observer projection of current
+scene facts, confirmed poses and eligible placed items. The projection reads the
+existing ledgers and the turn's loaded scene scope without another model call.
+Prop visibility defaults to private; another NPC sees a placement only when it
+is explicitly public and its current ownership and presence still match. Legacy
+unspecified placements stay private. Bounded views declare omitted rows and do
+not remove ledger entries.
+
+Witnessed scene-process changes become citable world events through the existing
+NPC source mechanism. An explicitly observed ending is recorded as ended; losing
+access to a fact is unavailable. Moving into another room does not end processes
+in the room left behind.
+
 VN turns reuse the existing completed-narration item/physical-state extraction request.
 `scene_updates` proposes environment, process and environmental-effect deltas;
 `final_frame_actions` describes the final visible instant. No extra summarization

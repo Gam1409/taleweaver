@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from backend.core.system_diagnostics import service
-from backend.engine.chpm import agenda, experience, host_adapter, host_observations
+from backend.engine.chpm import agenda, experience, host_adapter, host_scene
 from backend.engine.chpm.core.contracts import Experience
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.errors import ChpmError, RecoverableChpmError
@@ -72,7 +72,7 @@ def identities(manager: Any, state: KernelState, actors: list[Any]) -> dict:
         result[actor.id] = {
             "name": actor.name,
             "authored_identity": profile,
-            "current_host_state": host_observations.capture(manager.state, actor, names).model_dump(
+            "current_host_state": host_scene.capture(manager, actor, names).model_dump(
                 exclude={"physical_conditions"}
             ),
         }

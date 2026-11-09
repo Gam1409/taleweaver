@@ -6,11 +6,14 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from backend.engine.scene_staging import props
-from backend.engine.scene_staging.schema import SceneDelta, SceneExtraction
+from backend.engine.scene_staging.schema import Placement, Posture, SceneDelta, SceneExtraction
 from backend.engine.visual_novel.config import read_settings
 
 KEY = "__scene_staging__"
+_POSTURE: TypeAdapter[Posture] = TypeAdapter(Posture)
 
 
 def digest(text: str) -> str:
@@ -185,21 +188,22 @@ def project(state: Any, cast: list[dict]) -> dict[str, dict]:
     if not read_settings(state).scene_staging:
         return {}
     actors = retained(state, cast)
-    return {
-        key: {
-            **({"posture": row["posture"]["value"]} if row.get("posture") else {}),
-            **(
-                {
-                    "placement": {
-                        k: row["placement"][k] for k in ("relation", "target_kind", "target")
-                    }
-                }
-                if row.get("placement")
-                else {}
-            ),
-        }
-        for key, row in actors.items()
-    }
+    return {key: _project_actor(row) for key, row in actors.items()}
+
+
+def _project_actor(row: dict) -> dict:
+    result: dict[str, Any] = {}
+    try:
+        if row.get("posture"):
+            result["posture"] = _POSTURE.validate_python(row["posture"]["value"])
+        if row.get("placement"):
+            value = Placement.model_validate(
+                {key: row["placement"][key] for key in ("relation", "target_kind", "target")}
+            )
+            result["placement"] = value.model_dump()
+    except (KeyError, TypeError, ValidationError):
+        return {}  # A corrupt legacy actor is unknown without hiding other actors.
+    return result
 
 
 def narration_block(state: Any, entities: list[Any], avatar: Any) -> str:

@@ -56,6 +56,7 @@ class PropDelta(BaseModel):
     evidence: str = Field(min_length=3, max_length=800)
     spatial_position: str = Field(default="", max_length=120)
     status: Literal["confirmed", "provisional", "clear"] = "provisional"
+    visibility: Literal["public", "private"] = "private"
 
     @model_validator(mode="after")
     def one_identity(self) -> "PropDelta":
@@ -156,6 +157,7 @@ def reconcile(
                 "spatial_position": change.spatial_position,
                 "evidence": change.evidence,
                 "source_hash": digest(narration),
+                "visibility": change.visibility,
             }
         )
     state.entity_states = {**(state.entity_states or {}), KEY: {"items": records}}
@@ -179,15 +181,36 @@ def stamp(state: Any, message: Any) -> None:
         state.entity_states = {**state.entity_states, KEY: data}
 
 
-def project(state: Any, items: list[dict]) -> list[dict]:
-    known = {(item["item_id"], item["owner_id"]) for item in items}
-    return [
-        {key: entry[key] for key in ("item_id", "owner_id", "name", "spatial_position")}
-        for entry in ((state.entity_states or {}).get(KEY) or {}).get("items", [])
-        if entry.get("status") == "confirmed"
-        and entry.get("scene_id") == state.current_scene_id
-        and (entry["item_id"], entry["owner_id"]) in known
-    ]
+def project(state: Any, items: list[dict], *, observer_id: str | None = None) -> list[dict]:
+    known = {(item["item_id"], item["owner_id"]): item for item in items}
+    result = []
+    for entry in ((state.entity_states or {}).get(KEY) or {}).get("items", []):
+        if not isinstance(entry, dict) or not all(
+            isinstance(entry.get(key), str) for key in ("item_id", "owner_id")
+        ):
+            continue
+        item = known.get((entry["item_id"], entry["owner_id"]))
+        visible = (
+            observer_id is None
+            or entry["owner_id"] == observer_id
+            or entry.get("visibility") == "public"
+        )
+        if (
+            item is None
+            or not visible
+            or entry.get("status") != "confirmed"
+            or entry.get("scene_id") != state.current_scene_id
+        ):
+            continue
+        result.append(
+            {
+                "item_id": item["item_id"],
+                "owner_id": item["owner_id"],
+                "name": item.get("name", ""),
+                "spatial_position": entry.get("spatial_position", ""),
+            }
+        )
+    return result
 
 
 def retract(state: Any, message_id: str) -> None:

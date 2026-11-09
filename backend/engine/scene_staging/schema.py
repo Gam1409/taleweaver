@@ -81,6 +81,8 @@ with an exact quote of a completed action. spatial_position must be a literal
 phrase in that quote. Taking off an item never implies placing it on the floor.
 Use provisional for an explicitly observed but unlocated item, confirmed only for
 explicit placement, and clear for a picked-up item. Never change ownership.
+Mark a prop public only when its placement is visible to present observers;
+concealed placements and unspecified visibility stay private to its owner.
 Explicit acts are present-tense states, not changes: report every explicit act
 involving present characters that is ongoing or completed at the final instant,
 including acts from previous_staging that continue in current_narration; for a

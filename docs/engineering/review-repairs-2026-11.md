@@ -88,3 +88,18 @@ is not the selected behavior.
 - Live baseline measurements found both a truncated 1,200-token proposal and an
   independently malformed proposal/retry. These offline repairs do not establish
   that the complete live NPC pipeline now succeeds; that needs another live run.
+
+## Wave 6: observer-scoped scene continuity in NPC cognition
+
+- Reuse the existing staging and scene ledgers for current poses, visible placed
+  items and process changes. Share the loaded scene scope and the same projection
+  between normal cognition and simplified narration; send no extra model request.
+- Keep concealed or unspecified prop visibility private to its owner. Public
+  placements still require a current item owner, presence and confirmed location.
+  Renaming or transferring a canonical item invalidates stale labels or ownership;
+  a corrupt pose affects only its actor's projection.
+- Preserve legacy source hashes by omitting unknown additive fields. Bound the
+  observer projection with explicit omission counts while retaining its ledger.
+- Record witnessed process changes through the existing world-event mechanism.
+  Missing visibility is unavailable, not an inferred ending; changing rooms does
+  not establish that a process in the previous room stopped.
