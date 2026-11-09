@@ -20,6 +20,7 @@ from backend.core.llm_json_repair import (
     repair_json,
 )
 from backend.core.llm_logger import log_llm_interaction, log_structured_event
+from backend.core.llm_parallel import resolve as resolve_parallel
 from backend.core.llm_provider_config import (
     apply_provider_endpoint,
     is_minimax_model,
@@ -727,6 +728,9 @@ class GameMasterLLM:
         self.ollama_api_mode = (user.llm_settings or {}).get("ollama_api_mode", "generate")
 
         llm_settings = self.user.llm_settings or {}
+        self.parallel_policy = resolve_parallel(
+            llm_settings, model_category if use_role_settings else None
+        )
         self.sampling = resolve_sampling(
             llm_settings, model_category if use_role_settings else None
         )

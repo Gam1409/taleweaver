@@ -4,6 +4,7 @@ import { audioService } from '@/services/audioService'
 import { catalogService } from '@/services/catalogService'
 import { createEndpointModelCache } from '@/services/endpointModelCache'
 import { normalizeSampling } from '@/services/llmSampling'
+import { normalizeParallel } from '@/services/llmParallel'
 import type { OllamaRole } from '@/services/ollamaRoleSettings'
 import { refreshConfig } from '@/store/config'
 
@@ -26,6 +27,7 @@ class SettingsService {
   // Forms for configuration sections
   llmForm = ref({
     sampling: normalizeSampling(),
+    parallel_requests: normalizeParallel(),
     small_model: '',
     small_model_provider: 'openai',
     small_max_tokens: 12288,

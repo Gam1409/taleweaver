@@ -47,6 +47,7 @@ from backend.core.global_settings import (
     resolve_global_settings_owner as _resolve_global_settings_owner,
 )
 from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
+from backend.core.llm_parallel import ParallelSettings
 from backend.core.llm_router import GameMasterLLM
 from backend.core.llm_sampling import SamplingProfile, SamplingSettings
 from backend.core.llm_sampling import temporary as temporary_sampling
@@ -487,6 +488,7 @@ class ApiKeyPayload(BaseModel):
 
 
 class SettingsPayload(OllamaRoleSettings, CustomOpenAIRoleSettings):
+    parallel_requests: ParallelSettings = Field(default_factory=ParallelSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)
     small_model: str
     small_model_provider: str
@@ -901,7 +903,10 @@ async def update_llm_settings(
         payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
     user = await _resolve_global_settings_owner(db, current_user, for_update=True)
     retained_memory = (user.llm_settings or {}).get("memory_rag")
-    user.llm_settings = _normalize_llm_settings(payload.model_dump())
+    updates = payload.model_dump()
+    if "parallel_requests" not in payload.model_fields_set:
+        updates["parallel_requests"] = (user.llm_settings or {}).get("parallel_requests", {})
+    user.llm_settings = _normalize_llm_settings(updates)
     if retained_memory is not None:
         user.llm_settings = {**user.llm_settings, "memory_rag": retained_memory}
     await _broadcast_global_settings(db, user, fields=("llm_settings",))

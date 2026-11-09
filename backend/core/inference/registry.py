@@ -57,9 +57,13 @@ class Ticket:
     token: str
     background: bool
     concurrent: bool = False
+    capacity: int = 1
+    configured: bool = False
 
     @property
     def record_key(self) -> str:
+        if self.capacity > 1 and not self.concurrent:
+            return self.key + ":parallel:" + self.token
         return self.key + (":concurrent" if self.concurrent else "")
 
 
@@ -82,6 +86,8 @@ class Registry:
             not isinstance(row, dict)
             or not isinstance(row.get("token"), str)
             or not isinstance(row.get("started"), (int, float))
+            or type(row.get("capacity", 1)) is not int
+            or not 1 <= row.get("capacity", 1) <= 4
             for row in data.values()
         ):
             raise InferenceQueueError("Inference journal is invalid; restore a valid backup.")
@@ -98,11 +104,20 @@ class Registry:
         temporary.replace(self.path)
         self.records = records
 
-    def enqueue(self, key: str) -> Ticket:
+    def enqueue(self, key: str, *, capacity: int | None = None) -> Ticket:
+        if capacity is not None and (type(capacity) is not int or not 1 <= capacity <= 4):
+            raise InferenceQueueError("Inference capacity must be between one and four.")
         with self.lock:
             if len(self.waiters) >= 256:
                 raise InferenceQueueError("Inference queue is full; try again later.")
-            ticket = Ticket(key, str(uuid4()), background_call.get(), concurrent_call.get())
+            ticket = Ticket(
+                key,
+                str(uuid4()),
+                background_call.get(),
+                concurrent_call.get() if capacity is None else False,
+                capacity or 1,
+                capacity is not None,
+            )
             self.waiters.append(ticket)
             return ticket
 
@@ -114,17 +129,20 @@ class Registry:
     def try_acquire(self, ticket: Ticket, *, background_ready: bool = True) -> bool:
         with self.lock:
             records = self._load()
-            current = records.get(ticket.record_key)
-            siblings = [records.get(ticket.key), records.get(ticket.key + ":concurrent")]
-            if any(row and row["token"] not in self.active for row in siblings):
+            siblings = self._siblings(records, ticket.key)
+            if any(row["token"] not in self.active for row in siblings.values()):
                 raise InferenceUncertainError(
                     "The AI server may still be processing a previous request. "
                     "Ask the administrator to check Inference queue before retrying."
                 )
-            if current or (ticket.background and not background_ready):
+            if self._full(ticket, siblings) or (ticket.background and not background_ready):
                 return False
             eligible = sorted(
-                (item for item in self.waiters if item.record_key == ticket.record_key),
+                (
+                    item
+                    for item in self.waiters
+                    if item.key == ticket.key and item.concurrent == ticket.concurrent
+                ),
                 key=lambda item: item.background,
             )
             if not eligible or eligible[0] != ticket:
@@ -132,12 +150,38 @@ class Registry:
             if len(records) >= 256:
                 raise InferenceQueueError("Too many unresolved inference servers.")
             self._write(
-                {**records, ticket.record_key: {"token": ticket.token, "started": time.time()}}
+                {
+                    **records,
+                    ticket.record_key: {
+                        "token": ticket.token,
+                        "started": time.time(),
+                        **({"capacity": ticket.capacity} if ticket.configured else {}),
+                    },
+                }
             )
             self.active.add(ticket.token)
             logger.info("Inference admitted: endpoint=%s request=%s", ticket.key, ticket.token)
             self.waiters.remove(ticket)
             return True
+
+    @staticmethod
+    def _siblings(records: dict[str, dict], key: str) -> dict[str, dict]:
+        return {
+            name: row
+            for name, row in records.items()
+            if name in {key, key + ":concurrent"} or name.startswith(key + ":parallel:")
+        }
+
+    @staticmethod
+    def _full(ticket: Ticket, siblings: dict[str, dict]) -> bool:
+        concurrent = siblings.get(ticket.key + ":concurrent")
+        normal = [row for name, row in siblings.items() if name != ticket.key + ":concurrent"]
+        if ticket.concurrent:
+            return bool(concurrent) or any("capacity" in row for row in normal)
+        if ticket.configured and concurrent:
+            return True
+        capacity = min([ticket.capacity, *(int(row.get("capacity", 1)) for row in normal)])
+        return len(normal) >= capacity
 
     def finish(
         self, ticket: Ticket, *, certain: bool, reason: str = "completion_unconfirmed"

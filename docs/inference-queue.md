@@ -21,7 +21,12 @@ Guarded paths:
   scheduler. Waiting foreground requests take priority; running remote work is not
   forcibly preempted. Background admission rechecks that the game is still idle.
 
-Hosted providers using their normal cloud routing retain their previous behavior.
+Hosted providers retain their previous behavior until a
+[per-role connection policy](llm-parallel-requests.md) is configured. Configured
+roles use bounded shared-origin pools, including cloud requests, independently of
+the legacy serialization flag. An exclusive role waits for an empty pool; parallel
+participants honor the smallest participating limit. Each slot has its own durable
+reservation and any uncertain slot fences the whole origin.
 ComfyUI/image inference is not coordinated by this text/embedding queue.
 
 Endpoints are grouped by scheme, hostname and effective port, independent of model,

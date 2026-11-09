@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+from backend.core.llm_parallel import npc_capacity
 from backend.engine.chpm import actor_preparation, parallel_budget
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.schema import Decision, Observation
@@ -18,13 +19,17 @@ async def prepare(
     sequential: Callable[..., Awaitable[None]],
 ) -> None:
     ordered = sorted(actors, key=lambda actor: actor.id)
-    if turn.initial.settings.npc_concurrency == 1 or len(ordered) < 2:
+    settings = turn.initial.settings
+    limit = npc_capacity(
+        getattr(manager, "user", None), settings.model_role, settings.npc_concurrency
+    )
+    if limit == 1 or len(ordered) < 2:
         for actor in ordered:
             await sequential(manager, turn, actor, observed)
         return
     jobs = [await actor_preparation.prepare(manager, turn, actor, observed) for actor in ordered]
     await release_for_model(manager)
-    semaphore = asyncio.Semaphore(turn.initial.settings.npc_concurrency)
+    semaphore = asyncio.Semaphore(limit)
     normal_calls = 1 + (
         turn.initial.settings.agent_steps if turn.initial.settings.mode == "live" else 0
     )

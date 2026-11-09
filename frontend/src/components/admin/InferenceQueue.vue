@@ -50,7 +50,7 @@ onMounted(load)
 <template>
   <section class="rounded-xl border border-teal-500/30 p-4 space-y-3">
     <h3 class="font-bold text-teal-300">Inference queue · Experimental</h3>
-    <p class="text-sm text-slate-400">{{ enabled ? 'Enabled.' : 'Disabled. Set INFERENCE_SERIALIZATION_ENABLED=true in backend configuration and restart to enable.' }} Applies to Ollama, OpenAI-compatible servers and configured embeddings.</p>
+    <p class="text-sm text-slate-400">{{ enabled ? 'Legacy local-server serialization is enabled.' : 'Legacy local-server serialization is disabled. Set INFERENCE_SERIALIZATION_ENABLED=true and restart to include embeddings.' }} Configured per-role connection limits apply independently of this switch, including cloud providers.</p>
     <p class="text-sm text-slate-400">A timeout does not prove the remote model stopped. Check or restart that inference server before clearing an uncertain request. This button does not cancel remote generation.</p>
     <p v-if="!reservations.length" class="text-sm">No outstanding reservations.</p>
     <div v-for="row in reservations" :key="row.token" class="rounded border border-white/10 p-3 space-y-2">

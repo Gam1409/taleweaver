@@ -7,6 +7,7 @@ import LlmSamplingSettings from './LlmSamplingSettings.vue'
 import RoleGenerationSettings from './RoleGenerationSettings.vue'
 import { effectiveSampling, normalizeSampling, type SamplingProfile } from '@/services/llmSampling'
 import { customOpenAIUrl, useSharedApiUrlForAll } from '@/services/llmRoleEndpoints'
+import { normalizeParallel } from '@/services/llmParallel'
 
 const props = defineProps<{
   llmForm: any
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 const normalizeLocalForm = (data: any) => ({
   ...data,
   sampling: normalizeSampling(data?.sampling),
+  parallel_requests: normalizeParallel(data?.parallel_requests),
   turns_before_compacting: typeof data?.turns_before_compacting === 'number' ? data.turns_before_compacting : 10,
   enable_history_compression: typeof data?.enable_history_compression === 'boolean' ? data.enable_history_compression : true,
   small_max_tokens: typeof data?.small_max_tokens === 'number' ? data.small_max_tokens : 12288,

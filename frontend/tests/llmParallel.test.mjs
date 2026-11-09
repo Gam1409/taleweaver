@@ -1,0 +1,44 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import ts from 'typescript'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
+
+const source = readFileSync(new URL('../src/services/llmParallel.ts', import.meta.url), 'utf8')
+const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const { normalizeParallel, roleParallel, updateParallel } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+
+test('legacy configuration stays unconfigured until a role is explicitly changed', () => {
+  const legacy = normalizeParallel()
+  assert.deepEqual(legacy, { roles: {} })
+  assert.deepEqual(roleParallel(legacy, 'complex'), { enabled: false, max_concurrent: 2 })
+})
+
+test('roles retain independent capacity across disable, enable and saved reload', () => {
+  const saved = { roles: { small: { enabled: true, max_concurrent: 3 } } }
+  let draft = updateParallel(normalizeParallel(saved), 'complex', { enabled: true })
+  draft = updateParallel(draft, 'complex', { max_concurrent: 4 })
+  draft = updateParallel(draft, 'complex', { enabled: false })
+  assert.equal(roleParallel(draft, 'complex').max_concurrent, 4)
+  draft = updateParallel(draft, 'complex', { enabled: true })
+  assert.deepEqual(normalizeParallel(JSON.parse(JSON.stringify(draft))), draft)
+  assert.deepEqual(roleParallel(draft, 'small'), { enabled: true, max_concurrent: 3 })
+  assert.deepEqual(saved, { roles: { small: { enabled: true, max_concurrent: 3 } } })
+})
+
+test('each connection renders an accessible bounded control outside collapsed generation options', () => {
+  const file = readFileSync(new URL('../src/components/admin/RoleParallelSettings.vue', import.meta.url), 'utf8')
+  const { descriptor, errors } = parse(file)
+  assert.deepEqual(errors, [])
+  const script = compileScript(descriptor, { id: 'parallel-settings' })
+  const template = compileTemplate({ source: descriptor.template.content, filename: 'RoleParallelSettings.vue', id: 'parallel-settings', compilerOptions: { bindingMetadata: script.bindings } })
+  assert.deepEqual(template.errors, [])
+  assert.match(file, /Allow parallel requests/)
+  assert.match(file, /\[2, 3, 4\]/)
+  assert.match(file, /:for="`parallel-\$\{role\}`"/)
+  assert.match(file, /world changes are applied sequentially/)
+  const parent = readFileSync(new URL('../src/components/admin/RoleGenerationSettings.vue', import.meta.url), 'utf8')
+  assert.ok(parent.indexOf('<RoleParallelSettings') < parent.indexOf('<details'))
+  const cards = readFileSync(new URL('../src/components/admin/IntelligenceSection.vue', import.meta.url), 'utf8')
+  assert.equal(cards.match(/<RoleGenerationSettings\s/g).length, 5)
+})

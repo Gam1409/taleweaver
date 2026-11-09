@@ -53,8 +53,10 @@ so a failed parallel turn can spend more of the existing budget than a sequentia
 turn that would have stopped earlier. It never increases the configured cap.
 Cancellation drains child tasks; transport rules still fence uncertain work.
 
-Local/custom-server admission remains serialized when configured that way. Parallel
-NPC jobs do not bypass this queue or its uncertain-request protection. A provider
+The application-wide [role connection policy](llm-parallel-requests.md) caps the
+session concurrency when configured. Local/custom-server admission remains
+serialized without an explicit connection permission. Parallel NPC jobs do not
+bypass this queue or its uncertain-request protection. A provider
 that serializes work may show no speed gain. Sequential mode remains available for
 baseline measurements and servers with one effective inference slot.
 

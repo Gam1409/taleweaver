@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from backend.core.custom_openai_roles import ROLE_DEFAULTS as CUSTOM_OPENAI_ROLE_DEFAULTS
+from backend.core.llm_parallel import ParallelSettings
 from backend.core.llm_sampling import SamplingSettings
 from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
@@ -222,9 +223,16 @@ def _apply_openrouter_models(normalized: dict[str, Any], prefixes: tuple[str, ..
 def normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
     """Return LLM settings with separate providers, tokens and thinking modes."""
     if not llm_settings:
-        return {**_LLM_FALLBACK, "sampling": SamplingSettings().model_dump()}
+        return {
+            **_LLM_FALLBACK,
+            "sampling": SamplingSettings().model_dump(),
+            "parallel_requests": ParallelSettings().model_dump(),
+        }
 
     normalized = {**_LLM_ENDPOINT_DEFAULTS, **llm_settings}
+    normalized["parallel_requests"] = ParallelSettings.model_validate(
+        normalized.get("parallel_requests") or {}
+    ).model_dump()
     normalized["sampling"] = SamplingSettings.model_validate(
         normalized.get("sampling") or {}
     ).model_dump()

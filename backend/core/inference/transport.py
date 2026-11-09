@@ -6,18 +6,22 @@ from functools import wraps
 from typing import Any
 
 from backend.core import llm_timing
-from backend.core.inference import admission, receipts
-from backend.core.inference.registry import InferenceUncertainError, endpoint_key
+from backend.core.inference import admission, capacity, receipts
+from backend.core.inference.registry import InferenceUncertainError
 
 
-def target(router: Any) -> str | None:
-    if not admission.enabled() or router.provider not in {"ollama", "custom_openai"}:
+def target(router: Any, kwargs: dict | None = None) -> str | None:
+    configured = getattr(router, "parallel_policy", None) is not None
+    legacy = admission.enabled() and router.provider in {"ollama", "custom_openai"}
+    if not configured and not legacy:
         return None
-    return endpoint_key(router.api_base)
+    return capacity.target(router, kwargs)
 
 
 async def _stream(method: Callable, router: Any, kwargs: dict, key: str) -> AsyncIterator[Any]:
-    async with admission.reserve(key, float(router.request_timeout)) as lease:
+    async with admission.reserve(
+        key, float(router.request_timeout), capacity=capacity.limit(router)
+    ) as lease:
         with admission.deadline_scope(lease):
             llm_timing.dispatched()
             stream = await method(router, {**kwargs, "num_retries": 0})
@@ -42,13 +46,15 @@ async def _stream(method: Callable, router: Any, kwargs: dict, key: str) -> Asyn
 def guarded_async(method: Callable) -> Callable:
     @wraps(method)
     async def guarded(router: Any, kwargs: dict) -> Any:
-        key = target(router)
+        key = target(router, kwargs)
         if key is None:
             llm_timing.dispatched()
             return await method(router, kwargs)
         if kwargs.get("stream"):
             return _stream(method, router, kwargs, key)
-        async with admission.reserve(key, float(router.request_timeout)) as lease:
+        async with admission.reserve(
+            key, float(router.request_timeout), capacity=capacity.limit(router)
+        ) as lease:
             with admission.deadline_scope(lease):
                 llm_timing.dispatched()
                 result = await _outcome(method(router, {**kwargs, "num_retries": 0}), lease)
@@ -61,11 +67,13 @@ def guarded_async(method: Callable) -> Callable:
 def guarded_sync(method: Callable) -> Callable:
     @wraps(method)
     def guarded(router: Any, kwargs: dict) -> Any:
-        key = target(router)
+        key = target(router, kwargs)
         if key is None:
             llm_timing.dispatched()
             return method(router, kwargs)
-        with admission.reserve_sync(key, float(router.request_timeout)) as lease:
+        with admission.reserve_sync(
+            key, float(router.request_timeout), capacity=capacity.limit(router)
+        ) as lease:
             with admission.deadline_scope(lease):
                 llm_timing.dispatched()
                 result = method(router, {**kwargs, "num_retries": 0})

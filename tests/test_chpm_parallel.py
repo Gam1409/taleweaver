@@ -195,7 +195,10 @@ async def test_simultaneous_invalid_proposals_share_one_retry_and_reserve_the_re
         inference.reserve(settings, usage, 10)
 
 
-async def test_real_turn_overlaps_two_proposals_and_reloads_both_reviewed_minds(monkeypatch):
+@pytest.mark.parametrize("connection_policy", [False, True])
+async def test_real_turn_overlaps_two_proposals_and_reloads_both_reviewed_minds(
+    monkeypatch, connection_policy
+):
     entered, proposals = asyncio.Event(), []
 
     class TwoActors(ChpmRoles):
@@ -216,6 +219,8 @@ async def test_real_turn_overlaps_two_proposals_and_reloads_both_reviewed_minds(
                 await asyncio.wait_for(entered.wait(), 2)
                 return json.dumps(wire_proposal())
             if phase == "validation":
+                assert set(proposals) == {"LINA", "MILA"}
+                assert set(supplied["contract"]) == {"LINA", "MILA"}
                 passage = next(iter(supplied["passages"]))
                 return json.dumps(
                     {
@@ -227,6 +232,10 @@ async def test_real_turn_overlaps_two_proposals_and_reloads_both_reviewed_minds(
                 )
             return await super().simple(system, payload, model, **kwargs)
 
+        async def stream(self, *args, **kwargs):
+            assert set(proposals) == {"LINA", "MILA"}
+            return await super().stream(*args, **kwargs)
+
     roles = TwoActors()
     install_roles(monkeypatch, roles)
     monkeypatch.setattr(inference, "GameMasterLLM", roles)
@@ -235,6 +244,11 @@ async def test_real_turn_overlaps_two_proposals_and_reloads_both_reviewed_minds(
 
     async with TestSessionLocal() as db:
         user, _, state, _ = await seed_vn(db)
+        if connection_policy:
+            user.llm_settings = {
+                **(user.llm_settings or {}),
+                "parallel_requests": {"roles": {"complex": {"enabled": True, "max_concurrent": 2}}},
+            }
         db.add(
             WorldEntity(
                 id="MILA",

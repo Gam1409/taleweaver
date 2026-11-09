@@ -74,9 +74,9 @@ def failure_reason(error: BaseException) -> str:
 
 
 @asynccontextmanager
-async def reserve(key: str, timeout: float) -> AsyncIterator[Lease]:
+async def reserve(key: str, timeout: float, *, capacity: int | None = None) -> AsyncIterator[Lease]:
     owner = registry()
-    ticket = owner.enqueue(key)
+    ticket = owner.enqueue(key, capacity=capacity)
     deadline = time.monotonic() + timeout
     acquired = False
     lease = Lease(
@@ -124,9 +124,9 @@ async def reserve(key: str, timeout: float) -> AsyncIterator[Lease]:
 
 
 @contextmanager
-def reserve_sync(key: str, timeout: float) -> Iterator[Lease]:
+def reserve_sync(key: str, timeout: float, *, capacity: int | None = None) -> Iterator[Lease]:
     owner = registry()
-    ticket = owner.enqueue(key)
+    ticket = owner.enqueue(key, capacity=capacity)
     deadline = time.monotonic() + timeout
     acquired = False
     lease = Lease(deadline)
