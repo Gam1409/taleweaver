@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from backend.core.text_evidence import WithEvidenceSpan
+
 from .wire_contract import operation_rules
 
 KEY = "__scene_continuity__"
@@ -15,7 +17,7 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class Update(Model):
+class Update(Model, WithEvidenceSpan):
     model_config = ConfigDict(json_schema_extra=operation_rules)
 
     operation: Literal["record", "change", "end"]
@@ -46,13 +48,13 @@ class Update(Model):
         return self
 
 
-class Action(Model):
+class Action(Model, WithEvidenceSpan):
     actor_ids: list[str] = Field(min_length=1, max_length=6)
     detail: str = Field(min_length=4, max_length=400)
     evidence: str = Field(min_length=4, max_length=800)
 
 
-class Evidence(Model):
+class Evidence(Model, WithEvidenceSpan):
     kind: Literal["narration", "scene_description", "unavailable"]
     source_id: str = Field(max_length=100)
     revision_id: str | None = Field(default=None, max_length=100)

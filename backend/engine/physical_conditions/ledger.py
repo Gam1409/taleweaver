@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import ValidationError
 
+from backend.core.text_evidence import require_span
 from backend.engine.physical_conditions.schema import (
     KEY,
     MAX_ACTIVE,
@@ -40,6 +41,7 @@ def read(states: dict | None) -> Ledger:
 
 
 def _source(proposal: ConditionProposal, narration: str, message_id: str, manual: bool) -> Source:
+    require_span(narration, proposal.evidence, proposal.evidence_span)
     if not manual and proposal.evidence not in narration:
         raise ValueError("Condition evidence is not an exact quote from this completed narration.")
     return Source(
@@ -47,6 +49,7 @@ def _source(proposal: ConditionProposal, narration: str, message_id: str, manual
         message_id=None if manual else message_id,
         content_hash="" if manual else sha256(narration.encode()).hexdigest(),
         quote=proposal.evidence,
+        evidence_span=proposal.evidence_span,
     )
 
 

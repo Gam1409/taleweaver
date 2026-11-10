@@ -1129,18 +1129,20 @@ class GameMasterLLM:
         user_prompt: str,
         response_model: type[T],
         model: str,
+        *,
+        response_schema: dict | None = None,
     ) -> _StructuredRequest:
         """Builds LiteLLM kwargs for a structured-output (Pydantic) task."""
         normalized_model = self._normalize_model(model)
         from backend.core.llm_structured_output import for_router, trace
 
-        output = for_router(self, response_model, model=model)
+        output = for_router(self, response_model, model=model, schema=response_schema)
         trace(output.response_format, local_checks=output.local_checks)
         json_mode = uses_json_mode_fallback(self.provider, normalized_model)
         json_mode = json_mode or output.mode != "json_schema"
         if json_mode or output.local_checks:
             # Ground rules checked locally as well as those enforced during decoding.
-            system_prompt += json_schema_instruction(response_model)
+            system_prompt += json_schema_instruction(response_model, schema=response_schema)
 
         kwargs: dict[str, Any] = {
             "model": normalized_model,
@@ -1302,6 +1304,7 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        response_schema: dict | None = None,
     ) -> T:
         """
         Async version of execute_complex_task.
@@ -1313,7 +1316,9 @@ class GameMasterLLM:
             "phase": phase,
             "metadata": metadata,
         }
-        request = self._build_structured_request(system_prompt, user_prompt, response_model, model)
+        request = self._build_structured_request(
+            system_prompt, user_prompt, response_model, model, response_schema=response_schema
+        )
         self._log_structured_request(request, response_model, log_context)
 
         response = await self._acompletion_with_openrouter_fallback(request.kwargs)
@@ -1345,6 +1350,7 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        response_schema: dict | None = None,
     ) -> T:
         """
         Strict mechanics task (Strict Mode).
@@ -1358,7 +1364,9 @@ class GameMasterLLM:
             "phase": phase,
             "metadata": metadata,
         }
-        request = self._build_structured_request(system_prompt, user_prompt, response_model, model)
+        request = self._build_structured_request(
+            system_prompt, user_prompt, response_model, model, response_schema=response_schema
+        )
         self._log_structured_request(request, response_model, log_context)
 
         response = self._completion_with_openrouter_fallback(request.kwargs)

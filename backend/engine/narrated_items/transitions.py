@@ -33,12 +33,18 @@ def prepare(
     end = -1
     owner = actions[0].source_owner
     for action in actions:
-        start = narration.find(action.evidence)
+        span = action.evidence_span
+        start = span.start if span is not None else narration.find(action.evidence)
+        verified = (
+            span.matches(narration, action.evidence)
+            if span is not None
+            else narration.count(action.evidence) == 1
+        )
         if (
             action.basis != "completed"
             or action.source_owner != owner
             or start < end
-            or narration.count(action.evidence) != 1
+            or not verified
         ):
             raise ValueError(
                 "Item chain needs completed actions, continuous ownership and unambiguous narrative order."

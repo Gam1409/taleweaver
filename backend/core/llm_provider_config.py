@@ -166,9 +166,10 @@ def uses_json_mode_fallback(provider: str, normalized_model: str) -> bool:
     )
 
 
-def json_schema_instruction(response_model: type[BaseModel]) -> str:
+def json_schema_instruction(response_model: type[BaseModel], *, schema: dict | None = None) -> str:
     """Schema instruction appended to the system prompt in JSON-mode fallback."""
     schema_json = json.dumps(
-        compact_json_schema(response_model.model_json_schema()), separators=(",", ":")
+        compact_json_schema(schema if schema is not None else response_model.model_json_schema()),
+        separators=(",", ":"),
     )
     return JSON_SCHEMA_INSTRUCTION.format(schema_json=schema_json)

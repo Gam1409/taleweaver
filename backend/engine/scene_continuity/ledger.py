@@ -7,6 +7,8 @@ from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import ValidationError
 
+from backend.core.text_evidence import require_span
+
 from .schema import KEY, MAX_RECORDS, MAX_UPDATES, Action, Evidence, Ledger, Record, Update
 
 
@@ -24,6 +26,7 @@ def read(states: dict | None) -> Ledger:
 
 def _source(update: Update, message: Any, scene_description: str, scene_id: str) -> Evidence:
     text = message.content if update.source == "narration" else scene_description
+    require_span(text, update.evidence, update.evidence_span)
     if update.evidence not in text:
         raise ValueError("Evidence must be an exact contiguous quote from its declared source.")
     return Evidence(
@@ -32,6 +35,7 @@ def _source(update: Update, message: Any, scene_description: str, scene_id: str)
         revision_id=getattr(message, "revision_id", None) if update.source == "narration" else None,
         content_hash=digest(text),
         quote=update.evidence,
+        evidence_span=update.evidence_span,
     )
 
 
@@ -183,6 +187,7 @@ def _actions(
     for raw in values:
         try:
             row = Action.model_validate(raw)
+            require_span(narration, row.evidence, row.evidence_span)
             if row.evidence not in narration or not set(row.actor_ids).issubset(targets):
                 raise ValueError("Final-frame action source or actors are unavailable.")
             accepted.append(row)

@@ -34,7 +34,7 @@ def action_scope(actions: list[Any], actors: dict) -> set[str]:
 
 
 def unpack(
-    result: Any, actors: dict
+    result: Any, actors: dict, *, original_actions: list[Any] | None = None
 ) -> tuple[ItemExtraction, list[ItemFailure], set[str] | None, tuple[int, ...] | None]:
     if not isinstance(result, SharedItemExtraction):
         return ItemExtraction.model_validate(result), [], None, None
@@ -52,13 +52,12 @@ def unpack(
         try:
             value = ItemExtraction(actions=[raw]).actions[0]
         except ValidationError:
-            failures.append(
-                ItemFailure(
-                    f"Item proposal {index + 1}",
-                    "The item action failed schema validation.",
-                    action_index=index,
-                )
+            original = (
+                original_actions[index]
+                if original_actions is not None and index < len(original_actions)
+                else raw
             )
+            failures.append(_schema_failure(index, raw, original))
             denied.update(action_scope([raw], actors))
             if isinstance(raw, dict) and isinstance(raw.get("item_id"), str):
                 invalid_items.add(raw["item_id"])
@@ -76,6 +75,39 @@ def unpack(
         denied or None,
         tuple(index for _, index in retained),
     )
+
+
+def _schema_failure(index: int, raw: Any, original: Any) -> ItemFailure:
+    fields = original.model_dump() if hasattr(original, "model_dump") else original
+    fields = fields if isinstance(fields, dict) else {}
+    proposal = fields.get("new_item")
+    label = fields.get("item_id") or (proposal.get("name") if isinstance(proposal, dict) else None)
+    label = label[:120] if isinstance(label, str) else f"Item proposal {index + 1}"
+    unresolved = isinstance(raw, dict) and raw.get("evidence") is None
+    reason = (
+        "Item quote is not an exact contiguous substring of the completed narration, or its source reference is unavailable or ambiguous."
+        if unresolved
+        else "The item action failed schema validation."
+    )
+    proof = _reported_evidence(original)
+    return ItemFailure(
+        label,
+        reason,
+        action_index=index,
+        basis=proof.get("basis", ""),
+        evidence=proof.get("evidence", ""),
+    )
+
+
+def _reported_evidence(raw: Any) -> dict[str, str]:
+    original = raw.model_dump() if hasattr(raw, "model_dump") else raw
+    if not isinstance(original, dict):
+        return {}
+    return {
+        key: value[:limit]
+        for key, limit in (("basis", 40), ("evidence", 800))
+        if isinstance(value := original.get(key), str)
+    }
 
 
 def select(

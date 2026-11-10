@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from backend.core.text_evidence import WithEvidenceSpan
 from backend.engine.clothing.schema import Region
 from backend.engine.physical_conditions.wire_contract import operation_rules
 
@@ -21,7 +22,7 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class ConditionProposal(Model):
+class ConditionProposal(Model, WithEvidenceSpan):
     model_config = ConfigDict(json_schema_extra=operation_rules)
 
     operation: Operation
@@ -57,7 +58,7 @@ class ConditionProposal(Model):
         return self
 
 
-class Source(Model):
+class Source(Model, WithEvidenceSpan):
     kind: Literal["narration", "manual", "unavailable"]
     message_id: str | None = Field(default=None, max_length=100)
     content_hash: str = Field(default="", max_length=64)

@@ -1,10 +1,10 @@
 """Keep private social provenance local when a saved session is copied or imported."""
 
 from collections.abc import Callable
-from copy import deepcopy
 
 from pydantic import ValidationError
 
+from backend.engine.narrated_items.evidence import remap as remap_item_evidence
 from backend.engine.scene_continuity.lifecycle import remap as remap_scene_continuity
 from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY, remap_illustrations
 from backend.engine.scene_staging.provenance import remap
@@ -18,7 +18,9 @@ def remap_social_state(entity_states: dict | None, message_ids: dict[str, str]) 
     Unsupported state is preserved for a compatible reader. Orphaned provenance is
     discarded, while canonical feelings, goals and identity remain unchanged.
     """
-    result = remap_scene_continuity(remap(deepcopy(entity_states or {}), message_ids), message_ids)
+    result = remap_scene_continuity(
+        remap(remap_item_evidence(entity_states or {}, message_ids), message_ids), message_ids
+    )
     if STATE_KEY not in result:
         return result
     try:

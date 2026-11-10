@@ -68,6 +68,10 @@ def _validate_explicit(
             any(participant not in known for participant in participants)
             or len(participants) < minimum
             or delta.evidence not in narration
+            or (
+                delta.evidence_span is not None
+                and not delta.evidence_span.matches(narration, delta.evidence)
+            )
         ):
             rejected += 1
             continue
@@ -77,6 +81,11 @@ def _validate_explicit(
                 "participants": participants,
                 "evidence": delta.evidence,
                 "source_hash": source,
+                **(
+                    {"evidence_span": delta.evidence_span.model_dump()}
+                    if delta.evidence_span
+                    else {}
+                ),
             }
         )
     return atoms, rejected
@@ -121,6 +130,10 @@ def reconcile(
             or change.entity_id in uncertain
             or counts[change.entity_id] > 1
             or change.evidence not in narration
+            or (
+                change.evidence_span is not None
+                and not change.evidence_span.matches(narration, change.evidence)
+            )
             or invalid_target
         ):
             rejected += 1
@@ -164,7 +177,9 @@ def reconcile(
 
 
 def _apply_change(row: dict, change: SceneDelta, known: dict, source: str) -> dict:
-    proof = {"evidence": change.evidence, "source_hash": source}
+    proof: dict[str, Any] = {"evidence": change.evidence, "source_hash": source}
+    if change.evidence_span is not None:
+        proof["evidence_span"] = change.evidence_span.model_dump()
     if change.posture is not None:
         if change.posture != row.get("posture", {}).get("value"):
             row.pop("placement", None)

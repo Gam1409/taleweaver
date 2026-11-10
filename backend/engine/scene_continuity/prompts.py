@@ -14,11 +14,13 @@ For record, give a compact stable key, supplied subject_id, kind and resulting c
 The host assigns id; use an existing saved record_id for change/end. A new occurrence after an
 ended event needs a fresh key. Reuse existing facts, do not restate all unchanged records.
 Environment uses subject_id=scene_id, never an actor. Separate the room from people/outfits.
-source=scene_description is allowed ONLY for environment, with an exact quote from scene_description.
+For room-only environment facts, evidence may select a reference from
+scene_continuity.scene_description. Current processes, effects and actions must select
+completed_narration references. The host determines source; never return a source field.
 On first visit, extract a few concise room-only environment facts if not already saved. Ignore
 character appearance, outfits and biographies embedded in authored room prose. Refresh stale
-room facts by record_id against the current scene_description. Other deltas use source=narration.
-Every update needs one exact contiguous evidence quote from its declared source. Preserve IDs.
+room facts by record_id against the current scene description. Preserve IDs.
+A reference selects one occurrence, not all later repetitions in recollections or dialogue.
 Use change only for a confirmed new current state; end only when completed_narration explicitly
 ends that process or resolves that environmental effect. Ending a process does not end its effects.
 An existing cause_id may link a consequence ONLY when the supplied evidence establishes that link;
@@ -33,7 +35,7 @@ deadline. Time expiry requests confirmation; it does not prove an event ended or
 Omission from dialogue, a scene change or an unrelated action never resolves saved facts.
 
 final_frame_actions: at most 4 directly observed visible actions/poses still true at the END
-of this completed_narration. Give actor_ids, compact detail and an exact evidence quote.
+of this completed_narration. Give actor_ids, compact detail and a current narration evidence reference.
 Use __player__ for the player and supplied NPC IDs. Retain final actor/object bindings.
 Exclude dialogue, wishes, memories, imagined actions, intermediate movement, earlier contact
 that has ended, hidden physical states and inferred gestures. Do not invent a pose from emotion.

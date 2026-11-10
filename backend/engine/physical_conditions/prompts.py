@@ -15,7 +15,7 @@ Do not infer pregnancy, diagnoses, quantities, undress or any new consequence no
 For the same subject/kind/part reuse the active condition ID. Never restate all unchanged records.
 Private is the default visibility. Public means established public information, not permission to reveal
 private details to another character. Do not infer current visual exposure from this flag.
-Each operation needs an exact contiguous evidence quote from THIS completed narration, not the player's
+Each operation needs an evidence reference to THIS completed narration, not the player's
 request, old history, dialogue claims, imagined outcomes or a recalled earlier event.
 A full cleaning affects only that identified garment/part; a partial cleaning uses reduce.
 Do not resolve conditions merely because they were not mentioned. Return [] when no change is proved.

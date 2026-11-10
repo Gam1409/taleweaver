@@ -12,7 +12,7 @@ from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
-from backend.engine.narrated_items import evidence, independent_state
+from backend.engine.narrated_items import evidence, independent_state, reference_schema
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
@@ -102,9 +102,17 @@ async def reconcile_items(
         actor.update(identity_facts(identities[identifier]))
     snapshot = possession_snapshot(manager, rows)
     detailed = detail_settings(manager)["detailed"]
+    scene_context = await scene_continuity.prepare(manager)
+    catalog = evidence.Catalog(
+        narration,
+        str(scene_context.get("scene_description", "")),
+        scope=f"{manager.state.session_id}:{message_id}:{manager.state.current_scene_id}",
+    )
+    scene_context = {**scene_context, "scene_description": catalog.room_passages}
+    response_model = SharedItemExtraction if staging_enabled else ItemExtraction
     payload = json.dumps(
         {
-            "completed_narration": evidence.passages(narration),
+            "completed_narration": catalog.narration_passages,
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
@@ -115,7 +123,7 @@ async def reconcile_items(
             "physical_conditions": condition_context(
                 manager.state, set(actors) | set(snapshot.items)
             ),
-            "scene_continuity": await scene_continuity.prepare(manager),
+            "scene_continuity": scene_context,
             "scene_staging": shared_staging.prepare(manager, actors, rows),
             "item_changes_allowed": skipped is None,
             "independent_state_scope": {
@@ -149,18 +157,20 @@ async def reconcile_items(
                 + independent_state.INSTRUCTIONS
                 + (STAGING_INSTRUCTIONS if staging_enabled else ""),
                 payload,
-                SharedItemExtraction if staging_enabled else ItemExtraction,
+                response_model,
                 llm.model,
                 game_id=manager.game_id,
                 operation="narrated_items",
                 phase="reconciliation",
+                response_schema=reference_schema.build(response_model, catalog),
             ),
             timeout=role_timeout(manager.user, "small"),
         )
-        result = evidence.bind(result, narration)
+        original_actions = result.actions if isinstance(result, ItemExtraction) else None
+        result = evidence.bind(result, narration, catalog=catalog)
         shared_staging.propose(manager, result)
         extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
-            result, actors
+            result, actors, original_actions=original_actions
         )
         failures = list(schema_failures)
         changed, accepted, errors = (

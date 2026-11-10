@@ -40,6 +40,41 @@ minutes, visibility, witnesses and optional causal link. Unsupported candidates
 are rejected independently; existing facts are preserved. These records cannot
 move actors, transfer possessions, expose clothing, change HP or grant capabilities.
 
+## Exact source occurrences
+
+The existing passage segmentation now preserves character offsets. Each extraction
+receives request-scoped references such as `narration:<scope>:p0` and
+`room:<scope>:p0`, mapped to unchanged source text. The model selects a reference;
+the host resolves its quote, offsets and source kind. Room references establish
+authored environment only and cannot authorize a current process, pose or item
+action. The wire schema no longer asks the model to classify the source itself.
+
+Accepted scene records retain the message or scene ID, content hash, message
+revision when applicable, and optional `evidence_span` with Unicode character
+offsets `[start, end)`. Poses, placed props, physical conditions and item-check
+results reuse their existing provenance owners with the same optional span.
+Item checks are stamped with the saved assistant message after it is flushed;
+this does not introduce an unlimited item-action archive.
+
+Identical words in another passage or later turn are distinct occurrences.
+Resolution never searches old history for the nearest matching quote. Copying
+history remaps source IDs while preserving offsets and hashes; unavailable
+history cannot borrow a later matching quote. Existing retraction and full-turn
+undo retain their original responsibilities. Legacy records without offsets
+still load with their original serialized shape.
+
+Prompt/JSON-only providers receive the same finite reference contract. For
+compatibility, a literal quote can still bind only when its occurrence is unique
+across the allowed sources; a model-supplied source label cannot break a tie.
+Ambiguous, unknown and stale references are rejected
+through the existing independent validation paths. Repeated item-chain quotes
+use verified spans for ordering rather than searching for their first occurrence;
+ownership continuity and non-overlap are still required.
+
+This proves where the selected text occurred, not whether it describes a new
+event. A newly selected recollection can still be semantically misclassified.
+Omission and literary interpretation require separate model-quality tests.
+
 ## Events, processes and consequences
 
 An active process persists across dialogue-only turns and visits to other scenes.

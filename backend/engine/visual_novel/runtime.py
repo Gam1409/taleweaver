@@ -12,6 +12,7 @@ from backend.engine.clothing.visuals import (
     detailed_for_state,
     session_objects,
 )
+from backend.engine.narrated_items.evidence import stamp as stamp_item_evidence
 from backend.engine.physical_conditions.visuals import project as visual_conditions
 from backend.engine.scene_continuity.presentation import visual_facts as scene_visual_facts
 from backend.engine.scene_illustrations import capture_scene_snapshot
@@ -76,6 +77,7 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     await manager.db.flush([message])
     stamp(manager.state, message)
     props.stamp(manager.state, message)
+    stamp_item_evidence(manager, message)
     with manager.db.no_autoflush:
         entities = await AdventureLogic.build_session_entities(manager.db, manager.state)
         scene = await manager.db.scalar(

@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
+
+from backend.core.text_evidence import WithEvidenceSpan
 
 
 def digest(text: str) -> str:
@@ -17,7 +19,7 @@ def digest(text: str) -> str:
 KEY = "__scene_props__"
 
 
-class PropDelta(BaseModel):
+class PropDelta(WithEvidenceSpan):
     model_config = ConfigDict(
         extra="forbid",
         str_strip_whitespace=True,
@@ -138,6 +140,10 @@ def reconcile(
             and key not in seen
             and change.evidence in narration
             and (
+                change.evidence_span is None
+                or change.evidence_span.matches(narration, change.evidence)
+            )
+            and (
                 change.status != "confirmed"
                 or bool(change.spatial_position and change.spatial_position in change.evidence)
             )
@@ -157,6 +163,11 @@ def reconcile(
                 "spatial_position": change.spatial_position,
                 "evidence": change.evidence,
                 "source_hash": digest(narration),
+                **(
+                    {"evidence_span": change.evidence_span.model_dump()}
+                    if change.evidence_span
+                    else {}
+                ),
                 "visibility": change.visibility,
             }
         )

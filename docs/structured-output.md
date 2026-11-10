@@ -4,6 +4,13 @@ Technical tasks and NPC decisions share the existing LLM router's output policy.
 Narration remains a text request. No second model, token-filtering framework or
 additional generation loop is installed on the application machine.
 
+Shared post-narration extraction also supplies a transient schema whose evidence
+fields enumerate the current narration/room references. The same existing router
+passes that schema to native decoding or includes it in prompt/JSON fallback.
+Canonical models still validate the resolved proposals locally. Source labels
+and offsets are host-owned; this protocol adds no model call. See
+[exact source occurrences](scene-continuity.md#exact-source-occurrences).
+
 ## Contract and transport
 
 The canonical Pydantic model remains the local validation contract. Its full

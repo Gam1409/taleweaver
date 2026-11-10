@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from backend.core.text_evidence import require_span
 from backend.engine.clothing.classification import classify_action
 from backend.engine.clothing.profiles import (
     garment_for_item,
@@ -121,6 +122,7 @@ def _resolve(
         raise ValueError(
             f"Action basis '{action.basis}' is not a completed action or current wear observation."
         )
+    require_span(narration, action.evidence, action.evidence_span)
     if action.evidence not in narration:
         raise ValueError(
             "Item quote is not an exact contiguous substring of the completed narration."
@@ -227,6 +229,11 @@ def _apply_batch(
                     "destination_owner": action.destination_owner,
                     "disposition": action.disposition,
                     "evidence": action.evidence,
+                    **(
+                        {"evidence_span": action.evidence_span.model_dump()}
+                        if action.evidence_span
+                        else {}
+                    ),
                 }
             )
         except ValueError as exc:

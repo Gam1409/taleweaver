@@ -274,6 +274,57 @@ is not the selected behavior.
   boundary checks and 490 affected-feature checks pass. Ruff is clean and mypy
   accepts all 908 backend source files. Live generation remains paused by request.
 
+## Wave 17: bind exact source occurrences
+
+- Extend the existing shared passage index with exact character offsets while
+  preserving its numbering, text values and existing callers. No semantic/fuzzy
+  quote lookup or parallel memory store is introduced.
+- Bind extraction evidence to request-scoped narration/room references, then
+  assign source kind and offsets locally before existing domain validation.
+  A current narration fact cannot be lost merely because the model labels its
+  source as authored room text. Room text still establishes environment only.
+- Reuse the router's existing schema projection for a per-request finite schema
+  in native, JSON and prompt modes. Keep canonical saved models and legacy source
+  shapes compatible. No additional extraction or repair request is sent.
+- Preserve exact occurrences across scene facts, poses, props, conditions and
+  item checks. Save assistant-message provenance after flush. Copy/import remaps
+  IDs without looking up replacement words; missing sources stay unavailable.
+- Use verified spans when ordering item chains whose source words recur later.
+  Literal-only ambiguous chains still fail; ownership continuity, narrative
+  ordering and atomic rollback are unchanged.
+- Verify repeated quotes in four later turns, distinct occurrences in one
+  message, cross-turn stale references, authored/current source collisions,
+  wrong offsets, legacy serialization and independent rejection. Real provider
+  adapters are exercised with HTTP intercepted, not live paid requests. Offline
+  KoboldCpp conversion covers populated, tiny and empty source catalogues.
+- This wave establishes source identity. It does not establish that a model
+  extracts every fact or correctly distinguishes every recollection from an event.
+- Validation: the complete backend suite passed 5,129 tests. The final affected
+  suite passed 678 tests, including the last two literal-ambiguity regressions.
+  Ruff check/format is clean and mypy accepts all 911 backend files. Fifteen
+  offline KoboldCpp grammar conversions passed; 1,500 differential text cases
+  preserved the published passage index and exact offsets. No new live model
+  request was sent in this wave.
+
+## Next stages requested by the owner
+
+1. **Localize NPC decision failures.** Investigate the existing per-NPC proposal,
+   narration review and commit paths before extending them. One invalid intention
+   must not unnecessarily discard another NPC's confirmed updates. Preserve a
+   shared world snapshot and compatibility checks for interacting actions; an
+   actor leaving cannot simultaneously be treated as still available for contact.
+   Do not publish proposals independently when their shared outcome is unresolved.
+   Current investigation: `chpm.parallel.prepare` raises the first worker error
+   before applying any parallel result; `chpm.continuation.activate` clears all
+   turn-local decisions, minds and agendas. Extend these existing boundaries and
+   the shared narration review rather than creating a second decision pipeline.
+2. **Test omissions explicitly.** Add paired cases differing in one world fact,
+   literary paraphrases of the same event, and unchanged-state controls. Assert
+   expected extracted deltas and persisted state, not a model's own assertion
+   that it checked everything. Keep deterministic host tests separate from later
+   live extraction-quality measurements. These stages are not implemented by
+   the source-binding wave.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the

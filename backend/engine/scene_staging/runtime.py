@@ -8,6 +8,7 @@ from typing import Any
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.clothing.visuals import session_objects
+from backend.engine.narrated_items import evidence, reference_schema
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.proposals import StagingProposal
 from backend.engine.scene_staging.schema import INSTRUCTIONS
@@ -56,13 +57,17 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
     )
     present = {person["id"] for person in cast}
     items = [item for item in valid_items if item["owner_id"] in present]
+    catalog = evidence.Catalog(
+        narration,
+        scope=f"{state.session_id}:{getattr(manager, '_vn_player_message_id', '')}:{state.current_scene_id}",
+    )
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
             "present_cast": cast,
             "owned_items": items,
             "previous_staging": project(state, cast),
-            "current_narration": narration,
+            "current_narration": catalog.narration_passages,
         },
         ensure_ascii=False,
     )
@@ -84,11 +89,12 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
                 llm.model,
                 operation="scene_staging",
                 phase="reconciliation",
+                response_schema=reference_schema.build(StagingProposal, catalog),
                 game_id=manager.game_id,
             ),
             timeout=role_timeout(manager.user, "small"),
         )
-        apply_extraction(manager, narration, cast, rows, response)
+        apply_extraction(manager, narration, cast, rows, evidence.bind_staging(response, catalog))
         applied = True
     except asyncio.CancelledError:
         raise
