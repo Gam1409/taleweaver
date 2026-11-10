@@ -121,6 +121,13 @@ test('a cue-only line between speeches stays in its original position', () => {
   assert.deepEqual(dialogues.map(d => d.text), ['Oh…', '[long pause]', 'You are safe.'])
 })
 
+test('delivery cues before the speaker and inside speech are both preserved', () => {
+  const { dialogues } = parse('[afraid] Лина: [whispers] "Ah… please wait."')
+  assert.equal(dialogues.length, 1)
+  assert.equal(dialogues[0].voiceTag, 'afraid')
+  assert.equal(dialogues[0].text, '[whispers] Ah… please wait.')
+})
+
 test('object labels do not become known unquoted speakers', () => {
   const knownNames = knownSpeakerNames('Hero', [{ name: 'Сундук', entity_type: 'OBJECT' }])
   const result = parseComicDialogue('Сундук: закрыт.', { knownNames, resolveSpeaker: () => null })

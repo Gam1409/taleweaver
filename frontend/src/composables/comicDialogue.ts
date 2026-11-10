@@ -170,15 +170,18 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
   const { playerName, playerAvatar, knownNames, resolveSpeaker } = options
   let speakerName = (match[3] || match[5] || match[6] || '').trim()
   let voiceTag = match[1] ? normalizeVoiceTag(match[1]) : undefined
+  let inlineVoiceTag: string | undefined
   let speechText = (match[7] || '').trim()
   const tagInSpeech = speechText.match(/^"?\[([^\]\n]+)\]"?\s*"?\s*([\s\S]*)$/)
   if (tagInSpeech) {
+    if (voiceTag) inlineVoiceTag = tagInSpeech[1]
     voiceTag = voiceTag || normalizeVoiceTag(tagInSpeech[1])
     speechText = tagInSpeech[2].trim()
   }
   const hasQuotes = /^["“„«»]/.test(speechText) || /["”«»]$/.test(speechText)
   // Remove only the outer delimiters; preserve quotes within the spoken text.
   speechText = speechText.replace(/^["“„«»]/, '').replace(/["”«»]$/, '').trim()
+  if (inlineVoiceTag) speechText = `[${inlineVoiceTag}] ${speechText}`
   let targetName: string | undefined
   const toMatch = speakerName.match(/^(.+?)\s+(?:to|\(to)\s+(.+?)\)?$/i)
   if (toMatch) {

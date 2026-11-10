@@ -395,6 +395,8 @@ is not the selected behavior.
   comic-parser failures. After fixes, the 31 focused backend checks and all parser
   checks pass, including exact transport text, failure propagation, stream usage,
   reviewed VN persistence, bounded reasons and stale/archived experience handling.
+  A second delivery cue on a tagged dialogue line also stays in the visible text
+  instead of disappearing when the first cue occupies the badge.
   Broader validation is recorded below after completion. No live Pod calls were
   made; these checks establish text/context fidelity, not improved literary quality.
 
