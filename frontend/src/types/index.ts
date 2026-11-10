@@ -343,11 +343,13 @@ export interface WorldMemory {
 }
 
 export interface SessionCheckpoint {
+  turn_number?: number | null
+  input_preview?: string | null
   pinned?: boolean
   id: string
   session_id: string
   message_index: number
-  trigger_reason: 'SCENE_CHANGE' | 'QUEST_UPDATE' | 'AWARD_GRANTED'
+  trigger_reason: string
   title: string
   created_at: string
 }

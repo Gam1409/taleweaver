@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.checkpoint_avatar import restore as restore_avatar
@@ -29,18 +29,24 @@ from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
+from backend.models.turn_replay import TurnReplay
 from backend.schemas.checkpoint import SessionCheckpointResponse
 
 MAX_CHECKPOINTS_PER_SESSION = 5
+MAX_DEBUG_CHECKPOINTS_PER_SESSION = 5
+DEBUG_TURN_REASON = "DEBUG_TURN"
 
 
 def _reason_title(reason: str, snapshot: dict[str, Any]) -> str:
     scene_label = str(snapshot.get("scene_label") or "").strip()
     norm = str(reason or "").upper()
+    if norm == DEBUG_TURN_REASON:
+        number = _debug_details(snapshot)["turn_number"]
+        return f"Debug: Before turn {number}" if number else "Debug: Before turn"
     if norm == "SCENE_CHANGE":
-        if scene_label:
-            return f"Checkpoint: Arrived at {scene_label}"
-        return "Checkpoint: Scene Changed"
+        return (
+            f"Checkpoint: Arrived at {scene_label}" if scene_label else "Checkpoint: Scene Changed"
+        )
     if norm == "QUEST_UPDATE":
         return "Checkpoint: Quest Update"
     if norm == "AWARD_GRANTED":
@@ -48,6 +54,17 @@ def _reason_title(reason: str, snapshot: dict[str, Any]) -> str:
     if "WORLD_MEMOR" in norm:
         return "Checkpoint: World Memory Updated"
     return f"Checkpoint: {reason.replace('_', ' ').title()}" if reason else "Checkpoint"
+
+
+def _debug_details(snapshot: dict[str, Any]) -> dict:
+    info = snapshot.get("debug_turn") or {}
+    if not isinstance(info, dict):
+        return {"turn_number": None, "input_preview": None}
+    number, preview = info.get("turn_number"), info.get("input_preview")
+    return {
+        "turn_number": number if type(number) is int and number > 0 else None,
+        "input_preview": preview[:160] if isinstance(preview, str) else None,
+    }
 
 
 def _restore_session_context(
@@ -149,13 +166,15 @@ class SessionCheckpointService:
             .where(SessionCheckpoint.session_id == session_id)
             .order_by(SessionCheckpoint.created_at.desc(), SessionCheckpoint.id.desc())
         )
-        checkpoint_ids = [
-            cp.id
+        points = [
+            cp
             for cp in cp_res.scalars().all()
             if cp.trigger_reason.upper() != "MANUAL"
             and not (cp.state_snapshot or {}).get("pinned", False)
         ]
-        stale_ids = checkpoint_ids[keep:]
+        ordinary = [cp.id for cp in points if cp.trigger_reason.upper() != DEBUG_TURN_REASON]
+        debug = [cp.id for cp in points if cp.trigger_reason.upper() == DEBUG_TURN_REASON]
+        stale_ids = ordinary[keep:] + debug[MAX_DEBUG_CHECKPOINTS_PER_SESSION:]
         if stale_ids:
             await db.execute(delete(SessionCheckpoint).where(SessionCheckpoint.id.in_(stale_ids)))
 
@@ -206,6 +225,7 @@ class SessionCheckpointService:
                 trigger_reason=cp.trigger_reason,
                 title=_reason_title(cp.trigger_reason, cp.state_snapshot or {}),
                 created_at=cp.created_at,
+                **_debug_details(cp.state_snapshot or {}),
             )
             for cp in checkpoints
         ]
@@ -227,10 +247,12 @@ class SessionCheckpointService:
         game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         snapshot = checkpoint.state_snapshot or {}
         validate_world(snapshot)
-        if warnings is not None and "canonical_items" not in snapshot:
+        if warnings is not None and (
+            "canonical_items" not in snapshot or "canonical_actors" not in snapshot
+        ):
             warnings.append(
-                "This older checkpoint lacks canonical item snapshots. Only item fields stored "
-                "in its inventories can be recovered; other current item fields are retained."
+                "This older checkpoint lacks complete canonical item/NPC snapshots. "
+                "Only stored fields can be recovered; unsaved canonical fields are retained."
             )
         avatar_snapshot = snapshot.get("avatar") or {}
         state_snapshot = snapshot.get("session_state") or {}
@@ -268,5 +290,27 @@ class SessionCheckpointService:
         if stale_ids:
             await rewind_journals(db, session_id, stale_ids)
             await db.execute(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
+
+        await db.execute(
+            delete(SessionCheckpoint)
+            .where(
+                SessionCheckpoint.session_id == session_id,
+                SessionCheckpoint.id != checkpoint_id,
+                or_(
+                    SessionCheckpoint.message_index > checkpoint.message_index,
+                    SessionCheckpoint.created_at > checkpoint.created_at,
+                    and_(
+                        SessionCheckpoint.created_at == checkpoint.created_at,
+                        SessionCheckpoint.id > checkpoint.id,
+                    ),
+                ),
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        await db.execute(delete(TurnReplay).where(TurnReplay.session_id == session_id))
+        if "__agent__" in (state.entity_states or {}):
+            from backend.engine.gameplay.agent_logic import AgentService
+
+            AgentService.set_agent_active(state, False)
 
         return len(stale_ids)

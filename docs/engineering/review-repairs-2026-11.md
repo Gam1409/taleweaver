@@ -63,6 +63,15 @@ older history. Refuse deletion when no safe snapshot exists. Do not introduce an
 additional 20-turn snapshot archive. A text-only deletion that keeps consequences
 is not the selected behavior.
 
+Gameplay Debug now retains five recent before-turn Chronicles checkpoints in a
+separate retention pool from the ordinary five milestones. Canonical NPC records
+are captured alongside item/map data. Restoring a point cuts later messages and
+checkpoints, clears stale last-turn replay data and pauses the Play-Agent. Legacy
+checkpoints without canonical data warn about fields they cannot reconstruct.
+The regression suite covers seven turns followed by restoring the oldest retained
+point, game time/NPC metadata, ordinary/manual retention and the existing writer
+lease. Checkpoint, clothing, replay, memory and scene lifecycle checks: 70 passed.
+
 ## Wave 4: debug undo through the existing snapshot owner
 
 - Replace arbitrary message deletion with atomic rollback of the latest complete

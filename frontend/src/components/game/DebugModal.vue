@@ -33,6 +33,7 @@ const emit = defineEmits<{
   close: []
   executeCommand: [cmd: string]
   refresh: []
+  openChronicles: []
 }>()
 
 // --- Active Tab State ---
@@ -1240,6 +1241,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <DebugPhysicalConditions v-else-if="activeTab === 'state'" :data="sessionDebug?.physical_conditions" :busy="commandBusy" @command="runCmd" />
 
             <section v-else-if="activeTab === 'diagnostics'" class="flex-1 flex flex-col min-h-0 p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6">
+              <div class="rounded-2xl border border-amber-500/25 bg-slate-900/80 p-4 space-y-3">
+                <h4 class="font-bold text-amber-300">Turn rollback</h4>
+                <p class="text-sm text-slate-300">Gameplay Debug keeps five recent before-turn snapshots. Choose an available turn in Chronicles to restore its world, NPCs, items and memory and remove the later branch. Older turns without snapshots cannot be reconstructed.</p>
+                <button type="button" class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-400" @click="emit('close'); emit('openChronicles')">Choose a turn to roll back</button>
+              </div>
               <SessionStateChecks v-if="sessionDebug?.session?.id || sheet?.session_id" :session-id="sessionDebug?.session?.id || sheet?.session_id" />
               <!-- Quick Action Triggers Grid -->
               <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">

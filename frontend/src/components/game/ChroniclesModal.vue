@@ -23,9 +23,11 @@ function formatCheckpointTime(iso: string): string {
 }
 
 function reasonBadge(reason: SessionCheckpoint['trigger_reason']): string {
+  if (reason === 'DEBUG_TURN') return 'Debug turn'
+  if (reason === 'MANUAL') return 'Manual'
   if (reason === 'SCENE_CHANGE') return 'Scene change'
   if (reason === 'QUEST_UPDATE') return 'Quest update'
-  return 'Award granted'
+  return reason === 'AWARD_GRANTED' ? 'Award granted' : 'Checkpoint'
 }
 </script>
 
@@ -39,7 +41,7 @@ function reasonBadge(reason: SessionCheckpoint['trigger_reason']): string {
           </div>
           <div>
             <h3 class="text-lg font-black text-white">Chronicles Timeline</h3>
-            <p class="text-xs text-slate-400">The newest five automatic checkpoints are kept. Pin a checkpoint to retain it.</p>
+            <p class="text-xs text-slate-400">Five recent milestones and five Debug turn snapshots are kept. Pin a checkpoint to retain it.</p>
           </div>
         </div>
         <button class="text-slate-400 hover:text-white transition-colors" @click="emit('close')">
@@ -65,6 +67,7 @@ function reasonBadge(reason: SessionCheckpoint['trigger_reason']): string {
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-bold text-amber-300 truncate">{{ checkpoint.title }}</p>
+              <p v-if="checkpoint.input_preview" class="mt-1 text-xs text-slate-300 break-words">{{ checkpoint.input_preview }}</p>
               <p class="text-xs text-slate-400 mt-1 flex items-center gap-2">
                 <Clock3 class="w-3.5 h-3.5" />
                 {{ formatCheckpointTime(checkpoint.created_at) }}

@@ -44,6 +44,9 @@ async def record_before(manager: Any, text: str) -> None:
     )
     if shared:
         return  # Legacy shared avatars cannot be rewound independently.
+    from backend.engine.turn_replay import debug_history
+
+    await debug_history.record_before(manager, text)
     data = await capture(manager.db, manager.game_id)
     row = await manager.db.get(TurnReplay, manager.game_id)
     if row is None:

@@ -12,6 +12,26 @@ TALEWEAVER_DEBUG_ENABLED=True
 
 If this is not set to `True`, all `/debug` commands will be ignored or return an error for security reasons.
 
+## Rolling turn rollback
+
+While gameplay Debug is enabled, TaleWeaver keeps five recent **before-turn**
+checkpoints. Open **Debug → Diagnostics → Turn rollback**, choose a point in
+Chronicles and confirm restoration. The point's turn number and input preview
+identify the turn that will be undone. Later messages and checkpoints are removed;
+the play agent is paused after restoration. A running turn must finish first.
+
+These points share the existing checkpoint owner and restore saved session state,
+game time, avatar, NPC state, inventories, clothing, physical conditions, scene
+continuity and psychological memory. Canonical NPC definitions are now captured
+alongside items and maps, so those fields do not remain at their future values.
+Ordinary milestones retain their separate five-point limit; manual and pinned
+points remain retained. Existing images are referenced rather than copied.
+
+Recording begins with new turns after gameplay Debug is enabled. Older turns
+without a snapshot cannot be reconstructed. Old checkpoints missing canonical
+item/NPC data report a warning and restore only the fields they actually contain.
+This gameplay option is separate from the administrator's detailed diagnostic log.
+
 ## Command Syntax
 
 All debug commands are prefixed with `/debug`.

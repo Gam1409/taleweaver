@@ -1,4 +1,4 @@
-"""Keep session maps and canonical item definitions consistent with checkpoint state."""
+"""Keep maps and canonical item/NPC definitions consistent with checkpoint state."""
 
 from copy import deepcopy
 from typing import Any
@@ -19,13 +19,21 @@ def validate(snapshot: dict) -> None:
         maps = snapshot["world_map"]
         if not isinstance(maps, list) or any(not _valid_map(raw) for raw in maps):
             raise ValueError("Invalid map checkpoint.")
-    if "canonical_items" not in snapshot:
-        return
-    items = snapshot["canonical_items"]
-    if not isinstance(items, list) or any(not _valid_item(raw) for raw in items):
-        raise ValueError("Invalid canonical item checkpoint.")
-    if len({raw["id"] for raw in items}) != len(items):
-        raise ValueError("Duplicate canonical item checkpoint entries.")
+    for key, kind in (("canonical_items", "OBJECT"), ("canonical_actors", "NPC")):
+        if key in snapshot:
+            _validate_entities(snapshot[key], kind)
+    items = {raw["id"] for raw in snapshot.get("canonical_items", [])}
+    actors = {raw["id"] for raw in snapshot.get("canonical_actors", [])}
+    if items & actors:
+        raise ValueError("A checkpoint repeats an identifier across items and NPCs.")
+
+
+def _validate_entities(values: Any, kind: str) -> None:
+    if not isinstance(values, list) or any(not _valid_entity(raw, kind) for raw in values):
+        label = "item" if kind == "OBJECT" else "NPC"
+        raise ValueError(f"Invalid canonical {label} checkpoint.")
+    if len({raw["id"] for raw in values}) != len(values):
+        raise ValueError("Duplicate canonical checkpoint entries.")
 
 
 def _valid_map(raw: Any) -> bool:
@@ -37,11 +45,11 @@ def _valid_map(raw: Any) -> bool:
     )
 
 
-def _valid_item(raw: Any) -> bool:
+def _valid_entity(raw: Any, kind: str) -> bool:
     return (
         isinstance(raw, dict)
         and isinstance(raw.get("id"), str)
-        and raw.get("entity_type") == "OBJECT"
+        and raw.get("entity_type") == kind
         and all(
             isinstance(raw.get(field), str) for field in ("name", "description", "current_scene_id")
         )
@@ -53,6 +61,11 @@ async def capture(db: AsyncSession, state: SessionState) -> dict:
     items = await db.scalars(
         select(WorldEntity).where(
             WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "OBJECT"
+        )
+    )
+    actors = await db.scalars(
+        select(WorldEntity).where(
+            WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"
         )
     )
     return {
@@ -69,11 +82,17 @@ async def capture(db: AsyncSession, state: SessionState) -> dict:
             {"id": item.id, **{field: deepcopy(getattr(item, field)) for field in _ITEM_FIELDS}}
             for item in items
         ],
+        "canonical_actors": [
+            {"id": actor.id, **{field: deepcopy(getattr(actor, field)) for field in _ITEM_FIELDS}}
+            for actor in actors
+        ],
     }
 
 
 async def restore(db: AsyncSession, state: SessionState, snapshot: dict) -> None:
     await _restore_maps(db, state, snapshot)
+    if "canonical_actors" in snapshot:
+        await _restore_actors(db, state, snapshot["canonical_actors"])
     saved = snapshot.get("canonical_items")
     if saved is None:
         saved = _legacy_items(snapshot)
@@ -88,15 +107,28 @@ async def restore(db: AsyncSession, state: SessionState, snapshot: dict) -> None
     )
     existing = {item.id: item for item in rows}
     for raw in saved:
-        _restore_item(db, state.session_id, raw, existing)
+        _restore_entity(db, state.session_id, raw, existing, "OBJECT")
 
 
-def _restore_item(db: AsyncSession, session_id: str, raw: Any, existing: dict) -> None:
+async def _restore_actors(db: AsyncSession, state: SessionState, saved: list[dict]) -> None:
+    rows = list(
+        await db.scalars(
+            select(WorldEntity).where(
+                WorldEntity.session_id == state.session_id, WorldEntity.entity_type == "NPC"
+            )
+        )
+    )
+    existing = {actor.id: actor for actor in rows}
+    for raw in saved:
+        _restore_entity(db, state.session_id, raw, existing, "NPC")
+
+
+def _restore_entity(db: AsyncSession, session_id: str, raw: Any, existing: dict, kind: str) -> None:
     if not isinstance(raw, dict) or not isinstance(raw.get("id"), str):
         raise ValueError("Invalid canonical item checkpoint entry.")
     values = {field: deepcopy(raw[field]) for field in _ITEM_FIELDS if field in raw}
-    if values.get("entity_type", "OBJECT") != "OBJECT":
-        raise ValueError("An item checkpoint cannot replace a character.")
+    if values.get("entity_type", kind) != kind:
+        raise ValueError("A checkpoint cannot replace another entity type.")
     row = existing.get(raw["id"])
     if row is None:
         # Partial legacy inline records cannot establish a missing world row.

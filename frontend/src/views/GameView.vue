@@ -1806,6 +1806,7 @@ usePlayAgentAutoLoop()
       :map-data="mapData"
       :nodes="nodes"
       :execute-command="executeDebugCommand"
+      @open-chronicles="openChroniclesModal"
       @refresh="refreshSession().then(() => openDebugInspector()).catch(error => addNotification(error.message || 'Could not refresh repaired items.', 'error'))"
       @close="showDebug = false" 
     />

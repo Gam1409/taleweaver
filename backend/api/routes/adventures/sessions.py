@@ -1321,9 +1321,11 @@ async def restore_session_checkpoint(
 
     restore_warnings: list[str] = []
     try:
-        deleted_messages = await SessionCheckpointService.restore_checkpoint(
-            db, game_id, checkpoint_id, warnings=restore_warnings
-        )
+        async with scheduler.foreground():
+            deleted_messages = await SessionCheckpointService.restore_checkpoint(
+                db, game_id, checkpoint_id, warnings=restore_warnings
+            )
+            await db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -1331,8 +1333,6 @@ async def restore_session_checkpoint(
     logger.info(
         "Checkpoint restore for session %s pruned %s chat messages.", game_id, deleted_messages
     )
-    await db.commit()
-
     return RestoreCheckpointResponse(
         status="restored",
         checkpoint_id=checkpoint_id,

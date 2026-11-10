@@ -13,6 +13,8 @@ class SessionCheckpointResponse(BaseModel):
     pinned: bool = False
     title: str
     created_at: datetime
+    turn_number: int | None = Field(default=None, ge=1)
+    input_preview: str | None = Field(default=None, max_length=160)
 
     model_config = {"from_attributes": True}
 
