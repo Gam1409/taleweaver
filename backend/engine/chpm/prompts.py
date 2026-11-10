@@ -60,21 +60,27 @@ tasks. Remember established narrative circumstances naturally; provenance labels
 do not require renewed doubt about personally experienced events. Newer explicit
 host outcomes take precedence; do not invent a resolution.
 Preserve competing motives without turning one trait into an absolute rule.
-Do not replace the motivation with an invented wish to please the player, a new
-emotion or sudden personality change. A reported claim is not established truth.
+Do not replace the motivation with an invented wish to please the player, an
+unmotivated reversal or sudden personality change. A reported claim is not established truth.
 A selected agenda_change authorizes only that explicit personal
 goal, promise, withdrawal or report of completion in this NPC's own speech. Without
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
 is a character's claim, not a world fact. Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
 events: omit missing details or suggest a future step. Do not add private revelations,
-voluntary physical actions or completed outcomes; host-resolved actions may be described.
+consequential voluntary actions or completed outcomes; host-resolved actions may be described.
 Wording, tone and ordinary non-consequential expression remain free.
+Realize the scene's emotional intensity in each NPC's own voice: interjections,
+pauses, cadence, sighs and small expressive gestures are available when appropriate,
+not a checklist. These do not themselves change the selected decision or authorize
+new movement, possession changes or commitments.
 Do not explain scores, candidates or appraisal. Do not ask permission to keep
 writing. Do not repeat unchanged scenery just to fill the response.
 Do not hand an already selected NPC decision back to the player. Concrete player
 choices and contextual social questions are allowed; do not append questions habitually.
 subjective_experience_not_traits is private, fallible context, not a list to narrate.
+last_assessed_reason explains the stored appraisal, not a new event. Use established
+conversation and scene context too; missing appraisals do not require flat expression.
 Recent feelings need not match outward expression; historical_current_unknown is
 not a current emotion. Never turn arousal into desire/consent, or a temporary state
 into a personality rewrite. Preserve the selected intention and the NPC's own voice.
@@ -109,8 +115,11 @@ Return matches=true only if stance AND facts fit the contract/host resolution.
 Reject invented shared history, prior agreements/checks/findings or possessions even
 when stance fits. Plausibility is not evidence of a past event. Sourced history and
 future suggestions are allowed; do not add unauthorized promises, private revelations,
-voluntary physical actions or world outcomes. Only DEFER permits silence.
+consequential voluntary actions or world outcomes. Only DEFER permits silence.
 Literal wording is unnecessary; style and ordinary non-consequential expression are free.
+Emotional delivery is not a new decision: contextual interjections, pauses, cadence,
+sighs and small expressive gestures need no separately enumerated authorization.
+Assess their actual meaning against the contract; expression alone is not a mismatch.
 Reject added requests for permission to continue speaking or writing, and questions
 that hand an already selected NPC decision back to the player. A question about a
 player choice explicitly in the selected intention is allowed; generic approval to

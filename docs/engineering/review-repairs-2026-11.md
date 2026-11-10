@@ -391,14 +391,19 @@ is not the selected behavior.
   Missing appraisals do not establish calm or require emotionally blank prose.
 - Keep automatic factual repair and shared-world review. The owner explicitly
   retained that mechanism; expressive delivery itself is not a factual violation.
+  The final prompt-tuning change distinguishes expressive delivery from new
+  consequential actions and asks factual repair to preserve the original emotional
+  intensity, interjections and cadence while correcting the identified mismatch.
 - Before fixes, new regressions reproduced eleven backend failures and three
   comic-parser failures. After fixes, the 31 focused backend checks and all parser
   checks pass, including exact transport text, failure propagation, stream usage,
   reviewed VN persistence, bounded reasons and stale/archived experience handling.
   A second delivery cue on a tagged dialogue line also stays in the visible text
   instead of disappearing when the first cue occupies the badge.
-  Broader validation is recorded below after completion. No live Pod calls were
-  made; these checks establish text/context fidelity, not improved literary quality.
+  Broader validation: 1,568 affected backend tests, all 473 frontend tests, Vue type
+  checking and the production build passed. Ruff check/format is clean; mypy accepts
+  912 backend files. No live Pod calls were made; these checks establish text/context
+  fidelity, not improved literary quality.
 
 ## Open illustration consistency decision
 
