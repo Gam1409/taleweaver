@@ -180,11 +180,17 @@ def _query(turn: Any, actor: str, scene: str) -> str:
         if thread.closure is None
         for fact in thread.facts.values()
     ]
-    return (
+    existing = (
         "\n".join(perceived.quotes)[:1600]
         + f"\nScene: {scene}.\nOngoing circumstances: "
         + " ".join(reasons)[:1000]
     )[:3000]
+    observed = getattr(turn, "scene_cues", {}).get(actor, "")
+    if not isinstance(observed, str) or not observed:
+        return existing
+    label = "Last observed scene actions (not automatically ongoing): "
+    available = min(600, 3000 - len(existing) - len(label) - 1)
+    return label + observed[:available] + "\n" + existing if available > 0 else existing
 
 
 def validate(

@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.chpm import recent_scene
 from backend.engine.chpm.host_state import Mind, before_messages
 from backend.engine.chpm.kernel import digest
 from backend.models.chat import ChatMessage
@@ -12,7 +13,7 @@ from backend.models.chat import ChatMessage
 async def reconcile(manager: Any, mind: Mind) -> Mind:
     if not mind.sources:
         return mind
-    ids = {source.message_id for source in mind.sources.values()}
+    ids = {key for source in mind.sources.values() for key in recent_scene.dependencies(source)}
     rows = await manager.db.scalars(
         select(ChatMessage).where(
             ChatMessage.session_id == manager.game_id, ChatMessage.id.in_(ids)
@@ -39,4 +40,9 @@ def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
             or (source.reported and source.evidence_quote not in row.content)
         ):
             invalid.add(source.message_id)
+        moment = source.facts.last_observed_scene if source.facts else None
+        if moment and not recent_scene.matches(
+            moment, messages.get(moment.source_message_id), mind.genesis.scope.world_id
+        ):
+            invalid.add(moment.source_message_id)
     return before_messages(mind, invalid)

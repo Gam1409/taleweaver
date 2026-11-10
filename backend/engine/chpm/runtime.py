@@ -18,6 +18,7 @@ from backend.engine.chpm import (
     continuation,
     development_context,
     host_adapter,
+    host_observations,
     memory,
     narrative_context,
     passages,
@@ -74,6 +75,7 @@ class Turn:
     causal_threads: dict[str, list[Thread]] = field(default_factory=dict)
     reconciled_minds: dict[str, Mind] = field(default_factory=dict)
     semantic_hits: dict[str, list[semantic_recall.Hit]] = field(default_factory=dict)
+    scene_cues: dict[str, str] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -111,6 +113,9 @@ def contract_data(turn: Turn) -> dict:
             decision = turn.decisions[actor]
             data[actor]["agent_observed_sources"] = agent_context.present(decision, mind)
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
+            scene = host_observations.situation(mind)
+            if scene:
+                data[actor]["current_scene_observations"] = scene
             if decision.choice_preference is not None:
                 data[actor]["choice_preference_not_prose"] = decision.choice_preference.model_dump()
                 data[actor]["previous_intention_not_world_completion"] = (
@@ -177,6 +182,9 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     ]
     if not selected:
         return ""
+    from backend.engine.chpm import host_scene
+
+    await host_scene.prepare(manager, turn, selected)
     turn.fallback_identities = await continuation.recalled_identities(manager, state, selected)
     await causal_memory.prepare(manager, turn, {actor.id for actor in selected})
     manager._chpm_publish_after_commit = state.settings.mode == "live"

@@ -201,6 +201,12 @@ def check_turn(roles, host, events, reply, beat, previous, number):
     assert all(word in context for word in ("гроза", "янтарный", "рацией"))
     assert all(text in context for text in previous)
     check_minds(saved, beat)
+    if number:
+        for actor, (_, _, reason) in BEATS[number - 1].feelings.items():
+            supplied = next(
+                row for row in reversed(roles.proposal_inputs) if row["actor_id"] == actor
+            )
+            assert reason in json.dumps(supplied["experience_context"], ensure_ascii=False)
     projected = roles.reviews[-1]["contract"]
     for actor, (_, _, reason) in beat.feelings.items():
         assert reason in str(projected[actor]["subjective_experience_not_traits"])

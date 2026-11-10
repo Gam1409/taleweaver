@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from backend.engine.chpm import physical_observations
-from backend.engine.chpm.host_observation_contracts import HostFacts, Possession
+from backend.engine.chpm.host_observation_contracts import HostFacts, ObservedScene, Possession
 from backend.engine.chpm.host_state import Mind
 from backend.engine.clothing.profiles import load_profile, owned_items
 from backend.engine.scene_continuity.npc import difference as scene_difference
@@ -22,6 +22,7 @@ def capture(
     staging_cast: list[dict] | None = None,
     placed_items: list[dict] | None = None,
     player_id: str = "",
+    last_observed_scene: ObservedScene | None = None,
 ) -> HostFacts:
     override = (state.entity_states or {}).get(actor.id) or {}
     metadata = getattr(actor, "metadata_json", None) or {}
@@ -39,6 +40,7 @@ def capture(
     )
     return HostFacts(
         scene_id=state.current_scene_id,
+        last_observed_scene=last_observed_scene,
         visible_actor_ids=tuple(sorted(set(present) - {actor.id})),
         owned_items=tuple(
             Possession(id=key, name=str(item.get("name") or "")[:160])
@@ -73,6 +75,32 @@ def previous(mind: Mind) -> HostFacts | None:
 
 def frame(facts: HostFacts) -> str:
     return _bounded({"observation": "current_host_state", **facts.model_dump(mode="json")})
+
+
+def situation(mind: Mind) -> dict:
+    facts = previous(mind)
+    if facts is None:
+        return {}
+    observed = json.loads(frame(facts))
+    # Other host facts may be observer-private. Their existing narration owners
+    # decide what can be disclosed; this handoff contains only the public frame.
+    moment = observed.get("last_observed_scene")
+    return {"scene_id": facts.scene_id, "last_observed_scene": moment} if moment else {}
+
+
+def remap_frame(source: Any, message_ids: dict[str, str]) -> Any:
+    facts = source.facts
+    moment = facts.last_observed_scene if facts else None
+    if moment is None:
+        return source
+    changed = facts.model_copy(
+        update={
+            "last_observed_scene": moment.model_copy(
+                update={"source_message_id": message_ids[moment.source_message_id]}
+            )
+        }
+    )
+    return source.model_copy(update={"facts": changed, "text": frame(changed)})
 
 
 def difference(before: HostFacts | None, after: HostFacts) -> str | None:
@@ -125,7 +153,19 @@ def _bounded(data: dict) -> str:
         encoded = json.dumps({**data, "omitted": omitted}, ensure_ascii=False, sort_keys=True)
         if len(encoded) <= 2000:
             return encoded
-        key = max(
+        background = (
+            next(
+                (
+                    key
+                    for key in ("owned_items", "worn_item_ids", "placed_items", "visible_actor_ids")
+                    if isinstance(data.get(key), list) and data[key]
+                ),
+                None,
+            )
+            if data.get("last_observed_scene")
+            else None
+        )
+        key = background or max(
             (key for key, value in data.items() if isinstance(value, list) and value),
             key=lambda key: len(json.dumps(data[key])),
             default=None,

@@ -2,7 +2,13 @@
 
 from typing import Any
 
-from backend.engine.chpm import agent_beliefs, host_observations, inference
+from backend.engine.chpm import (
+    agent_beliefs,
+    continuation,
+    host_observations,
+    inference,
+    narrative_context,
+)
 from backend.engine.chpm.agent_contracts import INSTRUCTIONS, Step
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.host_state import Mind, Source
@@ -61,6 +67,10 @@ async def investigate(
                         for key, value in supplied.get("psychological_state", {}).items()
                         if key != "belief_context_ref"
                     },
+                    "experience_context": narrative_context.experience_reasons(
+                        mind,
+                        continuation.experience_view(mind, supplied.get("_chpm_gap_cursors", {})),
+                    ),
                     **agent_beliefs.subject_view(tools.mind),
                     "agenda": supplied.get("declared_agenda_not_world_facts", []),
                     **(

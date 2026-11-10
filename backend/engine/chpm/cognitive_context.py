@@ -7,6 +7,7 @@ from backend.engine.chpm import (
     continuation,
     inference,
     motivation,
+    narrative_context,
     proposal_draft,
 )
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
@@ -102,8 +103,8 @@ def _payload(
         "witnessed_utterances_not_world_facts": kept,
         "appraisal_context": window.payload,
         "motivation_context": catalogue.payload(),
-        "experience_context": continuation.experience_view(
-            mind, supplied.get("_chpm_gap_cursors", {})
+        "experience_context": narrative_context.experience_reasons(
+            mind, continuation.experience_view(mind, supplied.get("_chpm_gap_cursors", {}))
         ),
         "context_packing": {
             "policy": "focused-view-budget-v2",

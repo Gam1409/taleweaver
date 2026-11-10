@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from backend.engine.chpm import agenda, causal_memory
+from backend.engine.chpm import agenda, causal_memory, host_observations, recent_scene
 from backend.engine.chpm.core.contracts import Event, Experience, Genesis, Interpret, Observe
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import apply, initial
@@ -44,7 +44,12 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
     value = KernelState.model_validate(result[KEY])
     invalid: dict[str, set[str]] = {}
     for actor, mind in value.minds.items():
-        missing = {s.message_id for s in mind.sources.values() if s.message_id not in message_ids}
+        missing = {
+            key
+            for s in mind.sources.values()
+            for key in recent_scene.dependencies(s)
+            if key not in message_ids
+        }
         retained = before_messages(mind, missing)
         invalid[actor] = removed_messages(mind, retained)
         value.minds[actor] = _fork_mind(retained, message_ids, session_id)
@@ -127,6 +132,7 @@ def _fork_mind(mind: Mind, message_ids: dict[str, str], session_id: str) -> Mind
         if isinstance(body, Observe):
             source = mind.sources[event.event_id]
             source = source.model_copy(update={"message_id": message_ids[source.message_id]})
+            source = host_observations.remap_frame(source, message_ids)
             if source.graph:
                 source = source.model_copy(
                     update={

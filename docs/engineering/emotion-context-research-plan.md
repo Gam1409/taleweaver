@@ -1,6 +1,8 @@
 # Situation, personality and emotion: research and implementation plan
 
-Status: research draft, 2026-11-10. No runtime or prompt changes are included.
+Status: first integration implemented, 2026-11-10; offline validation only.
+The research baseline below records the original gap. Implementation status and
+remaining boundaries are listed at the end; no live quality gain is claimed.
 
 The owner's 25% character / 75% situation example expresses a product goal:
 intense events should substantially affect an NPC's current response without
@@ -211,9 +213,45 @@ continuity, credible expression, factual integrity and observer privacy separate
 Use blinded comparisons where practical and report variation across repeats.
 No percentage improvement in “realistic psychology” is justified by a small sample.
 
-## Completion boundary
+## First implementation and its boundaries
 
-This document is a concrete research/engineering plan. It does not claim a completed
-literature review of whole books, a clinical model, an implemented scene handoff,
-or a verified improvement in live RP quality. Runtime work starts only after the
-research synthesis and implementation choices are worked through in this order.
+The existing scene ledger and frozen public-cast snapshot now supply a bounded
+`last_observed_scene` to each eligible observer's existing host frame. The
+handoff preserves message/revision/hash, exact quote occurrence, room and recorded
+game minute. It uses only the latest preceding completed assistant message;
+unproven witnesses, changed sources and other rooms do not qualify. The same
+public view reaches lookup, decision, narration/review and simplified narration.
+The semantic query uses these cues without displacing existing causal-goal cues.
+
+This is a last observation, **not proof of an ongoing action**. Persistent processes
+retain their existing scene-ledger lifetime and resolution rules. A time skip
+does not refresh the observation or turn it into a current pose. No arbitrary
+previous prose, private thoughts or observer-private body/scene facts are copied
+into the shared narrator contract by this handoff.
+
+Existing stored experience explanations now accompany the bounded experience
+view in lookup and decision, as they already did for the narrator. The existing
+freshness/gap labels, two-reason/512-extra-character budget and source checks
+remain. This neither creates a fresh appraisal nor changes the original identity.
+
+The optional field preserves the exact legacy serialized host shape when absent.
+Nested scene references participate in existing source retraction and session-copy
+rebinding. Full typed observations and bounded model projections remain distinct;
+omitted actions are explicit. No additional model/embedding request, memory store,
+runtime dependency or schema-version bump is introduced.
+
+Regression coverage includes real turn orchestration with mocked model responses,
+observer privacy, repeated quotes, changed/deleted sources, copy/import, fallback,
+large inventories, context limits and game-time skips. The multi-turn emotional
+fixture checks that saved causes reach the next decision and that expressive prose
+survives review. It does not establish how a real model will write that prose.
+
+Remaining work includes auditing which scene/body observations can ground a new
+experience, measuring missed extraction and reviewing portrait-state consistency.
+Host frames are still context rather than independently citable current affect
+triggers. Model evaluation needs matched, repeated live runs after the owner
+resumes them; the current live-test pause remains in effect.
+
+This is not a completed review of whole books, a clinical model, or a measured
+improvement in literary/psychological quality. Later stages of the plan remain
+separate work rather than claims implied by this first integration.

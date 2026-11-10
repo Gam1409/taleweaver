@@ -199,7 +199,9 @@ def _validate_graph_transition(
 
 
 def before_messages(mind: Mind, message_ids: set[str]) -> Mind:
-    removed = {key for key, source in mind.sources.items() if source.message_id in message_ids}
+    from backend.engine.chpm.recent_scene import dependencies
+
+    removed = {key for key, source in mind.sources.items() if dependencies(source) & message_ids}
     earliest = min(
         (event.sequence for event in events(mind.snapshot) if event.event_id in removed),
         default=None,

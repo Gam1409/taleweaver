@@ -12,7 +12,7 @@ EXPERIENCE_REASON_EXTRA_CHARS = 512
 
 
 def experience_reasons(mind: Mind, view: dict) -> dict:
-    """Expose bounded stored reasons without refreshing age or changing technical inputs."""
+    """Share bounded stored reasons without refreshing their age or mutating the mind."""
     if not view["states"]:
         return view
     reasons = {
