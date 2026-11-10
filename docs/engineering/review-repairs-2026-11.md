@@ -306,7 +306,53 @@ is not the selected behavior.
   preserved the published passage index and exact offsets. No new live model
   request was sent in this wave.
 
-## Next stages requested by the owner
+## Wave 18: local proposal failure and natural continuation
+
+- Give completed invalid/truncated proposals their own recoverable error type.
+  In live Keep playing mode, reuse the inactive-character boundary for a rejected
+  NPC while preserving independently usable peer decisions. Strict, transport,
+  cancellation, shared-analysis and host-integrity failures keep their existing
+  whole-turn boundaries. With no surviving decision, use normal recovery.
+- Remove the failed actor's complete turn-local drafts, including observations,
+  recalled agendas, causal projections and temporary gap cursors. Preserve that
+  actor's original saved state. Shared narration review still gates publication;
+  a conflict can require repair or abandon all proposed psychological changes.
+- Keep the single shared retry and restore its serial budget accounting after a
+  deferred actor. Add bounded per-actor diagnostics and a partial status outside
+  the narration. Existing checkpoints, import/copy and saved-state owners remain
+  authoritative; the additive diagnostic field needs no schema-version bump.
+- Reuse the portrait-presentation owner to exclude new thoughts/emotions for
+  locally deferred NPCs while retaining their peers' cues. Check both pre-capture
+  and already-captured candidates, independent sessions, and an empty eligible
+  cue set without misclassifying it as a source-hash failure.
+- Live testing exposed a separate false rejection: INITIATE followed by CONTINUE
+  on the same discussion was labelled maintain. The owner approved this natural
+  progression. Allow only that additional pair, preserving conditions, grounded
+  revision requirements for other transitions and semantic narration review.
+- Regression coverage includes both actor orders, sequential/parallel execution,
+  schema/semantic rejection, strict rollback, shared review repair/rejection,
+  cancellation, hard-error precedence and exact request-budget reservations.
+- Validation: a complete backend run passed 5,156 tests before the final narrow
+  continuation and portrait-cue repairs. After all repairs, 1,777 affected
+  regression tests passed. All 470 frontend tests, Vue type checking and the
+  production build passed. Ruff check/format is clean; mypy accepts 912 backend
+  files. No further Pod requests were made after the idle/empty-queue check.
+
+## Wave 19: measure omissions against independently defined facts
+
+- Add six reusable kettle-process cases: a literal ending, its negation, an
+  ending repeated in recollection and authored prose, a literary ending, a pure
+  recollection, and an authored action with no current narrated event.
+- Score canonical state, retained identity, current source revision/hash/span,
+  and rejected proposals. An empty extraction succeeds only on unchanged-state
+  controls; an all-checked marker cannot hide a required change.
+- Run those cases through the real shared extractor with staging both enabled
+  and disabled. See the [live report](structured-output-live-review-2026-11-10.md)
+  for measured results and the distinction between live and captured-response
+  verification. These probes do not measure overall RP quality or long-session
+  psychological continuity.
+
+## Owner requests addressed by waves 18–19
 
 1. **Localize NPC decision failures.** Investigate the existing per-NPC proposal,
    narration review and commit paths before extending them. One invalid intention
@@ -314,16 +360,16 @@ is not the selected behavior.
    shared world snapshot and compatibility checks for interacting actions; an
    actor leaving cannot simultaneously be treated as still available for contact.
    Do not publish proposals independently when their shared outcome is unresolved.
-   Current investigation: `chpm.parallel.prepare` raises the first worker error
-   before applying any parallel result; `chpm.continuation.activate` clears all
-   turn-local decisions, minds and agendas. Extend these existing boundaries and
-   the shared narration review rather than creating a second decision pipeline.
+   Original investigation: `chpm.parallel.prepare` raised the first worker error
+   before applying any parallel result; `chpm.continuation.activate` cleared all
+   turn-local decisions, minds and agendas. Wave 18 extends those boundaries and
+   the shared narration review without creating a second decision pipeline.
 2. **Test omissions explicitly.** Add paired cases differing in one world fact,
    literary paraphrases of the same event, and unchanged-state controls. Assert
    expected extracted deltas and persisted state, not a model's own assertion
    that it checked everything. Keep deterministic host tests separate from later
-   live extraction-quality measurements. These stages are not implemented by
-   the source-binding wave.
+   live extraction-quality measurements. The source-binding wave was followed
+   by localized proposal handling and the paired extraction probes above.
 
 ## Open illustration consistency decision
 
