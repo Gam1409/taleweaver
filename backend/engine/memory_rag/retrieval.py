@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlalchemy import select
 
+from backend.core.engine_detailed_trace import step
 from backend.core.llm_logger import log_structured_event
 from backend.core.reliability_metrics import record_recall
 from backend.engine.memory_rag.core import context_fallback, working_memory
@@ -183,6 +184,7 @@ async def _turn_vectors(manager: Any, query: str) -> tuple[list[dict], Scope | N
     return result
 
 
+@step("memory.retrieve")
 async def prepare_recall(
     manager: Any, user_msg: str, entities: list[Any], *, history: list[dict] | None = None
 ) -> TurnRecall:

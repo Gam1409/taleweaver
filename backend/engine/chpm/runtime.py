@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
 from backend.engine.chpm import (
     agenda,
@@ -152,6 +153,7 @@ def contract(turn: Turn) -> str:
     )
 
 
+@step("npc.prepare")
 async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     state = load(manager.state)
     if state.settings.mode == "off" or not is_vn(manager.adventure):

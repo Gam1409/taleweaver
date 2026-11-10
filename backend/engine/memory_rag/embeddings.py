@@ -14,6 +14,7 @@ from backend.core.inference.registry import (
     endpoint_key,
 )
 from backend.core.llm_diagnostics import async_operation
+from backend.core.system_diagnostics import service
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
@@ -148,6 +149,16 @@ async def embed_with_settings(
 async def _embed(
     settings: MemoryRagSettings, texts: list[str], duration: float, api_key: str
 ) -> list[list[float]]:
+    token = service.detail_token()
+    if token is not None:
+        service.detail(
+            "detail.embedding.prepared",
+            token=token,
+            texts=texts,
+            model=settings.model,
+            provider=settings.provider,
+            timeout_seconds=duration,
+        )
     base = await asyncio.to_thread(validate_embedding_url, settings.base_url)
     if admission.enabled():
         async with admission.reserve(endpoint_key(base), settings.timeout_seconds) as lease:
@@ -157,6 +168,13 @@ async def _embed(
             lease.certain = True
     else:
         response = await _post(settings, base, texts, api_key, duration)
+    if token is not None:
+        service.detail(
+            "detail.embedding.http.response",
+            token=token,
+            status_code=response.status_code,
+            body=response.text,
+        )
     response.raise_for_status()
     return _parse_vectors(response.json(), settings.provider, len(texts))
 

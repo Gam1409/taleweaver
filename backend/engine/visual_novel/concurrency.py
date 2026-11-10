@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any
 
+from backend.core.engine_detailed_trace import stream_event, turn_context
+
 BUSY_DETAIL = (
     "This session is busy. Wait for the current turn or settings update to finish, then try again."
 )
@@ -60,9 +62,13 @@ def guard_session_turn(
     @wraps(method)
     async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
         try:
-            with session_write_lease(manager.game_id, lease=kwargs.get("session_lease")):
+            with (
+                session_write_lease(manager.game_id, lease=kwargs.get("session_lease")),
+                turn_context(manager, args, kwargs),
+            ):
                 async with aclosing(method(manager, *args, **kwargs)) as stream:
                     async for chunk in stream:
+                        stream_event(chunk)
                         yield chunk
         except SessionBusyError as exc:
             yield (

@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.engine_detailed_trace import step, sync_step
 from backend.models.world_entity import WorldScene
 
 from .ledger import apply
@@ -24,6 +25,7 @@ class Pending:
     actions: list[Any] | None = None
 
 
+@step("scene.prepare")
 async def prepare(manager: Any) -> dict:
     from backend.engine.gameplay.world import AdventureLogic
 
@@ -68,6 +70,7 @@ def complete(manager: Any, updates: list[Any], actions: list[Any]) -> None:
         pending.updates, pending.actions = deepcopy(updates), deepcopy(actions)
 
 
+@sync_step("scene.commit")
 def finish(manager: Any, message: Any) -> list[str]:
     pending = getattr(manager, "_pending_scene_continuity", None)
     manager._pending_scene_continuity = None

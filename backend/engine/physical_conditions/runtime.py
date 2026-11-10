@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from backend.core.engine_detailed_trace import sync_step
 from backend.engine.physical_conditions.ledger import apply, read
 from backend.engine.physical_conditions.schema import KEY
 
@@ -36,6 +37,7 @@ def stage(manager: Any, proposals: list[Any], targets: set[str], *, error: str =
     return pending
 
 
+@sync_step("physical_conditions.commit")
 def finish(manager: Any, message: Any) -> list[str]:
     pending = getattr(manager, "_pending_physical_conditions", None)
     discard(manager)

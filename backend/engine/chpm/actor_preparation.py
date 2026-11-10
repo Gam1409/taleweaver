@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from backend.core.engine_detailed_trace import step
 from backend.engine.chpm import (
     agenda,
     causal_memory,
@@ -26,6 +27,7 @@ class PreparedActor:
     mind: Mind | None
 
 
+@step("npc.build_context")
 async def prepare(manager: Any, turn: Any, actor: Any, observed: Observation) -> PreparedActor:
     previous = continuation.previous(turn.initial, actor.id)
     retained = await memory.recall(
@@ -78,6 +80,7 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Observation) ->
     return PreparedActor(actor.id, actor_observation, supplied, previous, turn.minds.get(actor.id))
 
 
+@step("npc.decision")
 async def run(manager: Any, turn: Any, job: PreparedActor) -> tuple[Decision, Mind | None]:
     token = performance.actor_id.set(job.actor_id)
     try:

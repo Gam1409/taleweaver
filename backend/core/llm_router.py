@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.core.inference.admission import timeout_for
 from backend.core.inference.transport import guarded_async, guarded_sync, owned_stream, target
+from backend.core.llm_detailed_trace import trace_async, trace_sync
 from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
@@ -139,6 +140,7 @@ class GameMasterLLM:
         retry_kwargs["extra_body"] = extra_body
         return retry_kwargs
 
+    @trace_sync
     @guarded_sync
     def _completion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Call LiteLLM completion and retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
@@ -206,6 +208,7 @@ class GameMasterLLM:
 
                 raise
 
+    @trace_async
     @guarded_async
     async def _acompletion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""

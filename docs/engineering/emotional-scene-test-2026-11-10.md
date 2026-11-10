@@ -50,12 +50,13 @@ No live inference requests were sent.
 - Record absent presentation data and its diagnostic reason; do not replace missing data with assumed calm.
 - Preserve the distinction between a reported rescue and a verified completed world outcome.
 
-The local opt-in live runner is prepared and import/collection checked. It discovers
+The live replay was cancelled by the owner before any inference request. The
+prepared local opt-in runner was import/collection checked. It discovers
 the generation model through the supplied OpenAI-compatible endpoint and uses the
 existing router and full VN turn path. Technical requests use temperature 0.2;
 narration uses 0.8. The miniature test uses recent conversation and disables semantic
 retrieval/background media so embedding availability does not mask emotional fidelity.
-The endpoint, full live prompts and reports remain private. A URL is still required.
+The endpoint, full live prompts and reports remain private. No live run is pending.
 
 ## Reference text
 

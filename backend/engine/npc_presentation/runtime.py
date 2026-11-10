@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from backend.core.engine_detailed_trace import sync_step
 from backend.core.npc_presentation import (
     EMOTIONS,
     MAX_NPCS,
@@ -183,6 +184,7 @@ class PresentationTurn:
         if not states:
             self._note(text, "no_valid_entries")
 
+    @sync_step("npc.presentation.validate_entry")
     def _entry(self, entry: Any) -> tuple[str | None, dict | None]:
         if not isinstance(entry, dict) or not isinstance(entry.get("npc_id"), str):
             return None, None

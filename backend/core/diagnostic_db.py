@@ -1,4 +1,4 @@
-"""Database timings without SQL text, bound values, results or connection details."""
+"""Database timings and opt-in statement text; never capture bound credentials."""
 
 import time
 
@@ -31,6 +31,10 @@ def _before_cursor(
     keyword = statement.lstrip().split(None, 1)[0].upper() if statement.strip() else "OTHER"
     operation = keyword if keyword in _OPERATIONS else "OTHER"
     context.__dict__["system_diagnostic_query"] = (time.perf_counter(), operation)
+    if getattr(_service(), "detailed_logging", False):
+        _service().detail(
+            "detail.db.query", statement=statement, operation=operation, executemany=_many
+        )
 
 
 def _query_fields(context: ExecutionContext | None) -> dict:

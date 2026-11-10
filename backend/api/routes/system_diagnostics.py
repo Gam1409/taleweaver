@@ -1,4 +1,4 @@
-"""Administrative control for metadata-only system diagnostics."""
+"""Administrative control for standard and explicitly enabled detailed diagnostics."""
 
 import asyncio
 
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/system-diagnostics", tags=["System diagnostics"])
 class DiagnosticSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: StrictBool
+    detailed_logging: StrictBool = False
 
 
 @router.get("")
@@ -51,7 +52,9 @@ async def update_diagnostics(
 ) -> dict:
     try:
         return {
-            **await asyncio.to_thread(service.set_enabled, payload.enabled),
+            **await asyncio.to_thread(
+                service.set_enabled, payload.enabled, detailed_logging=payload.detailed_logging
+            ),
             "reliability": snapshot(),
         }
     except OSError as error:

@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
 from backend.core.llm_logger import log_structured_event
 from backend.engine.clothing.narration import narration_clothing
@@ -354,6 +355,7 @@ class TurnLlmContextBuilder:
             + private_context(state, visible),
         )
 
+    @step("turn.build_context", result=False)
     async def build_context(self, user_msg: str, language: str | None) -> TurnLlmContext:
         db_start = time.perf_counter()
         history = await self._load_recent_history()

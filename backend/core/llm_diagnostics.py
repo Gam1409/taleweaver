@@ -11,7 +11,7 @@ from inspect import signature
 from typing import Any, ParamSpec, TypeVar, cast
 from uuid import UUID, uuid4
 
-from backend.core import llm_timing
+from backend.core import llm_timing, provider_detailed_trace
 from backend.core.diagnostic_fields import ENUMS
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,13 @@ def _purpose(fields: dict) -> dict:
 
 
 def retry(router: Any, attempt: int, delay: float = 0, error: BaseException | None = None) -> None:
+    from backend.core.llm_detailed_trace import failure_payload
+    from backend.core.system_diagnostics import service
+
+    if error is not None and service.detail_token() is not None:
+        service.detail(
+            "detail.llm.retry", attempt=attempt, delay_ms=delay * 1000, **failure_payload(error)
+        )
     fields: dict[str, float | str | BaseException] = {
         "attempt": attempt,
         "delay_ms": delay * 1000,
@@ -312,11 +319,14 @@ def async_operation(
                 context["count"] = len(values["texts"])
             start = time.perf_counter()
             emit(f"{kind}.started", **context)
+            detail_token = provider_detailed_trace.start(kind, context, dict(values))
             try:
                 result = await method(*args, **kwargs)
             except BaseException as error:
+                provider_detailed_trace.finish(kind, context, detail_token, error=error)
                 _finish(context, start, error, namespace=kind)
                 raise
+            provider_detailed_trace.finish(kind, context, detail_token, result=result)
             if kind == "image" and not result:
                 _finish(
                     context,

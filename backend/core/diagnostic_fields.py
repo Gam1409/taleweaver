@@ -62,6 +62,8 @@ EVENTS = {
     "llm_interaction",
 }
 IDENTIFIERS = {
+    "step_id",
+    "parent_step_id",
     "reservation_id",
     "request_id",
     "session_id",

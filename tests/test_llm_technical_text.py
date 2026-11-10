@@ -60,7 +60,7 @@ def test_structured_parser_keeps_literal_tags_fences_and_delimiters(quote, prefi
     assert GameMasterLLM._repair_json(raw) == raw
 
 
-async def test_plain_narration_still_normalizes_a_speaker_voice_tag(monkeypatch):
+async def test_plain_narration_preserves_the_authored_speaker_voice_tag(monkeypatch):
     llm = router()
     monkeypatch.setattr(
         llm,
@@ -68,7 +68,7 @@ async def test_plain_narration_still_normalizes_a_speaker_voice_tag(monkeypatch)
         AsyncMock(return_value=response('Mira: "[WHISPERS] Wait here."')),
     )
     result = await llm.aexecute_simple_task("Narrate.", "Wait.", "local-model")
-    assert result == 'Mira: [whispers] "Wait here."'
+    assert result == 'Mira: "[WHISPERS] Wait here."'
 
 
 async def test_technical_input_examples_preserve_literal_source_cues(monkeypatch):

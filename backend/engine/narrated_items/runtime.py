@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Any
 
+from backend.core.engine_detailed_trace import step
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.character_identity import identity_facts
@@ -53,6 +54,7 @@ def _status(manager: Any, message_id: str, narration: str, status: str, **detail
     }
 
 
+@step("items.scene.conditions.reconcile")
 async def reconcile_items(
     manager: Any,
     narration: str,

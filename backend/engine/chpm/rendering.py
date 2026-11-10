@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Any
 
+from backend.core.engine_detailed_trace import step
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import (
     agenda,
@@ -20,6 +21,7 @@ from backend.engine.chpm.schema import Verdict
 from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
 
 
+@step("narration.validate")
 async def validate(
     manager: Any,
     text: str,
@@ -154,6 +156,7 @@ def _candidate_key(text: str) -> str:
     return " ".join(text.split())
 
 
+@step("narration.review")
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
     available = passages.index(text)
     raw: passages.Review | Verdict = await inference.request(
@@ -248,6 +251,7 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
             )
 
 
+@step("narration.repair")
 async def _repair(
     manager: Any, turn: Turn, text: str, resolution: str, issues: list[str], system_prompt: str
 ) -> str:

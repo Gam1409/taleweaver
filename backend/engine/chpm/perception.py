@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from backend.core.engine_detailed_trace import step
 from backend.engine.chpm import inference, perception_fragments
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
@@ -30,6 +31,7 @@ Return only fragments keyed by supplied IDs, with kind, observers and engaged.
 """
 
 
+@step("npc.perception")
 async def project(
     manager: Any,
     settings: Settings,

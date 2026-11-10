@@ -1,4 +1,4 @@
-"""Opt-in rotating operational metadata, separate from raw LLM telemetry."""
+"""Opt-in rotating diagnostics with separately enabled full-content records."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from backend.core.diagnostic_fields import EVENTS, safe_error, safe_fields
 
 _context: ContextVar[dict | None] = ContextVar("system_diagnostic_context", default=None)
 MAX_BYTES = 5 * 1024 * 1024
+MAX_DETAIL_BYTES = 50 * 1024 * 1024
 BACKUP_COUNT = 4
 
 
@@ -50,6 +51,20 @@ class MetadataHandler(logging.Handler):
                 **(_context.get() or {}),
             },
         )
+        if self.owner.detailed_logging and record.name.startswith("backend.engine."):
+            from backend.core.diagnostic_detail import operational_message
+
+            try:
+                message = operational_message(record.getMessage())
+            except Exception as exc:
+                message = f"[Message unavailable: {type(exc).__name__}]"
+            self.owner.detail(
+                "detail.engine.log",
+                logger=record.name,
+                source=source,
+                severity=logging.getLevelName(record.levelno),
+                message=message,
+            )
 
 
 class DiagnosticWriter(RotatingFileHandler):
@@ -72,6 +87,8 @@ class DiagnosticService:
     def __init__(self, directory: Path):
         self.directory = directory
         self.enabled = False
+        self.detailed_logging = False
+        self.detail_epoch = 0
         self.write_failed = False
         self._writer: DiagnosticWriter | None = None
         self._capture = MetadataHandler(self)
@@ -80,8 +97,10 @@ class DiagnosticService:
     def status(self) -> dict:
         return {
             "enabled": self.enabled,
+            "detailed_logging": self.detailed_logging,
             "log_directory": "log",
             "retention_files": BACKUP_COUNT + 1,
+            "max_file_bytes": MAX_DETAIL_BYTES if self.detailed_logging else MAX_BYTES,
             "write_error": "Diagnostic storage is unavailable." if self.write_failed else None,
         }
 
@@ -99,23 +118,33 @@ class DiagnosticService:
     def initialize(self) -> None:
         try:
             data = json.loads((self.directory / ".system-debug.json").read_text())
-            self.set_enabled(data.get("enabled") is True, persist=False)
+            self.set_enabled(
+                data.get("enabled") is True,
+                detailed_logging=data.get("detailed_logging") is True,
+                persist=False,
+            )
         except FileNotFoundError:
             return
         except (OSError, ValueError, TypeError, AttributeError):
             self.write_failed = True
 
-    def _save_setting(self, enabled: bool) -> None:
+    def _save_setting(self, enabled: bool, detailed_logging: bool = False) -> None:
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         temporary = self.directory / f".system-debug-{uuid4().hex}.tmp"
         try:
-            temporary.write_text(json.dumps({"enabled": enabled}), encoding="utf-8")
+            temporary.write_text(
+                json.dumps({"enabled": enabled, "detailed_logging": detailed_logging}),
+                encoding="utf-8",
+            )
             os.replace(temporary, self.directory / ".system-debug.json")
         finally:
             temporary.unlink(missing_ok=True)
 
-    def set_enabled(self, enabled: bool, *, persist: bool = True) -> dict:
+    def set_enabled(
+        self, enabled: bool, *, detailed_logging: bool = False, persist: bool = True
+    ) -> dict:
         with self._lock:
+            detailed_logging = enabled and detailed_logging
             writer = self._writer
             if enabled and writer is None:
                 self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -123,13 +152,17 @@ class DiagnosticService:
                 writer.setFormatter(logging.Formatter("%(message)s"))
             try:
                 if persist:
-                    self._save_setting(enabled)
+                    self._save_setting(enabled, detailed_logging)
             except OSError:
                 if writer is not self._writer and writer is not None:
                     writer.close()
                 raise
             self._writer = writer
+            if writer is not None:
+                writer.maxBytes = MAX_DETAIL_BYTES if detailed_logging else MAX_BYTES
             self.write_failed = False
+            self.detail_epoch += 1
+            self.detailed_logging = detailed_logging
             if enabled:
                 self.enabled = True
                 logging.getLogger().addHandler(self._capture)
@@ -143,6 +176,8 @@ class DiagnosticService:
         with self._lock:
             logging.getLogger().removeHandler(self._capture)
             self.enabled = False
+            self.detailed_logging = False
+            self.detail_epoch += 1
             if self._writer is not None:
                 self._writer.close()
                 self._writer = None
@@ -161,6 +196,22 @@ class DiagnosticService:
             "line": frame.f_lineno,
         }
         self._write(event, data)
+
+    def detail_token(self) -> int | None:
+        return self.detail_epoch if self.enabled and self.detailed_logging else None
+
+    def detail(self, event: str, *, token: int | None = None, **payload: object) -> None:
+        """Explicit business payloads only; ordinary emit/HTTP/SQL logs stay metadata-only."""
+        with self._lock:
+            if self.detail_token() is None or (token is not None and token != self.detail_epoch):
+                return
+            from backend.core.diagnostic_detail import entries
+
+            try:
+                for data in entries(payload):
+                    self._write(event, {**self.current_context(), **data})
+            except Exception:
+                self.write_failed = True
 
     def http_event(self, event: str, scope: Mapping[str, Any], **fields: object) -> None:
         if not self.enabled or event not in EVENTS:

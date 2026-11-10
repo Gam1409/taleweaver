@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import or_, select
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
 from backend.engine.clothing.runtime import apply_wardrobe
 from backend.engine.gameplay.turn_event_awards import TurnEventAwards
@@ -105,6 +106,7 @@ class TurnStateApplier(
 
         return map_dict
 
+    @step("world.apply_event")
     async def _apply_game_event(self, event: GameEvent) -> list[str]:
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         enforce_vn_event_policy(event, self.adventure)

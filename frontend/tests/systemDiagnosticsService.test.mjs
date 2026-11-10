@@ -36,6 +36,16 @@ test('enable and disable requests send only the explicit boolean', async () => {
   ])
 })
 
+test('detailed logging is an explicit opt-in on the saved settings', async () => {
+  calls.length = 0
+  await service.saveSettings(true, true)
+  await service.saveSettings(true, false)
+  assert.deepEqual(calls.map(([, options]) => JSON.parse(options.body)), [
+    { enabled: true, detailed_logging: true },
+    { enabled: true, detailed_logging: false }
+  ])
+})
+
 test('server errors never expose raw diagnostic details or secrets', async () => {
   response = { ok: false, status: 500, json: async () => { throw new Error('private player text and api key') } }
   await assert.rejects(service.saveSettings(true), error => {
