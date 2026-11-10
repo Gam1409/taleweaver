@@ -187,6 +187,10 @@ is not the selected behavior.
 - Live testing found both successful validated NPC turns and a separate proposal
   semantics rejection. The classifier repair does not claim to resolve that model
   decision error or every failure previously presented as a quota problem.
+- Correct the error-privacy integration checks to inspect visible SSE content and
+  error details. Random receipt UUIDs can contain 429/503 without leaking a status.
+  Deterministic receipt IDs reproduce both old false failures; all 120 affected
+  gameplay and public-error checks pass after this test-only correction.
 
 ## Open illustration consistency decision
 

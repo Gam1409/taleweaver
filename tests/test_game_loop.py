@@ -40,6 +40,33 @@ def _llm_call_text(call) -> str:
     return "\n\n".join(parts)
 
 
+def _visible_sse_text(chunks: list[str]) -> str:
+    """Inspect story/error text, excluding opaque receipt and correlation IDs."""
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for chunk in chunks
+        for line in chunk.splitlines()
+        if line.startswith("data: ")
+    ]
+    return "\n".join(
+        str(payload.get(field, "")) for payload in payloads for field in ("content", "detail")
+    )
+
+
+@pytest.fixture
+def status_digits_in_receipt(monkeypatch):
+    original_save = GameTurnManager._save_chat_message
+
+    async def save_with_status_digits(manager, role, content):
+        message = await original_save(manager, role, content)
+        if role == "user":
+            message.id = "00000000-0429-7503-8000-000000000001"
+            await manager.db.flush()
+        return message
+
+    monkeypatch.setattr(GameTurnManager, "_save_chat_message", save_with_status_digits)
+
+
 async def _seed_game_context(db):
     """Seeds a minimal game context for turn testing."""
     user = User(username="player1", hashed_password="pw", role="user")
@@ -1095,7 +1122,9 @@ async def test_token_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch
         assert not any("maximum context length" in c.lower() for c in chunks)
 
 
-async def test_rate_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
+async def test_rate_limit_error_is_user_safe_in_chat(
+    setup_test_db, monkeypatch, status_digits_in_receipt
+):
     """Rate-limit exceptions should be surfaced as a short user-safe message without raw provider details."""
     from tests.conftest import TestSessionLocal
 
@@ -1118,7 +1147,8 @@ async def test_rate_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch)
             chunks.append(chunk)
 
         assert any("event: error" in c and "busy right now" in c.lower() for c in chunks)
-        assert not any("429" in c or "rate limit exceeded" in c.lower() for c in chunks)
+        visible_text = _visible_sse_text(chunks)
+        assert "429" not in visible_text and "rate limit exceeded" not in visible_text.lower()
 
 
 async def test_timeout_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
@@ -1147,7 +1177,9 @@ async def test_timeout_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
         assert not any("request timeout" in c.lower() for c in chunks)
 
 
-async def test_service_unavailable_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
+async def test_service_unavailable_error_is_user_safe_in_chat(
+    setup_test_db, monkeypatch, status_digits_in_receipt
+):
     """Service unavailable exceptions should be surfaced as a short user-safe message."""
     from tests.conftest import TestSessionLocal
 
@@ -1170,7 +1202,7 @@ async def test_service_unavailable_error_is_user_safe_in_chat(setup_test_db, mon
             chunks.append(chunk)
 
         assert any("event: error" in c and "temporarily unavailable" in c.lower() for c in chunks)
-        assert not any("503" in c for c in chunks)
+        assert "503" not in _visible_sse_text(chunks)
 
 
 async def test_invalid_structured_llm_payload_is_user_safe_in_chat(setup_test_db, monkeypatch):
