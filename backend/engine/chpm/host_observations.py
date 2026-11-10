@@ -95,8 +95,11 @@ def remap_frame(source: Any, message_ids: dict[str, str]) -> Any:
         return source
     changed = facts.model_copy(
         update={
-            "last_observed_scene": moment.model_copy(
-                update={"source_message_id": message_ids[moment.source_message_id]}
+            "last_observed_scene": ObservedScene.model_validate(
+                {
+                    **moment.model_dump(mode="json"),
+                    "source_message_id": message_ids[moment.source_message_id],
+                }
             )
         }
     )

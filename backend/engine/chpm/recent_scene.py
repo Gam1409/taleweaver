@@ -1,6 +1,5 @@
 """Project existing verified frame actions; never mine arbitrary private narration."""
 
-import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +11,7 @@ from backend.engine.chpm.host_observation_contracts import (
     MAX_SCENE_CHARS,
     ObservedScene,
     ObservedSceneAction,
+    scene_view_size,
 )
 from backend.engine.scene_continuity.ledger import digest, read
 from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY, content_hash
@@ -147,7 +147,7 @@ def _bounded(
             "actions": [row.model_dump(mode="json") for row in [*selected, action]],
             "omitted_actions": total - len(selected) - 1,
         }
-        if len(json.dumps(proposed, ensure_ascii=False)) <= MAX_SCENE_CHARS:
+        if scene_view_size(proposed) <= MAX_SCENE_CHARS:
             selected.append(action)
     return (
         ObservedScene(**metadata, actions=tuple(selected), omitted_actions=total - len(selected))

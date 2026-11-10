@@ -15,7 +15,7 @@ from backend.engine.chpm.host_observation_contracts import (
     PhysicalFact,
     SceneFact,
 )
-from backend.engine.chpm.host_state import record
+from backend.engine.chpm.host_state import Source, record
 from backend.engine.chpm.schema import Perception
 from tests.test_chpm_host_state import mind, source
 
@@ -45,6 +45,22 @@ def test_bounded_projection_retains_whole_quotes_and_rejects_oversized_saved_vie
     assert ObservedScene.model_validate_json(view.model_dump_json()) == view
     with pytest.raises(ValueError, match="budget"):
         ObservedScene(**METADATA, actions=tuple(actions))
+
+
+def test_a_packed_scene_still_loads_after_rebinding_to_a_longer_source_id():
+    metadata = {**METADATA, "source_message_id": "x"}
+    view = next(
+        result
+        for size in range(800, 399, -1)
+        if (result := recent_scene._bounded([action("q" * size)], metadata, 1)) is not None
+    )
+    facts = HostFacts(scene_id="room", last_observed_scene=view)
+    original = source(kind="host_frame", text=host_observations.frame(facts)).model_copy(
+        update={"facts": facts}
+    )
+    rebound = host_observations.remap_frame(original, {"x": "c" * 100})
+    assert Source.model_validate_json(rebound.model_dump_json()) == rebound
+    assert rebound.facts.last_observed_scene.actions == view.actions
 
 
 def test_observer_private_body_and_scene_facts_are_not_added_to_shared_narration():

@@ -13,6 +13,13 @@ from backend.engine.scene_staging.schema import Placement, Posture
 MAX_SCENE_CHARS = 1200
 
 
+def scene_view_size(data: dict) -> int:
+    """Reserve a full identifier so copying cannot invalidate an otherwise packed view."""
+    encoded = json.dumps(data, ensure_ascii=False)
+    identifier = json.dumps(data["source_message_id"], ensure_ascii=False)
+    return len(encoded) + max(0, 102 - len(identifier))
+
+
 class SceneFact(Contract):
     id: Identifier
     subject_id: Identifier
@@ -69,7 +76,7 @@ class ObservedScene(Contract):
 
     @model_validator(mode="after")
     def bounded(self) -> "ObservedScene":
-        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False)) > MAX_SCENE_CHARS:
+        if scene_view_size(self.model_dump(mode="json")) > MAX_SCENE_CHARS:
             raise ValueError("The observed scene exceeds its shared context budget.")
         return self
 
