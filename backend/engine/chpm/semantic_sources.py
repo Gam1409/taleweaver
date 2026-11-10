@@ -28,10 +28,12 @@ async def messages(db: Any, session_id: str, ids: set[str]) -> dict[str, Any]:
     ordered = sorted(ids)
     for offset in range(0, len(ordered), 400):
         found = await db.scalars(
-            select(ChatMessage).where(
+            select(ChatMessage)
+            .where(
                 ChatMessage.session_id == session_id,
                 ChatMessage.id.in_(ordered[offset : offset + 400]),
             )
+            .execution_options(populate_existing=True)
         )
         rows.update({row.id: row for row in found})
     return rows

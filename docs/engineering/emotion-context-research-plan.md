@@ -236,7 +236,9 @@ remain. This neither creates a fresh appraisal nor changes the original identity
 
 The optional field preserves the exact legacy serialized host shape when absent.
 Nested scene references participate in existing source retraction and session-copy
-rebinding. Full typed observations and bounded model projections remain distinct;
+rebinding. Post-retrieval checks also load the nested anchors and refresh cached
+message rows, so an unchanged scene is retained and an edit made during lookup is
+detected. Full typed observations and bounded model projections remain distinct;
 omitted actions are explicit. No additional model/embedding request, memory store,
 runtime dependency or schema-version bump is introduced.
 

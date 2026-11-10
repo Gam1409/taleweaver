@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core import database
-from backend.engine.chpm import host_sources, semantic_sources
+from backend.engine.chpm import host_sources, recent_scene, semantic_sources
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
@@ -149,7 +149,9 @@ async def _retrieve(
     candidates = await LanceMemoryStore().query(scope, vector, query, npc_ids=[actor], limit=12)
     # Canonical text and metadata are read after the network/storage awaits.
     rows = await semantic_sources.messages(
-        manager.db, manager.game_id, {s.message_id for s in saved.sources.values()}
+        manager.db,
+        manager.game_id,
+        {key for source in saved.sources.values() for key in recent_scene.dependencies(source)},
     )
     checked = host_sources.from_messages(saved, rows)
     turn.reconciled_minds[actor] = checked
