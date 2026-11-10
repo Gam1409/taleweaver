@@ -11,6 +11,35 @@ operations and game time. Rejected independent updates are counted and reported.
 
 Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs existing appearance and valid garment metadata. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
 
+Completed narration can update the existing worn garment's `uncovered_regions`.
+Partly lowered or partly donned clothing remains `worn`; it is not a completed
+removal. Null or omitted placement preserves known coverage, while an explicit
+empty array restores normal coverage. Regions must belong to that garment's
+coverage. Existing ownership, appearance, detailed-clothing and age checks apply.
+Debug recovery retains its separate, evidence-bound outer placement fields.
+
+Prefer a final outcome per item. Multiple proposals for one existing ID can form
+an atomic chain, such as removal followed by handover, when completed actions have
+continuous ownership and unique, non-overlapping quotes in narrative order.
+An invalid step rejects that item's whole chain; unrelated items remain eligible.
+Schema-invalid peers also block a partial chain. Original action indices remain
+stable for generated IDs and scene-prop references. Interleaved actions on different
+items retain their original global order. A final transfer already
+applied by mechanics is not replayed through intermediate ownership states.
+
+The extraction request supplies the current narration as an ordered passage map,
+reusing the existing NPC-review source index. Item and condition `evidence` may
+select a `passage:pN` reference. The host resolves it to the exact current text
+before ordinary validation and persistence. Literal quotes remain supported;
+unknown references, paraphrases and combined fragments are not repaired. No extra
+model request or duplicate copy of the narration is added. Other state sections
+continue to cite literal source text.
+
+Passage references prevent transcription mistakes; they do not prove that the
+chosen passage establishes the proposed event. Figurative prose, intentions,
+memories and unresolved pronouns still require correct model interpretation.
+An ambiguous metaphor alone must not be treated as established clothing removal.
+
 An explicitly established ordinary object or garment without a canonical ID can become an inline inventory card. The schema cannot grant bonuses or effects. Descriptions must preserve known facts and leave unknown details unspecified. New underwear requires detailed clothing and an established adult source owner (or adult recipient for a scene acquisition). These gates do not infer age from prose.
 
 Every proposal needs an exact quote from the completed response, valid participant IDs and a completed-action classification. Semantic interpretation still depends on the model: quote matching alone does not prove transfer or consent. The private `__narrated_items__` ledger stores accepted changes, rejected reasons, source input-message ID and narrative hash. Session replay/checkpoints preserve the state transactionally; newly materialized dropped objects retain runtime provenance for checkpoint cleanup. Regeneration remains a prose rewrite preserving committed outcomes, not a second transfer.

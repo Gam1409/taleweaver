@@ -189,7 +189,10 @@ class StagingRoles(TurnRoles):
         if self.fail:
             raise TimeoutError("Unavailable extractor")
         payload = json.loads(args[1])
-        assert payload["completed_narration"] == TEXT
+        assert payload["completed_narration"] == {
+            "passage:p0": "Hero sits on the bench.",
+            "passage:p1": "Лина stands in front of Hero.",
+        }
         staging = SceneExtraction(
             changes=[
                 {

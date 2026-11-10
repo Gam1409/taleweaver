@@ -245,6 +245,35 @@ is not the selected behavior.
 - See the [live validation report](structured-output-live-review-2026-11-10.md)
   for model correctness failures that remain outside this focused host repair.
 
+## Wave 16: partial clothing, atomic item chains and source passages
+
+- Reuse the existing worn-coverage representation in post-narration item actions.
+  Explicit partial placement stays worn; omission preserves known placement and
+  an explicit empty array restores coverage. Wire and host validation agree on
+  worn-only placement, unique regions and existing clothing policy checks.
+- Replace the unconditional duplicate-item rejection with bounded atomic chains
+  for one existing ID. Require completed, source-ordered, non-overlapping evidence
+  and continuous ownership. A failed terminal action or schema-invalid peer cannot
+  leave its earlier removal applied. Preserve unrelated items and source indices.
+- Reuse the NPC review's passage segmentation through a shared pure text helper.
+  Item and condition evidence can reference an unchanged current-message passage;
+  unknown IDs and paraphrases retain their normal validation failure. No extra
+  inference request, fuzzy quote repair or additional state store is introduced.
+- Local four-turn gameplay tests cover an adult garment's partial placement,
+  removal and transfer, another transfer and basket placement, washing, drying
+  and partial dressing. The tear survives cleaning. Run with staging on and off;
+  verify actual saved ownership, worn coverage and assistant-message provenance.
+- Additional tests cover independent-item failure, mechanics idempotence, legacy
+  literal evidence, source fidelity in literary text and debug recovery boundaries.
+  These deterministic tests do not establish live-model extraction quality.
+- The earlier 18/23 live result remains the baseline until another live run.
+  In particular, ambiguous metaphors need semantic evaluation with a real model.
+- Validation: the complete backend run passed 5,075 cases and exposed one outdated
+  staging mock expecting the old narration string. Update it to assert the exact
+  two source passages, retaining the message/pose assertions. The subsequent 81
+  boundary checks and 490 affected-feature checks pass. Ruff is clean and mypy
+  accepts all 908 backend source files. Live generation remains paused by request.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the

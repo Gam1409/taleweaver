@@ -12,7 +12,7 @@ from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
-from backend.engine.narrated_items import independent_state
+from backend.engine.narrated_items import evidence, independent_state
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
@@ -104,7 +104,7 @@ async def reconcile_items(
     detailed = detail_settings(manager)["detailed"]
     payload = json.dumps(
         {
-            "completed_narration": narration,
+            "completed_narration": evidence.passages(narration),
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
@@ -157,6 +157,7 @@ async def reconcile_items(
             ),
             timeout=role_timeout(manager.user, "small"),
         )
+        result = evidence.bind(result, narration)
         shared_staging.propose(manager, result)
         extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
             result, actors

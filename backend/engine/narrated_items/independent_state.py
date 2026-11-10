@@ -47,6 +47,7 @@ def unpack(
         )
         return extraction, [failure], action_scope(result.actions, actors), ()
     valid, indices, failures, denied = [], [], [], set()
+    invalid_items: set[str] = set()
     for index, raw in enumerate(result.actions):
         try:
             value = ItemExtraction(actions=[raw]).actions[0]
@@ -59,14 +60,21 @@ def unpack(
                 )
             )
             denied.update(action_scope([raw], actors))
+            if isinstance(raw, dict) and isinstance(raw.get("item_id"), str):
+                invalid_items.add(raw["item_id"])
             continue
         valid.append(value)
         indices.append(index)
+    retained = [
+        (value, index)
+        for value, index in zip(valid, indices, strict=True)
+        if value.item_id not in invalid_items
+    ]
     return (
-        extraction.model_copy(update={"actions": valid}),
+        extraction.model_copy(update={"actions": [value for value, _ in retained]}),
         failures,
         denied or None,
-        tuple(indices),
+        tuple(index for _, index in retained),
     )
 
 

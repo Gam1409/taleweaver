@@ -13,6 +13,7 @@ from backend.engine.clothing.profiles import (
     validate_profile,
 )
 from backend.engine.clothing.schema import VisualProfile, WornItem
+from backend.engine.narrated_items import transitions
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
@@ -77,7 +78,9 @@ def _remove(actor: dict, item_id: str) -> None:
         ]
 
 
-def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
+def _receive(
+    actor: dict, item: dict, disposition: str, detailed: bool, uncovered: list | None = None
+) -> None:
     identifier = item["id"]
     owned = owned_items(actor["inventory"], equipment=actor["equipment"])
     if identifier not in owned or not any(_id(row) == identifier for row in actor["inventory"]):
@@ -101,7 +104,7 @@ def _receive(actor: dict, item: dict, disposition: str, detailed: bool) -> None:
     if garment.underwear and not (detailed and type(age) is int and age >= 18):
         raise ItemPolicyError("inner_wear_policy")
     if identifier not in {entry.item_id for entry in profile.worn}:
-        profile.worn.append(WornItem(item_id=identifier))
+        profile.worn.append(WornItem(item_id=identifier, uncovered_regions=uncovered or []))
     actor["visual_profile"] = validate_profile(
         profile.model_dump(), actor["resolved_inventory"], equipment=actor["equipment"]
     ).model_dump()
@@ -146,7 +149,7 @@ def _resolve(
     return _new_item(action, actors, **creation_options)
 
 
-def apply_actions(
+def _apply_batch(
     extraction: ItemExtraction,
     actors: dict,
     snapshot: Possessions,
@@ -157,13 +160,12 @@ def apply_actions(
     message_id: str,
     failures: list[ItemFailure] | None = None,
     source_indices: Sequence[int] | None = None,
-) -> tuple[dict, list[dict], list[str]]:
-    """Validate each action on copies; failures never partially remove possessions."""
+) -> tuple[dict, Possessions, list[dict], list[str]]:
+    """Propose one item chain on copies; the caller commits only a complete chain."""
     actors = deepcopy(actors)
     snapshot = deepcopy(snapshot)
     accepted: list[dict] = []
     errors: list[str] = []
-    seen: set[str] = set()
     if source_indices is not None and (
         len(source_indices) != len(extraction.actions)
         or len(set(source_indices)) != len(source_indices)
@@ -186,9 +188,6 @@ def apply_actions(
                 index=index,
             )
             identifier = item["id"]
-            if identifier in seen:
-                raise ValueError("Multiple actions for the same item need review.")
-            seen.add(identifier)
             actual_owner = snapshot.owners.get(identifier, action.source_owner)
             if actual_owner == action.destination_owner and action.source_owner != actual_owner:
                 continue  # Already applied by the mechanics pass; never duplicate or unequip it.
@@ -196,13 +195,27 @@ def apply_actions(
             if (
                 action.basis == "observed_wear"
                 and profile
-                and any(row.item_id == identifier for row in profile.worn)
+                and any(
+                    row.item_id == identifier
+                    and (
+                        action.uncovered_regions is None
+                        or row.uncovered_regions == action.uncovered_regions
+                    )
+                    for row in profile.worn
+                )
             ):
                 continue
+            uncovered = action.uncovered_regions
+            if uncovered is None and actual_owner == action.destination_owner and profile:
+                uncovered = next(
+                    (row.uncovered_regions for row in profile.worn if row.item_id == identifier), []
+                )
             candidate = deepcopy(actors)
             if actual_owner in candidate:
                 _remove(candidate[actual_owner], identifier)
-            _receive(candidate[action.destination_owner], item, action.disposition, detailed)
+            _receive(
+                candidate[action.destination_owner], item, action.disposition, detailed, uncovered
+            )
             actors = candidate
             snapshot.items[identifier] = item
             snapshot.owners[identifier] = action.destination_owner
@@ -229,4 +242,108 @@ def apply_actions(
             errors.append(failure.message())
             if failures is not None:
                 failures.append(failure)
-    return actors, accepted, errors
+    return actors, snapshot, accepted, errors
+
+
+def _prepare_actions(
+    batches: list[list[tuple[int, ItemAction]]],
+    actors: dict,
+    snapshot: Possessions,
+    narration: str,
+) -> tuple[list[tuple[int, ItemAction]], list[ItemFailure]]:
+    eligible: list[tuple[int, ItemAction]] = []
+    failures: list[ItemFailure] = []
+    for entries in batches:
+        try:
+            actions = transitions.prepare(entries, actors, narration)
+            if not transitions.already_applied(actions, snapshot):
+                eligible.extend(
+                    (index, action) for (index, _), action in zip(entries, actions, strict=True)
+                )
+        except ValueError as exc:
+            index, action = entries[0]
+            failures.append(
+                ItemFailure(
+                    action.item_id or (action.new_item.name if action.new_item else "Item"),
+                    str(exc),
+                    basis=action.basis,
+                    evidence=action.evidence,
+                    action_index=index,
+                )
+            )
+    return sorted(eligible, key=lambda entry: entry[0]), failures
+
+
+def _commit_chains(
+    eligible: list[tuple[int, ItemAction]],
+    actors: dict,
+    snapshot: Possessions,
+    narration: str,
+    *,
+    detailed: bool,
+    session_id: str,
+    message_id: str,
+) -> tuple[dict, list[dict], list[ItemFailure]]:
+    failures: list[ItemFailure] = []
+    # At most six local passes: each rejected pass excludes at least one item chain.
+    # Nothing is persisted until a complete pass succeeds, in original action order.
+    while eligible:
+        rejected: list[ItemFailure] = []
+        changed, _, accepted, _ = _apply_batch(
+            ItemExtraction.model_validate(
+                {"actions": [action.model_dump() for _, action in eligible]}
+            ),
+            actors,
+            snapshot,
+            narration,
+            detailed=detailed,
+            session_id=session_id,
+            message_id=message_id,
+            failures=rejected,
+            source_indices=[index for index, _ in eligible],
+        )
+        if not rejected:
+            return changed, accepted, failures
+        failures.extend(rejected)
+        invalid_indices = {failure.action_index for failure in rejected}
+        invalid_items = {
+            action.item_id
+            for index, action in eligible
+            if index in invalid_indices and action.item_id is not None
+        }
+        eligible = [
+            (index, action)
+            for index, action in eligible
+            if index not in invalid_indices and action.item_id not in invalid_items
+        ]
+    return actors, [], failures
+
+
+def apply_actions(
+    extraction: ItemExtraction,
+    actors: dict,
+    snapshot: Possessions,
+    narration: str,
+    *,
+    detailed: bool,
+    session_id: str,
+    message_id: str,
+    failures: list[ItemFailure] | None = None,
+    source_indices: Sequence[int] | None = None,
+) -> tuple[dict, list[dict], list[str]]:
+    """Commit item chains atomically without reordering interleaved independent actions."""
+    batches = transitions.batches(extraction.actions, source_indices)
+    eligible, rejected = _prepare_actions(batches, actors, snapshot, narration)
+    changed, accepted, failed = _commit_chains(
+        eligible,
+        actors,
+        snapshot,
+        narration,
+        detailed=detailed,
+        session_id=session_id,
+        message_id=message_id,
+    )
+    rejected.extend(failed)
+    if failures is not None:
+        failures.extend(rejected)
+    return changed, accepted, [failure.message() for failure in rejected]
