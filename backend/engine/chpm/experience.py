@@ -141,6 +141,9 @@ EXPERIENCE: Return experiences (0-2, [] if unwarranted), separately from beliefs
 These are tentative estimates about this observer, not measurements or trait edits.
 Each needs exact visible citations including a CURRENT observed trigger, authored/
 active-agenda personal_motive_ids, a short explanation, alternatives and unknowns.
+Explain the trigger's personal significance in this situation. Motive IDs ground
+stakes, not permission to feel; controlled expression need not mean weak feeling.
+last_observed_scene contextualizes a current citation, never replaces one.
 For affect use fear/anger/sadness/joy/shame/interest/arousal/sexual_desire; arousal is
 general activation, NOT sexual desire. about_id=null or a known subject.
 sexual_desire is optional: estimate it only with a current trigger and a personal

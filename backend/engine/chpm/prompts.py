@@ -4,6 +4,10 @@ PROPOSE = """Propose 2-4 meaningfully different dialogue intentions for ONE NPC 
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
+Appraise the current situation and personal stakes before choosing. Use known host
+state and experience_context reasons; last_observed_scene is a past observation,
+not proof of ongoing action. Traits inform appraisal and coping, not an obligation
+to stay calm. Strong/mixed feelings can coexist with professional goals and agency.
 Return candidates as an OBJECT keyed by action kind, without kind in values.
 preconditions: [] or up to two unmet requirements; a future check is not completed.
 player_request_source_ids reference visible_evidence. Intentions describe
@@ -29,6 +33,9 @@ Use agent_observed_sources as this NPC's source-bound knowledge when realizing a
 selected intention. Preserve concrete locations, item identities and access codes;
 do not invent replacements or claim another NPC knows these sources. Historical
 reports are not current world facts; current host state overrides them.
+current_scene_observations preserves this observer's verified public view.
+last_observed_scene describes its recorded minute, not an automatically ongoing
+action. Current canonical outcomes override old movement, poses and clothing.
 CHPM DIALOGUE CONTRACT (private data, not prose to repeat):
 Within each NPC object, text_ref is a JSON pointer to exact text in that SAME object.
 preconditions are unmet requirements, not completed checks. Keep the intention conditional
@@ -59,9 +66,12 @@ inventory item or an authorized transfer. Closed threads are history, not pendin
 tasks. Remember established narrative circumstances naturally; provenance labels
 do not require renewed doubt about personally experienced events. Newer explicit
 host outcomes take precedence; do not invent a resolution.
-Preserve competing motives without turning one trait into an absolute rule.
-Do not replace the motivation with an invented wish to please the player, an
-unmotivated reversal or sudden personality change. A reported claim is not established truth.
+Let the perceived situation and its personal significance shape this turn's response.
+Traits, values and goals shape how the NPC copes and expresses it; a professional
+role does not imply absent feeling. Composure may be effortful without changing
+the selected intention. Preserve competing motives; do not substitute an invented
+wish to please the player, an unmotivated reversal or a permanent personality change.
+A reported claim is not established truth.
 A selected agenda_change authorizes only that explicit personal
 goal, promise, withdrawal or report of completion in this NPC's own speech. Without
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
@@ -82,8 +92,10 @@ subjective_experience_not_traits is private, fallible context, not a list to nar
 last_assessed_reason explains the stored appraisal, not a new event. Use established
 conversation and scene context too; missing appraisals do not require flat expression.
 Recent feelings need not match outward expression; historical_current_unknown is
-not a current emotion. Never turn arousal into desire/consent, or a temporary state
-into a personality rewrite. Preserve the selected intention and the NPC's own voice.
+not a current emotion. Distinguish feeling, attempted regulation, chosen action and
+outward expression. Neither an event label nor a trait dictates one required display.
+Never turn arousal into desire/consent, or a temporary state into a personality
+rewrite. Preserve the selected intention and the NPC's own voice.
 developing_tendencies are source-bound gradual qualifications of the original
 identity, not replacement cards. Treat contested tendencies as uncertain; do not
 generalize a local relationship or scene-bound conversational habit to everyone.
@@ -131,8 +143,12 @@ contradiction with the pinned identity, treating a report/challenged belief as
 certainty, or inventing desire/trust merely because the player asked. Acceptance
 and refusal can both fit a character. Do not require reasons to be spoken aloud.
 Traits are contextual tendencies; a tradeoff between sourced motives is allowed.
-Subjective experience is tentative context, not a new personality or required
-display of feelings. Historical states do not establish current intensity.
+Do not reject situational distress, excitement or strained composure merely because
+the card describes a reserved or professional person. Check actual meaning and
+facts, not emotional restraint as a proxy for identity. Subjective experience is
+tentative context, not a new personality or required display of feelings.
+Historical states and last_observed_scene do not establish current intensity or
+prove that a past action is ongoing. Current host outcomes take precedence.
 agent_observed_sources contain exact excerpts this NPC obtained through tools.
 Preserve their concrete items, locations and codes if conveying them; never replace
 missing details with invented specifics. Reported/historical information retains
