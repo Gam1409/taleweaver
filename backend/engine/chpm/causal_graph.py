@@ -4,14 +4,20 @@ from typing import Any
 
 from backend.engine.chpm.causal_contracts import MAX_CLOSED, MAX_OPEN, Anchor, Fact, Thread, Update
 from backend.engine.chpm.causal_graph_contracts import Binding, FactKey, LinkDraft
+from backend.engine.chpm.core.contracts import Observe
+from backend.engine.chpm.core.history import events
 from backend.engine.chpm.host_state import Mind, Source, identifier, record_many
 from backend.engine.chpm.kernel import digest
 
 
 def _records(mind: Mind) -> list[tuple[str, Source]]:
-    # JSON object key order is not chronology. The validated evidence projection
-    # retains observation sequence across serialization, archive and session copies.
-    return [(entry.event_id, mind.sources[entry.event_id]) for entry in mind.snapshot.evidence]
+    # Interpretations also produce evidence, but only observations bind host sources.
+    # The validated event ledger preserves chronology across archives and JSON copies.
+    return [
+        (event.event_id, mind.sources[event.event_id])
+        for event in events(mind.snapshot)
+        if isinstance(event.payload, Observe)
+    ]
 
 
 def narration(actor: str, fact: Fact) -> Source:

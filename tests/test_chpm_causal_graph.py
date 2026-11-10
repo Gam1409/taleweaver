@@ -279,3 +279,44 @@ def test_legacy_source_identifiers_remain_stable_without_optional_graph_field():
     body = original.model_dump(exclude={"facts", "graph"})
     legacy_id = fingerprint({"scope": mind.genesis.scope.model_dump(), "source": body})
     assert identifier(original, mind.genesis) == legacy_id
+
+
+@pytest.mark.parametrize("when", ["before_open", "before_update"])
+def test_psychological_interpretations_are_not_mistaken_for_host_sources(when):
+    from backend.engine.chpm import appraisal, appraisal_context
+    from tests.test_chpm_appraisal import heard, proposal
+
+    turn, state, reply = graph_opened()
+    if when == "before_open":
+        turn, original = contract_fixture()
+        state = KernelState(minds={"npc": original})
+    observed = heard(state.minds["npc"], message="appraisal")
+    window = appraisal_context.build(observed)
+    alias = next(
+        key for key, (_, source, _) in window.sources.items() if source.message_id == "appraisal"
+    )
+    interpreted, _ = appraisal.accept(
+        observed,
+        [proposal(citations=[{"source_id": alias, "quote": "missed my promise"}])],
+        window,
+        message_id="appraisal",
+    )
+    inference_ids = {
+        entry.event_id
+        for entry in interpreted.snapshot.evidence
+        if entry.source_kind == "inference"
+    }
+    assert inference_ids and inference_ids.isdisjoint(interpreted.sources)
+    state.minds["npc"] = interpreted
+    if when == "before_open":
+        turn.verdict = Verdict(matches=True, causal_updates=[draft()])
+        causal_memory.apply(turn, state, reply, {"p0": TEXT})
+    else:
+        update_thread(turn, state)
+    saved = Mind.model_validate_json(state.minds["npc"].model_dump_json())
+    assert not state.usage.causal_notes
+    assert inference_ids <= {entry.event_id for entry in saved.snapshot.evidence}
+    assert saved.snapshot.beliefs == interpreted.snapshot.beliefs
+    assert len(causal_graph.frontier(saved)) == 1
+    assert causal_graph.projection(saved)["transitions"]
+    causal_graph.current_links(saved, causal_graph.frontier(saved)[0])

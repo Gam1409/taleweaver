@@ -228,6 +228,23 @@ is not the selected behavior.
 - See [technical structured output](../structured-output.md) for the supported
   boundaries. Live model correctness is a separate validation step.
 
+## Wave 15: causal records coexist with psychological interpretations
+
+- A live two-NPC turn reached accepted narration but failed at commit: the causal
+  graph treated an interpretation's evidence ID as an observation source ID.
+  Interpretations deliberately have no direct host source binding.
+- Read observation records from the existing validated chronological event ledger,
+  including archived events. Keep interpretations and their beliefs intact; never
+  invent source bindings or discard psychological history to avoid the failure.
+- Regression tests reproduce the original KeyError before opening or updating a
+  causal thread. Existing graph tests cover archival, serialization, reordering,
+  source retraction and session forks.
+- Replaying the captured live outputs through the repaired completion path saves
+  both NPC decisions and the causal thread without new model requests. This replay
+  verifies the commit boundary; it is not a new successful live gameplay turn.
+- See the [live validation report](structured-output-live-review-2026-11-10.md)
+  for model correctness failures that remain outside this focused host repair.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the
