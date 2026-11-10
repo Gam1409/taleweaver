@@ -192,6 +192,18 @@ is not the selected behavior.
   Deterministic receipt IDs reproduce both old false failures; all 120 affected
   gameplay and public-error checks pass after this test-only correction.
 
+## Wave 13: unavailable NPC references remain unavailable
+
+- Eliminate empty ID enums before composing a prompt or transmitting its schema.
+  With no known beliefs, revision arrays are forced empty instead of creating an
+  invalid grammar rule. Nullable references still permit only null; known IDs
+  remain usable when they become available on a later turn.
+- Propagate unavailable required references through shared definitions, unions,
+  arrays and observer maps. Reject an impossible required root before generation.
+  Do not widen an allowlist or replace a missing reference with an invented ID.
+- Preserve canonical NPC state, source validation and the existing request budget.
+  This is a wire-contract repair; no psychological update or paid retry is added.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the

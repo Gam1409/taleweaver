@@ -166,7 +166,10 @@ def test_visible_excerpt_is_the_citation_boundary_and_ids_are_enumerated():
     assert schema["$defs"]["Assessment"]["properties"]["about_id"]["enum"] == ["@player"]
     assert "interpretations" in schema["required"]
     assert schema["$defs"]["Assessment"]["properties"]["belief_id"]["enum"] == [None]
-    assert schema["$defs"]["Revision"]["properties"]["belief_id"]["enum"] == []
+    assert "Revision" not in schema["$defs"]
+    assert schema["properties"]["interpretations"]["items"]["anyOf"] == [
+        {"$ref": "#/$defs/Assessment"}
+    ]
     with pytest.raises(ValueError):
         parse(GroundedProposal, '{"interpretations":[],"interpretations":[]}')
 

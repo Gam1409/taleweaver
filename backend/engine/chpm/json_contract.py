@@ -6,6 +6,8 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from backend.core.llm_schema_choices import prune_unavailable
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -17,6 +19,7 @@ def response_schema(
 ) -> dict:
     contract = schema.model_json_schema()
     _bind_ids(contract, identifiers or {})
+    contract = prune_unavailable(contract)
     if explicit_keys:
         _explicit_enum_maps(contract)
     _strip_titles(contract)
