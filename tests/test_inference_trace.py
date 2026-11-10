@@ -10,6 +10,7 @@ import pytest
 from backend.core import llm_diagnostics, system_diagnostics
 from backend.core.inference import events, transport
 from backend.core.inference.registry import InferenceUncertainError
+from backend.core.llm_parallel import ParallelPolicy
 from tests.test_inference_integration import reservations
 from tests.test_inference_reservations import KEY, chunk, router
 
@@ -123,3 +124,21 @@ async def test_stream_chain_survives_separate_consumer_tasks(trace, reservations
     assert len({row["call_id"] for row in data}) == 1
     assert data[-1]["event"] == "llm.completed"
     assert reservations.status() == []
+
+
+async def test_queue_trace_records_effective_exclusive_policy_and_safe_endpoint(
+    trace, reservations
+):
+    @transport.guarded_async
+    async def request(value, args):
+        return "done"
+
+    value = client()
+    value.parallel_policy = ParallelPolicy(enabled=False, max_concurrent=4)
+    assert await request(value, {}) == "done"
+    data = [row for row in records(trace) if row["event"] == "inference.queued"]
+    assert len(data) == 1
+    assert data[0]["endpoint_fingerprint"] == KEY
+    assert data[0]["max_concurrent"] == 1
+    assert data[0]["concurrency_policy"] == "configured"
+    assert data[0]["background"] is False and data[0]["concurrent_lane"] is False

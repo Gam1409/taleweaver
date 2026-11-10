@@ -144,7 +144,8 @@ def turn_context(manager: Any, args: tuple, kwargs: dict) -> Iterator[None]:
         yield
         return
     started = time.perf_counter()
-    with service.context(session_id=manager.game_id, turn_id=uuid4().hex):
+    turn_id = getattr(manager, "turn_id", None) or uuid4().hex
+    with service.context(session_id=manager.game_id, turn_id=turn_id):
         service.detail(
             "detail.engine.turn.started",
             token=token,

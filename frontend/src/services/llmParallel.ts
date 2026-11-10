@@ -1,5 +1,5 @@
 /** Connection permissions never imply that dependent workflow stages can overlap. */
-import type { LLMRole } from './llmRoleEndpoints'
+import { LLM_ROLES, type LLMRole } from './llmRoleEndpoints'
 
 export interface ParallelPolicy {
   enabled: boolean
@@ -19,6 +19,13 @@ export function normalizeParallel(value?: ParallelSettings | null): ParallelSett
 
 export function roleParallel(value: ParallelSettings, role: LLMRole): ParallelPolicy {
   return { enabled: false, max_concurrent: 2, ...value.roles[role] }
+}
+
+/** Saving the visible controls must also apply their unchecked defaults. */
+export function parallelForSave(value: ParallelSettings): ParallelSettings {
+  return {
+    roles: Object.fromEntries(LLM_ROLES.map(role => [role, roleParallel(value, role)]))
+  }
 }
 
 export function updateParallel(

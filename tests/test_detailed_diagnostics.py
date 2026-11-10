@@ -3,11 +3,13 @@
 import json
 import logging
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel
 
 from backend.core import custom_openai
+from backend.core.engine_detailed_trace import turn_context
 from backend.core.llm_detailed_trace import trace_async
 from backend.core.system_diagnostics import DiagnosticService, service
 from backend.engine.chpm.state import load
@@ -275,3 +277,14 @@ def test_operational_messages_redact_credentials_and_bad_formatting_does_not_rai
     )
     service._capture.emit(invalid)
     assert "Message unavailable: TypeError" in str(records())
+
+
+def test_turn_trace_preserves_the_transport_turn_id_in_all_boundary_records():
+    service.set_enabled(True, detailed_logging=True)
+    turn_id = uuid4()
+    manager = SimpleNamespace(game_id=str(uuid4()), turn_id=turn_id.hex)
+    with turn_context(manager, ("A quiet moment.",), {}):
+        service.detail("detail.engine.event", event_name="probe")
+    rows = [row for row in records() if row["event"].startswith("detail.engine.")]
+    assert len(rows) == 3
+    assert {row["turn_id"] for row in rows} == {str(turn_id)}

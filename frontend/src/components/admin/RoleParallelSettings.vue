@@ -63,8 +63,8 @@ function limit(event: Event) {
       LLM settings to apply.
     </p>
     <p v-if="!Object.keys(modelValue.roles).length" class="text-xs text-slate-500">
-      No connection policy saved yet; existing scheduling is preserved. Toggle a role to configure
-      it.
+      No connection policy saved yet; existing scheduling is preserved until you save.
+      Saving with these boxes unchecked limits each server to one LLM request at a time.
     </p>
   </div>
 </template>

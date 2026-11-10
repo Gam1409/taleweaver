@@ -73,6 +73,19 @@ def failure_reason(error: BaseException) -> str:
     return "provider_or_processing_error"
 
 
+def _queued(ticket: Ticket, timeout: float) -> None:
+    events.emit(
+        "queued",
+        reservation_id=ticket.token,
+        timeout_seconds=timeout,
+        endpoint_fingerprint=ticket.key,
+        max_concurrent=ticket.capacity + int(ticket.concurrent),
+        concurrency_policy="configured" if ticket.configured else "legacy",
+        background=ticket.background,
+        concurrent_lane=ticket.concurrent,
+    )
+
+
 @asynccontextmanager
 async def reserve(key: str, timeout: float, *, capacity: int | None = None) -> AsyncIterator[Lease]:
     owner = registry()
@@ -85,7 +98,7 @@ async def reserve(key: str, timeout: float, *, capacity: int | None = None) -> A
         reservation_id=ticket.token,
     )
     started = time.monotonic()
-    events.emit("queued", reservation_id=ticket.token, timeout_seconds=timeout)
+    _queued(ticket, timeout)
     try:
         while not acquired:
             if time.monotonic() >= deadline:
@@ -131,7 +144,7 @@ def reserve_sync(key: str, timeout: float, *, capacity: int | None = None) -> It
     acquired = False
     lease = Lease(deadline)
     started = time.monotonic()
-    events.emit("queued", reservation_id=ticket.token, timeout_seconds=timeout)
+    _queued(ticket, timeout)
     try:
         while not acquired:
             if time.monotonic() >= deadline:

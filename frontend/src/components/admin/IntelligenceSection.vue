@@ -7,7 +7,7 @@ import LlmSamplingSettings from './LlmSamplingSettings.vue'
 import RoleGenerationSettings from './RoleGenerationSettings.vue'
 import { effectiveSampling, normalizeSampling, type SamplingProfile } from '@/services/llmSampling'
 import { customOpenAIUrl, useSharedApiUrlForAll } from '@/services/llmRoleEndpoints'
-import { normalizeParallel } from '@/services/llmParallel'
+import { normalizeParallel, parallelForSave } from '@/services/llmParallel'
 
 const props = defineProps<{
   llmForm: any
@@ -274,7 +274,10 @@ const syncFromPass1 = () => {
 }
 
 const handleSave = () => {
-  emit('save', normalizeOllamaRoleNumbers(localForm.value))
+  emit('save', normalizeOllamaRoleNumbers({
+    ...localForm.value,
+    parallel_requests: parallelForSave(localForm.value.parallel_requests)
+  }))
 }
 
 // Trigger test with proper args

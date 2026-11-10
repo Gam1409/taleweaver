@@ -38,11 +38,20 @@ background maintenance. Existing streams and synchronous requests use the same p
 
 Connection policies apply even when legacy `INFERENCE_SERIALIZATION_ENABLED` is
 off. Keep that flag enabled when embeddings share the inference server: embedding
-admission stays exclusive. Empty legacy role settings retain their old behavior;
-once any role is configured, unspecified roles default to exclusive admission.
+admission stays exclusive. Empty legacy role settings retain their old behavior
+until the connection form is saved. Saving writes an explicit policy for every
+visible role, including unchecked controls; all unchecked means one LLM request at
+a time per server. Older API clients that omit the setting preserve existing
+policies. Once any role is configured, unspecified roles default to exclusive admission.
 Existing Living World overlap cannot create an extra lane for a configured role.
 Single-worker operation is still required. Separate URL aliases or other client
 applications are outside this in-process capacity accounting.
+
+In system diagnostics, `llm.started` marks operation entry, which can precede
+queue admission. Use `inference.admitted` and `inference.completed` to assess
+overlap. Each `inference.queued` record includes a safe endpoint fingerprint,
+the request's capacity, configured/legacy policy, and background/concurrent-lane
+flags. Several started or queued operations do not prove simultaneous inference.
 
 Every admitted request has its own durable token. Unconfirmed completion in any
 slot fences the entire origin, including exclusive requests and the legacy Living

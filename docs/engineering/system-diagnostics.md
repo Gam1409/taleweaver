@@ -43,7 +43,11 @@ the result. Rotation can eventually remove old records; collect the current file
 and its rotated siblings after reproducing an issue.
 
 Use `request_id`, `session_id`/`game_id`, `turn_id`, `call_id`, and engine step IDs
-to follow interleaved requests. Turning detailed logging off invalidates active
+to follow interleaved requests. Engine turn boundaries reuse the transport's turn
+ID. Operation start can precede queue admission: compare `inference.admitted`
+and `inference.completed` to establish actual overlap. Queue records include the
+endpoint fingerprint, request capacity and configured/legacy scheduling policy.
+Turning detailed logging off invalidates active
 capture tokens immediately: buffered old content is not written after re-enabling.
 The mode does not send extra model requests or alter prompts, narration or game state.
 It intentionally stores private story and NPC context locally; review files before

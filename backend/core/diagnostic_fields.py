@@ -74,6 +74,7 @@ IDENTIFIERS = {
     "call_id",
 }
 NUMBERS = {
+    "max_concurrent",
     "queue_ms",
     "provider_attempts",
     "ttft_ms",
@@ -112,6 +113,7 @@ NUMBERS = {
     "local_check_count",
 }
 ENUMS = {
+    "concurrency_policy": {"configured", "legacy"},
     "output_mode": {"prompt", "json_object", "json_schema"},
     "operation": {
         "simple",
@@ -272,7 +274,7 @@ ENUMS["phase"] = {
 def safe_fields(fields: dict) -> dict:
     result = {}
     for key, value in fields.items():
-        if key == "schema_fingerprint" and isinstance(value, str):
+        if key in {"schema_fingerprint", "endpoint_fingerprint"} and isinstance(value, str):
             if re.fullmatch(r"[a-f0-9]{64}", value):
                 result[key] = value
         elif key in IDENTIFIERS and isinstance(value, str):
@@ -288,7 +290,8 @@ def safe_fields(fields: dict) -> dict:
             or key in ENUMS
             and isinstance(value, str)
             and value in ENUMS[key]
-            or key in {"final_sent", "streaming", "success", "thinking"}
+            or key
+            in {"final_sent", "streaming", "success", "thinking", "background", "concurrent_lane"}
             and type(value) is bool
         ):
             result[key] = value
