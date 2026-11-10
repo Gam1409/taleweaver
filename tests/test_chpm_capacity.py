@@ -57,7 +57,15 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
     causal_passages = Update.model_json_schema()["properties"]["facts"]["maxProperties"]
     influences = Update.model_json_schema()["properties"]["links"]["maxItems"]
     assert (
-        2 + excerpts + 1 + heard + lookups + causal_passages * 2 + influences + 1
+        2
+        + excerpts
+        + 1
+        + heard
+        + lookups
+        + causal_passages * 2
+        + influences
+        + 1
+        + capacity.OBSERVATION_LIMIT
         == capacity.SOURCE_RESERVE
     )
     experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]

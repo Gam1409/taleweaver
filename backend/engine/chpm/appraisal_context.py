@@ -2,7 +2,13 @@
 
 from dataclasses import dataclass
 
-from backend.engine.chpm import agent_beliefs, belief_recall, episodic_memory, host_observations
+from backend.engine.chpm import (
+    agent_beliefs,
+    belief_recall,
+    episodic_memory,
+    host_observations,
+    observation_sources,
+)
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source
@@ -105,6 +111,7 @@ def build(
         *((item.record_id, item.source, item.fragment) for item in recalled),
     ]
     sources.update({f"r{index}": item for index, item in enumerate(history, 1)})
+    assessed, omitted_observations = _add_observations(mind, current_message_id, sources)
     if pinned:
         pinned_ids = {item[0] for item in pinned.values()}
         sources = {alias: item for alias, item in sources.items() if item[0] not in pinned_ids}
@@ -147,9 +154,16 @@ def build(
                     "speaker_id": source.speaker_id,
                     "kind": "reported" if source.reported else "witnessed",
                     **({"channel": "narration"} if source.kind == "narration" else {}),
+                    **observation_sources.descriptor(source),
                     "text": text,
                     "excerpted": len(text) < len(source.text),
                     "source_message_id": source.message_id,
+                    **({"currently_observed": True} if record_id in assessed else {}),
+                    **(
+                        {"already_supports_states": assessed[record_id]}
+                        if assessed.get(record_id)
+                        else {}
+                    ),
                     "current_turn": source.message_id == current_message_id
                     if current_message_id is not None
                     else None,
@@ -163,6 +177,11 @@ def build(
                 {key for key, _ in available} - {item[0] for item in sources.values()}
             ),
             "beliefs_omitted": len(mind.snapshot.beliefs) - len(beliefs),
+            **(
+                {"current_observations_omitted": omitted_observations}
+                if omitted_observations
+                else {}
+            ),
             "episodic_recall": recall_status,
             "recollected_episodes": [
                 {
@@ -175,3 +194,17 @@ def build(
             ],
         },
     )
+
+
+def _add_observations(mind: Mind, message_id: str | None, sources: dict) -> tuple[dict, int]:
+    from backend.engine.chpm.experience import used_observations
+
+    observed = observation_sources.current(mind, message_id)
+    sources.update(
+        {
+            f"o{index}": (record_id, source, source.text)
+            for index, (record_id, source) in enumerate(observed.items(), 1)
+        }
+    )
+    assessed = used_observations(mind, set(observed)) if observed else {}
+    return assessed, observation_sources.omitted(mind, message_id, len(observed))

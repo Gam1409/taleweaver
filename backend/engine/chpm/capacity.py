@@ -7,15 +7,17 @@ from backend.engine.chpm.core.history import count
 from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIENCES
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.observation_sources import LIMIT as OBSERVATION_LIMIT
 from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
 # up to twelve heard passages, four tool observations and two developmental reflections. A single
 # observer may receive all heard entries even in a twenty-character scene. Up to five
 # newly cited causal passages, five statement nodes, three influence edges and
-# one transition can be recorded by the existing narration reviewer.
-EVENT_RESERVE = 71
-SOURCE_RESERVE = 65
+# one transition can be recorded by the existing narration reviewer. Bounded stable
+# state observations are added only when their canonical content has not been seen.
+EVENT_RESERVE = 71 + OBSERVATION_LIMIT
+SOURCE_RESERVE = 65 + OBSERVATION_LIMIT
 BELIEF_RESERVE = 3
 EXPERIENCE_RESERVE = 2
 

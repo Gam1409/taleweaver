@@ -3,7 +3,13 @@
 from types import SimpleNamespace
 from typing import Any
 
-from backend.engine.chpm import host_observations, host_scene, host_sources, identity_adapter
+from backend.engine.chpm import (
+    host_observations,
+    host_scene,
+    host_sources,
+    identity_adapter,
+    observation_sources,
+)
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
 from backend.engine.chpm.host_state import Mind, Source, record_many
@@ -54,6 +60,7 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
         Source(**anchor, speaker_id="@player", kind="speech", text=quote)
         for quote in turn.perceptions[actor.id].quotes
     )
+    additions.extend(observation_sources.additions(mind, facts, anchor))
     return record_many(mind, additions, minute=observed.minute)
 
 

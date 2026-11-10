@@ -8,6 +8,7 @@ from backend.engine.chpm.core.reducer import apply
 from backend.engine.chpm.host_state import Mind, fingerprint
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.motivation import Catalogue
+from backend.engine.chpm.observation_sources import current
 
 POLICY = "qualitative-experience-v1"
 # A visibility horizon, NOT a measured recovery rate or a transition to calm.
@@ -40,6 +41,19 @@ def view(mind: Mind) -> dict:
         "states": entries,
         "omitted": max(0, len(mind.snapshot.experiences) - VISIBLE_LIMIT),
         "meaning": "subjective hypotheses; not traits, displayed expression, consent or diagnoses",
+    }
+
+
+def used_observations(mind: Mind, record_ids: set[str]) -> dict[str, list[str]]:
+    evidence = {row.id: row for row in mind.snapshot.evidence}
+    estimates = view(mind)["states"]
+    return {
+        key: [
+            row["state_id"]
+            for row in estimates
+            if set(evidence[key].root_ids) <= set(evidence[row["record_id"]].root_ids)
+        ]
+        for key in record_ids
     }
 
 
@@ -97,7 +111,18 @@ def _resolve(
         for source, citation in zip(references, proposal.citations, strict=True)
     ):
         raise ChpmError("CHPM experience needs exact visible source evidence.")
-    if not any(source and source[1].message_id == message_id for source in references):
+    if any(source and source[1].kind == "host_frame" for source in references):
+        raise ChpmError("Use a specific host observation, not a whole frame, for experience.")
+    observed = current(mind, message_id)
+    if not any(
+        source
+        and (
+            source[0] in observed
+            if source[1].kind == "host_observation"
+            else source[1].message_id == message_id
+        )
+        for source in references
+    ):
         raise ChpmError("CHPM experience needs a current observed trigger, not recall alone.")
     citations = tuple(
         Citation(record_id=source[0], quote=citation.quote)

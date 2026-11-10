@@ -30,6 +30,7 @@ class Source(BaseModel):
         "causal_link",
         "causal_state",
         "host_frame",
+        "host_observation",
         "world_event",
     ]
     text: str = Field(min_length=1, max_length=2000)
@@ -46,8 +47,12 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def frame_facts_only(self) -> "Source":
-        if self.facts is not None and self.kind != "host_frame":
-            raise ValueError("Only a host frame can carry authoritative state.")
+        if self.facts is not None and self.kind not in {"host_frame", "host_observation"}:
+            raise ValueError("Only a host frame or observation can carry authoritative state.")
+        if self.kind == "host_observation":
+            from backend.engine.chpm.observation_sources import validate
+
+            validate(self)
         if (self.kind in {"causal_fact", "causal_link", "causal_state"}) != (
             self.graph is not None
         ):
@@ -78,8 +83,20 @@ class Mind(BaseModel):
         if set(observations) != set(self.sources):
             raise ValueError("Core observations must have exactly one host source binding each.")
         transitions: dict[str, str] = {}
+        current_frame: Source | None = None
         for key, event in observations.items():
             source = self.sources[key]
+            if source.kind == "host_frame":
+                current_frame = source
+            if source.kind == "host_observation":
+                from backend.engine.chpm.observation_sources import validate_anchor
+
+                validate_anchor(source, current_frame)
+            if (
+                source.kind == "host_observation"
+                and source.speaker_id != self.genesis.scope.observer_id
+            ):
+                raise ValueError("A host observation belongs to another observer.")
             if event.payload != payload(source, self.genesis) or key != identifier(
                 source, self.genesis
             ):
@@ -112,6 +129,10 @@ def payload(source: Source, genesis: Genesis) -> Observe:
         root = {"scope": genesis.scope.model_dump(), "frame": source.text}
         if source.facts is not None:
             root["facts"] = source.facts.model_dump()
+    if source.kind == "host_observation":
+        from backend.engine.chpm.observation_sources import signature
+
+        root = {"scope": genesis.scope.model_dump(), "observation": signature(source.facts)}
     return Observe(
         record_id=identifier(source, genesis),
         text=source.text,

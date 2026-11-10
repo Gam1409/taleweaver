@@ -1,6 +1,7 @@
 # Situation, personality and emotion: research and implementation plan
 
-Status: first integration implemented, 2026-11-10; offline validation only.
+Status: scene handoff and state-grounded appraisal integrations implemented,
+2026-11-10; offline validation only.
 The research baseline below records the original gap. Implementation status and
 remaining boundaries are listed at the end; no live quality gain is claimed.
 
@@ -248,10 +249,35 @@ large inventories, context limits and game-time skips. The multi-turn emotional
 fixture checks that saved causes reach the next decision and that expressive prose
 survives review. It does not establish how a real model will write that prose.
 
-Remaining work includes auditing which scene/body observations can ground a new
-experience, measuring missed extraction and reviewing portrait-state consistency.
-Host frames are still context rather than independently citable current affect
-triggers. Model evaluation needs matched, repeated live runs after the owner
+## State-grounded appraisal integration
+
+The follow-up audit found that an optional `inspect_self` tool could already pin
+a complete host frame as a citation, while normal proposal input excluded frames
+from citable evidence. A first observation could therefore remain context-only,
+and unrelated changes to a pinned frame could give an unchanged fact new roots.
+
+`observation_sources.py` extends the existing source journal with bounded,
+single-fact `host_observation` entries from canonical body/garment and accessible
+scene state. Each entry must match its preceding full frame and input anchor.
+Unchanged content reuses its source; its grounds are independent of unrelated
+inventory changes and clock ticks. A body condition retains its grounds across
+rooms; scene facts retain their room binding. Unknown/expired scene information
+is excluded from current triggers. Whole-frame experience citations are rejected.
+
+The model sees whether a specific retained source is still currently observed,
+which exposed estimates already use its grounds, and how many current facts were
+omitted from the bounded view. The existing pure reducer still rejects reused
+grounds as a fresh update. First appraisal of an ongoing fact remains possible;
+neither a new appraisal nor a particular emotion is mandatory.
+
+Offline tests include forty host-observation cycles with a game-time advance,
+explicit treatment/resolution, observer privacy, unrelated inventory changes,
+room transitions, review failure, exact copy/import and rollback. No request stage
+or runtime dependency was added; unchanged facts do not create new journal entries
+on each turn. Storage admission reserves the bounded additions before inference.
+
+Remaining work includes measuring missed extraction and reviewing portrait-state
+consistency. Model evaluation needs matched, repeated live runs after the owner
 resumes them; the current live-test pause remains in effect.
 
 This is not a completed review of whole books, a clinical model, or a measured
