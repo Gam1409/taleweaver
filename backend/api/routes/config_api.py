@@ -965,7 +965,7 @@ async def test_llm_connection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> dict[str, Any]:
-    """Tests the connection to an LLM provider with a simple prompt and measures latency."""
+    """Test the provider's technical output path in one request and measure latency."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     # Inject temporary ollama_url or openrouter_provider if provided
@@ -1000,16 +1000,9 @@ async def test_llm_connection(
         gm = GameMasterLLM.for_role(user, payload.role)
         test_stage = "request_or_response"
         start_time = time.perf_counter()
-        if payload.provider == "custom_openai":
-            from backend.core.custom_openai import test_connection
+        from backend.core.llm_connection_test import test_connection
 
-            response = await test_connection(gm, payload.model)
-        else:
-            response = await gm.aexecute_simple_task(
-                system_prompt="You are a helpful RPG assistant.",
-                user_prompt="Say 'TaleWeaver connection test successful!' in a fantasy style.",
-                model=payload.model,
-            )
+        response = await test_connection(gm, payload.model)
         end_time = time.perf_counter()
         latency = round(end_time - start_time, 2)
         return {"status": "success", "message": response, "response_time": latency}

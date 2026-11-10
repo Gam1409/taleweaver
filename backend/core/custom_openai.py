@@ -14,8 +14,20 @@ from pydantic import BaseModel
 from backend.core.custom_openai_roles import resolve_url
 from backend.core.inference.admission import timeout_for
 from backend.core.inference.events import sent
+from backend.core.llm_connection_test import ConnectionTestResult, test_connection
 from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
+
+__all__ = [
+    "ConnectionTestResult",
+    "test_connection",
+    "validate_custom_url",
+    "configure_custom_router",
+    "discover_models",
+    "complete",
+    "acomplete",
+    "structured_response_format",
+]
 
 
 def validate_custom_url(url: str) -> str:
@@ -195,32 +207,12 @@ def structured_response_format(
     router: Any, response_model: type[BaseModel], *, schema: dict | None = None
 ) -> dict | None:
     """Use only the structured-output capability explicitly selected by the administrator."""
-    mode = router.custom_response_format
-    if mode == "json_object":
-        return {"type": "json_object"}
-    if mode == "json_schema":
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": response_model.__name__,
-                "schema": schema if schema is not None else response_model.model_json_schema(),
-            },
-        }
-    return None
+    from backend.core.llm_structured_output import select
 
-
-class ConnectionTestResult(BaseModel):
-    """Small schema used to check the endpoint's selected structured-output capability."""
-
-    message: str
-
-
-async def test_connection(router: Any, model: str) -> str:
-    """Exercise the same JSON path used for mechanics, rather than text-only connectivity."""
-    result = await router.aexecute_complex_task(
-        system_prompt="You are a helpful RPG assistant.",
-        user_prompt='Return a JSON object with a message saying "TaleWeaver connection test successful!".',
-        response_model=ConnectionTestResult,
-        model=model,
-    )
-    return str(result.message)
+    return select(
+        "custom_openai",
+        "",
+        response_model,
+        schema=schema,
+        custom_mode=router.custom_response_format,
+    ).response_format

@@ -404,6 +404,8 @@ def test_explicit_structured_output_capability(local_policy, mode):
         return
     assert request.kwargs["response_format"]["type"] == mode
     if mode == "json_schema":
-        assert (
-            request.kwargs["response_format"]["json_schema"]["schema"] == Answer.model_json_schema()
-        )
+        assert request.kwargs["response_format"]["json_schema"]["schema"] == {
+            "type": "object",
+            "properties": {"value": {"type": "integer"}},
+            "required": ["value"],
+        }

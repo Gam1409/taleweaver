@@ -69,9 +69,10 @@ async def test_configured_json_mode_reaches_technical_http_requests_only(
     else:
         assert seen[0]["response_format"]["type"] == mode
     if mode == "json_schema":
-        assert seen[0]["response_format"]["json_schema"]["schema"] == json_contract.response_schema(
-            Projection, identifiers
-        )
+        sent = seen[0]["response_format"]["json_schema"]["schema"]
+        assert sent["$defs"]["Perception"]["properties"]["actor_id"]["enum"] == ["npc"]
+        assert sent["$defs"]["Perception"]["additionalProperties"] is False
+        assert sent["properties"]["audience"]["maxItems"] == 20
     assert (
         await router.aexecute_simple_task("Freeform narrative.", "Continue.", "vendor/model")
         == "A freeform answer."
@@ -113,7 +114,10 @@ async def test_finite_candidate_keys_reach_the_http_grammar_without_expanding_in
     )
     assert usage.calls == 1 and len(seen) == 1
     sent = seen[0]["response_format"]["json_schema"]["schema"]
-    assert sent == json_contract.response_schema(Draft, identifiers, explicit_keys=True)
+    assert sent["$defs"]["ChoicePreference"]["properties"]["motive_ids"]["items"]["enum"] == [
+        "goal1",
+        "character",
+    ]
     assert sent["properties"]["candidates"]["additionalProperties"] is False
     assert "CONTINUE" in sent["properties"]["candidates"]["properties"]
     compact = json_contract.response_schema(Draft, identifiers)

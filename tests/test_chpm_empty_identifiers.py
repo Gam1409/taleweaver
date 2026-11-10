@@ -87,3 +87,43 @@ def test_empty_observer_map_stays_empty_instead_of_accepting_unknown_keys():
     assert not empty_enums(schema)
     assert validator.is_valid({"observers": {}})
     assert not validator.is_valid({"observers": {"unknown": "a fact"}})
+
+
+def test_unavailable_reference_in_a_fixed_tuple_cannot_leave_a_dangling_definition():
+    class Reference(BaseModel):
+        model_config = {"extra": "forbid"}
+        belief_id: str
+
+    class Pairs(BaseModel):
+        pairs: list[tuple[Reference, Reference]]
+
+    schema = response_schema(Pairs, {"belief_id": []})
+    assert schema["properties"]["pairs"]["maxItems"] == 0
+    validator = Draft202012Validator(schema)
+    assert validator.is_valid({"pairs": []})
+    assert not validator.is_valid({"pairs": [[{"belief_id": "invented"}] * 2]})
+
+
+async def test_an_impossible_request_is_recoverable_and_does_not_spend_the_budget():
+    from backend.engine.chpm.errors import RecoverableChpmError
+    from backend.engine.chpm.inference import request
+    from backend.engine.chpm.schema import Settings, Usage
+    from tests.test_chpm_json_contract import host
+
+    class RequiredReference(BaseModel):
+        belief_id: str
+
+    manager, usage = host("unused"), Usage()
+    with pytest.raises(RecoverableChpmError, match="No request was sent"):
+        await request(
+            manager,
+            Settings(),
+            usage,
+            "Choose a belief.",
+            {},
+            RequiredReference,
+            "test",
+            identifiers={"belief_id": []},
+        )
+    assert usage.calls == 0 and usage.input_chars == 0
+    manager._chpm_model_factory("small").aexecute_simple_task.assert_not_awaited()

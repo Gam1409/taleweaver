@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
+from backend.core.llm_schema_choices import SchemaChoiceError
 from backend.engine.chpm import json_contract, parallel_budget, performance, wire_normalization
 from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
@@ -62,11 +63,17 @@ def validation_feedback(error: ValueError) -> str:
 def compose(
     instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict | None
 ) -> tuple[str, str]:
+    try:
+        contract = json_contract.response_schema(schema, identifiers)
+    except SchemaChoiceError as exc:
+        raise RecoverableChpmError(
+            "CHPM has no usable source-bound contract. No request was sent; no decision was applied."
+        ) from exc
     prompt = (
         instruction + "\nReturn one JSON object only, without Markdown fences or commentary. "
         "Use exact enum values for identifiers, never display names.\nJSON schema:\n"
         + json.dumps(
-            json_contract.response_schema(schema, identifiers),
+            contract,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -81,16 +88,14 @@ def model_for(manager: Any, role: str, router: Any) -> Any:
 
 
 def transport_options(router: Any, schema: type[BaseModel], identifiers: dict | None) -> dict:
-    """Honor the custom connection's existing explicit structured-output capability."""
-    if getattr(router, "provider", None) != "custom_openai":
-        return {}
-    from backend.core.custom_openai import structured_response_format
+    """Reuse the same output policy as all other technical router requests."""
+    from backend.core.llm_structured_output import for_router
 
-    selected = structured_response_format(
+    selected = for_router(
         router,
         schema,
         schema=json_contract.response_schema(schema, identifiers, explicit_keys=True),
-    )
+    ).response_format
     return {"response_format": selected} if selected is not None else {}
 
 

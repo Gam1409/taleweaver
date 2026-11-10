@@ -204,6 +204,30 @@ is not the selected behavior.
 - Preserve canonical NPC state, source validation and the existing request budget.
   This is a wire-contract repair; no psychological update or paid retry is added.
 
+## Wave 14: shared structured-output policy
+
+- Route NPC technical calls and ordinary structured tasks through the same output
+  selector. Preserve explicit compatible-endpoint modes, existing sampling,
+  inference admission and bounded retry behavior. Keep freeform narration freeform.
+- Project conditional operation schemas into complete alternatives for decoder
+  compatibility. Retain canonical models, evidence checks and deferred constraints
+  in local validation; ground deferred rules in the prompt as well.
+- Use native schema transport where the contract fits. Select JSON-only or
+  prompt-only compatibility paths before generation for unsupported contracts.
+  Do not mislabel Anthropic's schema-less JSON request as native enforcement.
+- Reuse one structured connection probe for all providers and keep temporary role
+  settings temporary. Display compatibility notices only in LLM settings.
+- Add content-free output-contract diagnostics and tests of the installed provider
+  adapters with real sockets forbidden. Review also covers unavailable references
+  inside fixed tuples and original text rules after structural projection.
+- Preserve technical JSON before narration cleanup: voice tags, literal thinking
+  tags, fence markers and comma/bracket text inside strings are data. A valid
+  document is not repaired. Ordinary narration retains its voice normalization.
+- Treat an impossible source-bound NPC contract as recoverable before reserving
+  a model call, retaining the existing continuation and request-budget policy.
+- See [technical structured output](../structured-output.md) for the supported
+  boundaries. Live model correctness is a separate validation step.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the

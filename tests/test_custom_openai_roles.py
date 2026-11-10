@@ -82,7 +82,7 @@ async def test_unsaved_connection_test_uses_selected_role_url_without_persisting
         calls.append((router.model_category, router.api_base, model))
         return "ok"
 
-    monkeypatch.setattr(custom_openai, "test_connection", test)
+    monkeypatch.setattr("backend.core.llm_connection_test.test_connection", test)
     response = await auth_client.post(
         "/api/settings/test-llm",
         json={

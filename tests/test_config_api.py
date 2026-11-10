@@ -446,7 +446,7 @@ async def test_test_llm_connection_handles_authentication_errors_gracefully(
         def __init__(self, *args, **kwargs):
             pass
 
-        async def aexecute_simple_task(self, **kwargs):
+        async def aexecute_complex_task(self, **kwargs):
             raise Exception("litellm.AuthenticationError: Invalid Authentication")
 
     monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
@@ -474,7 +474,7 @@ async def test_test_llm_connection_handles_generic_errors_without_500(
         def __init__(self, *args, **kwargs):
             pass
 
-        async def aexecute_simple_task(self, **kwargs):
+        async def aexecute_complex_task(self, **kwargs):
             raise RuntimeError("upstream timeout")
 
     monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(_FakeLLM))
@@ -596,8 +596,11 @@ async def test_llm_test_uses_selected_ollama_role_without_persisting(client, mon
                 provider=provider, category=model_category, settings=dict(user.llm_settings)
             )
 
-        async def aexecute_simple_task(self, **kwargs):
-            return "connected"
+        async def aexecute_complex_task(self, **kwargs):
+            from backend.core.llm_connection_test import ConnectionTestResult
+
+            captured["request"] = kwargs
+            return ConnectionTestResult(message="connected")
 
     monkeypatch.setattr(config_api, "GameMasterLLM", RoleLLMFactory(FakeLLM))
     response = await client.post(
@@ -613,6 +616,8 @@ async def test_llm_test_uses_selected_ollama_role_without_persisting(client, mon
         },
     )
     assert response.json()["status"] == "success"
+    assert captured["request"]["model"] == "role-model:latest"
+    assert captured["request"]["response_model"].__name__ == "ConnectionTestResult"
     assert captured["category"] == role
     assert captured["settings"]["ollama_api_mode"] == "chat"
     assert captured["settings"][f"{role}_ollama_url"] == "http://127.0.0.1:11439"

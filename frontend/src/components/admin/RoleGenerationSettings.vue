@@ -7,6 +7,7 @@ import SamplingHelp from './SamplingHelp.vue'
 import { normalizeSampling, type SamplingSettings } from '@/services/llmSampling'
 import type { LLMRole } from '@/services/llmRoleEndpoints'
 import RoleParallelSettings from './RoleParallelSettings.vue'
+import LlmOutputNotice from './LlmOutputNotice.vue'
 import { normalizeParallel, type ParallelSettings } from '@/services/llmParallel'
 
 const props = defineProps<{
@@ -47,6 +48,10 @@ function numeric(field: string, event: Event) {
     :model-value="normalizeParallel(form.parallel_requests as ParallelSettings | undefined)"
     :role="role"
     @update:model-value="change('parallel_requests', $event)"
+  />
+  <LlmOutputNotice
+    :provider="provider"
+    :response-format="text('custom_openai_response_format')"
   />
   <details :data-generation-role="role" class="rounded-xl border border-purple-700/40 p-4">
     <summary class="cursor-pointer text-xs font-bold text-purple-300">Generation settings</summary>

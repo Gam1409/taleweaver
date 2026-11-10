@@ -158,8 +158,6 @@ async def test_settings_save_reload_clear_and_invalid_update_are_atomic(auth_cli
 async def test_connection_test_uses_unsaved_role_sampling_without_saving(
     auth_client, local_policy, monkeypatch
 ):
-    from backend.core import custom_openai
-
     old = (await auth_client.get("/api/settings")).json()["llm_settings"]
     calls = []
 
@@ -167,7 +165,7 @@ async def test_connection_test_uses_unsaved_role_sampling_without_saving(
         calls.append(router.sampling)
         return "ok"
 
-    monkeypatch.setattr(custom_openai, "test_connection", test)
+    monkeypatch.setattr("backend.core.llm_connection_test.test_connection", test)
     response = await auth_client.post(
         "/api/settings/test-llm",
         json={

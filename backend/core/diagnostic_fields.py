@@ -1,6 +1,7 @@
 """Strict metadata-only serialization for the system diagnostic log."""
 
 import math
+import re
 from pathlib import Path
 from uuid import UUID
 
@@ -24,6 +25,7 @@ EVENTS = {
     "llm.failed",
     "llm.cancelled",
     "llm.retry",
+    "llm.output_contract",
     "embedding.started",
     "embedding.completed",
     "embedding.failed",
@@ -105,8 +107,10 @@ NUMBERS = {
     "output_chars",
     "duration_seconds",
     "retrieved_chars",
+    "local_check_count",
 }
 ENUMS = {
+    "output_mode": {"prompt", "json_object", "json_schema"},
     "operation": {
         "simple",
         "structured",
@@ -266,7 +270,10 @@ ENUMS["phase"] = {
 def safe_fields(fields: dict) -> dict:
     result = {}
     for key, value in fields.items():
-        if key in IDENTIFIERS and isinstance(value, str):
+        if key == "schema_fingerprint" and isinstance(value, str):
+            if re.fullmatch(r"[a-f0-9]{64}", value):
+                result[key] = value
+        elif key in IDENTIFIERS and isinstance(value, str):
             try:
                 result[key] = str(UUID(value))
             except ValueError:

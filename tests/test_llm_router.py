@@ -528,8 +528,12 @@ async def test_aexecute_complex_task_gemini_direct_uses_structured_outputs(monke
     )
 
     assert out.required == "ok"
-    # Direct Gemini should pass response_model directly as response_format
-    assert captured["response_format"] == _MiniSchema
+    assert captured["response_format"]["type"] == "json_schema"
+    assert captured["response_format"]["json_schema"]["schema"] == {
+        "type": "object",
+        "properties": {"required": {"type": "string"}},
+        "required": ["required"],
+    }
 
 
 @pytest.mark.asyncio

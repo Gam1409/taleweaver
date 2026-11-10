@@ -211,7 +211,7 @@ async def test_deepseek_fallback_retries_when_only_reasoning_content_is_returned
 
 @pytest.mark.asyncio
 async def test_anthropic_fallback_injects_schema(monkeypatch):
-    """Test that Anthropic uses the prompt-injected JSON mode fallback."""
+    """An unsupported Anthropic contract stays grounded without claiming JSON enforcement."""
     user = _make_user(encrypted_api_keys={"anthropic": "key"})
     monkeypatch.setattr(
         "backend.core.llm_router.GameMasterLLM._get_decrypted_key",
@@ -242,7 +242,7 @@ async def test_anthropic_fallback_injects_schema(monkeypatch):
 
     monkeypatch.setattr("backend.core.llm_router.litellm.acompletion", fake_acompletion)
 
-    await router.aexecute_complex_task(
+    result = await router.aexecute_complex_task(
         system_prompt="Base sys",
         user_prompt="prompt",
         response_model=MockSchema,
@@ -256,7 +256,8 @@ async def test_anthropic_fallback_injects_schema(monkeypatch):
     assert system_blocks[0]["cache_control"] == {"type": "ephemeral"}
     # Presentation-only schema keys are stripped to save tokens.
     assert '"title"' not in system_blocks[0]["text"]
-    assert captured["response_format"] == {"type": "json_object"}
+    assert "response_format" not in captured
+    assert result == MockSchema(name="Claude", age=3)
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,10 @@ from copy import deepcopy
 from typing import Any, Literal
 
 
+class SchemaChoiceError(ValueError):
+    """Available references cannot populate the requested technical contract."""
+
+
 def prune_unavailable(schema: dict) -> dict:
     """An empty allowlist disables its operation, rather than emitting `enum: []`."""
     body = deepcopy(schema)
@@ -20,7 +24,9 @@ def prune_unavailable(schema: dict) -> dict:
         unavailable |= discovered
     result = _prune(body, unavailable)
     if result is False:
-        raise ValueError("Structured output has no valid operation with the available identifiers.")
+        raise SchemaChoiceError(
+            "Structured output has no valid operation with the available identifiers."
+        )
     retained = {
         name: _prune(value, unavailable)
         for name, value in definitions.items()
@@ -62,7 +68,9 @@ def _properties(node: dict, unavailable: set[str]) -> bool:
         if key in required:
             return False
         if node.get("additionalProperties") is not False:
-            raise ValueError("An unavailable optional reference requires a closed object schema.")
+            raise SchemaChoiceError(
+                "An unavailable optional reference requires a closed object schema."
+            )
         del properties[key]
     additional = node.get("additionalProperties")
     if isinstance(additional, dict):
@@ -76,6 +84,8 @@ def _properties(node: dict, unavailable: set[str]) -> bool:
 
 
 def _items(node: dict, unavailable: set[str]) -> bool:
+    if not _prefix_items(node, unavailable):
+        return False
     if "items" not in node or isinstance(node["items"], list):
         return True
     child = _prune(node["items"], unavailable)
@@ -86,4 +96,26 @@ def _items(node: dict, unavailable: set[str]) -> bool:
         return False
     # A valid, unused item type avoids grammar converters visiting a false schema.
     node.update(items={"type": "null"}, maxItems=0)
+    return True
+
+
+def _prefix_items(node: dict, unavailable: set[str]) -> bool:
+    prefix = node.get("prefixItems")
+    if not isinstance(prefix, list):
+        return True
+    retained = []
+    for index, value in enumerate(prefix):
+        child = _prune(value, unavailable)
+        if child is not False:
+            retained.append(child)
+            continue
+        if node.get("minItems", 0) > index:
+            return False
+        node["maxItems"] = min(index, node.get("maxItems", index))
+        break
+    if retained:
+        node["prefixItems"] = retained
+    else:
+        node.pop("prefixItems", None)
+        node["items"] = {"type": "null"}
     return True

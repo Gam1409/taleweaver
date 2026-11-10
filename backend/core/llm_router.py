@@ -16,6 +16,7 @@ from backend.core.inference.transport import guarded_async, guarded_sync, owned_
 from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
+    clean_technical_text,
     is_truncated_json,
     repair_json,
 )
@@ -23,7 +24,6 @@ from backend.core.llm_logger import log_llm_interaction, log_structured_event
 from backend.core.llm_parallel import resolve as resolve_parallel
 from backend.core.llm_provider_config import (
     apply_provider_endpoint,
-    is_minimax_model,
     json_schema_instruction,
     normalize_model,
     uses_json_mode_fallback,
@@ -1005,15 +1005,20 @@ class GameMasterLLM:
             ]
 
         normalized_model = self._normalize_model(model)
+        technical = response_format is not None or operation == "chpm"
 
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": normalized_model,
-            "messages": clean_voice_history(messages),
+            "messages": messages if technical else clean_voice_history(messages),
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if technical:
+            from backend.core.llm_structured_output import trace
+
+            trace(response_format)
         self._apply_thinking_settings(kwargs)
 
         self._apply_provider_options(kwargs, model)
@@ -1034,8 +1039,10 @@ class GameMasterLLM:
         response = await self._acompletion_with_openrouter_fallback(kwargs)
 
         result = response.choices[0].message.content or ""
-        result = self.clean_thinking_tags(result)
-        result = self.normalize_voice_tags(result)
+        if technical:
+            result = clean_technical_text(result)
+        else:
+            result = self.normalize_voice_tags(self.clean_thinking_tags(result))
 
         log_llm_interaction(
             model=model,
@@ -1116,13 +1123,6 @@ class GameMasterLLM:
         output = self._clean_stream_voice_tags(stream)
         return owned_stream(output, stream, timed_stream, raw_stream)
 
-    @staticmethod
-    def _structured_response_format(json_mode: bool, minimax: bool, response_model: type[T]) -> Any:
-        """MiniMax rejects response_format; JSON-mode providers get json_object."""
-        if minimax:
-            return None
-        return {"type": "json_object"} if json_mode else response_model
-
     def _build_structured_request(
         self,
         system_prompt: str,
@@ -1132,9 +1132,14 @@ class GameMasterLLM:
     ) -> _StructuredRequest:
         """Builds LiteLLM kwargs for a structured-output (Pydantic) task."""
         normalized_model = self._normalize_model(model)
+        from backend.core.llm_structured_output import for_router, trace
+
+        output = for_router(self, response_model, model=model)
+        trace(output.response_format, local_checks=output.local_checks)
         json_mode = uses_json_mode_fallback(self.provider, normalized_model)
-        if json_mode:
-            # Inject the schema into the prompt since strict enforcement is bypassed.
+        json_mode = json_mode or output.mode != "json_schema"
+        if json_mode or output.local_checks:
+            # Ground rules checked locally as well as those enforced during decoding.
             system_prompt += json_schema_instruction(response_model)
 
         kwargs: dict[str, Any] = {
@@ -1146,13 +1151,7 @@ class GameMasterLLM:
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking and not json_mode else 0),
         }
-        response_format = self._structured_response_format(
-            json_mode, is_minimax_model(self.provider, normalized_model), response_model
-        )
-        if self.provider == "custom_openai":
-            from backend.core.custom_openai import structured_response_format
-
-            response_format = structured_response_format(self, response_model)
+        response_format = output.response_format
         if response_format is not None:
             kwargs["response_format"] = response_format
         if not json_mode or self.provider == "deepseek":
@@ -1271,7 +1270,7 @@ class GameMasterLLM:
             raise self._empty_content_error(finish_reason)
 
         try:
-            content = self._clean_json_string(self.clean_thinking_tags(content))
+            content = self._clean_json_string(clean_technical_text(content))
             if not content:
                 logger.error(
                     "LLM returned content that was empty after JSON cleanup; finish_reason=%s",

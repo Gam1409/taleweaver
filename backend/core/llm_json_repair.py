@@ -83,6 +83,27 @@ def _parses(content: str) -> bool:
     return True
 
 
+def clean_technical_text(content: str) -> str:
+    """Strip reasoning outside a JSON document, preserving literal tags inside it."""
+    text = content.strip()
+    if text.startswith(("{", "[", "```")):
+        return text
+    for match in re.finditer(r"</think>", text):
+        tail = text[match.end() :].lstrip()
+        wrapper = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", tail, re.DOTALL)
+        if _parses(wrapper.group(1) if wrapper else tail):
+            return tail
+    closing = text.find("</think>")
+    if text.startswith("<think>"):
+        return text[closing + len("</think>") :].lstrip() if closing >= 0 else ""
+    first_json = min(
+        (pos for char in ("{", "[", "```") if (pos := text.find(char)) >= 0), default=len(text)
+    )
+    if 0 <= closing < first_json:
+        return text[closing + len("</think>") :].lstrip()
+    return text
+
+
 def _single_quoted_value_to_double(match: re.Match[str]) -> str:
     # Escape double quotes (now wrapped in double quotes) and unescape single quotes.
     val = match.group(1).replace('"', r"\"").replace(r"\'", "'")
@@ -104,6 +125,8 @@ def repair_json(content: str) -> str:
     unescaped double quotes inside values)."""
     if not content:
         return ""
+    if _parses(content):
+        return content
     content = re.sub(r",\s*([\}\]])", r"\1", content)
     if _parses(content):
         return content
