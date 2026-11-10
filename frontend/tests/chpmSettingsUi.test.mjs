@@ -40,6 +40,16 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
   assert.doesNotMatch(await render(1), /processed sequentially/)
 })
 
+test('a localized proposal failure names only the paused NPC and escapes its detail', async () => {
+  const html = await render(2, [], {
+    characters: [{ id: 'LINA', name: 'Lina' }, { id: 'MILA', name: 'Mila' }],
+    usage: { status: 'validated', actor_failures: { LINA: '<script>invalid quote</script>' } },
+  })
+  assert.match(html, /Paused this turn: Lina/)
+  assert.match(html, /&lt;script&gt;invalid quote&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /Paused this turn: Mila|<script>/)
+})
+
 test('parallel analysis is an explicit saved setting with unchanged request limits', async () => {
   const html = await render(3, [], {}, { npc_concurrency: 2 })
   assert.match(html, /up to 2 NPCs at once/)

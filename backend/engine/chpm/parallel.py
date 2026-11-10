@@ -5,7 +5,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from backend.core.llm_parallel import npc_capacity
-from backend.engine.chpm import actor_preparation, parallel_budget
+from backend.engine.chpm import actor_preparation, parallel_budget, proposal_failures
+from backend.engine.chpm.errors import ProposalRejectedError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.schema import Decision, Observation
 from backend.engine.turn_replay.transactions import release_for_model
@@ -24,8 +25,7 @@ async def prepare(
         getattr(manager, "user", None), settings.model_role, settings.npc_concurrency
     )
     if limit == 1 or len(ordered) < 2:
-        for actor in ordered:
-            await sequential(manager, turn, actor, observed)
+        await _sequential(manager, turn, ordered, observed, sequential)
         return
     jobs = [await actor_preparation.prepare(manager, turn, actor, observed) for actor in ordered]
     await release_for_model(manager)
@@ -42,11 +42,43 @@ async def prepare(
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
-    error = next((result for result in results if isinstance(result, BaseException)), None)
+    _publish(turn, jobs, results)
+
+
+async def _sequential(
+    manager: Any, turn: Any, actors: list[Any], observed: Observation, prepare: Callable
+) -> None:
+    failures = []
+    for actor in actors:
+        try:
+            await prepare(manager, turn, actor, observed)
+        except ProposalRejectedError as exc:
+            if not proposal_failures.can_defer(turn, exc):
+                raise
+            proposal_failures.defer(turn, actor.id, exc)
+            failures.append(exc)
+    proposal_failures.require_survivor(turn, failures)
+
+
+def _publish(turn: Any, jobs: list[actor_preparation.PreparedActor], results: list[Any]) -> None:
+    error = next(
+        (
+            result
+            for result in results
+            if isinstance(result, BaseException) and not proposal_failures.can_defer(turn, result)
+        ),
+        None,
+    )
     if error is not None:
         raise error
+    failures = []
     for job, result in zip(jobs, results, strict=True):
-        actor_preparation.apply(turn, job.actor_id, cast(tuple[Decision, Mind | None], result))
+        if isinstance(result, ProposalRejectedError):
+            proposal_failures.defer(turn, job.actor_id, result)
+            failures.append(result)
+        else:
+            actor_preparation.apply(turn, job.actor_id, cast(tuple[Decision, Mind | None], result))
+    proposal_failures.require_survivor(turn, failures)
 
 
 async def _run(

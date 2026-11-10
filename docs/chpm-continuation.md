@@ -1,6 +1,6 @@
 # Keep playing when NPC analysis fails
 
-**NPC Personality 1.0.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
+**NPC Personality 1.2.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
 sessions. It helps NPCs respond from their own traits, values, goals and witnessed
 history. The narrator still writes the story. CHPM remains **off by default**.
 
@@ -40,9 +40,26 @@ systems should not independently decide for the same characters.
 
 ## What happens on a failure
 
+When one completed NPC proposal remains invalid and another NPC has a usable
+decision, **Keep playing** defers only the rejected character. That NPC retains
+the last confirmed identity, memory, agenda and psychological state and receives
+no new dialogue, decisions or private thoughts in this controlled reply. The
+existing inactive-character boundary is reused. The other decisions still need
+the shared review of the whole narration and host resolution before saving.
+
+The indicator reads **NPC Personality: partial** after that review succeeds.
+Session settings identify paused characters and their bounded rejection details;
+these details do not appear in the story. Parallel and sequential analysis use
+the same rule and the same single shared proposal-repair budget.
+
+If no usable decision survives, the existing whole-turn recovery policy applies.
+Shared perception, transport, cancellation, exhausted shared budgets and persistence failures are
+not reclassified as one bad intention. Strict mode still stops the whole turn.
+
 | Failure | Keep playing behavior |
 | --- | --- |
-| Invalid analysis JSON, unusable proposals, or an analysis capacity limit | Abandon proposed psychological updates; use standard narration. |
+| One completed rejected proposal, with another usable decision | Defer that character; jointly review the remaining decisions before saving. |
+| Invalid shared analysis, no usable proposals, or an analysis capacity limit | Abandon proposed psychological updates; use standard narration. |
 | A review is unavailable or malformed, with no known rejection of the current text | Keep that reply as explicitly unreviewed RP; do not dispatch another narrator request. |
 | The reviewer rejects text | Try the existing single repair and review when the request budget allows. If still rejected or repair fails, request at most one fresh standard reply. Never release the known rejected text. |
 | A nonempty narrator stream ends early | Preserve the host's ordinary partial-response behavior and warning; no psychological update is confirmed. |
@@ -98,6 +115,11 @@ The rejected object remains unvalidated data; it is never applied as psychology.
 Ambiguous or incomplete JSON is excluded. An oversized rejected object is omitted
 explicitly, preserving all required context. No extra retry is added and the
 300-character choice explanation cap remains unchanged.
+
+Starting a discussion (`INITIATE`) and then continuing it (`CONTINUE`) may preserve
+an intention without invented new evidence. Its existing conditions must remain
+unchanged, and the shared reviewer still checks the actual conversational course.
+Other kind changes, including the reverse transition, require a grounded revision.
 
 Enabled replies are buffered until review and the recoverable save boundary.
 The interface shows progress while waiting; generated prose does not stream in

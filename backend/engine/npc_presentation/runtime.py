@@ -42,6 +42,7 @@ class PresentationTurn:
         self.output_chars = 0
         self.candidates: dict[str, dict] = {}
         self.outcomes: dict[str, str] = {}
+        self.deferred_actor_ids: set[str] = set()
 
     @property
     def reminder(self) -> str:
@@ -126,7 +127,13 @@ class PresentationTurn:
         return visible
 
     def payload(self, text: str) -> dict | None:
-        return self.candidates.get(source_hash(text))
+        value = self.candidates.get(source_hash(text))
+        if value is None or not self.deferred_actor_ids:
+            return value
+        npcs = {
+            key: cue for key, cue in value["npcs"].items() if key not in self.deferred_actor_ids
+        }
+        return {**value, "npcs": npcs} if npcs else None
 
     def diagnostic(self, text: str, *, completed: bool) -> str:
         if not self.preferences.enabled:
@@ -137,6 +144,8 @@ class PresentationTurn:
             return "incomplete_narration"
         if self.payload(text):
             return "available"
+        if source_hash(text) in self.candidates:
+            return "no_valid_entries"
         return self.outcomes.get(
             source_hash(text), "source_mismatch" if self.candidates else "missing_footer"
         )
@@ -177,7 +186,7 @@ class PresentationTurn:
     def _entry(self, entry: Any) -> tuple[str | None, dict | None]:
         if not isinstance(entry, dict) or not isinstance(entry.get("npc_id"), str):
             return None, None
-        if entry["npc_id"] not in self.catalog:
+        if entry["npc_id"] not in self.catalog or entry["npc_id"] in self.deferred_actor_ids:
             return None, None
         emotion = Cue()
         if self.preferences.emotion_palette:
@@ -220,6 +229,13 @@ def clean_candidate(manager: Any, text: str) -> str:
 def output_reminder(manager: Any) -> str:
     turn = getattr(manager, "_portrait_presentation", None)
     return turn.reminder if isinstance(turn, PresentationTurn) else ""
+
+
+def defer_characters(manager: Any, actor_ids: set[str]) -> None:
+    """A locally rejected intention cannot add new private portrait thoughts or feelings."""
+    turn = getattr(manager, "_portrait_presentation", None)
+    if isinstance(turn, PresentationTurn):
+        turn.deferred_actor_ids.update(actor_ids)
 
 
 def diagnose(manager: Any, text: str, *, completed: bool) -> None:

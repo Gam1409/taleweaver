@@ -140,9 +140,12 @@ def _continuity(choice: ChoicePreference, prior: PreviousIntention | None, windo
     if choice.continuity == "new":
         raise ChpmError("Account for the retained intention: maintain it or explain a revision.")
     if choice.continuity == "maintain":
-        if choice.preferred != prior.selected.kind or choice.change_basis:
+        same_kind = choice.preferred == prior.selected.kind
+        continuing_initiation = (prior.selected.kind, choice.preferred) == ("INITIATE", "CONTINUE")
+        if (not same_kind and not continuing_initiation) or choice.change_basis:
             raise ChpmError(
-                "Maintaining the intention cannot change its kind or claim revision evidence."
+                "Maintaining an intention permits only the same kind or INITIATE to CONTINUE, "
+                "without claiming revision evidence."
             )
         return
     if not choice.change_basis:

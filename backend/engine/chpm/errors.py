@@ -11,3 +11,7 @@ class RecoverableChpmError(ChpmError):
 
 class InferenceUnavailableError(RecoverableChpmError):
     """A model request failed; shared inference admission still controls dispatch."""
+
+
+class ProposalRejectedError(RecoverableChpmError):
+    """A completed NPC proposal is invalid; shared transport and host state are intact."""

@@ -114,6 +114,69 @@ def test_previous_course_requires_maintain_or_source_grounded_revision():
         )
 
 
+def initiation():
+    value = prior()
+    return value.model_copy(
+        update={"selected": value.selected.model_copy(update={"kind": "INITIATE"})}
+    )
+
+
+def test_an_initiated_discussion_can_continue_without_invented_revision_evidence():
+    previous = initiation()
+    original = previous.model_dump_json()
+    result = choose(prior=previous, changes={"continuity": "maintain"})
+    assert result.selected.kind == "CONTINUE"
+    assert result.previous_intention.selected.kind == "INITIATE"
+    assert result.choice_preference.change_basis == []
+    assert previous.model_dump_json() == original
+
+
+def test_continuing_an_initiation_cannot_drop_its_existing_conditions():
+    previous = initiation()
+    previous.selected.preconditions = ["Wait until the player chooses a topic."]
+    with pytest.raises(ValueError, match="preserve its conditions"):
+        choose(prior=previous, changes={"continuity": "maintain"})
+
+
+def test_continuing_an_initiation_still_cannot_claim_new_revision_evidence():
+    with pytest.raises(ValueError, match="revision evidence"):
+        choose(
+            prior=initiation(),
+            changes={
+                "continuity": "maintain",
+                "change_basis": [{"source_id": "e1", "quote": "A new demand."}],
+            },
+        )
+
+
+@pytest.mark.parametrize("kind", ["REFUSE", "DEFER", "ACCEPT", "NEGOTIATE"])
+def test_other_kind_changes_still_require_a_grounded_revision(kind):
+    previous = prior()
+    previous.selected.kind = kind
+    with pytest.raises(ValueError, match="kind"):
+        choose(prior=previous, changes={"continuity": "maintain"})
+
+
+def test_continuation_to_a_new_initiative_still_requires_a_revision():
+    _, window, raw, motives = fixture()
+    proposal = raw.canonical()
+    proposal.candidates.append(proposal.candidates[0].model_copy(update={"kind": "INITIATE"}))
+    motives["INITIATE"] = motives["CONTINUE"]
+    choice = raw.choice.model_copy(update={"preferred": "INITIATE", "continuity": "maintain"})
+    with pytest.raises(ValueError, match="kind"):
+        semantic_choice.select(
+            "npc",
+            observation(),
+            proposal,
+            None,
+            choice,
+            motives,
+            window,
+            prior(),
+            context_hash="same",
+        )
+
+
 def test_exact_observed_response_can_change_course_without_rewriting_identity():
     value, _, raw, _ = fixture("DEFER")
     value = record(value, source("reaction", text="I need quiet now."), minute=1)

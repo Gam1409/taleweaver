@@ -244,6 +244,8 @@ def public_status(state: KernelState | StatusProjection) -> dict:
         "mode": state.settings.mode,
         "quality": "simplified"
         if state.usage.simplified
+        else "partial"
+        if state.usage.status == "validated" and state.usage.actor_failures
         else "verified"
         if state.usage.status == "validated"
         else "idle",

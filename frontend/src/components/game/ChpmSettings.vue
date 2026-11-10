@@ -113,6 +113,11 @@ defineExpose({ save })
       <p v-if="status.usage.proposal_repairs">Proposal retries: {{ status.usage.proposal_repairs }}</p>
       <p v-if="status.usage.format_repairs">Local format corrections: {{ status.usage.format_repairs }} (no additional model requests).</p>
       <p v-for="(feedback, index) in status.usage.proposal_feedback ?? []" :key="index">{{ feedback }}</p>
+      <template v-if="!status.usage.simplified">
+        <p v-for="(failure, id) in status.usage.actor_failures ?? {}" :key="id" class="text-amber-200">
+          Paused this turn: {{ status.characters.find(actor => actor.id === id)?.name ?? id }} — {{ failure }}
+        </p>
+      </template>
       <p v-if="status.usage.detail">{{ status.usage.detail }}</p>
     </div>
     <details v-if="status?.usage.timings?.length" class="mt-3 space-y-2 text-xs text-slate-400">

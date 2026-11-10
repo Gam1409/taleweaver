@@ -79,3 +79,12 @@ test('one remaining recovery turn uses the singular form', async () => {
   assert.match(html, /after 1 turn</)
   assert.doesNotMatch(html, /after 1 turns/)
 })
+
+test('a partial turn keeps the indicator and explains the joint review boundary', async () => {
+  updateNpcBehaviorStatus('one', status('partial'))
+  const html = await render('one')
+  assert.match(html, /NPC Personality: partial/)
+  assert.match(html, /Other NPC updates passed the shared reply check/)
+  assert.match(html, /remain inactive for this turn/)
+  assert.doesNotMatch(html, /simplified RP|after 3 turns/)
+})

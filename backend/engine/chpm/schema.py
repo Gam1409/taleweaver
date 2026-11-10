@@ -307,6 +307,9 @@ class Usage(Contract):
     proposal_repairs: int = 0
     format_repairs: int = Field(default=0, ge=0)
     proposal_feedback: list[str] = Field(default_factory=list, max_length=2)
+    actor_failures: dict[str, Annotated[str, Field(max_length=600)]] = Field(
+        default_factory=dict, max_length=20
+    )
     status: Literal["idle", "prepared", "validated", "shadow", "failed"] = "idle"
     detail: str = ""
     memory_evictions: int = 0

@@ -4,6 +4,18 @@ NPC Personality (technical module name: CHPM) has its own release version, indep
 version and persisted data contracts. The current version is **1.2.0**, defined
 in `backend/engine/chpm/version.py` and exposed in session settings and status.
 
+## Unreleased repairs
+
+- Localize completed proposal rejection in Keep playing mode when a separate
+  usable NPC decision survives. Reuse inactive-character restrictions and the
+  shared narration review; keep strict and shared-failure rollback boundaries.
+- Preserve deferred NPC psychology and exclude their new portrait thoughts and
+  emotions while retaining independently reviewed peers and their display cues.
+- Allow INITIATE → CONTINUE to maintain a discussion with unchanged conditions.
+  Other kind changes still need grounded revision and semantic review.
+- Expose bounded per-character failures and a partial status outside the story.
+  Keep one shared proposal retry and the existing saved-state versions.
+
 ## 1.2.0
 
 - Add opt-in semantic NPC memory in Enabled mode. Match paraphrases against each

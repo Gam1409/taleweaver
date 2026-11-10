@@ -7,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.engine.chpm import choice_grounds, inference, parallel_budget, proposal_repair
 from backend.engine.chpm.core.errors import TransitionError
-from backend.engine.chpm.errors import RecoverableChpmError
+from backend.engine.chpm.errors import ProposalRejectedError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Settings, Usage
@@ -45,6 +45,8 @@ async def request(
             hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
             if hint:
                 feedback = f"{feedback}; {hint}"[:600]
+        except inference.OutputBudgetError as exc:
+            raise ProposalRejectedError(str(exc)) from exc
         else:
             candidate = raw.model_dump(mode="json")
             try:
@@ -54,7 +56,7 @@ async def request(
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
-            raise RecoverableChpmError(
+            raise ProposalRejectedError(
                 "CHPM proposal remains invalid; no decision applied. " + feedback
             )
         turn = getattr(manager, "_chpm_turn", None)
@@ -63,7 +65,7 @@ async def request(
             3 if settings.mode == "live" else 0
         )
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
-            raise RecoverableChpmError(
+            raise ProposalRejectedError(
                 "CHPM proposal retry has no reserved request budget. " + feedback
             )
         payload = proposal_repair.payload_for(
@@ -77,7 +79,7 @@ async def request(
         )
         prompt, content = inference.compose(instruction, payload, schema, identifiers)
         if len(prompt) + len(content) > settings.max_input_chars:
-            raise RecoverableChpmError(
+            raise ProposalRejectedError(
                 "CHPM proposal retry cannot fit its input budget. " + feedback
             )
         usage.proposal_repairs += 1

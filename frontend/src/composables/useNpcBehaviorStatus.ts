@@ -3,7 +3,7 @@ import { computed, shallowRef } from 'vue'
 export interface NpcBehaviorStatus {
   module_version: string
   mode: 'off' | 'shadow' | 'live'
-  quality: 'idle' | 'verified' | 'simplified'
+  quality: 'idle' | 'verified' | 'partial' | 'simplified'
   reason: string
   cooldown_remaining: number
   unreviewed_turns: number
@@ -19,6 +19,8 @@ const RECOVERY_REASONS: Record<string, string> = {
 }
 
 export function npcBehaviorExplanation(state: NpcBehaviorStatus | null): string {
+  if (state?.quality === 'partial') return 'Some NPCs have no confirmed decision and remain inactive for this turn. ' +
+    'Other NPC updates passed the shared reply check. See NPC Personality settings for the paused characters.'
   if (state?.quality !== 'simplified') return 'Optional NPC character and memory guidance is enabled.'
   const reason = Object.prototype.hasOwnProperty.call(RECOVERY_REASONS, state.reason)
     ? RECOVERY_REASONS[state.reason] + ' '
@@ -41,7 +43,7 @@ export function updateNpcBehaviorStatus(sessionId: string, value: unknown): void
     'mode' in value &&
     ['off', 'shadow', 'live'].includes(String(value.mode)) &&
     'quality' in value &&
-    ['idle', 'verified', 'simplified'].includes(String(value.quality))
+    ['idle', 'verified', 'partial', 'simplified'].includes(String(value.quality))
   current.value = { sessionId, value: valid ? (value as NpcBehaviorStatus) : null }
 }
 
