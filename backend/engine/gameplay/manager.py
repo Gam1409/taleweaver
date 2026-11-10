@@ -173,14 +173,15 @@ def _friendly_token_limit_message() -> str:
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
+    from backend.core.error_diagnostics import has_http_status
+
     text = str(exc or "").lower()
     patterns = (
         "rate limit",
         "too many requests",
         "quota exceeded",
-        "429",
     )
-    return any(p in text for p in patterns)
+    return has_http_status(exc, 429) or any(p in text for p in patterns)
 
 
 def _is_timeout_error(exc: Exception) -> bool:
@@ -196,17 +197,16 @@ def _is_timeout_error(exc: Exception) -> bool:
 
 
 def _is_service_unavailable_error(exc: Exception) -> bool:
+    from backend.core.error_diagnostics import has_http_status
+
     text = str(exc or "").lower()
     patterns = (
         "service unavailable",
         "temporarily unavailable",
         "overloaded",
         "bad gateway",
-        "502",
-        "503",
-        "504",
     )
-    return any(p in text for p in patterns)
+    return has_http_status(exc, 502, 503, 504) or any(p in text for p in patterns)
 
 
 def _is_invalid_llm_payload_error(exc: Exception) -> bool:

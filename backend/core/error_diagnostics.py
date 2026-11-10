@@ -6,12 +6,27 @@ into actionable, human-friendly error messages for the UI.
 """
 
 import logging
+import re
 
 from backend.core.comfyui_errors import ComfyRequestError
 from backend.core.inference.diagnostics import admission_diagnostic
 from backend.core.prompt_preparation_error import PromptPreparationError
 
 logger = logging.getLogger(__name__)
+
+
+def has_http_status(exc: Exception, *codes: int) -> bool:
+    """Prefer transport metadata; a number inside an identifier is not an HTTP code."""
+    for source in (exc, getattr(exc, "response", None)):
+        value = getattr(source, "status_code", None)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value in codes
+    match = re.search(
+        r"\b(?:http(?:/\d+(?:\.\d+)?)?|status(?:_code|\s+code)?)\s*[:=]?\s*(\d{3})\b",
+        str(exc or ""),
+        flags=re.IGNORECASE,
+    )
+    return bool(match and int(match[1]) in codes)
 
 
 def diagnose_provider_error(

@@ -173,6 +173,21 @@ is not the selected behavior.
   item/pose provenance and import/copy paths. Semantic extraction accuracy still
   requires a future live test; offline coverage is not a model-quality claim.
 
+## Wave 12: distinguish provider status from local identifiers
+
+- Reproduce false quota/service diagnoses when a local ValueError contains 429,
+  502, 503 or 504 inside a source identifier. These numbers alone are not proof
+  of a provider response status and previously hid the local failure's traceback.
+- Reuse the central diagnostics owner for HTTP status matching. Prefer typed
+  exception/response status metadata; accept explicit legacy HTTP/status text.
+  Preserve recognized provider phrases and the existing safe public messages.
+- Unrelated local failures now reach the existing unexpected-error log path,
+  without exposing source identifiers in the client response. Full gameplay and
+  public-error regression coverage passes alongside genuine 429/503 cases.
+- Live testing found both successful validated NPC turns and a separate proposal
+  semantics rejection. The classifier repair does not claim to resolve that model
+  decision error or every failure previously presented as a quota problem.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the
