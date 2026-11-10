@@ -117,8 +117,8 @@ def contract_data(turn: Turn) -> dict:
                     if decision.previous_intention
                     else None
                 )
-            data[actor]["subjective_experience_not_traits"] = continuation.experience_view(
-                mind, turn.gap_cursors
+            data[actor]["subjective_experience_not_traits"] = narrative_context.experience_reasons(
+                mind, continuation.experience_view(mind, turn.gap_cursors)
             )
             if turn.initial.recovery.pending_gap_turns:
                 data[actor]["continuity_gap"] = continuation.gap_context(turn.initial)

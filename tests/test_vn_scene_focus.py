@@ -63,7 +63,7 @@ def test_new_attempts_old_quotes_and_unobserved_plans_do_not_support_observation
     assert focus["last_observed_change"] == focus["evidence"] == ""
 
 
-def test_observation_matches_the_same_voice_cleaned_context_the_planner_received():
+def test_observation_matches_legacy_voice_cleaned_context():
     manager = manager_with_focus()
     stage_focus(
         manager,
@@ -72,6 +72,19 @@ def test_observation_matches_the_same_voice_cleaned_context_the_planner_received
     )
     record_direction(manager, "reply", completed=True)
     assert focus_context(manager.state)["evidence"] == "Lina finishes explaining."
+
+
+def test_observation_accepts_exact_emotional_cues_in_completed_narration():
+    manager = manager_with_focus()
+    stage_focus(
+        manager,
+        proposal_with_focus(evidence="Lina <sigh>finishes explaining."),
+        [{"role": "assistant", "content": "Lina <sigh>finishes explaining."}],
+    )
+    from backend.engine.visual_novel.scene_focus import record_focus
+
+    record_focus(manager, "new-reply")
+    assert focus_context(manager.state)["evidence"] == "Lina <sigh>finishes explaining."
 
 
 def test_focus_is_replaced_over_many_turns_and_not_added_to_planning_history():

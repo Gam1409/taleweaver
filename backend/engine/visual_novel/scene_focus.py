@@ -58,7 +58,10 @@ def stage_focus(manager: Any, proposal: Any, history: list[dict]) -> None:
     )
     if (
         not focus.evidence
-        or focus.evidence not in strip_historical_voice_cues(latest)
+        or (
+            focus.evidence not in latest
+            and focus.evidence not in strip_historical_voice_cues(latest)
+        )
         or not focus.last_observed_change
     ):
         focus.last_observed_change = ""

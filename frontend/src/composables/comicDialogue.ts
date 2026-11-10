@@ -82,7 +82,6 @@ function appendNarration(dialogues: DialogueSegment[], line: string): void {
   const tagMatch = narrationText.match(/^\[([^\]\n]+)\]\s*(.*)$/)
   if (tagMatch) {
     voiceTag = normalizeVoiceTag(tagMatch[1])
-    narrationText = tagMatch[2].trim()
   }
 
   if (!narrationText || /^(?:[*_]{1,3}|[•·])$/u.test(narrationText)) return

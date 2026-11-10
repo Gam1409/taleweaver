@@ -1,4 +1,4 @@
-"""Limit vocal runs in output and prevent old delivery cues becoming style examples."""
+"""Legacy opt-in cue filters; never use to rewrite RP output or its source history."""
 
 import re
 

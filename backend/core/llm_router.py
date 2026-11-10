@@ -34,7 +34,7 @@ from backend.core.llm_sampling import apply as apply_sampling
 from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.security import encryption_util
-from backend.core.voice_repetition import clean_voice_history, clean_voice_repetition
+from backend.core.voice_repetition import clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
 from backend.models.user import User
 
@@ -344,6 +344,8 @@ class GameMasterLLM:
         """Strip <think>...</think> tags and the reasoning text inside them."""
         if not text:
             return ""
+        if "<think>" not in text and "</think>" not in text:
+            return text
         # Remove completed think blocks
         cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         # Also strip any dangling open think tag to the end of the text (in case of truncation/interruption)
@@ -414,8 +416,7 @@ class GameMasterLLM:
     @staticmethod
     def normalize_voice_tags(text: str) -> str:
         """
-        Normalizes voice/emotion tags at the beginning of the text, in paragraphs,
-        and in character dialogue lines to standard English [tag] format.
+        Legacy opt-in tag formatting; never apply to generated or stored narration.
         """
         if not text:
             return text
@@ -938,7 +939,7 @@ class GameMasterLLM:
 
         kwargs = {
             "model": normalized_model,
-            "messages": clean_voice_history(messages),
+            "messages": messages,
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
@@ -963,7 +964,6 @@ class GameMasterLLM:
 
         result = response.choices[0].message.content or ""
         result = self.clean_thinking_tags(result)
-        result = self.normalize_voice_tags(result)
 
         log_llm_interaction(
             model=model,
@@ -1009,7 +1009,7 @@ class GameMasterLLM:
 
         kwargs: dict[str, Any] = {
             "model": normalized_model,
-            "messages": messages if technical else clean_voice_history(messages),
+            "messages": messages,
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
@@ -1039,10 +1039,7 @@ class GameMasterLLM:
         response = await self._acompletion_with_openrouter_fallback(kwargs)
 
         result = response.choices[0].message.content or ""
-        if technical:
-            result = clean_technical_text(result)
-        else:
-            result = self.normalize_voice_tags(self.clean_thinking_tags(result))
+        result = clean_technical_text(result) if technical else self.clean_thinking_tags(result)
 
         log_llm_interaction(
             model=model,
@@ -1088,7 +1085,7 @@ class GameMasterLLM:
 
         kwargs = {
             "model": normalized_model,
-            "messages": clean_voice_history(messages),
+            "messages": messages,
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
             "stream": True,
@@ -1120,8 +1117,8 @@ class GameMasterLLM:
             chunk_timeout=float(self.request_timeout),
         )
         stream = self._clean_stream_thinking(timed_stream)
-        output = self._clean_stream_voice_tags(stream)
-        return owned_stream(output, stream, timed_stream, raw_stream)
+        # Narration is source evidence: preserve its delivery cues and exact wording.
+        return owned_stream(stream, timed_stream, raw_stream)
 
     def _build_structured_request(
         self,

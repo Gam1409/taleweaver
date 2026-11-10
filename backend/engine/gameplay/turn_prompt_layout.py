@@ -14,7 +14,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.voice_repetition import strip_historical_voice_cues
 from backend.models.chat import ChatMessage
 
 RECENT_NARRATION_MAX_CHARS = 400
@@ -43,7 +42,6 @@ def format_recent_narration(
         if message.get("role") != "assistant" or not content:
             continue
         if for_story_initiative:
-            content = strip_historical_voice_cues(content)
             if len(content) > STORY_NARRATION_MAX_CHARS:
                 head = STORY_NARRATION_MAX_CHARS // 2
                 content = (

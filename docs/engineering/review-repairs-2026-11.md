@@ -371,6 +371,33 @@ is not the selected behavior.
    live extraction-quality measurements. The source-binding wave was followed
    by localized proposal handling and the paired extraction probes above.
 
+## Wave 20: preserve expressive narration and its emotional context
+
+- Trace the existing narrator, history, planner, CHPM review, persistence and comic
+  display paths before extending them. Confirmed losses were cue deletion from
+  assistant history, repeated-cue clipping in responses and streaming, and removal
+  of leading narration tags in the comic parser, including entire cue-only lines.
+- Bypass legacy voice normalization/clipping in narrative transport and preserve
+  assistant messages verbatim. Protocol reasoning and private presentation footers
+  keep their existing boundaries. Explicit context-window budgets remain intact;
+  emotion, interjections, pauses and repeated delivery cues are not cleanup targets.
+- Keep planner narration cues and accept exact raw scene-focus evidence. Continue
+  recognizing the earlier cue-stripped focus representation for compatibility;
+  focus still cannot establish world state or authorize transitions.
+- Extend the existing narrator context with exact stored experience explanations,
+  including archived events, without new inference, state stores or schema changes.
+  Add at most two reasons and 512 serialized characters per NPC. Preserve freshness
+  and continuity-gap status, observer isolation and the technical decision input.
+  Missing appraisals do not establish calm or require emotionally blank prose.
+- Keep automatic factual repair and shared-world review. The owner explicitly
+  retained that mechanism; expressive delivery itself is not a factual violation.
+- Before fixes, new regressions reproduced eleven backend failures and three
+  comic-parser failures. After fixes, the 31 focused backend checks and all parser
+  checks pass, including exact transport text, failure propagation, stream usage,
+  reviewed VN persistence, bounded reasons and stale/archived experience handling.
+  Broader validation is recorded below after completion. No live Pod calls were
+  made; these checks establish text/context fidelity, not improved literary quality.
+
 ## Open illustration consistency decision
 
 - F13 remains open: a source-backed visual exposure atom can conflict with the

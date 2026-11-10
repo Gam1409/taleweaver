@@ -101,12 +101,24 @@ test('inline dialogue preserves narration and ordering', () => {
   )
 })
 
-test('a leading narration emotion stays narration without an empty bubble', () => {
+test('a leading narration emotion remains visible in the narrator text', () => {
   const result = parse('[thoughtful] Одета Лина просто, но аккуратно: льняное платье.')
   assert.equal(result.dialogues.length, 1)
   assert.equal(result.dialogues[0].isNarration, true)
   assert.equal(result.dialogues[0].voiceTag, 'thoughtful')
-  assert.equal(result.dialogues[0].text, 'Одета Лина просто, но аккуратно: льняное платье.')
+  assert.equal(result.dialogues[0].text, '[thoughtful] Одета Лина просто, но аккуратно: льняное платье.')
+})
+
+test('cue-only narration, changing emotional tags and expressive pauses remain visible', () => {
+  const text = '[short pause]\n[afraid] Ah…\n[relieved] Oh!\n…\n<sigh><sigh><sigh>'
+  const { dialogues } = parse(text)
+  assert.equal(dialogues.length, 1)
+  assert.equal(dialogues[0].text, text.split('\n').join('\n\n'))
+})
+
+test('a cue-only line between speeches stays in its original position', () => {
+  const { dialogues } = parse('Лина: "Oh…"\n[long pause]\nHero: "You are safe."')
+  assert.deepEqual(dialogues.map(d => d.text), ['Oh…', '[long pause]', 'You are safe.'])
 })
 
 test('object labels do not become known unquoted speakers', () => {
