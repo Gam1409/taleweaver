@@ -26,6 +26,12 @@ sources. It is not a search over unrestricted chat, private thoughts, another
 NPC's knowledge or hidden inventory. Explicit reports retain their reported
 status. No source is synthesized from a nearest vector match.
 
+The cognitive evidence ledger also contains inferences and reflections. These
+remain psychological judgments with their existing citations; they are not raw
+message sources. Observer indexing skips those derived entries while retaining
+their original checked observations. A valid saved appraisal must not interrupt
+indexing or become a new independent quotation.
+
 Each source is split into exact, overlapping 600-character excerpts with a
 480-character stride. Speaker, observer and scene identifiers provide embedding
 context. At retrieval, the original message, revision and content hash are checked

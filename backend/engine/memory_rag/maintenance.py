@@ -6,7 +6,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from backend.core.diagnostic_fields import safe_error
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+from backend.core.system_diagnostics import service
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
@@ -49,6 +51,7 @@ class Cycle:
         return Outcome("waiting" if self.failures else "ready", index_idle, self.notice())
 
     def _failed(self, kind: str, exc: Exception) -> None:
+        service.detail("detail.engine.failed", step=f"memory.{kind}", error=safe_error(exc))
         attempt = self.failures.get(kind, (0, 0))[0] + 1
         delay = min(60 * 2 ** min(attempt - 1, 4), 900)
         self.failures[kind] = (attempt, time.monotonic() + delay)

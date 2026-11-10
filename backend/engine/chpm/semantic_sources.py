@@ -44,7 +44,11 @@ def episodes(
     scope = mind.genesis.scope
     hashes = {key: digest(row.content) for key, row in rows.items()}
     for order, evidence in enumerate(mind.snapshot.evidence):
-        source = mind.sources[evidence.event_id]
+        # Interpretations/reflections are evidence too, but only observations
+        # have a host message binding. Do not index a judgment as a new quote.
+        source = mind.sources.get(evidence.event_id)
+        if source is None:
+            continue
         row = rows.get(source.message_id)
         if (
             source.kind not in KINDS

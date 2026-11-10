@@ -35,6 +35,8 @@ Detailed events use the `detail.*` namespace in the same file. They include:
   provider lifecycle observer.
 - SQL statement text and transaction/query metadata. Bound SQL values, HTTP
   authentication headers and account credential bodies are not captured.
+- Caught memory-maintenance failures include their phase and safe stack locations,
+  even when the worker handles the error and continues other maintenance phases.
 
 Full story payloads are not clipped at the legacy 12,000-character telemetry limit.
 Large payloads are split into `payload_json_part` records sharing `detail_group`,

@@ -13,6 +13,7 @@ from backend.core.engine_detailed_trace import turn_context
 from backend.core.llm_detailed_trace import trace_async
 from backend.core.system_diagnostics import DiagnosticService, service
 from backend.engine.chpm.state import load
+from backend.engine.memory_rag.maintenance import KINDS, Cycle
 from backend.models.chat import ChatMessage
 from tests import test_custom_openai as endpoint_fixtures
 from tests.conftest import TestSessionLocal
@@ -288,3 +289,19 @@ def test_turn_trace_preserves_the_transport_turn_id_in_all_boundary_records():
     rows = [row for row in records() if row["event"].startswith("detail.engine.")]
     assert len(rows) == 3
     assert {row["turn_id"] for row in rows} == {str(turn_id)}
+
+
+async def test_caught_maintenance_failure_still_records_its_stage_and_stack():
+    service.set_enabled(True, detailed_logging=True)
+
+    async def observer():
+        raise KeyError("PRIVATE_SOURCE")
+
+    cycle = Cycle(cursor=KINDS.index("observer"))
+    result = await cycle.run({"observer": observer})
+    assert result.status == "failed"
+    row = next(row for row in records() if row["event"] == "detail.engine.failed")
+    assert row["detail"]["step"] == "memory.observer"
+    assert row["detail"]["error"]["type"] == "KeyError"
+    assert row["detail"]["error"]["frames"][-1]["function"] == "observer"
+    assert "PRIVATE_SOURCE" not in str(records())
