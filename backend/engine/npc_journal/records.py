@@ -7,6 +7,7 @@ from typing import Any, get_args
 
 from backend.engine.npc_journal.archive import compact, expanded
 from backend.engine.npc_journal.clock import clock_fields
+from backend.engine.npc_journal.reading import entries as journal_entries
 from backend.engine.npc_journal.schema import CharacterObservation, Observation, Significance
 
 JOURNAL_KEY = "npc_journal"
@@ -125,9 +126,18 @@ def fact_topic(entry: dict) -> str:
 
 def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) -> str:
     """Keep the full journal in storage, but cap material repeated in model prompts."""
-    journal = journal_of(npc, full=True)
-    latest: dict[str, dict] = {}
-    for entry in journal.get("entries") or []:
+    if limit <= 0:
+        return ""
+    prefix = " Last learned information (may be outdated; live state takes precedence): "
+    if visual_only:
+        prefix = (
+            " Last observed physical information (overrides older appearance; depict only "
+            "explicitly visible/worn items, never stored, given-away, dropped or consumed items): "
+        )
+    seen: set[str] = set()
+    facts: list[str] = []
+    length = len(prefix)
+    for entry in journal_entries(npc, reverse=True):
         if visual_only and entry.get("source") != "observed":
             continue
         category = entry.get("category", "event")
@@ -139,16 +149,12 @@ def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) ->
             "physical" if category in _PHYSICAL_CATEGORIES and subject != "general" else category
         )
         topic = f"{group}/{fact_topic(entry)}"
-        latest.pop(topic, None)
-        latest[topic] = entry
-    facts = [
-        f"{e.get('category', 'event')} ({e.get('source', 'observed')}): {e.get('text', '')}"
-        for e in reversed(list(latest.values()))
-    ]
-    prefix = " Last learned information (may be outdated; live state takes precedence): "
-    if visual_only:
-        prefix = (
-            " Last observed physical information (overrides older appearance; depict only "
-            "explicitly visible/worn items, never stored, given-away, dropped or consumed items): "
-        )
+        if topic in seen:
+            continue
+        seen.add(topic)
+        fact = f"{entry.get('category', 'event')} ({entry.get('source', 'observed')}): {entry.get('text', '')}"
+        facts.append(fact)
+        length += len(fact) + (2 if len(facts) > 1 else 0)
+        if length >= limit:
+            break
     return (prefix + "; ".join(facts))[:limit] if facts else ""

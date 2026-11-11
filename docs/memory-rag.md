@@ -39,6 +39,14 @@ database; back it up along with the usual session data.
 
 ## What is remembered
 
+Foreground journal recall reads the mutable tail first. Cold compressed blocks
+carry derived, content-checked source indexes; an old vector hit expands only its
+matching blocks. Missing or stale indexes fall back to canonical decoding.
+Bounded prompt context stops once its existing character budget is filled.
+Export, copy and inspection retain every canonical record. Cold JSON storage and
+full background scans still grow with history; this optimization does not remove
+the finite exact archive limits or replace consolidation.
+
 New NPC journal extraction prioritizes durable facts, promises, boundaries,
 decisions, consequences, relationship changes and stable appearance changes.
 It requires an explanation of the change and evidence from the narration.

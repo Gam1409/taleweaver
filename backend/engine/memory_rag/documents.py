@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from backend.engine.npc_journal.clock import clock_fields
-from backend.engine.npc_journal.records import journal_of, supported_quote
+from backend.engine.npc_journal.reading import entries as journal_entries
+from backend.engine.npc_journal.records import supported_quote
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemorySummary
@@ -165,8 +166,8 @@ def _journal_documents(
     state: Any, user_id: str, npc: WorldEntity, messages: dict[str, ChatMessage]
 ) -> list[MemoryDocument]:
     documents = []
-    for entry in journal_of(npc, full=True).get("entries") or []:
-        message = messages.get(entry.get("message_id"))
+    for entry in journal_entries(npc, message_ids=set(messages)):
+        message = messages.get(str(entry.get("message_id") or ""))
         if not message or message.role != "assistant":
             continue
         if not supported_quote(entry.get("evidence"), message.content) or not entry.get("text"):

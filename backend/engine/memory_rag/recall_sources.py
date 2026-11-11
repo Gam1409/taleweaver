@@ -1,6 +1,7 @@
 """Bound foreground source loading; full corpus scans belong to idle indexing."""
 
 import json
+from itertools import zip_longest
 from typing import Any
 
 from sqlalchemy import func, select
@@ -18,7 +19,7 @@ from backend.engine.memory_rag.documents import (
     summary_sources,
 )
 from backend.engine.memory_rag.ranking import ordered_terms
-from backend.engine.npc_journal.records import journal_of
+from backend.engine.npc_journal.reading import source_ids
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemorySummary
@@ -79,13 +80,8 @@ def _journal_source_ids(npcs: list[Any], budget: int) -> set[str]:
     if budget <= 0:
         return set()
     ids: set[str] = set()
-    groups = [list(reversed(journal_of(npc, full=True).get("entries") or [])) for npc in npcs]
-    for offset in range(max((len(group) for group in groups), default=0)):
-        ids.update(
-            group[offset]["message_id"]
-            for group in groups
-            if offset < len(group) and group[offset].get("message_id")
-        )
+    for group in zip_longest(*(source_ids(npc) for npc in npcs)):
+        ids.update(identifier for identifier in group if identifier)
         if len(ids) >= budget:
             return set(sorted(ids)[:budget])
     return ids
