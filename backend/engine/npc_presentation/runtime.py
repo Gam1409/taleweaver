@@ -102,7 +102,7 @@ class PresentationTurn:
             "at the player. Respect established identity and psychological appraisals when provided. "
             "Use the actual situation in the completed story, not a personality label. "
             "Outward composure alone does not establish weak feeling. "
-            "General activation is not sexual arousal. "
+            "Assess UI labels in their own meaning and context, separately from CHPM dimension names. "
             "Use unknown or omit an entry when unassessed; unknown never means calm. "
             "Do not invent events, possessions, knowledge, agreement or personality changes for "
             "this display. Do not add protagonist thoughts. Do not include disabled fields. "

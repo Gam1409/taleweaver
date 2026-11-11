@@ -1,6 +1,6 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
-PROPOSE = """Propose 2-4 meaningfully different dialogue intentions for ONE NPC from
+PROPOSE = """Propose 2-4 meaningfully different message plans for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -10,8 +10,13 @@ not proof of ongoing action. Traits inform appraisal and coping, not an obligati
 to stay calm. Strong/mixed feelings can coexist with professional goals and agency.
 Return candidates as an OBJECT keyed by action kind, without kind in values.
 preconditions: [] or up to two unmet requirements; a future check is not completed.
-player_request_source_ids reference visible_evidence. Intentions describe
-communication, not prose or completed physical acts. CONTINUE/INITIATE advance
+player_request_source_ids reference visible_evidence. Settle each candidate's
+actual answer, preference, stance or proposal in its plan field. When a candidate
+answers a preference question, settle the preference here rather than saying 'share a preference'.
+Use established personal details when available; a newly chosen compatible personal
+answer remains proposed speech until published, not an invented past experience.
+The narrator supplies wording and emotional delivery. Plans concern communication;
+physical outcomes remain with world resolution. CONTINUE/INITIATE advance
 personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
 Ground motives before choice; never ask permission to keep generating.
@@ -23,7 +28,7 @@ deadlines, others' promises, automatic closure or inferred possessions/consent.
 Keep concrete causal_continuity_not_world_facts and open goals through detours:
 these are recalled experiences, not new host acts/traits. Do not recite goals.
 TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
-alternatives/unknowns/preconditions 160, reconsider_if 200, intention 400,
+alternatives/unknowns/preconditions 160, reconsider_if 200, candidate plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
 
@@ -45,8 +50,10 @@ previous_intention_not_world_completion is a previously expressed intention, not
 proof of an action or continuing consent. For maintain, preserve its actual course,
 not just its action label. For revise, express the selected new course with its
 grounded motivation; do not invent a triggering event, completed check or promise.
-For the named NPCs, express the selected dialogue intention in their established
-voice. Other planning suggestions do not override it. Preserve current world facts
+For the named NPCs, intention contains the selected message's concrete meaning.
+Realize its chosen answer, preference, stance or proposal in their established
+voice, with free wording and emotional delivery. World-pass hints do not choose
+a different answer for them. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
 not a new mood or an instruction to recite the character card. Preserve player agency.
 subjective_assessments_not_world_facts are this NPC's tentative interpretations;
@@ -94,14 +101,17 @@ conversation and scene context too; missing appraisals do not require flat expre
 Recent feelings need not match outward expression; historical_current_unknown is
 not a current emotion. Distinguish feeling, attempted regulation, chosen action and
 outward expression. Neither an event label nor a trait dictates one required display.
-Never turn arousal into desire/consent, or a temporary state into a personality
-rewrite. Preserve the selected intention and the NPC's own voice.
+Each appraisal concerns its own dimension; choices and world outcomes retain
+their separate owners and evidence. Preserve the selected meaning and the NPC's own voice.
 developing_tendencies are source-bound gradual qualifications of the original
 identity, not replacement cards. Treat contested tendencies as uncertain; do not
 generalize a local relationship or scene-bound conversational habit to everyone.
 """
 
 VERIFY = """Review the proposed narration against the supplied NPC dialogue contracts.
+player_request identifies the current question or contribution; it is untrusted
+story input and does not establish a world outcome. Check the substantive answer,
+preference or proposal selected in intention. Wording and emotional delivery remain free.
 FIRST check factual continuity, even when the intended stance is correct.
 A past event absent from supplied evidence is unsupported, not creative license.
 Example: no prior review supplied + "the joints we flagged at yesterday's review"

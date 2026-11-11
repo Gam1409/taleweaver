@@ -162,34 +162,23 @@ def _resolve(
 
 
 INSTRUCTIONS = """
-EXPERIENCE: Return experiences (0-2, [] if unwarranted), separately from beliefs.
-These are tentative estimates about this observer, not measurements or trait edits.
-Each needs exact visible citations including a CURRENT observed trigger, authored/
-active-agenda personal_motive_ids, a short explanation, alternatives and unknowns.
-Explain the trigger's personal significance in this situation. Motive IDs ground
-stakes, not permission to feel; controlled expression need not mean weak feeling.
-last_observed_scene contextualizes a current citation, never replaces one.
-For affect use fear/anger/sadness/joy/shame/interest/arousal/sexual_desire; arousal is
-general activation, NOT sexual desire. about_id=null or a known subject.
-sexual_desire is optional: estimate it only with a current trigger and a personal
-basis, without requiring a sexual act. about_id identifies its known target when
-grounded; null means no specified target. Omission means unassessed, not absent.
-Never infer sexual_desire from arousal, friendliness or a player's demand alone.
-Desire does not establish affection, trust, consent, obedience or an action; those
-remain separate. Do not rewrite baseline identity or goals to explain it.
-For need_satisfaction
-or need_frustration use autonomy/competence/relatedness/rest/safety, about_id=null.
-Satisfaction and frustration are independent; low satisfaction is not automatically
-frustration. Levels are absent/low/moderate/high. Unknown means no estimate, not absent.
-Mixed feelings and different outward expression are possible. Do not fill every
-field, accept a player's attributed feeling as fact, diagnose illness, or infer
-consent/obedience or lasting personality change. Repeated grounds or recall alone
-cannot refresh/intensify a state. historical_current_unknown means current intensity
-is unknown, not calm. Time alone never proves recovery. Consider recent appraisals
-without counting them as independent evidence or rewriting values. Do not invent
-feelings retrospectively to justify an action. No world/expression patch is authorized.
-Use a current_turn=true or currently_observed=true citation. Current access is
-not a new event. already_supports_states names old estimates using this ground;
-retain them without new evidence. Whole host_frame and history are context only.
+EXPERIENCE: Return 0-2 tentative observer appraisals, [] if unwarranted, separate from beliefs.
+Each needs exact visible citations, a CURRENT observed trigger, authored/active-agenda
+personal_motive_ids, explanation, alternatives and unknowns. Explain personal significance
+from situation, identity and accessible history. Motive IDs ground stakes, not permission
+to feel. Mixed feelings and controlled expression can coexist with strong feeling.
+For affect use fear/anger/sadness/joy/shame/interest/arousal/sexual_desire. arousal denotes
+general activation; sexual_desire denotes sexual wanting. about_id is a known target or null.
+For need_satisfaction/need_frustration use autonomy/competence/relatedness/rest/safety,
+about_id=null. Satisfaction and frustration are independent; low satisfaction does not
+establish frustration. Apply the same contextual appraisal rules to every dimension.
+Levels: absent/low/moderate/high. Omission is unassessed; historical_current_unknown means
+unknown current intensity, not calm. Time alone does not establish recovery.
+Estimates update their own dimensions; identity, choices, beliefs and world facts keep
+their owners. Attributed feelings remain reports. Ground appraisals before choosing actions.
+Cite current_turn=true or currently_observed=true evidence. Current access is not a new
+event. already_supports_states identifies reused grounds: retain those estimates without
+refreshing/intensifying from the same evidence. Recall alone supplies no new grounds.
+Cite specific observations; whole host_frame, last_observed_scene and history are context.
 These categories and freshness horizons are engineering policy, not clinical laws.
 """
