@@ -5,6 +5,7 @@ from hashlib import sha256
 from types import SimpleNamespace
 
 from backend.engine.clothing.body_schema import WearSource
+from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.recovery_contract import resolve_recovery_item
 from backend.engine.clothing.recovery_evidence import evidence_issues, rejected_entry
 from backend.engine.clothing.recovery_mentions import mention_checks
@@ -169,12 +170,23 @@ def evaluated_preview(
         "skipped": skipped,
         "rejected_entries": diagnostics,
         "mention_checks": mention_checks(context, proposal),
+        "review_entries": [
+            rejected_entry(
+                row["proposal_index"],
+                proposal.entries[row["proposal_index"]],
+                row["item"]["name"],
+                [],
+                garment_for_item(row["item"]),
+            )
+            for row in accepted
+        ],
+        # Retain the existing field name for older clients. Any reviewed entry may
+        # need a different fragment from this same bounded source window.
         "rejected_sources": {
             row["id"]: row["content"]
             for row in context["messages"]
             if row["role"]
             in ({"assistant", "user"} if context.get("allow_player_sources") else {"assistant"})
-            and any(issue["source_message_id"] == row["id"] for issue in diagnostics)
         },
         "source_roles": {row["id"]: row["role"] for row in context["messages"]},
     }

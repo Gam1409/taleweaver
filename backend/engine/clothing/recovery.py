@@ -32,6 +32,19 @@ from backend.engine.clothing.runtime import _store_actor
 logger = logging.getLogger(__name__)
 
 
+def _preview_options(args: str) -> tuple[str, str, str]:
+    arguments = shlex.split(args)[1:]
+    if not 1 <= len(arguments) <= 3:
+        raise ValueError('Expected wardrobe_preview NPC_ID [complex|small] ["search focus"].')
+    role = arguments[1] if len(arguments) >= 2 else "complex"
+    if role not in {"small", "complex"}:
+        raise ValueError("Choose the complex or small recovery model.")
+    focus = arguments[2].strip() if len(arguments) == 3 else ""
+    if len(focus) > 400:
+        raise ValueError("Recovery search focus must be at most 400 characters.")
+    return arguments[0], role, focus
+
+
 def _review_proposal(
     result: BaseModel, context: dict, detailed: bool, session_id: str
 ) -> ProposalReview:
@@ -52,20 +65,15 @@ async def debug_wardrobe_preview(
     if not state.is_debug_enabled or avatar is None:
         return "DEBUG ERROR: Wardrobe recovery requires debug mode and a session avatar."
     try:
-        arguments = shlex.split(args)[1:]
-    except ValueError:
-        return "DEBUG ERROR: Expected wardrobe_preview NPC_ID [complex|small]."
-    if not 1 <= len(arguments) <= 2 or (
-        len(arguments) == 2 and arguments[1] not in {"small", "complex"}
-    ):
-        return "DEBUG ERROR: Expected wardrobe_preview NPC_ID [complex|small]."
-    npc_id = arguments[0]
-    role = arguments[1] if len(arguments) == 2 else "complex"
+        npc_id, role, focus = _preview_options(args)
+    except ValueError as exc:
+        return f"DEBUG ERROR: {exc}"
     deadline = role_timeout(user, role)
     context = None
     model_step_started = False
     try:
         context = await recovery_context(db, state, avatar, npc_id)
+        context["recovery_focus"] = focus
         detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
         llm = GameMasterLLM.for_role(user, role)
         context, payload = build_payload(context, detailed)

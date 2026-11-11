@@ -22,13 +22,19 @@ const props = defineProps<{
   token?: string
   busy?: boolean
   sourceRoles?: Record<string, string>
+  heading?: string
 }>()
 const emit = defineEmits<{ command: [value: string] }>()
 const selectedQuote = ref({ index: -1, text: '' })
+const selectedSources = ref<Record<number, string>>({})
+function sourceId(entry: WardrobeRejection) {
+  return selectedSources.value[entry.index] || entry.source_message_id
+}
 watch(
   () => props.token,
   () => {
     selectedQuote.value = { index: -1, text: '' }
+    selectedSources.value = {}
   }
 )
 function captureSelection(index: number, event: Event) {
@@ -43,7 +49,9 @@ function captureSelection(index: number, event: Event) {
 </script>
 <template>
   <section class="space-y-3">
-    <h4 class="font-bold text-rose-200">Rejected entries — {{ entries.length }}</h4>
+    <h4 v-if="heading !== ''" class="font-bold text-rose-200">
+      {{ heading ?? `Rejected entries — ${entries.length}` }}
+    </h4>
     <article
       v-for="entry in entries"
       :key="entry.index"
@@ -57,7 +65,22 @@ function captureSelection(index: number, event: Event) {
         Basis: {{ entry.basis }} · Disposition: {{ entry.disposition }}
       </p>
       <p class="break-all text-xs text-slate-400">Cited message: {{ entry.source_message_id }}</p>
-      <p v-if="sourceRoles?.[entry.source_message_id] === 'user'" class="text-xs text-amber-200">
+      <label v-if="sources && Object.keys(sources).length" class="block text-sm">
+        Source message for correction
+        <select
+          v-model="selectedSources[entry.index]"
+          :disabled="busy"
+          class="mt-1 w-full min-w-0 rounded bg-slate-800 p-2"
+          @change="selectedQuote = { index: -1, text: '' }"
+        >
+          <option :value="undefined" disabled>Current cited message</option>
+          <option v-for="(text, id) in sources" :key="id" :value="id">
+            {{ sourceRoles?.[id] === 'user' ? 'Player' : 'Narrator' }} · {{ text.slice(0, 100) }} ·
+            {{ id }}
+          </option>
+        </select>
+      </label>
+      <p v-if="sourceRoles?.[sourceId(entry)] === 'user'" class="text-xs text-amber-200">
         Player message — requires your explicit confirmation in Debug.
       </p>
       <p v-if="entry.attachment_slot" class="text-xs">
@@ -77,39 +100,38 @@ function captureSelection(index: number, event: Event) {
           {{ entry.placement_evidence || '(missing)' }}
         </blockquote>
       </div>
-      <details v-if="sources?.[entry.source_message_id]" class="rounded bg-slate-900 p-2">
+      <details v-if="sources?.[sourceId(entry)]" class="rounded bg-slate-900 p-2">
         <summary class="cursor-pointer text-cyan-200">
           Original
-          {{ sourceRoles?.[entry.source_message_id] === 'user' ? 'player' : 'assistant' }} message —
-          compare the exact wording
+          {{ sourceRoles?.[sourceId(entry)] === 'user' ? 'player' : 'assistant' }} message — compare
+          the exact wording
         </summary>
         <pre
           @mouseup="captureSelection(entry.index, $event)"
           @keyup="captureSelection(entry.index, $event)"
           class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs select-text"
-          >{{ sources[entry.source_message_id] }}</pre>
+          >{{ sources[sourceId(entry)] }}</pre>
       </details>
       <p v-else class="text-amber-200">The cited message was not found in the reviewed history.</p>
       <DebugWardrobeCorrection
         v-if="
-          token &&
-          sources?.[entry.source_message_id] &&
-          entry.coverage.length &&
-          !entry.attachment_slot
+          token && sources?.[sourceId(entry)] && entry.coverage.length && !entry.attachment_slot
         "
-        :key="`${token}:${entry.index}`"
+        :key="`${token}:${entry.index}:${sourceId(entry)}`"
         :entry="entry"
-        :source="sources[entry.source_message_id]!"
+        :source="sources[sourceId(entry)]!"
+        :source-message-id="sourceId(entry)"
         :token="token"
         :busy="!!busy"
         :selected-quote="selectedQuote.index === entry.index ? selectedQuote.text : ''"
         @command="emit('command', $event)"
       />
       <DebugBodyPlacementCorrection
-        v-if="token && sources?.[entry.source_message_id] && entry.attachment_slot"
-        :key="`${token}:${entry.index}:placement`"
+        v-if="token && sources?.[sourceId(entry)] && entry.attachment_slot"
+        :key="`${token}:${entry.index}:${sourceId(entry)}:placement`"
         :entry="entry"
-        :source="sources[entry.source_message_id]!"
+        :source="sources[sourceId(entry)]!"
+        :source-message-id="sourceId(entry)"
         :token="token"
         :busy="!!busy"
         :selected-quote="selectedQuote.index === entry.index ? selectedQuote.text : ''"

@@ -20,6 +20,7 @@ class RecoveryCorrection(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: Literal["worn", "carried"]
     evidence: str = Field(min_length=4, max_length=800)
+    source_message_id: str | None = Field(default=None, min_length=1, max_length=100)
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
     restore_coverage: StrictBool = False
@@ -56,14 +57,18 @@ class RecoveryCorrection(BaseModel):
 def _corrected_proposal(
     preview: dict, index: int, correction: RecoveryCorrection
 ) -> RecoveryProposal:
-    if index not in {row["index"] for row in preview.get("rejected_entries") or []}:
-        raise ValueError("Choose a rejected entry from this preview.")
+    reviewable = {row["index"] for row in preview.get("rejected_entries") or []} | {
+        row["proposal_index"] for row in preview.get("accepted") or []
+    }
+    if index not in reviewable:
+        raise ValueError("Choose an available entry from this preview.")
     proposal = RecoveryProposal.model_validate(deepcopy(preview.get("proposal")))
     if not 0 <= index < len(proposal.entries):
         raise ValueError("Unknown entry; generate a new preview.")
     entry = proposal.entries[index]
     changed = {
         **entry.model_dump(),
+        "source_message_id": correction.source_message_id or entry.source_message_id,
         "action": {
             **entry.action.model_dump(),
             "basis": "observed_wear" if correction.status == "worn" else "completed",
@@ -84,7 +89,7 @@ def _request(args: str, preview: dict) -> tuple[int, RecoveryProposal]:
     if len(parts) != 4 or parts[1] != preview.get("token"):
         raise ValueError("Preview is missing or has been replaced. Generate a new preview.")
     if len(parts[2]) > 2 or not parts[2].isascii() or not parts[2].isdecimal():
-        raise ValueError("Choose a rejected entry from this preview.")
+        raise ValueError("Choose an available entry from this preview.")
     if len(parts[3]) > 12000:
         raise ValueError("Correction is too large. Copy short exact quotes.")
     index = int(parts[2])
@@ -111,7 +116,8 @@ async def debug_wardrobe_correct(
             raise ValueError(
                 "Correction failed validation; preview unchanged. " + " ".join(reasons)
             )
-        if any(row not in reviewed["accepted"] for row in preview.get("accepted", [])):
+        others = [row for row in preview.get("accepted", []) if row.get("proposal_index") != index]
+        if any(row not in reviewed["accepted"] for row in others):
             raise ValueError(
                 "Correction conflicts with another validated garment; preview unchanged."
             )

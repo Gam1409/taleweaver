@@ -16,6 +16,7 @@ export interface WardrobeRecoveryPreview {
   skipped?: string[] | null
   model_role?: string | null
   source_roles?: Record<string, string>
+  review_entries?: WardrobeRejection[]
   accepted: {
     proposal_index?: number
     item: {
@@ -39,6 +40,8 @@ const props = defineProps<{
   busy: boolean
 }>()
 const modelRole = ref('complex')
+const recoveryFocus = ref('')
+const focusError = computed(() => [...recoveryFocus.value.trim()].length > 400)
 const selected = ref<number[]>([])
 const selectable = computed(() =>
   (props.preview?.accepted || []).flatMap(entry =>
@@ -52,6 +55,14 @@ watch(
   }
 )
 const emit = defineEmits<{ command: [value: string] }>()
+function requestPreview() {
+  if (props.busy || focusError.value) return
+  const focus = recoveryFocus.value.trim()
+  emit(
+    'command',
+    `/debug wardrobe_preview ${JSON.stringify(props.npcId)} ${modelRole.value}${focus ? ` ${JSON.stringify(focus)}` : ''}`
+  )
+}
 </script>
 <template>
   <section class="space-y-2 rounded border border-cyan-900 p-2">
@@ -62,18 +73,36 @@ const emit = defineEmits<{ command: [value: string] }>()
         <option value="small">Small model</option>
       </select>
     </label>
+    <label class="block text-sm">
+      What to look for (optional)
+      <input
+        v-model="recoveryFocus"
+        :disabled="busy"
+        :aria-invalid="focusError"
+        maxlength="800"
+        placeholder="An item name or a short description from the story"
+        class="mt-1 w-full rounded bg-slate-800 p-2"
+      />
+    </label>
+    <p class="text-xs text-slate-400">
+      Search hint only. Recovery still requires evidence from the reviewed history.
+    </p>
+    <p v-if="focusError" role="status" class="text-xs text-amber-200">
+      Use at most 400 characters.
+    </p>
     <button
       type="button"
-      :disabled="busy"
+      :disabled="busy || focusError"
       class="rounded bg-cyan-900 px-3 py-2 disabled:opacity-40"
-      @click="emit('command', `/debug wardrobe_preview ${JSON.stringify(npcId)} ${modelRole}`)"
+      @click="requestPreview"
     >
       Restore clothing & placed items from history…
     </button>
     <p class="text-slate-400">
       Preview missing clothing and body-placed items from up to 80 recent story messages. Nothing
       changes until you apply. Check later removals and transfers before accepting. Player
-      descriptions can be proposed as manual corrections; select them explicitly to confirm.
+      descriptions can be proposed as manual corrections; select them explicitly to confirm. An
+      exact quotation alone does not prove it supports the proposed item or state.
     </p>
     <div v-if="preview" class="space-y-2">
       <p
@@ -169,6 +198,24 @@ const emit = defineEmits<{ command: [value: string] }>()
           {{ entry.evidence }}
         </blockquote>
         <p class="break-all text-[10px] text-slate-400">Source: {{ entry.source_message_id }}</p>
+        <details
+          v-if="preview.review_entries?.some(row => row.index === entry.proposal_index)"
+          class="rounded border border-cyan-900 p-2"
+        >
+          <summary class="cursor-pointer text-cyan-200">
+            Check source / correct this proposal
+          </summary>
+          <DebugWardrobeRejections
+            class="mt-2"
+            heading=""
+            :entries="preview.review_entries.filter(row => row.index === entry.proposal_index)"
+            :sources="preview.rejected_sources"
+            :source-roles="preview.source_roles"
+            :token="preview.token"
+            :busy="busy"
+            @command="emit('command', $event)"
+          />
+        </details>
       </article>
       <div v-if="preview.skipped?.length" class="space-y-1 text-amber-200">
         <p>

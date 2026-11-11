@@ -14,7 +14,7 @@ from backend.engine.debug_engine import DebugEngine
 from backend.models.chat import ChatMessage
 from tests.conftest import TestSessionLocal
 from tests.test_narrated_items import fixtures
-from tests.test_vn_turn_integration import seed_vn
+from tests.test_vn_turn_integration import PRIOR, seed_vn
 from tests.test_wardrobe_recovery import TEXT, entry
 
 
@@ -57,7 +57,7 @@ async def test_evidence_retry_retains_valid_entries_and_exposes_unresolved_sourc
     from backend.engine.clothing import recovery
 
     async with TestSessionLocal() as db:
-        user, avatar, state, _ = await seed_vn(db)
+        user, avatar, state, previous_id = await seed_vn(db)
         state.is_debug_enabled = True
         message = ChatMessage(
             session_id=state.session_id, role="assistant", content=TEXT, scene_id="START"
@@ -92,7 +92,7 @@ async def test_evidence_retry_retains_valid_entries_and_exposes_unresolved_sourc
         assert len(preview["accepted"]) == 1 and preview["errors"]
         assert preview["rejected_entries"][0]["label"] == "Scarf"
         assert preview["rejected_entries"][0]["evidence"] == "Paraphrased clothing description."
-        assert preview["rejected_sources"] == {message.id: TEXT}
+        assert preview["rejected_sources"] == {previous_id: PRIOR, message.id: TEXT}
         applied = await DebugEngine.handle_debug_command(
             db, state, "wardrobe_apply " + preview["token"], user=user, avatar=avatar
         )

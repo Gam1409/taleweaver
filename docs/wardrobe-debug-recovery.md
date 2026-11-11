@@ -27,6 +27,11 @@ ordinary object explicitly placed in a body slot. It cannot silently reconstruct
 an arbitrary older history outside that window or treat a fluid/body part as an
 inventory object.
 
+**What to look for (optional)** supplies a short search hint, such as an item name.
+It prioritizes that item in the same model request; it does not establish that the
+item exists or bypass evidence checks. A missing ordinary physical object can use
+the new-item branch; an anatomical part is not a separate inventory object.
+
 Player descriptions may be proposed in this explicit debug workflow. Their
 source is visibly labelled, and applying player-sourced entries requires explicit
 selection; the older apply-all command is rejected for those previews. The normal
@@ -39,3 +44,14 @@ message and hash so the NPC card can display a confirmed occupied slot after rel
 Changed sources invalidate that displayed proof. Rejected body proposals have an
 exact-quote correction form. Previews and quote corrections do not apply state;
 the user must select and restore the validated entries.
+
+An exact quote proves only that the words occur in a source message. It does not
+prove that the quote supports the proposed item, character or current state.
+Both accepted and rejected proposals can be corrected before applying. Expand
+**Check source / correct this proposal**, select a source message from the same
+reviewed window and copy the appropriate exact passage. Confirm the state and
+validate the correction, then select the item for restoration. The correction
+refreshes the preview token and rechecks evidence, ownership, chronology fingerprint
+and clothing policy without another model request or an inventory change. Other
+accepted entries must remain unchanged. Unsupported items should stay unselected;
+formal validation is not a guarantee of semantic correctness.

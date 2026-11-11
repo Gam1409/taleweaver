@@ -48,6 +48,7 @@ def _facts(context: dict, detailed: bool) -> dict:
         "existing_body_items": list(existing_body_items(context)),
         "detailed_clothing": detailed,
         "player_sources_require_confirmation": context.get("allow_player_sources", False),
+        **({"recovery_focus": context["recovery_focus"]} if context.get("recovery_focus") else {}),
     }
 
 

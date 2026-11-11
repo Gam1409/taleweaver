@@ -9,6 +9,7 @@ const props = defineProps<{
   token: string
   busy: boolean
   selectedQuote?: string
+  sourceMessageId?: string
 }>()
 const emit = defineEmits<{ command: [value: string] }>()
 const evidence = ref(props.entry.evidence)
@@ -32,6 +33,7 @@ function submit() {
   const payload = JSON.stringify({
     status: 'worn',
     evidence: evidence.value.trim(),
+    ...(props.sourceMessageId ? { source_message_id: props.sourceMessageId } : {}),
     attachment_slot: slot.value
   })
   emit('command', `/debug wardrobe_correct ${props.token} ${props.entry.index} ${payload}`)

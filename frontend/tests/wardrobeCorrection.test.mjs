@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(`import {computed,ref,watch} from '${import.
 import {quoteError,quoteSuggestion} from '${quoteModule}';
 export function setup(props, emit) {
   ${source}
-  return { status, evidence, placement, uncovered, restoreCoverage, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection };
+  return { status, evidence, placement, uncovered, restoreCoverage, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection, resetExposedRegions };
 }`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
 const { setup } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
@@ -61,6 +61,21 @@ test('paraphrased evidence and regions outside garment coverage cannot be submit
   f.uncovered.value = ['feet']
   f.submit()
   assert.equal(f.calls.length, 0)
+})
+
+test('a correction sends the explicitly selected source message without applying an item', async t => {
+  const f = fixture(t)
+  f.props.sourceMessageId = 'correct-source'
+  f.props.source = 'Lina carries black shoes.'
+  f.status.value = 'carried'
+  await nextTick()
+  f.evidence.value = f.props.source
+  f.submit()
+  assert.equal(f.calls.length, 1)
+  assert.match(f.calls[0][1], /^\/debug wardrobe_correct preview 2 /)
+  const payload = JSON.parse(f.calls[0][1].slice('/debug wardrobe_correct preview 2 '.length))
+  assert.equal(payload.source_message_id, 'correct-source')
+  assert.equal(payload.evidence, 'Lina carries black shoes.')
 })
 
 test('restored coverage requires an explicit choice and a literal restoring quote', t => {
@@ -110,6 +125,9 @@ test('invalid inherited exposed regions stay visible so the user can remove them
   f.uncovered.value = ['pelvis', 'feet']
   assert.match(f.regionError.value, /feet/)
   assert.ok(f.regionChoices.value.includes('feet'))
+  f.resetExposedRegions()
+  assert.deepEqual(f.uncovered.value, [])
+  assert.equal(f.placement.value, '')
 })
 
 test('the same exact Russian quote can identify both the item and its partial placement', t => {
