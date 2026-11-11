@@ -84,7 +84,7 @@ async def equipment_rows(
             await db.scalars(
                 select(ChatMessage).where(
                     ChatMessage.session_id == state.session_id,
-                    ChatMessage.role == "assistant",
+                    ChatMessage.role.in_(["assistant", "user"]),
                     ChatMessage.id.in_(ids),
                 )
             )
@@ -92,11 +92,15 @@ async def equipment_rows(
         if ids
         else []
     )
-    sources = {message.id: message.content for message in messages}
+    sources = {message.id: message for message in messages}
     for row in extra:
         source = row.source
-        if source is None or not source_matches(
-            source.model_dump(), sources.get(source.source_message_id or "", "")
+        message = sources.get(source.source_message_id or "") if source else None
+        if (
+            source is None
+            or message is None
+            or message.role != source.source_role
+            or not source_matches(source.model_dump(), message.content)
         ):
             continue
         age = profile.appearance.age_years

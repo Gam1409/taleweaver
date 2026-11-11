@@ -19,16 +19,21 @@ LABELS = {"underwear_bottom": "Underwear bottoms", "underwear_top": "Bra"}
 def explicit_mentions(context: dict) -> list[dict]:
     result = []
     for kind, pattern in PATTERNS.items():
-        sources = _sources(context["messages"], pattern)
+        sources = _sources(
+            context["messages"], pattern, allow_player=context.get("allow_player_sources", False)
+        )
         if sources:
             result.append({"kind": kind, "label": LABELS[kind], "sources": sources[-3:]})
     return result
 
 
-def _sources(messages: list[dict], pattern: re.Pattern) -> list[dict]:
+def _sources(
+    messages: list[dict], pattern: re.Pattern, *, allow_player: bool = False
+) -> list[dict]:
     sources = []
+    roles = {"assistant", "user"} if allow_player else {"assistant"}
     for row in messages:
-        match = pattern.search(row["content"]) if row["role"] == "assistant" else None
+        match = pattern.search(row["content"]) if row["role"] in roles else None
         if match:
             sources.append(
                 {
@@ -47,7 +52,10 @@ def mention_checks(context: dict, proposal: RecoveryProposal) -> list[dict]:
         for entry in proposal.entries
     ]
     sources = {
-        row["id"]: row["content"] for row in context["messages"] if row["role"] == "assistant"
+        row["id"]: row["content"]
+        for row in context["messages"]
+        if row["role"]
+        in ({"assistant", "user"} if context.get("allow_player_sources") else {"assistant"})
     }
     return [_check(row, names, sources, proposal) for row in explicit_mentions(context)]
 

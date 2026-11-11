@@ -24,7 +24,7 @@ def source_matches(source: dict, text: str) -> bool:
     )
 
 
-def _stamp_profile(raw: Any, request_id: str, message: Any) -> Any:
+def stamp_profile(raw: Any, request_id: str, message: Any) -> Any:
     if not isinstance(raw, dict) or not isinstance(raw.get("worn"), list):
         return raw
     result = deepcopy(raw)
@@ -37,6 +37,8 @@ def _stamp_profile(raw: Any, request_id: str, message: Any) -> Any:
             and source_matches(source, message.content)
         ):
             source["source_message_id"] = message.id
+            if getattr(message, "role", "assistant") == "user":
+                source["source_role"] = "user"
     return result
 
 
@@ -47,13 +49,13 @@ def stamp(manager: Any, message: Any) -> None:
     avatar = getattr(manager, "avatar", None)
     if avatar is not None:
         raw = getattr(avatar, "visual_profile", None)
-        avatar.visual_profile = _stamp_profile(raw, request_id, message)
+        avatar.visual_profile = stamp_profile(raw, request_id, message)
     states = dict(manager.state.entity_states or {})
     for identifier, override in states.items():
         if isinstance(override, dict) and "visual_profile" in override:
             states[identifier] = {
                 **override,
-                "visual_profile": _stamp_profile(override["visual_profile"], request_id, message),
+                "visual_profile": stamp_profile(override["visual_profile"], request_id, message),
             }
     manager.state.entity_states = states
 

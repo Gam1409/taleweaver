@@ -74,7 +74,9 @@ def _ids(values: Iterable[Any] | None) -> set[str]:
 def candidates(
     avatar: Any, rows: list[Any], state: Any, cast_ids: set[str], *, include_worn: bool = False
 ) -> list[dict]:
-    result = []
+    from backend.engine.scene_staging.room_items import candidates as room_items
+
+    result = room_items(rows, state)
     by_id = {row.id: row for row in rows}
     actors = [avatar, *[row for row in rows if row.id in cast_ids and row.id != avatar.id]]
     for actor in actors:
@@ -221,6 +223,14 @@ def project(state: Any, items: list[dict], *, observer_id: str | None = None) ->
                 "spatial_position": entry.get("spatial_position", ""),
             }
         )
+    selected = {row["item_id"] for row in result}
+    result.extend(
+        {key: item[key] for key in ("item_id", "owner_id", "name", "spatial_position")}
+        for item in items
+        if item.get("scene_bound")
+        and item.get("spatial_position")
+        and item["item_id"] not in selected
+    )
     return result
 
 

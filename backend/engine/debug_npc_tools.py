@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.clothing.context import resolved_inventory
+from backend.engine.clothing.debug_wardrobe import scene_items
 from backend.engine.clothing.profiles import (
     garment_for_item,
     load_profile,
@@ -30,6 +31,12 @@ class WardrobeEdit(BaseModel):
     description: str = Field(max_length=1000)
     clothing: Garment
     worn: bool
+
+
+class WardrobeRemoval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    npc_id: str = Field(min_length=1, max_length=100)
+    item_id: str = Field(min_length=1, max_length=100)
 
 
 def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict) -> dict:
@@ -60,6 +67,11 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 )
                 if profile
                 else [],
+                "attachment_slot": next(
+                    (row.attachment_slot for row in profile.worn if row.item_id == identifier), None
+                )
+                if profile
+                else None,
             }
         )
     preview = states.get("__wardrobe_recovery__") or {}
@@ -81,10 +93,12 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 "mention_checks",
                 "context_messages",
                 "model_step_started",
+                "source_roles",
             )
         }
     return {
         "items": clothes,
+        "scene_items": scene_items(entity, entities, states),
         "profile_known": profile is not None,
         "recovery": recovery,
         "preferences": read_preferences(entity, states),
@@ -155,6 +169,53 @@ async def debug_npc_clothing(
         return await _edit_clothing(db, state, edit)
     except (ValueError, ValidationError, IndexError) as exc:
         return f"DEBUG ERROR: Clothing was not changed: {exc}"
+
+
+async def debug_npc_unwear(
+    db: AsyncSession,
+    state: SessionState,
+    args: str,
+    user: Any = None,
+    adventure: Any = None,
+    avatar: Any = None,
+) -> str:
+    if not state.is_debug_enabled:
+        return "DEBUG ERROR: Enable debug mode first."
+    try:
+        request = WardrobeRemoval.model_validate_json(args.split(" ", 1)[1])
+        return await _remove_wear(db, state, request)
+    except (ValueError, IndexError) as exc:
+        return f"DEBUG ERROR: Item was not removed: {exc}"
+
+
+async def _remove_wear(db: AsyncSession, state: SessionState, request: WardrobeRemoval) -> str:
+    npc = await _npc(db, state, request.npc_id)
+    if npc is None:
+        raise ValueError("NPC does not belong to this session.")
+    states = deepcopy(state.entity_states or {})
+    override = states.get(npc.id, {})
+    profile = load_profile(override.get("visual_profile", npc.visual_profile))
+    if profile is None or request.item_id not in {row.item_id for row in profile.worn}:
+        raise ValueError("This item is no longer recorded as worn or placed. Refresh the wardrobe.")
+    inventory = override.get(
+        "inventory", npc.inventory or (npc.metadata_json or {}).get("inventory") or []
+    )
+    entities = list(
+        await db.scalars(select(WorldEntity).where(WorldEntity.session_id == state.session_id))
+    )
+    resolved = resolved_inventory(inventory, entities, states)
+    items = owned_items(resolved)
+    if request.item_id not in items:
+        raise ValueError("The selected item is not owned by this NPC.")
+    profile.worn = [row for row in profile.worn if row.item_id != request.item_id]
+    profile = validate_profile(profile, resolved)
+    states[npc.id] = {
+        **override,
+        "inventory": deepcopy(inventory),
+        "visual_profile": profile.model_dump(),
+    }
+    state.entity_states = states
+    return f"DEBUG: Removed {items[request.item_id].get('name', request.item_id)} from {npc.name}; the item remains in their inventory."
 
 
 async def _edit_clothing(db: AsyncSession, state: SessionState, edit: WardrobeEdit) -> str:

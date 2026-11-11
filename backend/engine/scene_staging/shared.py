@@ -171,7 +171,7 @@ def apply_extraction(
                 manager.state,
                 narration,
                 extraction.props,
-                [item for item in valid if item["owner_id"] in present],
+                [item for item in valid if item["owner_id"] in present or item.get("scene_bound")],
                 valid_items=valid,
             )
             if "props" not in unconfirmed_sections

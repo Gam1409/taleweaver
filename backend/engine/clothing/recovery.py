@@ -165,4 +165,4 @@ async def debug_wardrobe_apply(
     _store_actor(SimpleNamespace(state=state, avatar=avatar), states, actors[preview["npc_id"]])
     states.pop(KEY, None)
     state.entity_states = states
-    return f"DEBUG: Recovered {len(accepted)} clothing records for {actors[preview['npc_id']]['name']}."
+    return f"DEBUG: Recovered {len(accepted)} clothing or placed-item records for {actors[preview['npc_id']]['name']}."

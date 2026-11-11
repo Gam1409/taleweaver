@@ -9,6 +9,10 @@ def selected_entries(preview: dict, selection: str | None) -> set[int]:
     if len(allowed) != len(accepted):
         raise ValueError("This preview predates item selection. Generate a new preview.")
     if selection is None:
+        if any(row.get("source_role") == "user" for row in accepted):
+            raise ValueError(
+                "Player-sourced corrections require explicit selection before applying."
+            )
         if preview.get("errors"):
             raise ValueError(
                 "Preview has rejected changes. Select the validated garments to apply; nothing was applied."

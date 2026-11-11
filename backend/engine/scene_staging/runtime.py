@@ -56,7 +56,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         manager.avatar, rows, state, {row.id for row in rows if row.entity_type == "NPC"}
     )
     present = {person["id"] for person in cast}
-    items = [item for item in valid_items if item["owner_id"] in present]
+    items = [item for item in valid_items if item["owner_id"] in present or item.get("scene_bound")]
     catalog = evidence.Catalog(
         narration,
         scope=f"{state.session_id}:{getattr(manager, '_vn_player_message_id', '')}:{state.current_scene_id}",

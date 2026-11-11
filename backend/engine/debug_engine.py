@@ -9,6 +9,7 @@ from backend.engine import (
     debug_npc_tools,
     debug_progression,
 )
+from backend.engine.clothing.debug_wardrobe import command as debug_npc_wardrobe
 from backend.engine.clothing.recovery import debug_wardrobe_apply, debug_wardrobe_preview
 from backend.engine.clothing.recovery_correction import debug_wardrobe_correct
 from backend.engine.clothing.wardrobe_preferences import debug_wardrobe_settings
@@ -46,6 +47,8 @@ _HANDLERS = {
     "move_player": debug_move_player,
     "condition": debug_condition,
     "npc_clothing": debug_npc_tools.debug_npc_clothing,
+    "npc_unwear": debug_npc_tools.debug_npc_unwear,
+    "npc_wardrobe": debug_npc_wardrobe,
     "wardrobe_preview": debug_wardrobe_preview,
     "wardrobe_apply": debug_wardrobe_apply,
     "wardrobe_correct": debug_wardrobe_correct,

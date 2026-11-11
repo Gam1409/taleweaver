@@ -2,10 +2,11 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
+from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.schema import Garment, Region
-from backend.engine.narrated_items.schema import ItemAction, NewItem
+from backend.engine.narrated_items.schema import ItemAction, NewItem, NewOrdinaryItem
 from backend.schemas.authoring_completion import EquipmentSlot
 
 
@@ -35,10 +36,31 @@ class NewRecoveryAction(ItemAction):
     )
 
 
+class RecoveryBodyAction(ItemAction):
+    disposition: Literal["worn"] = "worn"
+    attachment_slot: BodySlot
+    uncovered_regions: None = None
+
+
+class ExistingRecoveryBodyAction(RecoveryBodyAction):
+    item_id: str = Field(min_length=1, max_length=100)
+    new_item: None = None
+
+
+class NewRecoveryBodyAction(RecoveryBodyAction):
+    item_id: None = None
+    new_item: NewOrdinaryItem
+
+
 class RecoveryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_message_id: str
-    action: ExistingRecoveryAction | NewRecoveryAction
+    action: (
+        ExistingRecoveryAction
+        | NewRecoveryAction
+        | ExistingRecoveryBodyAction
+        | NewRecoveryBodyAction
+    )
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
     restore_coverage: StrictBool = Field(
@@ -51,6 +73,16 @@ class RecoveryEntry(BaseModel):
     def action_data(cls, value: object) -> object:
         # Internal callers can still supply a validated live action; revalidate its wire shape.
         return value.model_dump() if isinstance(value, ItemAction) else value
+
+    @model_validator(mode="after")
+    def placement_kind(self) -> "RecoveryEntry":
+        if self.action.attachment_slot and (
+            self.uncovered_regions or self.placement_evidence or self.restore_coverage
+        ):
+            raise ValueError(
+                "Body placement uses the item's exact evidence, without clothing coverage fields."
+            )
+        return self
 
 
 class OmittedMention(BaseModel):

@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from backend.engine.clothing.profiles import garment_for_item
-from backend.engine.clothing.recovery_contract import existing_garments
+from backend.engine.clothing.recovery_contract import existing_body_items, existing_garments
 from backend.engine.clothing.recovery_mentions import explicit_mentions
 
 MAX_PAYLOAD = 64000
@@ -35,11 +35,19 @@ def _facts(context: dict, detailed: bool) -> dict:
                 for row in worn
                 if isinstance(row, dict) and "item_id" in row
             },
+            "body_placements": {
+                row["item_id"]: row["attachment_slot"]
+                for row in worn
+                if isinstance(row, dict) and row.get("attachment_slot") and row.get("item_id")
+            },
+            "body": profile.get("body") if isinstance(profile, dict) else None,
         },
         "canonical_items": canonical,
         "owners": snapshot.owners,
         "existing_garments": list(eligible),
+        "existing_body_items": list(existing_body_items(context)),
         "detailed_clothing": detailed,
+        "player_sources_require_confirmation": context.get("allow_player_sources", False),
     }
 
 

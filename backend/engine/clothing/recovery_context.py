@@ -59,7 +59,7 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
             default=str,
         ).encode()
     ).hexdigest()
-    # Explicit debug recovery can inspect an absent NPC, but may only change that NPC's own garments.
+    # Explicit debug recovery can inspect an absent NPC, but may only change that NPC's own items.
     override = states.get(npc.id, {})
     states[npc.id] = {**override, "is_hidden": False, "is_defeated": False, "presence": "present"}
     proxy = SimpleNamespace(
@@ -79,4 +79,5 @@ async def recovery_context(db: Any, state: Any, avatar: Any, npc_id: str) -> dic
         "messages": messages,
         "fingerprint": fingerprint,
         "limited": history.limited,
+        "allow_player_sources": True,
     }

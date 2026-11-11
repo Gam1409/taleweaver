@@ -6,7 +6,7 @@ from backend.engine.narrated_items.schema import ItemAction
 
 
 def evidence_issues(
-    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment
+    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment | None
 ) -> list[str]:
     issues = []
     if action.basis not in {"completed", "observed_wear"}:
@@ -21,11 +21,17 @@ def evidence_issues(
         issues.append(
             "observed_wear requires disposition=worn; completed removal uses completed/carried."
         )
+    if action.attachment_slot:
+        if source["content"].count(action.evidence) != 1:
+            issues.append(
+                "Body placement needs one unambiguous exact source quote; select a longer passage."
+            )
+        return issues
     return issues + _placement_issues(entry, action, source, garment)
 
 
 def _placement_issues(
-    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment
+    entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment | None
 ) -> list[str]:
     issues: list[str] = []
     if not entry.uncovered_regions and not entry.placement_evidence and not entry.restore_coverage:
@@ -36,10 +42,11 @@ def _placement_issues(
         issues.append("Restored coverage cannot also expose regions.")
     if entry.placement_evidence and not entry.uncovered_regions and not entry.restore_coverage:
         issues.append("Confirm restore_coverage before resetting an existing placement.")
-    invalid = sorted(set(entry.uncovered_regions) - set(garment.coverage))
+    coverage = garment.coverage if garment else []
+    invalid = sorted(set(entry.uncovered_regions) - set(coverage))
     if invalid:
         issues.append(
-            f"Exposed regions {', '.join(invalid)} are outside garment coverage {', '.join(garment.coverage)}."
+            f"Exposed regions {', '.join(invalid)} are outside garment coverage {', '.join(coverage)}."
         )
     if (entry.uncovered_regions or entry.restore_coverage) and not entry.placement_evidence:
         issues.append("Partial placement has no evidence quote.")
@@ -64,5 +71,10 @@ def rejected_entry(
         "coverage": garment.coverage if garment else [],
         "uncovered_regions": entry.uncovered_regions,
         "reasons": reasons,
+        **(
+            {"attachment_slot": entry.action.attachment_slot}
+            if entry.action.attachment_slot
+            else {}
+        ),
         **({"restore_coverage": True} if entry.restore_coverage else {}),
     }

@@ -4,6 +4,9 @@ VN characters can retain a neutral appearance profile and clothing linked to can
 inventory items. Hair, eyes, build and distinguishing features are separate from worn
 clothes. Existing RPG equipment slots and stat bonuses remain unchanged.
 
+See [debug corrections and history recovery](wardrobe-debug-recovery.md) for
+restoring missing items and separating worn, carried and room clothing.
+
 ## Creating a world
 
 The VN creation form has a separate **Adult content: detailed clothing** preference:

@@ -5,10 +5,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, create_model
 
-from backend.engine.clothing.profiles import garment_for_item
+from backend.engine.clothing.profiles import attachment_item_allowed, garment_for_item
 from backend.engine.clothing.recovery_schema import (
     ExistingRecoveryAction,
+    ExistingRecoveryBodyAction,
     NewRecoveryAction,
+    NewRecoveryBodyAction,
     RecoveryEntry,
     RecoveryProposal,
 )
@@ -27,24 +29,58 @@ def existing_garments(context: dict) -> dict:
 
 
 def response_schema(context: dict) -> type[BaseModel]:
-    identifiers = tuple(existing_garments(context))
-    action_type: Any = NewRecoveryAction
-    if identifiers:
+    action_type: Any = NewRecoveryAction | NewRecoveryBodyAction
+    for name, base, identifiers in (
+        ("OwnedRecoveryAction", ExistingRecoveryAction, tuple(existing_garments(context))),
+        (
+            "OwnedRecoveryBodyAction",
+            ExistingRecoveryBodyAction,
+            tuple(existing_body_items(context)),
+        ),
+    ):
+        if not identifiers:
+            continue
         existing = create_model(
-            "OwnedRecoveryAction",
-            __base__=ExistingRecoveryAction,
+            name,
+            __base__=base,
             item_id=(
                 Literal[identifiers],
-                Field(description="Exact owned garment ID; choose from enum."),
+                Field(description="Exact owned item ID; choose from enum."),
             ),
         )
-        action_type = NewRecoveryAction | existing
+        action_type = action_type | existing
     entry = create_model("BoundRecoveryEntry", __base__=RecoveryEntry, action=(action_type, ...))
     return create_model(
         "RecoveryProposal",
         __base__=RecoveryProposal,
         entries=(GenericAlias(list, entry), Field(default_factory=list, max_length=16)),
     )
+
+
+def existing_body_items(context: dict) -> dict:
+    snapshot = context["snapshot"]
+    return {
+        key: item
+        for key, item in snapshot.items.items()
+        if snapshot.owners.get(key) == context["actor"]["id"] and attachment_item_allowed(item)
+    }
+
+
+def resolve_recovery_item(
+    action: ItemAction, snapshot: Possessions, actor_id: str
+) -> Garment | None:
+    if not action.attachment_slot:
+        return resolve_garment(action, snapshot, actor_id)
+    if action.new_item is not None:
+        if action.new_item.kind != "ordinary":
+            raise ValueError("New body-placement recovery requires an ordinary item.")
+        return None
+    item = snapshot.items.get(action.item_id or "")
+    if item is None or snapshot.owners.get(action.item_id or "") != actor_id:
+        raise ValueError("Body placement requires an existing item owned by the target NPC.")
+    if not attachment_item_allowed(item):
+        raise ValueError("This item cannot be recovered as a body attachment.")
+    return garment_for_item(item)
 
 
 def resolve_garment(action: ItemAction, snapshot: Possessions, actor_id: str) -> Garment:

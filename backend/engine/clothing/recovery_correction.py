@@ -7,11 +7,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
+from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.recovery_context import KEY, recovery_context
 from backend.engine.clothing.recovery_evaluation import evaluated_preview
 from backend.engine.clothing.recovery_payload import build_payload
-from backend.engine.clothing.recovery_schema import RecoveryProposal
+from backend.engine.clothing.recovery_schema import RecoveryEntry, RecoveryProposal
 from backend.engine.clothing.schema import Region
 
 
@@ -22,9 +23,21 @@ class RecoveryCorrection(BaseModel):
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
     restore_coverage: StrictBool = False
+    attachment_slot: BodySlot | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> "RecoveryCorrection":
+        if self.attachment_slot:
+            if (
+                self.status != "worn"
+                or self.uncovered_regions
+                or self.placement_evidence
+                or self.restore_coverage
+            ):
+                raise ValueError(
+                    "Body placement requires placed state without clothing coverage fields."
+                )
+            return self
         if self.status == "carried" and (
             self.uncovered_regions or self.placement_evidence or self.restore_coverage
         ):
@@ -49,12 +62,20 @@ def _corrected_proposal(
     if not 0 <= index < len(proposal.entries):
         raise ValueError("Unknown entry; generate a new preview.")
     entry = proposal.entries[index]
-    entry.action.basis = "observed_wear" if correction.status == "worn" else "completed"
-    entry.action.disposition = correction.status
-    entry.action.evidence = correction.evidence
-    entry.uncovered_regions = correction.uncovered_regions
-    entry.placement_evidence = correction.placement_evidence
-    entry.restore_coverage = correction.restore_coverage
+    changed = {
+        **entry.model_dump(),
+        "action": {
+            **entry.action.model_dump(),
+            "basis": "observed_wear" if correction.status == "worn" else "completed",
+            "disposition": correction.status,
+            "evidence": correction.evidence,
+            "attachment_slot": correction.attachment_slot or entry.action.attachment_slot,
+        },
+        "uncovered_regions": correction.uncovered_regions,
+        "placement_evidence": correction.placement_evidence,
+        "restore_coverage": correction.restore_coverage,
+    }
+    proposal.entries[index] = RecoveryEntry.model_validate(changed)
     return proposal
 
 
