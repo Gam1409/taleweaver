@@ -1,5 +1,6 @@
 """Autonomous initiative never supplies the player's action or bypasses continuity."""
 
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -64,19 +65,25 @@ def test_departure_adds_only_npc_movement_and_leaves_player_inventory_and_clock_
 
 
 @pytest.mark.parametrize("phase", ["engaged", "settling", "open"])
-@pytest.mark.parametrize("kind", ["departure", "dialogue"])
+@pytest.mark.parametrize("kind", ["departure", "dialogue", "activity"])
 def test_scene_rhythm_does_not_veto_npc_initiative(phase, kind):
     manager, npc, exits, proposal, event = setup_direction(phase=phase, kind=kind)
+    if kind != "departure":
+        assert proposal.story_beat is None
+        stage_direction(manager, proposal, event, [npc], exits)
+        assert not event.moved_entities and direction_reminder(manager, event) == ""
+        return
     proposal.story_beat.relation = "transition"
     stage_direction(manager, proposal, event, [npc], exits)
     assert "APPROVED NPC INITIATIVE" in direction_reminder(manager, event)
     assert bool(event.moved_entities) == (kind == "departure")
 
 
-def test_engaged_scene_allows_a_new_response_within_same_interaction():
+def test_engaged_scene_leaves_the_response_choice_to_the_active_narrative_owner():
     manager, npc, exits, proposal, event = setup_direction(phase="engaged", kind="dialogue")
     stage_direction(manager, proposal, event, [npc], exits)
-    assert "Explain why the letter matters" in direction_reminder(manager, event)
+    assert proposal.story_beat is None
+    assert direction_reminder(manager, event) == ""
     assert not event.moved_entities
 
 
@@ -132,25 +139,50 @@ def test_guardrail_rejection_cannot_leave_a_phantom_departure_in_narration_or_me
 
 
 def test_attempted_directions_are_bounded_guidance_not_an_action_blacklist():
-    manager, npc, exits, proposal, event = setup_direction(kind="dialogue")
+    manager, npc, exits, proposal, event = setup_direction()
     for number in range(6):
         proposal.story_beat.action = f"Explain reason {number}"
+        event.moved_entities = []
         stage_direction(manager, proposal, event, [npc], exits)
         record_direction(manager, str(number), completed=True)
     assert len(recent_directions(manager.state)) == 4
     assert manager.state.entity_states["kept"] == {"value": 1}
     assert direction_context(manager, [npc], exits)["premise"] == "Find the missing letter."
     assert "recent_attempted_beats_not_facts" in direction_context(manager, [npc], exits)
+    assert all(
+        "Explain reason" not in entry["beat"]["action"]
+        for entry in recent_directions(manager.state)
+    )
     proposal.story_beat.action = "  EXPLAIN reason 5!"
+    event.moved_entities = []
     stage_direction(manager, proposal, event, [npc], exits)
-    assert "EXPLAIN reason 5!" in direction_reminder(manager, event)
+    assert "EXPLAIN reason 5!" not in direction_reminder(manager, event)
+    assert "APPROVED NPC INITIATIVE" in direction_reminder(manager, event)
 
 
 def test_incomplete_narration_does_not_record_a_direction():
-    manager, npc, exits, proposal, event = setup_direction(kind="dialogue")
+    manager, npc, exits, proposal, event = setup_direction()
     stage_direction(manager, proposal, event, [npc], exits)
     record_direction(manager, "reply", completed=False)
     assert STATE_KEY not in manager.state.entity_states
+
+
+def test_legacy_attempted_dialogue_remains_historical_data_without_reapplication():
+    manager, npc, exits, proposal, event = setup_direction()
+    legacy = {
+        "npc_id": "NPC",
+        "kind": "dialogue",
+        "purpose": "Ask about a letter",
+        "action": "Explain why the letter matters",
+    }
+    manager.state.entity_states[STATE_KEY] = {
+        "version": 1,
+        "recent": [{"message_id": "old", "beat": legacy}],
+    }
+    before = deepcopy(manager.state.entity_states[STATE_KEY])
+    assert recent_directions(manager.state)[0]["beat"]["action"] == legacy["action"]
+    assert manager.state.entity_states[STATE_KEY] == before
+    assert getattr(manager, "_vn_story_beat", None) is None
 
 
 def test_malformed_optional_planning_does_not_abort_valid_continuity():

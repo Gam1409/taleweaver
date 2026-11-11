@@ -18,6 +18,7 @@ from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
     StoryBeat,
+    WorldDeparture,
     direction_context,
     optional_beat,
 )
@@ -91,7 +92,10 @@ VNProgressionIntent = create_model(
         ),
     ),
     story_beat=(
-        Annotated[StoryBeat | None, BeforeValidator(optional_beat)],
+        Annotated[
+            StoryBeat | None,
+            BeforeValidator(optional_beat, json_schema_input_type=WorldDeparture | None),
+        ],
         Field(
             default=None,
             description="Principal autonomous NPC initiative for continuity validation, not a limit on narrative development; separate from completed events.",
@@ -119,7 +123,6 @@ VNProgressionIntent = create_model(
             description="An explicit player-declared completed duration with exact current-message evidence; never a future appointment or recalled episode.",
         ),
     ),
-    narrative_description=(str, Field(default="", max_length=800)),
 )
 
 VN_PROGRESSION_PROMPT = (

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 
 from backend.engine.chpm.appraisal_contracts import (
     Assessment,
@@ -26,7 +26,11 @@ from backend.engine.chpm.schema import (
 
 
 class Intent(Contract):
-    intention: str = Field(min_length=1, max_length=400)
+    intention: str = Field(
+        min_length=1,
+        max_length=400,
+        validation_alias=AliasChoices("message_plan", "intention"),
+    )
     preconditions: list[IntentionCondition] = Field(max_length=2)
     reconsider_if: str = Field(min_length=1, max_length=200)
     agenda_change: AgendaIntent | None = None

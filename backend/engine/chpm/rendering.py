@@ -204,6 +204,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
 def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> dict:
     return {
         "contract": contract_data(turn),
+        "player_request": turn.player_request,
         "host_resolution": resolution,
         "present_speakers": turn.present_names,
         "controlled_actor_ids": sorted(turn.decisions),
@@ -270,7 +271,13 @@ async def _repair(
         + output_reminder(manager)
     )
     payload = json.dumps(
-        {"host_resolution": resolution, "narration": text, "issues": issues}, ensure_ascii=False
+        {
+            "player_request": turn.player_request,
+            "host_resolution": resolution,
+            "narration": text,
+            "issues": issues,
+        },
+        ensure_ascii=False,
     )
     inference.reserve(turn.initial.settings, turn.usage, len(system) + len(payload))
     turn.usage.repairs += 1

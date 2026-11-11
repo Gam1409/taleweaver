@@ -3,7 +3,7 @@
 The VN narrator can develop the story and direct NPCs without waiting for a player
 command. It can connect actions and consequences, resolve interactions and introduce
 compatible developments. There is no one-beat ceiling. The existing Utility request
-may propose a principal NPC initiative alongside continuity updates; a missing plan
+may propose a physical NPC departure alongside continuity updates; a missing plan
 does not suspend the narrator's initiative. There is no additional LLM call, background
 director loop, new model dependency or database migration. Existing VN sessions use
 this path. RPG and ordinary Chat retain their own progression contracts.
@@ -15,12 +15,20 @@ meaningful changes, interactions and newly relevant details. Emotional nuance an
 consequences still belong in narration; neither scenic paragraphs nor narration
 between every line of dialogue are mandatory.
 
-The director receives a bounded premise and guidance, characterization and goals
+The world pass receives a bounded premise and guidance, characterization and goals
 for the available present NPCs, and two recent attempted initiatives. The full story
 frame remains available to the narrator. VN planning receives up to 8,000 characters
 of the previous narrator reply, instead of the generic 400-character reference tail.
 Longer replies retain the beginning and ending with an explicit omission marker.
 This increases tokens in the existing request; production latency has not been measured.
+
+The world request no longer accepts `narrative_description` as a draft dialogue
+answer. Its `story_beat` wire shape contains only `npc_id`, `kind=departure` and
+`destination_id`. Legacy dialogue/activity proposals are ignored; extra departure
+purpose/action text is discarded and replaced with a host movement description.
+Historical attempted beats retain their existing saved shape. New dialogue meaning
+belongs to the selected CHPM message plan, or to the ordinary narrator when no
+active dialogue controller applies. See [stage boundaries](engineering/narrative-stage-boundaries.md).
 
 ## Player agency and scene rhythm
 

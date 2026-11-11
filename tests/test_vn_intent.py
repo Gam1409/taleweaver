@@ -40,8 +40,9 @@ def test_hostile_rpg_fields_are_absent_from_schema_and_ignored_on_conversion():
     intent = to_chat_progression_intent(payload)
     event = TurnProgressionBuilder.build_progression_event(intent)
 
-    forbidden = set(payload) - {"narrative_description", "updated_entities"}
+    forbidden = set(payload) - {"updated_entities"}
     assert forbidden.isdisjoint(VNProgressionIntent.model_json_schema()["properties"])
+    assert event.narrative_description == ""
     assert event.hp_change == event.stamina_change == event.mana_change == 0
     assert not event.game_over and not event.game_completed and not event.sequence_completed
     assert not event.completed_quest_ids and not event.earned_award_keys

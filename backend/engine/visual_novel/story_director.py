@@ -36,14 +36,32 @@ class StoryBeat(BaseModel):
     destination_id: str | None = Field(default=None, max_length=64)
 
 
+class WorldDeparture(BaseModel):
+    """The world pass selects a physical move, without choosing dialogue content."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+    npc_id: str = Field(min_length=1, max_length=64)
+    kind: Literal["departure"] = "departure"
+    destination_id: str = Field(min_length=1, max_length=64)
+
+
 def optional_beat(value: Any) -> StoryBeat | None:
     if value is None:
         return None
     try:
-        return StoryBeat.model_validate(value)
+        departure = WorldDeparture.model_validate(
+            value.model_dump() if isinstance(value, BaseModel) else value
+        )
     except ValidationError:
-        logger.warning("Discarding malformed optional VN story initiative")
+        logger.warning("Discarding unowned or malformed optional VN world initiative")
         return None
+    return StoryBeat(
+        npc_id=departure.npc_id,
+        kind="departure",
+        destination_id=departure.destination_id,
+        purpose="Move to the selected accessible location.",
+        action="Depart for the supplied destination.",
+    )
 
 
 def _states(state: Any) -> dict:
@@ -152,21 +170,18 @@ def stage_direction(
     """Validate initiative independently; existing turn guardrails still run afterwards."""
     manager._vn_story_beat = None
     stage_focus(manager, proposal, history or [])
-    beat = getattr(proposal, "story_beat", None)
+    beat = optional_beat(getattr(proposal, "story_beat", None))
     if beat is None:
         return
     npc = _eligible_actor(manager.state, beat, event, entities)
     if npc is None:
         return
-    if beat.kind == "departure":
-        if not _valid_departure(manager.state, npc, beat.destination_id, exits):
-            return
-        event.moved_entities = [
-            *(event.moved_entities or []),
-            EntityMovement(entity_id=npc.id, to_scene_id=beat.destination_id),
-        ]
-    elif beat.destination_id:
+    if not _valid_departure(manager.state, npc, beat.destination_id, exits):
         return
+    event.moved_entities = [
+        *(event.moved_entities or []),
+        EntityMovement(entity_id=npc.id, to_scene_id=beat.destination_id),
+    ]
     manager._vn_story_beat = beat
 
 

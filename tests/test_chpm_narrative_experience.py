@@ -99,3 +99,27 @@ def test_projection_does_not_resolve_another_observers_record():
     unrelated = mind(actor="other")
     result = narrative_context.experience_reasons(unrelated, experience.view(owner))
     assert "last_assessed_reason" not in result["states"][0]
+
+
+@pytest.mark.parametrize("gap", [False, True])
+def test_desire_keeps_its_level_reason_and_freshness_in_message_plan_narration_and_review(gap):
+    from backend.engine.chpm import rendering, runtime
+    from tests.test_chpm_compact_contract import contract_fixture
+    from tests.test_chpm_sexual_desire import TRIGGER, desire
+
+    value, _ = accept(heard(text=TRIGGER), [desire()])
+    turn, _ = contract_fixture()
+    turn.minds["npc"] = value
+    if gap:
+        turn.gap_cursors = {"npc": value.snapshot.cursor}
+    before = value.model_dump_json()
+    narrated = runtime.contract_data(turn)["npc"]["subjective_experience_not_traits"]
+    reviewed = rendering._review_payload(turn, {}, "")["contract"]["npc"][
+        "subjective_experience_not_traits"
+    ]
+    assert reviewed == narrated
+    row = next(item for item in narrated["states"] if item["dimension"] == "sexual_desire")
+    assert row["last_assessed_level"] == "moderate"
+    assert row["last_assessed_reason"] == desire().explanation
+    assert row["status"] == ("historical_current_unknown" if gap else "recent_appraisal")
+    assert value.model_dump_json() == before
