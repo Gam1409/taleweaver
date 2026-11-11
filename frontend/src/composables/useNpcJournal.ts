@@ -1,6 +1,7 @@
 import { apiFetch } from '@/services/http'
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
+import type { NpcCurrentState } from '@/types/npcCurrentState'
 
 export type NpcAttitude = 'unknown' | 'love' | 'trust' | 'friendly' | 'neutral' | 'suspicion' | 'hostility' | 'fear' | 'mixed'
 
@@ -21,6 +22,7 @@ export interface NpcJournalEntry {
   source: 'observed' | 'claimed'
   scene_id?: string
   recorded_at?: string
+  game_minute?: number | null
   player_attitude?: NpcAttitude | null
 }
 
@@ -58,6 +60,7 @@ export interface NpcCard {
   history_kind?: NpcHistoryKind
   state_visible?: boolean
   insights?: NpcInsights | null
+  current_state?: NpcCurrentState
 }
 
 export interface LearningProgress {

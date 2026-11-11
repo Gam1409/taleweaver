@@ -8,14 +8,14 @@ from .ledger import read
 from .schema import KEY
 
 
-def project(state: Any, actors: dict, *, detailed: bool) -> list[dict]:
+def project(state: Any, actors: dict, *, detailed: bool, limit: int | None = 12) -> list[dict]:
     try:
         ledger = read(getattr(state, "entity_states", None))
     except ValueError:
         return []
     regions = _regions(actors, detailed)
     subjects = _subjects(actors, detailed)
-    return [
+    rows = [
         {
             "id": row.id,
             "target_id": row.target_id,
@@ -29,7 +29,8 @@ def project(state: Any, actors: dict, *, detailed: bool) -> list[dict]:
         and row.visual_detail
         and row.latest.kind != "unavailable"
         and row.visual_region in regions.get(row.target_id, set())
-    ][:12]
+    ]
+    return rows if limit is None else rows[:limit]
 
 
 def _subjects(actors: dict, detailed: bool) -> dict[str, dict]:

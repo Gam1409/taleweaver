@@ -140,6 +140,16 @@ test('enabling indicators refetches and still respects server visibility', async
   assert.equal(f.details.value.insights, null)
 })
 
+test('physical observations stay available when psychological indicators are disabled', async t => {
+  const state = { availability: 'present', clothing: { items: [{ item_id: 'coat' }] }, conditions: { items: [{ id: 'bandage' }] } }
+  const shown = ref(false)
+  t.mock.method(globalThis, 'fetch', async () => reply({ id: 'mira', current_state: state, state_visible: true, insights: { emotion: 'calm' }, entries: [] }))
+  const f = fixture(t, 'mira', shown)
+  await tick()
+  assert.equal(f.details.value.insights, null)
+  assert.deepEqual(f.details.value.current_state, state)
+})
+
 
 test('history tabs paginate independently, preserve profile while loading and ignore late old-tab data', async t => {
   const history = ref('general'), requests = []

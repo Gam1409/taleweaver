@@ -114,7 +114,7 @@ test('history tabs support keyboard activation and reset for a different charact
 const useNpcJournal = () => ({ details: ref(null), loading: ref(false), error: ref(''), load: () => {} });
 const useNpcCardSettings = () => ({ showState: ref(false) });
 const setInterval = () => 0;
-export function setup() { ${source}; return { history, navigateTabs, tabId }; }`
+export function setup() { ${source}; return { history, navigateTabs, tabId, activeTab, navigateSections }; }`
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   const { setup } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
   const scope = effectScope(), state = scope.run(setup)
@@ -134,12 +134,49 @@ export function setup() { ${source}; return { history, navigateTabs, tabId }; }`
   assert.equal(state.history.value, 'shared')
   press('Escape')
   assert.equal(prevented, 5)
+  assert.equal(state.activeTab.value, 'state')
+  state.navigateSections({ key: 'End', preventDefault: () => {}, currentTarget: { closest: () => ({ querySelector: () => ({ focus: () => {} }) }) } })
+  assert.equal(state.activeTab.value, 'history')
+  assert.equal(state.history.value, 'shared')
   globalThis[key].npcId = 'new-character'
   assert.equal(state.history.value, 'general')
+  assert.equal(state.activeTab.value, 'state')
   state.history.value = 'shared'
   globalThis[key].sessionId = 's2'
   assert.equal(state.history.value, 'general')
   assert.match(state.tabId.value, /s2-new-character/)
+})
+
+test('current state distinguishes unobserved, unavailable and empty observations', async () => {
+  const ui = await component('NpcCurrentState')
+  const state = {
+    availability: 'present', game_minute: 480,
+    clothing: { status: 'available', items: [], detail_limited: false },
+    conditions: { status: 'available', items: [{ id: 'wound', kind: 'injury', part: 'arm', status: 'treated', detail: '<script>Bandage</script>', last_changed_minute: 470 }] },
+  }
+  const observed = await render(ui, { state })
+  assert.match(observed, /Treated|game minute 480/)
+  assert.match(observed, /&lt;script&gt;Bandage&lt;\/script&gt;/)
+  assert.doesNotMatch(observed, /<script\b/)
+  const absent = await render(ui, { state: { ...state, availability: 'not_present' } })
+  assert.match(absent, /not currently visible/)
+  assert.doesNotMatch(absent, /Bandage|Treated/)
+  const unknown = await render(ui, { state: { ...state, clothing: { status: 'unavailable', items: [] }, conditions: { status: 'unavailable', items: [] } } })
+  assert.match(unknown, /Clothing details are not confirmed/)
+  assert.match(unknown, /Current physical conditions are not confirmed/)
+  assert.doesNotMatch(unknown, /No known physical conditions recorded/)
+})
+
+test('clothing tiles use item images and mark partial displacement without HTML injection', async () => {
+  const ui = await component('NpcClothingTile', 'const getImageUrl = path => path;')
+  const item = { item_id: 'coat', name: '<b>Coat</b>', image_url: '/coat.png', layer: 2, description: '<script>detail</script>', visible_regions: ['arms'], uncovered_regions: ['torso'] }
+  const html = await render(ui, { item })
+  assert.match(html, /src="\/coat.png"/)
+  assert.match(html, /Partially displaced/)
+  assert.match(html, /&lt;b&gt;Coat&lt;\/b&gt;/)
+  assert.doesNotMatch(html, /<script\b|<b>/)
+  const missing = await render(ui, { item: { ...item, image_url: null, uncovered_regions: [] } })
+  assert.doesNotMatch(missing, /<img\b|Partially displaced/)
 })
 
 test('missing portrait offers generation next to the avatar before advanced options', async () => {

@@ -19,12 +19,28 @@ consecutive name parts, not arbitrary letter prefixes; ambiguous forms are not a
 to a guessed character. Scene and metadata copies with the same ID count as one person.
 This is display resolution only: it creates no NPC, merges no records and needs no LLM call.
 
-The card shows the portrait, current description and a short **General overview**
-from learned background facts. Two history tabs separate **General history**
-(background, appearance and other known facts) from **History with your character**
+The card keeps the portrait, general description and a short **General overview**
+in a separate profile column while the right side scrolls. On narrow screens the
+profile becomes a compact block above the tabs. **State & clothing** shows a grid
+of currently visible worn garments, their saved images and partial-displacement
+markers, alongside physical conditions. It uses the existing coverage and condition
+projections, not a new state store or model call. Covered clothing layers and private
+conditions are omitted; absent, audible-only and hidden NPCs have no live observation.
+Missing coverage or an invalid condition ledger is marked unconfirmed, not healthy
+or undressed. Resolved conditions are absent from the current-state list.
+
+Visible physical traces are labeled **Visible now**. Other public conditions, such
+as a reported pain, can appear as previously confirmed only when their exact latest
+source passage still matches a saved assistant message in this session, including its
+content hash and occurrence span when present. Private ledger descriptions are not
+shown. **Refresh observations** reloads the saved facts without requesting generation.
+
+**History** contains the existing two history tabs: **General history**
+(background, appearance and other known facts) and **History with your character**
 (shared events and reactions toward the player). The latter starts with up to four
 recent observations; expand **All shared events** for its full history. Each tab
-has independent pagination and supports arrow-key navigation. Repeated summary
+has independent pagination and supports arrow-key navigation. Entries show game
+minutes when recorded; missing historical timestamps are not guessed. Repeated summary
 topics use the latest entry, and claims remain labeled as claims. Summaries need
 no additional LLM request. A missing portrait has a visible **Generate portrait**
 button; **Portrait options** contains reference and regeneration controls.
@@ -35,7 +51,10 @@ to off. Change it later in **Characters → Character card display**, or in an o
 card; the choice applies to that session. When enabled, cards may show last evaluated
 emotion, trust, affinity, respect and tension. These are narrative estimates from
 completed interactions, not guaranteed current feelings. Missing evidence shows an
-unavailable state, never invented neutral values. NPC inventories, goals and plans
+unavailable state, never invented neutral values. These estimates are under
+**Relationships and emotional estimates** in the state tab. The display preference
+does not disable clothing or physical conditions, and neither requires NPC Personality.
+NPC inventories, goals and plans
 remain private in both display modes.
 
 The display choice is stored independently of generated content. Models cannot

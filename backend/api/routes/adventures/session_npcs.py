@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.character_identity import identity_facts
+from backend.engine.npc_cards.current_state import character_current_state
 from backend.engine.npc_cards.presentation import (
     HistoryKind,
     character_insights,
@@ -147,6 +148,7 @@ async def character_details(
         "overview": character_overview(entries),
         "summary": recent_summary(entries),
         "insights": await character_insights(db, state, npc.id),
+        "current_state": await character_current_state(db, state, npc),
         **history_page(entries, history, offset),
     }
 
