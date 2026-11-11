@@ -58,7 +58,7 @@ class SceneExtraction(BaseModel):
     explicit: list[ExplicitDelta] = Field(default_factory=list, max_length=8)
 
 
-INSTRUCTIONS = """Extract only final, explicitly completed visual changes from current_narration.
+INSTRUCTIONS = """Extract supported final visual changes and explicit states from current_narration.
 current_narration is an ordered map of source passages. Every evidence field selects
 an exact current narration reference ID; the host resolves its original text and offsets.
 Never return offsets, invent references or borrow room-description evidence for people.
@@ -103,16 +103,19 @@ act only when the quote itself describes the act being performed. participants
 are supplied present character IDs only. Every entry requires an exact
 current narration reference identifying the act and its
 participants. Requests, negotiations, negations, hypotheticals, memories and
-dreams are never reported. Omission reports nothing.
-Return empty changes and props lists when no supported visual change occurred.
+dreams are never reported. Leave unsupported candidates out of their lists.
+Always return changes, props and explicit lists explicitly; an absent list is unconfirmed.
+Empty changes/props mean no supported visual change; explicit follows the final-state
+rules above even when no pose or prop changed.
 """
 
 SHARED_INSTRUCTIONS = (
     """
 SHARED SCENE STAGING: return the existing SceneExtraction shape under staging.
 scene_staging is the staging context; completed_narration is current_narration below.
-When scene_staging is null, leave staging null. When enabled, return staging even
-when nothing changed: {"changes":[],"props":[],"explicit":[]}. Null means not confirmed.
+When scene_staging is null, leave staging null. When enabled, always return staging
+with changes, props and explicit lists. Null means not confirmed. Empty changes/props
+do not establish an empty explicit list: follow the final-state rules below.
 All following changes/props/explicit fields belong inside staging, never at the root.
 Use __player__ consistently for the player; the host binds it to the saved actor ID.
 scene_staging.owned_items lists ownership before the item actions; read names from items.
