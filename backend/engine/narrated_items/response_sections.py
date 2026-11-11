@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-ROOT_FIELDS = ("actions", "condition_updates", "scene_updates", "final_frame_actions")
+ROOT_FIELDS = ("actions", "condition_updates", "scene_updates", "final_frame_actions", "movements")
 STAGING_FIELDS = ("changes", "props", "explicit")
 
 

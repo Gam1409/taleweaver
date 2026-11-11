@@ -3,6 +3,8 @@
 import json
 from typing import Any
 
+from backend.engine.npc_movement import is_moveable
+
 PRESENCE_INSTRUCTION = """NPC PRESENCE: Use updated_entities.presence only for an actual,
 completed departure or return: present (physically here), audible (outside the
 immediate scene but explicitly still within hearing), absent (cannot participate).
@@ -43,7 +45,14 @@ def presence_context(entities: list[Any], state: Any) -> str:
         scene = override.get("current_scene_id", entity.current_scene_id)
         if scene != state.current_scene_id or override.get("is_hidden", entity.is_hidden):
             continue
-        cast.append({"id": entity.id, "name": entity.name, "presence": presence(entity, state)})
+        cast.append(
+            {
+                "id": entity.id,
+                "name": entity.name,
+                "presence": presence(entity, state),
+                "moveable": is_moveable(entity, override),
+            }
+        )
     return (
         "\nCURRENT NPC PRESENCE (authoritative, not historical memory):\n"
         + json.dumps(cast, ensure_ascii=False)

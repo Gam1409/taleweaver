@@ -190,6 +190,10 @@ async def test_runtime_persists_change_and_deduplicates_retries(timeout):
             "backend.engine.narrated_items.runtime.scene_continuity.prepare",
             AsyncMock(return_value={}),
         ),
+        patch(
+            "backend.engine.narrated_items.runtime.narrated_movement.prepare",
+            AsyncMock(return_value={}),
+        ),
         patch("backend.engine.narrated_items.runtime.role_timeout", return_value=timeout),
         patch(
             "backend.engine.narrated_items.runtime.asyncio.wait_for", wraps=asyncio.wait_for

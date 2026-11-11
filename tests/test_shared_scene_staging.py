@@ -81,6 +81,7 @@ class SharedRoles(TurnRoles):
                                     "condition_updates": [],
                                     "scene_updates": [],
                                     "final_frame_actions": [],
+                                    "movements": [],
                                     **(
                                         {"staging": self.staging}
                                         if schema is SharedItemExtraction

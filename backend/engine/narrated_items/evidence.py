@@ -23,7 +23,13 @@ def bind(result: Any, narration: str, *, catalog: Catalog | None = None) -> Any:
         return result
     if catalog is None:
         return _legacy(result, body, narration)
-    for field in ("actions", "condition_updates", "scene_updates", "final_frame_actions"):
+    for field in (
+        "actions",
+        "condition_updates",
+        "scene_updates",
+        "final_frame_actions",
+        "movements",
+    ):
         _section(body.get(field), catalog, allow_room=field == "scene_updates")
     staging = body.get("staging")
     if isinstance(staging, dict):
@@ -108,6 +114,10 @@ def remap(states: dict, message_ids: dict[str, str]) -> dict:
         source["message_id"] = message_ids.get(old_id) if isinstance(old_id, str) else None
         if source["message_id"] is None:
             source["available"] = False
+    movement = ledger.get("movement_check")
+    if isinstance(movement, dict):
+        old_id = movement.get("message_id")
+        movement["message_id"] = message_ids.get(old_id) if isinstance(old_id, str) else None
     return result
 
 

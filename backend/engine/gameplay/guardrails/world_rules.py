@@ -11,7 +11,7 @@ from backend.engine.gameplay.guardrails.base import inventory_ids_upper
 from backend.engine.gameplay.guardrails.items import ItemIntegrityMixin
 from backend.engine.gameplay.guardrails.movement_messages import movement_message
 from backend.engine.mutation_targets import TargetIndex
-from backend.engine.npc_movement import allowed_scenes
+from backend.engine.npc_movement import allowed_scenes, is_moveable
 from backend.engine.rule_engine import GameEvent
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -147,12 +147,7 @@ class WorldRulesMixin(ItemIntegrityMixin):
 
     @staticmethod
     def _npc_is_moveable(ent: WorldEntity, override: dict[str, Any]) -> bool:
-        moveable = override.get("moveable")
-        if moveable is not None:
-            return bool(moveable)
-        return bool(getattr(ent, "moveable", False)) or (
-            str(getattr(ent, "movement_type", "") or "").upper() == "MOVABLE"
-        )
+        return is_moveable(ent, override)
 
     def _npc_move_violation(self, ent: WorldEntity, move: Any) -> str | None:
         override = (self.state.entity_states or {}).get(ent.id, {})

@@ -45,7 +45,13 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
         "type": "string",
         "enum": catalog.references(allow_room=True),
     }
-    for name in ("ExistingItemAction", "NewItemAction", "ConditionProposal", "Action"):
+    for name in (
+        "ExistingItemAction",
+        "NewItemAction",
+        "ConditionProposal",
+        "Action",
+        "MovementProposal",
+    ):
         _citations(definitions.get(name), "NarrationEvidenceReference")
     for name in ("SceneDelta", "ExplicitDelta", "PropDelta"):
         _citations(definitions.get(name), "VisualEvidenceReference")

@@ -16,6 +16,7 @@ FIELDS = {
     "condition_updates": "conditions",
     "scene_updates": "scene",
     "final_frame_actions": "scene",
+    "movements": "scene",
 }
 MAX_GROUPS = 24
 

@@ -78,6 +78,25 @@ def complete(
         pending.unconfirmed_sections = unconfirmed_sections
 
 
+async def follow_transition(manager: Any) -> None:
+    """Final narration facts belong to the confirmed arrival scene, never the departed room."""
+    pending = getattr(manager, "_pending_scene_continuity", None)
+    if not isinstance(pending, Pending) or pending.scene_id == manager.state.current_scene_id:
+        return
+    if (manager.state.entity_states or {}).get(KEY) != pending.before:
+        return  # Leave the stale-write guard in finish responsible for the conflict.
+    await prepare(manager)
+    updates = [
+        {**row, "evidence": None}
+        if isinstance(row, dict) and row.get("source") == "scene_description"
+        else row
+        for row in (pending.updates or [])
+    ]
+    complete(
+        manager, updates, pending.actions or [], unconfirmed_sections=pending.unconfirmed_sections
+    )
+
+
 @sync_step("scene.commit")
 def finish(manager: Any, message: Any) -> list[str]:
     pending = getattr(manager, "_pending_scene_continuity", None)

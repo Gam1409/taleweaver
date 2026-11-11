@@ -19,6 +19,7 @@ from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.schema import Garment, Region
 from backend.engine.narrated_items.coverage import Tag
 from backend.engine.narrated_items.wire_contract import placement_rules
+from backend.engine.narrated_movement.schema import MovementProposal
 from backend.engine.physical_conditions.schema import (
     MAX_PROPOSALS,
     ConditionProposal,
@@ -121,6 +122,9 @@ class NewItemAction(ItemAction):
 class ItemExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     coverage: dict[str, list[Tag]] | None = None
+    movements: Annotated[
+        list[Any], BeforeValidator(scene_candidates, json_schema_input_type=list[MovementProposal])
+    ] = Field(default_factory=list, json_schema_extra={"maxItems": 8})
     actions: list[ExistingItemAction | NewItemAction] = Field(default_factory=list, max_length=6)
     scene_updates: Annotated[
         list[Any], BeforeValidator(scene_candidates, json_schema_input_type=list[SceneUpdate])

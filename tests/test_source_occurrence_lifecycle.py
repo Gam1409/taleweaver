@@ -18,6 +18,7 @@ def test_item_source_points_to_saved_assistant_and_cannot_be_rebound_to_later_qu
                 "message_id": "input",
                 "source_hash": digest(text),
                 "processed_message_ids": ["input"],
+                "movement_check": {"message_id": "original", "accepted": []},
             }
         }
     )
@@ -31,9 +32,11 @@ def test_item_source_points_to_saved_assistant_and_cannot_be_rebound_to_later_qu
     assert copied[KEY]["narration_source"]["message_id"] == "copy"
     assert copied[KEY]["message_id"] == "copy-input"
     assert copied[KEY]["processed_message_ids"] == ["copy-input"]
+    assert copied[KEY]["movement_check"]["message_id"] == "copy"
     missing = remap_social_state(state.entity_states, {"input": "copy-input"})
     assert missing[KEY]["narration_source"]["message_id"] is None
     assert missing[KEY]["narration_source"]["available"] is False
+    assert missing[KEY]["movement_check"]["message_id"] is None
     assert missing[KEY]["narration_source"]["content_hash"] == digest(text)
 
 

@@ -20,7 +20,7 @@ from tests.test_shared_scene_staging import SharedRoles, seed
 from tests.test_vn_turn_integration import final_payload
 
 TEXT = "Lina has ink on her hand. A lamp stays lit beside the door."
-FIELDS = ("actions", "condition_updates", "scene_updates", "final_frame_actions")
+FIELDS = ("actions", "condition_updates", "scene_updates", "final_frame_actions", "movements")
 WIRE_FIELDS = {*FIELDS, "coverage"}
 
 

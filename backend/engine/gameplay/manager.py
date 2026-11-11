@@ -54,6 +54,7 @@ from backend.engine.gameplay.turn_helpers import (
 )
 from backend.engine.gameplay.turn_llm_pipeline import TurnLlmContextBuilder
 from backend.engine.gameplay.turn_pass_flow import (
+    advance_completed_boundary,
     advance_in_game_turn,
     crossed_turn_boundary,
     extract_usage_tokens,
@@ -82,6 +83,7 @@ from backend.engine.command_parser import CommandParser
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
+from backend.engine.narrated_movement.runtime import finish as finish_narrated_movement
 from backend.engine.visual_novel.item_rejections import rejected_targets, rejection_reason
 from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
 from backend.engine.scene_continuity.runtime import finish as finish_scene_continuity
@@ -2183,11 +2185,20 @@ class GameTurnManager:
         self.db.add(assistant_chat)
         if policy.vn:
             await self.db.flush()
+            movement_messages = await finish_narrated_movement(self, assistant_chat)
+            async for boundary_event in advance_completed_boundary(self, script_runner, game_event):
+                yield boundary_event
+            assistant_chat.npc_journal = {
+                **(assistant_chat.npc_journal or {}),
+                "game_minute": int(self.state.in_game_time or 0),
+            }
             for condition_message in finish_physical_conditions(
                 self, assistant_chat
             ) + finish_scene_continuity(self, assistant_chat):
                 await self._save_chat_message("system", condition_message)
                 yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': condition_message})}\n\n"
+            for movement_message in movement_messages:
+                yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': movement_message})}\n\n"
 
         # Post-narration scripts (on_narration_done)
         if script_runner.scripts:

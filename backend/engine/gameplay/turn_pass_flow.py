@@ -146,3 +146,14 @@ async def advance_in_game_turn(
         if isinstance(game_event, GameEvent):
             game_event.game_over = True
             game_event.status_note = str(goe)
+
+
+async def advance_completed_boundary(
+    manager: Any, script_runner: Any, game_event: Any = None
+) -> AsyncGenerator[str, None]:
+    """Use the same boundary owner when completed narration confirms late travel."""
+    if not crossed_turn_boundary(manager.state, manager._turn_anchor):
+        return
+    async for event in advance_in_game_turn(manager, script_runner, game_event):
+        yield event
+    manager._turn_anchor = turn_anchor(manager.state)

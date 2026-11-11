@@ -5,6 +5,16 @@ from typing import Any
 from backend.engine.dynamic_locations.schema import KEY
 
 
+def is_moveable(entity: Any, override: dict[str, Any]) -> bool:
+    value = override.get("moveable")
+    if value is not None:
+        return bool(value)
+    return (
+        bool(getattr(entity, "moveable", False))
+        or str(getattr(entity, "movement_type", "")).upper() == "MOVABLE"
+    )
+
+
 def allowed_scenes(entity: Any, overrides: dict[str, Any]) -> list[str]:
     override = overrides.get(entity.id, {})
     allowed = override.get("allowed_scenes")

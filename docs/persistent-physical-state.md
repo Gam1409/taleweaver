@@ -6,7 +6,7 @@ This is a state ledger, not a medical simulator or a complete causal world model
 
 ## How a completed turn changes state
 
-1. The existing post-narration item reconciliation request also receives relevant active physical facts and an optional `condition_updates` field. There is no additional model request.
+1. The existing post-narration item reconciliation request also receives relevant active physical facts and a `condition_updates` field. There is no additional model request.
 2. The model proposes a new fact or an operation on a known condition ID. The host checks the schema, available canonical subject, operation/kind compatibility and an exact contiguous quote from the completed assistant narration. Player requests and earlier history are not evidence for this pass.
 3. After the assistant reply has a saved ID, accepted changes are stored with its ID, content hash and quote in the same final turn transaction. The host assigns condition IDs. One rejected condition candidate does not cancel other valid candidates or a valid item action.
 4. The next continuity request receives current facts for available actors, their known items and accessible loose items. The narrator receives public facts for actors, visible garments and visible scene items, plus the player's own conditions, constrained by clothing and perspective. Explicit recent resolutions remain as compact negative facts, so old prose cannot silently restore a healed wound or cleaned item.
@@ -14,6 +14,8 @@ This is a state ledger, not a medical simulator or a complete causal world model
 In live CHPM, bodily conditions and conditions of the NPC's current possessions enter its existing typed host snapshot. They are available through `inspect_self` and citable evidence for cognition. Treatment and explicit resolution produce host differences; a missing/corrupt record or a lost possession never establishes healing. The legacy standalone bodily context is removed when the current host snapshot supplies it, avoiding a duplicate input block. Shadow mode retains its existing input path.
 
 A valid quote proves that the words occur in the reply. It does **not** prove that the model correctly understood the actor, body region, extent, actuality or completeness of the action. This implementation reduces forgotten recorded facts; it does not guarantee extraction completeness or semantic correctness. Live evaluation with the user's model remains necessary.
+
+Automatic extraction may mistakenly repeat `record` for an existing condition. Before applying that response, the host binds it to the existing ID only when canonical subject, condition kind and case-insensitive body part identify exactly one non-resolved record. The resulting `change` still passes the normal source, scope and transition checks. It preserves origin, first-recorded time and treatment status; `last_check.reference_bindings` records the local correction. Ambiguous matches stay rejected, resolved facts are not reopened, and manual Debug `record` operations remain strict. Reconfirming an unchanged fact refreshes its source without restarting its last-change clock.
 
 | Operation | Result |
 | --- | --- |

@@ -61,6 +61,7 @@ def crowd(monkeypatch):
         monkeypatch.setattr(module, "release_for_model", AsyncMock())
         monkeypatch.setattr(module, "role_timeout", lambda *_: 10)
     monkeypatch.setattr(items_runtime.scene_continuity, "prepare", AsyncMock(return_value={}))
+    monkeypatch.setattr(items_runtime.narrated_movement, "prepare", AsyncMock(return_value={}))
     monkeypatch.setattr(
         AdventureLogic,
         "build_session_entities",
@@ -82,6 +83,7 @@ async def test_one_transfer_in_a_twenty_npc_scene_keeps_every_other_inventory(mo
                 "condition_updates": [],
                 "scene_updates": [],
                 "final_frame_actions": [],
+                "movements": [],
                 "staging": {"changes": [], "props": [], "explicit": []},
                 "actions": [
                     {

@@ -49,6 +49,19 @@ class TurnStateApplier(
 ):
     """Applies game event outcomes to the database, session state, entities, inventory, and awards."""
 
+    async def apply_narrated_movement(self, event: GameEvent) -> list[str]:
+        """Apply already-validated travel without advancing another turn or its clock."""
+        await validate_mutation_targets(self.manager, event)
+        messages: list[str] = []
+        states = dict(self.state.entity_states or {})
+        await self._apply_entity_movements(event, states, messages)
+        await self._apply_entity_updates(event, states, messages, is_vn(self.adventure))
+        self.state.entity_states = states
+        flag_modified(self.state, "entity_states")
+        await self._apply_scene_transition(event, states, messages)
+        await self.db.flush()
+        return messages
+
     def __init__(self, manager: GameTurnManager) -> None:
         self.manager = manager
 

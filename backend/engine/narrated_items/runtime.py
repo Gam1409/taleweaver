@@ -26,6 +26,8 @@ from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction, SharedItemExtraction
+from backend.engine.narrated_movement import runtime as narrated_movement
+from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INSTRUCTIONS
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
 from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
@@ -68,6 +70,17 @@ def _status(
     }
 
 
+def _identified_actors(manager: Any, rows: list[Any]) -> dict:
+    actors = actor_records(manager, rows)
+    identities = {
+        PLAYER: manager.avatar,
+        **{row.id: row for row in rows if row.entity_type == "NPC"},
+    }
+    for identifier, actor in actors.items():
+        actor.update(identity_facts(identities[identifier]))
+    return actors
+
+
 @step("items.scene.conditions.reconcile")
 async def reconcile_items(
     manager: Any,
@@ -81,6 +94,7 @@ async def reconcile_items(
 ) -> list[str]:
     physical_conditions.discard(manager)
     manager._pending_scene_continuity = None
+    manager._pending_narrated_movement = None
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
     staging_enabled = shared_staging.begin(
@@ -116,15 +130,8 @@ async def reconcile_items(
         _status(manager, message_id, narration, "needs_review", **skipped.details())
         return [skipped.message()]
     rows = await session_objects(manager.db, manager.state.session_id)
-    actors = actor_records(manager, rows)
-    identities = {
-        PLAYER: manager.avatar,
-        **{row.id: row for row in rows if row.entity_type == "NPC"},
-    }
-    for identifier, actor in actors.items():
-        actor.update(identity_facts(identities[identifier]))
+    actors = _identified_actors(manager, rows)
     snapshot = possession_snapshot(manager, rows)
-    detailed = detail_settings(manager)["detailed"]
     scene_context = await scene_continuity.prepare(manager)
     catalog = evidence.Catalog(
         narration,
@@ -142,7 +149,8 @@ async def reconcile_items(
             "actors": actor_context(actors),
             "items": item_context(snapshot.items),
             "owners": snapshot.owners,
-            "detailed_clothing": detailed,
+            "movement_context": await narrated_movement.prepare(manager, rows, narration),
+            "detailed_clothing": detail_settings(manager)["detailed"],
             "physical_conditions": condition_context(
                 manager.state, set(actors) | set(snapshot.items)
             ),
@@ -177,6 +185,7 @@ async def reconcile_items(
                 INSTRUCTIONS
                 + CONDITION_INSTRUCTIONS
                 + SCENE_INSTRUCTIONS
+                + MOVEMENT_INSTRUCTIONS
                 + independent_state.INSTRUCTIONS
                 + (STAGING_INSTRUCTIONS if staging_enabled else ""),
                 payload,
@@ -210,7 +219,7 @@ async def reconcile_items(
                 actors,
                 snapshot,
                 narration,
-                detailed=detailed,
+                detailed=detail_settings(manager)["detailed"],
                 session_id=manager.state.session_id,
                 message_id=message_id,
                 failures=failures,
@@ -224,6 +233,12 @@ async def reconcile_items(
             extraction, state_rejected = independent_state.select(
                 manager, extraction, denied, set(actors) | set(snapshot.items)
             )
+        narrated_movement.complete(
+            manager,
+            extraction.movements,
+            denied=denied,
+            confirmed=skipped is None and "movements" in sections.provided,
+        )
     except asyncio.CancelledError:
         raise
     except Exception as exc:

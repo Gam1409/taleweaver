@@ -14,6 +14,7 @@ def extraction(model: type[T], **changes: Any) -> T:
             "condition_updates": [],
             "scene_updates": [],
             "final_frame_actions": [],
+            "movements": [],
             **changes,
         }
     )

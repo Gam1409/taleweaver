@@ -38,6 +38,7 @@ def reconciliation_fixture(monkeypatch):
     monkeypatch.setattr(prefix + "detail_settings", lambda *_: {"detailed": True})
     monkeypatch.setattr(prefix + "release_for_model", AsyncMock())
     monkeypatch.setattr(prefix + "scene_continuity.prepare", AsyncMock(return_value={}))
+    monkeypatch.setattr(prefix + "narrated_movement.prepare", AsyncMock(return_value={}))
     monkeypatch.setattr(prefix + "role_timeout", lambda *_: 10)
     monkeypatch.setattr(
         prefix + "GameMasterLLM.for_role",
