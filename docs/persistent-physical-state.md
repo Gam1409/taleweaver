@@ -53,11 +53,20 @@ Existing sessions start with an empty ledger. Old narration is **not** automatic
 
 For a manual record, choose the NPC as subject, the condition kind, its specific body
 part and current detail. Fluid traces use `fluid`; another explicit physiological sign
-can use `other`. Select Public only for facts established as known to the player.
+can use `other`. Select Public only for established openly observable/shared information;
+knowledge limited to the player and particular participants remains private.
 Public manual corrections appear under **Characters > NPC > State > Physical condition**
 while that NPC is present. Private or resolved records stay out of that public card.
 This works with NPC Personality enabled or disabled. A public correction alone does
 not establish exposed skin or a visible surface for image generation.
+
+The physical ledger currently has no per-observer knowledge list. A private condition
+known to the player therefore remains available in Debug, but this card projection
+cannot distinguish it from a condition unknown to the player. Promoting it to Public
+solely to show it on the card loses that distinction. Scene continuity already has
+an `observers` mechanism for private facts; extending that existing audience model
+to physical conditions is the appropriate integration point. This limitation is not
+resolved by a prompt or by treating everyone in the room as a witness.
 
 An internal condition and a visible external trace have separate records when both
 are established. Partial cleaning uses `reduce` with the remaining detail; complete

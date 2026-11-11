@@ -22,12 +22,11 @@ Fluid, wetness, dirt and bodily traces are neutral physical facts, not feelings 
 An emotional label alone does not prove a bodily sign; a bodily sign alone does not prove a desire.
 Do not infer pregnancy, diagnoses, quantities, undress or any new consequence not explicitly established.
 For the same subject/kind/part reuse the active condition ID. Never restate all unchanged records.
-Private is the default visibility. Public means established public information, not permission to reveal
-private details to another character. Do not infer current visual exposure from this flag.
-Use visibility=public for a condition explicitly observed by the player in this narration;
-an unobserved internal condition stays private. Known facts and visible surfaces remain separate.
-An internal location alone does not make a fact private when the narration explicitly establishes
-the player's knowledge of it. Public knowledge still does not establish visible skin.
+Private is the default visibility. Public means established openly observable/shared scene information.
+A condition known only to the player and particular participants remains private. The player's
+knowledge alone does not make it public; mere co-presence does not prove another NPC noticed it.
+Internal anatomy alone does not decide visibility either. When access is uncertain, keep private.
+This flag does not establish current visual exposure or any particular NPC's knowledge.
 Each operation needs an evidence reference to THIS completed narration, not the player's
 request, old history, dialogue claims, imagined outcomes or a recalled earlier event.
 A full cleaning affects only that identified garment/part; a partial cleaning uses reduce.
