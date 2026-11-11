@@ -13,6 +13,15 @@ STAGING_FIELDS = ("changes", "props", "explicit")
 class Sections:
     provided: frozenset[str]
     unconfirmed: tuple[str, ...]
+    coverage: dict | None = None
+
+    @property
+    def needs_review(self) -> bool:
+        return bool(
+            self.unconfirmed
+            or self.coverage
+            and self.coverage.get("status") in {"incomplete", "needs_review"}
+        )
 
     @property
     def scene_missing(self) -> tuple[str, ...]:
@@ -30,6 +39,7 @@ class Sections:
         return {
             "response_sections": sorted(self.provided),
             "unconfirmed_sections": list(self.unconfirmed),
+            **({"extraction_coverage": self.coverage} if self.coverage is not None else {}),
         }
 
     def messages(self) -> list[str]:

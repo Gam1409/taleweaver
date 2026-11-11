@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from backend.engine.narrated_items.coverage import groups
 from backend.engine.narrated_items.source_catalog import Catalog
 
 
@@ -13,6 +14,25 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
     if complete:
         schema["required"] = list(schema["properties"])
     definitions = schema.setdefault("$defs", {})
+    keys = groups(catalog)
+    tags = ["items", "conditions", "scene", "unchanged", "historical", "uncertain"]
+    if "staging" in schema["properties"]:
+        tags.append("staging")
+    schema["properties"]["coverage"] = {
+        "type": "object",
+        "properties": {
+            key: {
+                "type": "array",
+                "items": {"enum": tags},
+                "minItems": 1,
+                "maxItems": 4,
+                "uniqueItems": True,
+            }
+            for key in keys
+        },
+        "required": list(keys),
+        "additionalProperties": False,
+    }
     staging = definitions.get("SceneExtraction")
     if complete and isinstance(staging, dict):
         staging["required"] = ["changes", "props", "explicit"]

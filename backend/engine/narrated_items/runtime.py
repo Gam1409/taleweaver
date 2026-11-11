@@ -14,6 +14,7 @@ from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import (
+    coverage,
     evidence,
     independent_state,
     reference_schema,
@@ -134,6 +135,7 @@ async def reconcile_items(
     payload = json.dumps(
         {
             "completed_narration": catalog.narration_passages,
+            "extraction_coverage_groups": coverage.groups(catalog),
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
@@ -193,6 +195,7 @@ async def reconcile_items(
         )
         sections = response_sections.read(result, staging=staging_enabled)
         original_actions = result.actions if isinstance(result, ItemExtraction) else None
+        result, sections = coverage.annotate(result, catalog, sections, staging=staging_enabled)
         result = evidence.bind(result, narration, catalog=catalog)
         shared_staging.propose(manager, result, unconfirmed_sections=sections.staging_missing)
         extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
@@ -311,7 +314,7 @@ def _finish_extraction(
         manager,
         message_id,
         narration,
-        "needs_review" if sections.unconfirmed else "complete",
+        "needs_review" if sections.needs_review else "complete",
         handled=True,
         accepted=accepted,
         rejected=errors,

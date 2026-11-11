@@ -17,6 +17,7 @@ from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.core.text_evidence import WithEvidenceSpan
 from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.schema import Garment, Region
+from backend.engine.narrated_items.coverage import Tag
 from backend.engine.narrated_items.wire_contract import placement_rules
 from backend.engine.physical_conditions.schema import (
     MAX_PROPOSALS,
@@ -119,6 +120,7 @@ class NewItemAction(ItemAction):
 
 class ItemExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    coverage: dict[str, list[Tag]] | None = None
     actions: list[ExistingItemAction | NewItemAction] = Field(default_factory=list, max_length=6)
     scene_updates: Annotated[
         list[Any], BeforeValidator(scene_candidates, json_schema_input_type=list[SceneUpdate])

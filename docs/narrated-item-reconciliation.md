@@ -28,6 +28,20 @@ missing body checks preserve conditions, missing final actions have no confirmed
 frame, and incomplete staging retains valid independent sections. A missing pose
 section leaves poses unconfirmed; missing prop checks make old placements
 provisional; missing explicit-act checks do not certify absence of an act.
+
+The same extraction request also classifies every source group in `coverage`:
+items, conditions, scene and enabled staging can overlap; unchanged, historical
+and uncertain are exclusive. Up to 24 groups retain references to all original
+fragments. A group marked with a changed domain needs a matching source-bound
+proposal in that domain. Historical and uncertain groups cannot authorize new
+state changes. Diagnostics distinguish missing annotations from explicit empty
+results; independently valid sections survive malformed annotations.
+
+These checks expose inconsistent or incomplete extraction, not every semantic
+omission. A model can still misclassify a changed fragment as unchanged or miss
+one of several events in a group. Exact occurrence references keep a current
+event separate from later recollections using identical words. No additional
+model call or story-text editing is introduced.
 The standalone staging fallback uses the same required lists and completeness
 checks before defaults are applied.
 
