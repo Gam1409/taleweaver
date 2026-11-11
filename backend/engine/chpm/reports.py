@@ -12,6 +12,7 @@ from backend.engine.chpm.core.history import events
 from backend.engine.chpm.host_state import Mind, Source, fingerprint, payload
 from backend.engine.chpm.kernel import digest
 from backend.engine.chpm.report_contracts import MAX_HOPS, ReportHop, ReportLineage
+from backend.engine.debug_transcript import is_debug_message
 from backend.models.chat import ChatMessage
 
 MAX_ORIGINS = 4
@@ -153,6 +154,7 @@ def matches(
 def _matches(hop: ReportHop, row: Any, session_id: str, hashes: dict | None = None) -> bool:
     return bool(
         row is not None
+        and not is_debug_message(row)
         and row.session_id == session_id
         and row.role == hop.role
         and row.revision_id == hop.revision_id

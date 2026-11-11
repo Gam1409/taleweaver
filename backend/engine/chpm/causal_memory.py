@@ -17,6 +17,7 @@ from backend.engine.chpm.causal_contracts import (
 )
 from backend.engine.chpm.host_state import Mind, Source, identifier
 from backend.engine.chpm.kernel import ChpmError, digest, fingerprint
+from backend.engine.debug_transcript import is_debug_message
 from backend.models.chat import ChatMessage
 
 
@@ -73,6 +74,7 @@ async def recall(manager: Any, memory: Memory, actors: set[str]) -> dict[str, li
 def _valid(ref: Anchor, message: Any, session_id: str) -> bool:
     return bool(
         message is not None
+        and not is_debug_message(message)
         and ref.session_id == session_id == message.session_id
         and message.role == "assistant"
         and ref.revision_id == message.revision_id

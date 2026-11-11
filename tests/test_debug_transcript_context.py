@@ -157,3 +157,80 @@ def test_legacy_debug_association_ends_after_its_reply_and_preserves_following_g
         {"role": "assistant", "content": "Lina watches the bridge."},
     ]
     assert without_debug(rows) == rows[2:]
+
+
+@pytest.mark.asyncio
+async def test_journal_context_does_not_use_a_debug_command_as_the_previous_player_action():
+    import json
+    from types import SimpleNamespace
+
+    from backend.engine.npc_journal.extract import extraction_context
+
+    async with TestSessionLocal() as db:
+        _, _, avatar, state, _ = await seed(db)
+        db.add(
+            ChatMessage(
+                session_id=state.session_id,
+                role="user",
+                content="/debug correction",
+                is_debug=True,
+                created_at=datetime(2026, 1, 2),
+            )
+        )
+        narration = ChatMessage(
+            session_id=state.session_id,
+            role="assistant",
+            content="Lina replies.",
+            created_at=datetime(2026, 1, 3),
+        )
+        db.add(narration)
+        await db.commit()
+        payload, _ = await extraction_context(
+            db, narration, SimpleNamespace(id=state.session_id, avatar_id=avatar.id)
+        )
+        assert json.loads(payload)["player_message_for_context_only"] == "story user 7"
+
+
+def test_persisted_debug_sources_cannot_be_recalled_as_valid_character_memory():
+    from types import SimpleNamespace
+
+    from backend.engine.chpm import causal_memory, memory, recent_scene, reports, semantic_sources
+    from backend.engine.chpm.kernel import digest
+
+    source = ChatMessage(
+        id="technical",
+        session_id="session",
+        role="assistant",
+        content="Generated technical output.",
+        revision_id="revision",
+        scene_id="room",
+        is_debug=True,
+    )
+    entry = memory.from_source(source, "NPC", "NPC", source.content, "own_speech")
+    anchor = SimpleNamespace(
+        session_id="session",
+        revision_id="revision",
+        content_hash=digest(source.content),
+        quote=source.content,
+        role="assistant",
+        reported=False,
+        history=None,
+    )
+    moment = SimpleNamespace(
+        scene_id="room",
+        source_revision_id="revision",
+        source_hash=digest(source.content),
+        actions=[],
+    )
+    checks = [
+        lambda: memory.valid_source(entry, source, "NPC", "session"),
+        lambda: causal_memory._valid(anchor, source, "session"),
+        lambda: reports._matches(anchor, source, "session"),
+        lambda: semantic_sources._valid(
+            anchor, source, {source.id: digest(source.content)}, "session"
+        ),
+        lambda: recent_scene.matches(moment, source, "session"),
+    ]
+    assert not any(check() for check in checks)
+    source.is_debug = False
+    assert all(check() for check in checks)

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from backend.engine.chpm import recent_scene, reports
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import digest, fingerprint
+from backend.engine.debug_transcript import is_debug_message
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.models.chat import ChatMessage
 
@@ -102,6 +103,7 @@ def episodes(
 def _valid(source: Any, row: Any, hashes: dict[str, str], session_id: str) -> bool:
     return bool(
         row
+        and not is_debug_message(row)
         and (getattr(row, "npc_journal", None) or {}).get("status") != "incomplete"
         and row.session_id == session_id
         and row.role == source.role

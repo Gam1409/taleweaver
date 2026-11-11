@@ -7,6 +7,7 @@ from sqlalchemy import select
 from backend.engine.chpm import recent_scene
 from backend.engine.chpm.host_state import Mind, before_messages
 from backend.engine.chpm.kernel import digest
+from backend.engine.debug_transcript import is_debug_message
 from backend.models.chat import ChatMessage
 
 
@@ -27,6 +28,7 @@ def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
     """Reuse a canonical post-await read without replaying invalid dependent suffixes."""
     from backend.engine.chpm import reports
 
+    messages = {key: row for key, row in messages.items() if not is_debug_message(row)}
     hashes = {key: digest(row.content) for key, row in messages.items()}
     invalid = set()
     for source in mind.sources.values():

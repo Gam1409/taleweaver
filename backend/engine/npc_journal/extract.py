@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.content_language import prose_language_instruction
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.debug_transcript import not_debug_sql
 from backend.engine.npc_journal.records import is_significant, journal_of
 from backend.engine.npc_journal.schema import SYSTEM_PROMPT, JournalExtraction
 from backend.models.avatar import Avatar
@@ -89,6 +90,7 @@ async def extraction_context(
         .where(
             ChatMessage.session_id == session.id,
             ChatMessage.role == "user",
+            not_debug_sql(),
             ChatMessage.created_at <= message.created_at,
         )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())

@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from backend.engine.chpm.kernel import digest
 from backend.engine.chpm.schema import KernelState, MemoryEntry
+from backend.engine.debug_transcript import is_debug_message
 from backend.models.chat import ChatMessage
 
 
@@ -32,6 +33,7 @@ async def recall(
 def valid_source(entry: MemoryEntry, source: Any, actor_id: str, session_id: str) -> bool:
     return bool(
         source is not None
+        and not is_debug_message(source)
         and source.session_id == session_id
         and source.role == entry.source_role
         and entry.observer_id == actor_id

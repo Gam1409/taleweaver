@@ -13,6 +13,7 @@ from backend.engine.chpm.host_observation_contracts import (
     ObservedSceneAction,
     scene_view_size,
 )
+from backend.engine.debug_transcript import is_debug_message
 from backend.engine.scene_continuity.ledger import digest, read
 from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY, content_hash
 from backend.models.chat import ChatMessage
@@ -180,6 +181,7 @@ def dependencies(source: Any) -> set[str]:
 def matches(moment: ObservedScene, message: Any, session_id: str) -> bool:
     return bool(
         message
+        and not is_debug_message(message)
         and message.session_id == session_id
         and message.role == "assistant"
         and message.scene_id == moment.scene_id
