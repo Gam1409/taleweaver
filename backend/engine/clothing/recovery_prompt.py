@@ -5,6 +5,10 @@ from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 PROMPT = (
     """Task: prepare reviewable Debug corrections for target_actor's missing garments,
 missing wear records and explicitly body-placed ordinary objects.
+This is a general story-state repair task for any setting or scene, not a medical
+or intimate-scene task. Review evidenced everyday, work, travel, ceremonial and
+fantasy garments alike; neither the item's purpose nor the scene's genre makes
+it more or less recoverable. An ordinary outfit needs no intimate context.
 Input: target_actor (including age, body and recorded placements), chronological
 history, canonical_items, owners, existing_garments, existing_body_items,
 detailed_clothing, player_sources_require_confirmation and explicit_garment_mentions.
@@ -60,21 +64,24 @@ uncovered_regions=[] and its exact restoring placement quote. Omitted placement
 means unchanged placement, never restored coverage. Reuse the existing garment ID.
 
 Body-placement branches:
+Apply these only when the history establishes a supported body placement;
+do not invent one to make an unrelated inventory object fit this recovery schema.
 - Existing ordinary object/accessory: exact item_id from existing_body_items;
   new_item=null, disposition=worn and attachment_slot=vaginal or anal as stated.
 - Missing ordinary object: item_id=null; new_item.kind=ordinary with its established
   name and intrinsic description, no clothing metadata and no wearable_slots;
   disposition=worn and the explicitly stated attachment_slot are required.
 An ordinary physical object need not already be in canonical_items: recovering that
-missing record is the purpose of the new_item branch. A test tube, for example, is an
-object even when used or placed against/inside the body; an attached finger is part of a character,
-not a separate inventory object. Do not discard an explicitly placed ordinary object
-merely because its canonical record is absent. Do not split attached body parts into inventory items.
+missing record is the purpose of the new_item branch. A physical object's identity
+does not change with its use or position. Do not discard an explicitly placed
+ordinary object merely because its canonical record is absent. Attached body parts
+belong to a character; do not split them into separate inventory items.
 For a missing ordinary object, possession means current physical custody or body placement,
-not proof of purchase or permanent personal property. Medical supplies, disposable and
-consumable objects still qualify while they remain distinct physical objects, including
-instruments temporarily placed during a procedure. Planned removal under a protocol is
-not completed removal. Their use does not establish consumption or disappearance.
+not proof of purchase or permanent personal property. Tools, supplies, accessories,
+props and other ordinary objects qualify for this branch when explicitly placed
+in a supported slot, while they remain distinct physical objects. Disposable or
+consumable classification alone does not establish consumption or disappearance.
+Temporary use and planned removal are not completed removal.
 Here worn is the schema's placed-item state; the object does not become clothing.
 Leave action.uncovered_regions=null and the entry's coverage/placement fields empty.
 The action's evidence must identify the object, character and current body placement
@@ -82,6 +89,13 @@ in one unambiguous passage. Body parts, characters, fluids and residue are not
 inventory objects. Do not infer anatomy or age. Respect explicit body.attachment_slots:
 [] excludes these regions; null is unassessed, not an invitation to invent anatomy.
 An item already removed from the body is not a current body placement.
+
+Respect this recovery schema's scope: garments and supported ordinary body placements.
+Loose objects, carried tools, weapons, bags and other equipment are still inventory
+objects, but this schema cannot restore arbitrary ordinary inventory or equipment
+mounts. Do not relabel them as garments or invent a body placement. If a requested
+item is outside these branches, explain that scope limit in notes; do not claim the
+item is not physical, never existed or lacks evidence merely because of that limit.
 
 Use exactly one identity: item_id OR new_item. Never invent IDs, slugs or names in
 item_id, and never use the string "null". Legacy garments with missing/invalid

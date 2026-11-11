@@ -27,6 +27,12 @@ ordinary object explicitly placed in a body slot. It cannot silently reconstruct
 an arbitrary older history outside that window or treat a fluid/body part as an
 inventory object.
 
+Recovery applies to ordinary and mature scenes in any setting; it is not tied to
+medical items or a particular genre. The current schema covers garments and
+explicitly supported body placements, not arbitrary carried inventory or equipment
+mounts. An object outside that scope remains an inventory object; it must not be
+reclassified as clothing or given an invented placement to fit the preview.
+
 **What to look for (optional)** supplies a short search hint, such as an item name.
 It prioritizes that item in the same model request; it does not establish that the
 item exists or bypass evidence checks. A missing ordinary physical object can use
