@@ -6,6 +6,7 @@ from typing import Any
 
 from backend.core.engine_detailed_trace import sync_step
 from backend.engine.physical_conditions.ledger import apply, read
+from backend.engine.physical_conditions.references import bind_records
 from backend.engine.physical_conditions.schema import KEY
 
 
@@ -56,15 +57,21 @@ def finish(manager: Any, message: Any) -> list[str]:
             }
             manager.state.entity_states = {**states, KEY: ledger.model_dump()}
             return []  # The shared extraction already displayed its failure.
+        ledger = read(states)
+        if ledger.last_check.get("message_id") == message.id:
+            return []
+        proposals, bindings = bind_records(ledger, pending.proposals)
         result, _, errors = apply(
             states,
-            pending.proposals,
+            proposals,
             targets=pending.targets,
             narration=message.content,
             message_id=message.id,
             session_id=manager.state.session_id,
             minute=int(manager.state.in_game_time or 0),
         )
+        if bindings:
+            result[KEY]["last_check"]["reference_bindings"] = bindings
     except ValueError:
         return [
             "Physical condition state is invalid and was preserved. Review it in Debug → State."

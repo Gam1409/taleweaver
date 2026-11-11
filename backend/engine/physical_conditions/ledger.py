@@ -122,7 +122,9 @@ def _update(
     visual = _visual_fields(proposal)
     changed.visual_detail, changed.visual_region = visual["visual_detail"], visual["visual_region"]
     changed.updated_revision = ledger.revision + 1
-    changed.last_changed_minute = minute
+    fact_fields = ("status", "detail", "visibility", "visual_detail", "visual_region")
+    if any(getattr(changed, field) != getattr(current, field) for field in fact_fields):
+        changed.last_changed_minute = minute
     return changed
 
 
