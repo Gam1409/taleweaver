@@ -12,6 +12,7 @@ from backend.engine import (
 from backend.engine.clothing.debug_wardrobe import command as debug_npc_wardrobe
 from backend.engine.clothing.recovery import debug_wardrobe_apply, debug_wardrobe_preview
 from backend.engine.clothing.recovery_correction import debug_wardrobe_correct
+from backend.engine.clothing.recovery_manual import add_proposal, prepare_sources
 from backend.engine.clothing.wardrobe_preferences import debug_wardrobe_settings
 from backend.engine.debug_player_location import debug_move_player
 from backend.engine.gameplay.snapshot import AdventureSnapshot
@@ -52,6 +53,8 @@ _HANDLERS = {
     "wardrobe_preview": debug_wardrobe_preview,
     "wardrobe_apply": debug_wardrobe_apply,
     "wardrobe_correct": debug_wardrobe_correct,
+    "wardrobe_sources": prepare_sources,
+    "wardrobe_add": add_proposal,
     "wardrobe_settings": debug_wardrobe_settings,
     "open_exit": debug_mutations.debug_open_exit,
     "walkthrough": debug_mutations.debug_walkthrough,

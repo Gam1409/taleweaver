@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DebugWardrobeCorrection from './DebugWardrobeCorrection.vue'
 import DebugBodyPlacementCorrection from './DebugBodyPlacementCorrection.vue'
+import DebugRecoverySource from './DebugRecoverySource.vue'
 import { ref, watch } from 'vue'
 export interface WardrobeRejection {
   index: number
@@ -37,15 +38,6 @@ watch(
     selectedSources.value = {}
   }
 )
-function captureSelection(index: number, event: Event) {
-  const element = event.currentTarget as HTMLElement
-  const selection = window.getSelection()
-  const range = selection?.rangeCount === 1 ? selection.getRangeAt(0) : null
-  selectedQuote.value = {
-    index,
-    text: range && element.contains(range.commonAncestorContainer) ? range.toString() : ''
-  }
-}
 </script>
 <template>
   <section class="space-y-3">
@@ -65,24 +57,6 @@ function captureSelection(index: number, event: Event) {
         Basis: {{ entry.basis }} · Disposition: {{ entry.disposition }}
       </p>
       <p class="break-all text-xs text-slate-400">Cited message: {{ entry.source_message_id }}</p>
-      <label v-if="sources && Object.keys(sources).length" class="block text-sm">
-        Source message for correction
-        <select
-          v-model="selectedSources[entry.index]"
-          :disabled="busy"
-          class="mt-1 w-full min-w-0 rounded bg-slate-800 p-2"
-          @change="selectedQuote = { index: -1, text: '' }"
-        >
-          <option :value="undefined" disabled>Current cited message</option>
-          <option v-for="(text, id) in sources" :key="id" :value="id">
-            {{ sourceRoles?.[id] === 'user' ? 'Player' : 'Narrator' }} · {{ text.slice(0, 100) }} ·
-            {{ id }}
-          </option>
-        </select>
-      </label>
-      <p v-if="sourceRoles?.[sourceId(entry)] === 'user'" class="text-xs text-amber-200">
-        Player message — requires your explicit confirmation in Debug.
-      </p>
       <p v-if="entry.attachment_slot" class="text-xs">
         Body placement: {{ entry.attachment_slot }}
       </p>
@@ -100,19 +74,16 @@ function captureSelection(index: number, event: Event) {
           {{ entry.placement_evidence || '(missing)' }}
         </blockquote>
       </div>
-      <details v-if="sources?.[sourceId(entry)]" class="rounded bg-slate-900 p-2">
-        <summary class="cursor-pointer text-cyan-200">
-          Original
-          {{ sourceRoles?.[sourceId(entry)] === 'user' ? 'player' : 'assistant' }} message — compare
-          the exact wording
-        </summary>
-        <pre
-          @mouseup="captureSelection(entry.index, $event)"
-          @keyup="captureSelection(entry.index, $event)"
-          class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs select-text"
-          >{{ sources[sourceId(entry)] }}</pre>
-      </details>
-      <p v-else class="text-amber-200">The cited message was not found in the reviewed history.</p>
+      <DebugRecoverySource
+        v-if="sources"
+        :model-value="sourceId(entry)"
+        :sources="sources"
+        :source-roles="sourceRoles"
+        :disabled="busy"
+        label="Source message for correction"
+        @update:model-value="selectedSources[entry.index] = $event"
+        @quote="selectedQuote = { index: entry.index, text: $event }"
+      />
       <DebugWardrobeCorrection
         v-if="
           token && sources?.[sourceId(entry)] && entry.coverage.length && !entry.attachment_slot

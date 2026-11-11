@@ -9,6 +9,10 @@ def selected_entries(preview: dict, selection: str | None) -> set[int]:
     if len(allowed) != len(accepted):
         raise ValueError("This preview predates item selection. Generate a new preview.")
     if selection is None:
+        if preview.get("manual_indices"):
+            raise ValueError(
+                "Manual recovery proposals require explicit selection before applying."
+            )
         if any(row.get("source_role") == "user" for row in accepted):
             raise ValueError(
                 "Player-sourced corrections require explicit selection before applying."

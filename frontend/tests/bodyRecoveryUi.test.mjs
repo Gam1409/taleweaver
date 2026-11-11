@@ -42,7 +42,7 @@ test('player-sourced item previews are labelled and are unselected by default', 
     preview: { token: 'p', notes: '', messages_scanned: 2, limited: false, errors: [],
       source_roles: { old: 'user' }, accepted: [{ proposal_index: 0, item: { name: 'Sealed tube', description: 'Small glass tube.' },
         disposition: 'worn', attachment_slot: 'vaginal', source_role: 'user', source_message_id: 'old', evidence: 'The original placement.' }] },
-  }, { './DebugWardrobeMentions.vue': { default: stubComponent }, './DebugWardrobeRejections.vue': { default: stubComponent } })
+  }, { './DebugWardrobeMentions.vue': { default: stubComponent }, './DebugWardrobeRejections.vue': { default: stubComponent }, './DebugRecoveryManual.vue': { default: stubComponent } })
   t.after(() => view.app.unmount())
   assert.match(view.all().map(view.text).join(' '), /Player message/)
   assert.equal(view.button('Restore selected items').props.disabled, true)

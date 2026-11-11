@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import DebugWardrobeMentions, { type WardrobeMention } from './DebugWardrobeMentions.vue'
 import DebugWardrobeRejections, { type WardrobeRejection } from './DebugWardrobeRejections.vue'
+import DebugRecoveryManual from './DebugRecoveryManual.vue'
 export interface WardrobeRecoveryPreview {
   token: string
   notes: string
@@ -17,6 +18,7 @@ export interface WardrobeRecoveryPreview {
   model_role?: string | null
   source_roles?: Record<string, string>
   review_entries?: WardrobeRejection[]
+  manual_indices?: number[]
   accepted: {
     proposal_index?: number
     item: {
@@ -41,6 +43,7 @@ const props = defineProps<{
 }>()
 const modelRole = ref('complex')
 const recoveryFocus = ref('')
+const manualOpen = ref(false)
 const focusError = computed(() => [...recoveryFocus.value.trim()].length > 400)
 const selected = ref<number[]>([])
 const selectable = computed(() =>
@@ -62,6 +65,16 @@ function requestPreview() {
     'command',
     `/debug wardrobe_preview ${JSON.stringify(props.npcId)} ${modelRole.value}${focus ? ` ${JSON.stringify(focus)}` : ''}`
   )
+}
+function openManual() {
+  if (props.busy) return
+  manualOpen.value = !manualOpen.value
+  if (manualOpen.value && !props.preview?.rejected_sources) {
+    requestSources()
+  }
+}
+function requestSources() {
+  if (!props.busy) emit('command', `/debug wardrobe_sources ${JSON.stringify(props.npcId)}`)
 }
 </script>
 <template>
@@ -98,13 +111,39 @@ function requestPreview() {
     >
       Restore clothing & placed items from history…
     </button>
+    <button
+      type="button"
+      :disabled="busy"
+      class="ml-2 rounded border border-cyan-700 px-3 py-2 disabled:opacity-40"
+      @click="openManual"
+    >
+      {{ manualOpen ? 'Close manual form' : 'Recover from source manually…' }}
+    </button>
     <p class="text-slate-400">
       Preview missing clothing and body-placed items from up to 80 recent story messages. Nothing
       changes until you apply. Check later removals and transfers before accepting. Player
       descriptions can be proposed as manual corrections; select them explicitly to confirm. An
       exact quotation alone does not prove it supports the proposed item or state.
     </p>
+    <button
+      v-if="manualOpen"
+      type="button"
+      :disabled="busy"
+      class="block text-sm text-cyan-200 underline disabled:opacity-40"
+      @click="requestSources"
+    >
+      Reload history sources
+    </button>
     <div v-if="preview" class="space-y-2">
+      <DebugRecoveryManual
+        v-if="manualOpen && preview.rejected_sources"
+        :key="preview.token"
+        :token="preview.token"
+        :sources="preview.rejected_sources"
+        :source-roles="preview.source_roles"
+        :busy="busy"
+        @command="emit('command', $event)"
+      />
       <p
         v-if="
           preview.context_messages !== undefined &&
@@ -120,6 +159,10 @@ function requestPreview() {
             : 'No model request was started.'
         }}
       </p>
+      <p v-else-if="preview.model_step_started === false">
+        Messages available for manual recovery: {{ preview.messages_scanned
+        }}{{ preview.limited ? ' (older history excluded)' : '' }}. No model request.
+      </p>
       <p v-else>
         Messages supplied to the model: {{ preview.messages_scanned
         }}{{ preview.limited ? ' (older history excluded)' : '' }}.
@@ -127,7 +170,14 @@ function requestPreview() {
       <p v-if="preview.model_role" class="text-slate-400">
         Preview model role: {{ preview.model_role }}
       </p>
-      <p v-if="preview.notes" class="text-amber-200">{{ preview.notes }}</p>
+      <p v-if="preview.notes" class="text-amber-200">
+        <span
+          v-if="preview.manual_indices?.length && preview.model_step_started !== false"
+          class="font-bold"
+          >Earlier model notes (before manual changes):
+        </span>
+        {{ preview.notes }}
+      </p>
       <p v-if="!preview.accepted.length && !preview.errors.length">
         No supported missing clothing or placed items were proposed.
       </p>
@@ -177,7 +227,13 @@ function requestPreview() {
         <p>{{ entry.item.description }}</p>
         <p v-if="entry.attachment_slot">Body placement: {{ entry.attachment_slot }}</p>
         <p
-          v-if="
+          v-if="preview.manual_indices?.includes(entry.proposal_index ?? -1)"
+          class="text-amber-200"
+        >
+          Manual proposal — explicitly select this item after reviewing its source and state.
+        </p>
+        <p
+          v-else-if="
             entry.source_role === 'user' ||
             preview.source_roles?.[entry.source_message_id] === 'user'
           "

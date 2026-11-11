@@ -105,28 +105,29 @@ async def debug_wardrobe_correct(
     preview = (state.entity_states or {}).get(KEY) or {}
     try:
         index, proposal = _request(args, preview)
-        context = await recovery_context(db, state, avatar, preview["npc_id"])
-        if context["fingerprint"] != preview.get("fingerprint"):
-            return "DEBUG ERROR: Story or state changed after preview. Generate a new preview."
-        detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
-        context, _ = build_payload(context, detailed)
-        reviewed = evaluated_preview(context, proposal, detailed, state.session_id)
-        if index not in {row["proposal_index"] for row in reviewed["accepted"]}:
-            reasons = [*reviewed["errors"], *reviewed["skipped"]]
-            raise ValueError(
-                "Correction failed validation; preview unchanged. " + " ".join(reasons)
-            )
-        others = [row for row in preview.get("accepted", []) if row.get("proposal_index") != index]
-        if any(row not in reviewed["accepted"] for row in others):
-            raise ValueError(
-                "Correction conflicts with another validated garment; preview unchanged."
-            )
+        reviewed = await revise_preview(db, state, avatar, preview, proposal, index)
     except ValidationError:
         return "DEBUG ERROR: Invalid correction. Choose worn or carried and provide exact quotes; only worn garments can change placement."
     except ValueError as exc:
         return f"DEBUG ERROR: {exc}"
-    state.entity_states = {
-        **state.entity_states,
-        KEY: {**preview, **reviewed, "token": str(uuid4())},
-    }
+    state.entity_states = {**state.entity_states, KEY: reviewed}
     return "DEBUG: Recovery proposal corrected. Review and select the garment before applying. No clothing was changed."
+
+
+async def revise_preview(
+    db: Any, state: Any, avatar: Any, preview: dict, proposal: RecoveryProposal, index: int
+) -> dict:
+    """Recheck a replacement or addition without applying any possessions."""
+    context = await recovery_context(db, state, avatar, preview["npc_id"])
+    if context["fingerprint"] != preview.get("fingerprint"):
+        raise ValueError("Story or state changed after preview. Generate a new preview.")
+    detailed = detail_settings(SimpleNamespace(state=state))["detailed"]
+    context, _ = build_payload(context, detailed)
+    reviewed = evaluated_preview(context, proposal, detailed, state.session_id)
+    if index not in {row["proposal_index"] for row in reviewed["accepted"]}:
+        reasons = [*reviewed["errors"], *reviewed["skipped"]]
+        raise ValueError("Correction failed validation; preview unchanged. " + " ".join(reasons))
+    others = [row for row in preview.get("accepted", []) if row.get("proposal_index") != index]
+    if any(row not in reviewed["accepted"] for row in others):
+        raise ValueError("Correction conflicts with another validated garment; preview unchanged.")
+    return {**preview, **reviewed, "token": str(uuid4())}

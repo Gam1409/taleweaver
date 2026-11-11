@@ -13,7 +13,7 @@ const script = readFileSync(new URL('../src/components/game/DebugWardrobeRecover
 const compiled = ts.transpileModule(`import {computed,ref,watch} from '${import.meta.resolve('vue')}';
 export function setup(props, emit) {
   ${script}
-  return {recoveryFocus, modelRole, focusError, requestPreview};
+  return {recoveryFocus, modelRole, focusError, requestPreview, manualOpen, openManual, requestSources};
 }`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
 const {setup} = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
@@ -34,6 +34,8 @@ test('an optional quoted search hint travels in one preview command and does not
   f.props.busy = true
   f.requestPreview()
   assert.equal(f.commands.length, 1)
+  f.requestSources()
+  assert.equal(f.commands.length, 1)
 })
 
 test('the old preview command remains valid without a focus and excessive focus is rejected', t => {
@@ -47,4 +49,17 @@ test('the old preview command remains valid without a focus and excessive focus 
   assert.equal(f.focusError.value, true)
   f.requestPreview()
   assert.equal(f.commands.length, 2)
+})
+
+test('manual recovery loads sources without inference and retains an existing reviewed window', t => {
+  const f = fixture(t)
+  f.openManual()
+  assert.deepEqual(f.commands, ['/debug wardrobe_sources "LINA"'])
+  f.openManual()
+  f.props.preview = {token: 'preview', rejected_sources: {message: 'Known item.'}}
+  f.openManual()
+  assert.equal(f.manualOpen.value, true)
+  assert.equal(f.commands.length, 1)
+  f.requestSources()
+  assert.deepEqual(f.commands, ['/debug wardrobe_sources "LINA"', '/debug wardrobe_sources "LINA"'])
 })

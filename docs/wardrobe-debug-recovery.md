@@ -55,3 +55,25 @@ refreshes the preview token and rechecks evidence, ownership, chronology fingerp
 and clothing policy without another model request or an inventory change. Other
 accepted entries must remain unchanged. Unsupported items should stay unselected;
 formal validation is not a guarantee of semantic correctness.
+
+## Manual proposals without inference
+
+**Recover from source manually…** loads the same bounded, session-owned history
+without calling a model. An existing current preview is retained. Select a source
+message and its exact passage, enter the missing item's name and a short description
+of known intrinsic properties, and choose its state. A placed ordinary object uses
+its explicit body placement; a garment needs clothing metadata and equipment slots.
+Use **Add proposal to preview**, then select the proposed item and restore it.
+
+The user confirms the passage's meaning and current state, including later removals
+or transfers. Host checks still enforce exact evidence, canonical duplicate rejection,
+source-window scope, adult/body availability, clothing policy, the 16-entry limit and
+the unchanged session fingerprint. A new preview token invalidates the old form.
+Manual proposals always require explicit item selection, even for narrator sources.
+No inference, story-clock advancement or inventory mutation happens while loading
+sources or preparing the proposal. Applying uses the existing recovery transaction.
+
+A short description is valid when the story establishes no further design details.
+For a removed garment lying in the room, register it as removed and then use
+**Place in room** to set its actual position. For partial displacement, correct the
+added proposal with the existing exact-placement form before applying.
