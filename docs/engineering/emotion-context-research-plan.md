@@ -280,6 +280,28 @@ Remaining work includes measuring missed extraction and reviewing portrait-state
 consistency. Model evaluation needs matched, repeated live runs after the owner
 resumes them; the current live-test pause remains in effect.
 
+## Extraction completeness and omission baseline
+
+The follow-up audit found two host integration gaps: strict item parsing could
+discard independent body/scene updates when staging was disabled, and default
+empty lists concealed response sections that the provider had never supplied.
+The existing shared request now preserves independent candidates for their own
+strict validators. Its request-specific wire contract requires explicit sections;
+runtime checks distinguish missing sections from explicit empty results. The
+standalone staging fallback uses the same completeness rules. Valid independent
+changes survive a partial response, with the unresolved domains recorded for
+review and handled inventory changes protected against duplicate application.
+
+The existing scene omission fixtures are supplemented with physical-condition
+ground truth: twenty scenarios in total cover current events, literary phrasing,
+Russian text, negative controls, partial cleaning, another owner's garment,
+treatment versus healing and repeated source occurrences. Tests deliberately
+demonstrate that complete JSON and an exact quote do not prove semantic entailment:
+an empty response can miss a real event, and a cited recollection or negation can
+still support a mechanically valid but factually wrong proposal. These are offline
+host/scoring checks, not live-model recall results. No additional inference stage
+or automatic prose cleanup was introduced.
+
 This is not a completed review of whole books, a clinical model, or a measured
 improvement in literary/psychological quality. Later stages of the plan remain
 separate work rather than claims implied by this first integration.

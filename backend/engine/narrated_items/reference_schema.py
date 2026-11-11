@@ -8,9 +8,14 @@ from pydantic import BaseModel
 from backend.engine.narrated_items.source_catalog import Catalog
 
 
-def build(model: type[BaseModel], catalog: Catalog) -> dict:
+def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -> dict:
     schema = deepcopy(model.model_json_schema())
+    if complete:
+        schema["required"] = list(schema["properties"])
     definitions = schema.setdefault("$defs", {})
+    staging = definitions.get("SceneExtraction")
+    if complete and isinstance(staging, dict):
+        staging["required"] = ["changes", "props", "explicit"]
     definitions["NarrationEvidenceReference"] = {"type": "string", "enum": catalog.references()}
     definitions["VisualEvidenceReference"] = {
         "type": "string",

@@ -23,6 +23,7 @@ class Pending:
     actor_targets: set[str]
     updates: list[Any] | None = None
     actions: list[Any] | None = None
+    unconfirmed_sections: tuple[str, ...] = ()
 
 
 @step("scene.prepare")
@@ -64,10 +65,17 @@ async def prepare(manager: Any) -> dict:
     }
 
 
-def complete(manager: Any, updates: list[Any], actions: list[Any]) -> None:
+def complete(
+    manager: Any,
+    updates: list[Any],
+    actions: list[Any],
+    *,
+    unconfirmed_sections: tuple[str, ...] = (),
+) -> None:
     pending = getattr(manager, "_pending_scene_continuity", None)
     if isinstance(pending, Pending):
         pending.updates, pending.actions = deepcopy(updates), deepcopy(actions)
+        pending.unconfirmed_sections = unconfirmed_sections
 
 
 @sync_step("scene.commit")
@@ -94,6 +102,12 @@ def finish(manager: Any, message: Any) -> list[str]:
         )
     except ValueError:
         return ["Scene continuity is invalid and was preserved; review Debug → State."]
+    if pending.unconfirmed_sections:
+        ledger = result[KEY]
+        ledger["last_check"]["unconfirmed_sections"] = list(pending.unconfirmed_sections)
+        if "final_frame_actions" in pending.unconfirmed_sections:
+            ledger["frame_message_id"] = ""
+            ledger["frame_actions"] = []
     manager.state.entity_states = result
     return (
         ["Some scene continuity updates need review; previous facts were preserved."]

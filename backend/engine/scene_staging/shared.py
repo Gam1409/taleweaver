@@ -30,9 +30,11 @@ class Pending:
     extraction: Any = None
     accepted: list[dict] = field(default_factory=list)
     error: str = "The shared state extraction did not complete."
+    unconfirmed_sections: frozenset[str] = frozenset()
+    reuse: bool = False
 
 
-def begin(manager: Any, narration: str) -> bool:
+def begin(manager: Any, narration: str, *, reuse: bool = False) -> bool:
     manager._shared_scene_staging = None
     if not read_settings(manager.state).scene_staging:
         return False
@@ -42,6 +44,7 @@ def begin(manager: Any, narration: str) -> bool:
         digest(narration),
         deepcopy(states.get(KEY)),
         deepcopy(states.get(props.KEY)),
+        reuse=reuse,
     )
     return True
 
@@ -99,10 +102,15 @@ def complete(manager: Any, extraction: Any, accepted: list[dict]) -> None:
         )
 
 
-def propose(manager: Any, response: Any) -> None:
+def propose(
+    manager: Any, response: Any, *, unconfirmed_sections: frozenset[str] = frozenset()
+) -> None:
     """A malformed item section must not veto an independently valid pose section."""
     raw = response.model_dump() if isinstance(response, BaseModel) else response
     complete(manager, raw.get("staging") if isinstance(raw, dict) else None, [])
+    pending = getattr(manager, "_shared_scene_staging", None)
+    if isinstance(pending, Pending):
+        pending.unconfirmed_sections = unconfirmed_sections
 
 
 def approve_items(manager: Any, accepted: list[dict]) -> None:
@@ -132,6 +140,8 @@ def apply_extraction(
     rows: list[Any],
     extraction: Any,
     accepted: list[dict] | None = None,
+    *,
+    unconfirmed_sections: frozenset[str] = frozenset(),
 ) -> None:
     validated = validate(extraction)
     extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
@@ -142,7 +152,8 @@ def apply_extraction(
         extraction,
         unconfirmed_actors={
             bindings.actor_id(value, manager.avatar.id) for value in validated.unconfirmed_actors
-        },
+        }
+        | ({person["id"] for person in cast} if "changes" in unconfirmed_sections else set()),
         invalid_changes=validated.rejected["changes"],
     )
     result["explicit_rejected"] += validated.rejected["explicit"]
@@ -155,14 +166,22 @@ def apply_extraction(
     result["rejected_props"] = (
         rejected
         + validated.rejected["props"]
-        + props.reconcile(
-            manager.state,
-            narration,
-            extraction.props,
-            [item for item in valid if item["owner_id"] in present],
-            valid_items=valid,
+        + (
+            props.reconcile(
+                manager.state,
+                narration,
+                extraction.props,
+                [item for item in valid if item["owner_id"] in present],
+                valid_items=valid,
+            )
+            if "props" not in unconfirmed_sections
+            else 0
         )
     )
+    if "props" in unconfirmed_sections:
+        props.invalidate(manager.state)
+    if unconfirmed_sections:
+        result["unconfirmed_sections"] = sorted(unconfirmed_sections)
     manager.state.entity_states = {**(manager.state.entity_states or {}), KEY: result}
 
 
@@ -185,6 +204,8 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         invalidate(manager.state, narration, "The shared staging source no longer matches.")
         return True
     if pending.error:
+        if pending.reuse:
+            return True
         invalidate(manager.state, narration, pending.error)
         return True
     try:
@@ -192,7 +213,13 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         if current_cast != pending.cast:
             raise ValueError("The present cast or its position changed during extraction.")
         apply_extraction(
-            manager, narration, current_cast, pending.rows, pending.extraction, pending.accepted
+            manager,
+            narration,
+            current_cast,
+            pending.rows,
+            pending.extraction,
+            pending.accepted,
+            unconfirmed_sections=pending.unconfirmed_sections,
         )
     except Exception:
         logger.exception("Shared scene staging failed for session %s", manager.state.session_id)

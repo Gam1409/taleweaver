@@ -11,6 +11,7 @@ from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.runtime import KEY, reconcile_items
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.visual_novel.continuity import PLAYER, Possessions
+from tests.state_response_fixture import extraction
 
 
 def fixtures():
@@ -171,7 +172,9 @@ async def test_runtime_persists_change_and_deduplicates_retries(timeout):
     )
     llm = SimpleNamespace(
         model="test",
-        aexecute_complex_task=AsyncMock(return_value=ItemExtraction(actions=[action()])),
+        aexecute_complex_task=AsyncMock(
+            return_value=extraction(ItemExtraction, actions=[action()])
+        ),
     )
     with (
         patch(

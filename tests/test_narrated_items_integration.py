@@ -13,6 +13,7 @@ from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_vn_turn_integration import TurnRoles, install_roles, seed_vn
 
 
@@ -25,8 +26,9 @@ async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch, pending_ca
     class GiftRoles(TurnRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is ItemExtraction:
-                return ItemExtraction(
+            if issubclass(schema, ItemExtraction):
+                return extraction(
+                    schema,
                     actions=[
                         ItemAction(
                             source_owner="LINA",
@@ -42,7 +44,7 @@ async def test_completed_gift_is_saved_once_and_not_worn(monkeypatch, pending_ca
                                 "wearable_slots": ["Neck"],
                             },
                         )
-                    ]
+                    ],
                 )
             result = await super().structured(*args, **kwargs)
             if pending_candidate and schema.__name__.startswith("VNProgressionIntent"):
@@ -108,8 +110,9 @@ async def test_rejected_item_does_not_discard_narrator_thoughts_or_emotions(monk
     class RejectedGiftRoles(TurnRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is ItemExtraction:
-                return ItemExtraction(
+            if issubclass(schema, ItemExtraction):
+                return extraction(
+                    schema,
                     actions=[
                         ItemAction(
                             item_id="UNREGISTERED_SCARF",
@@ -119,7 +122,7 @@ async def test_rejected_item_does_not_discard_narrator_thoughts_or_emotions(monk
                             evidence=body,
                             basis="completed",
                         )
-                    ]
+                    ],
                 )
             return await super().structured(*args, **kwargs)
 
@@ -165,8 +168,9 @@ async def test_current_wear_description_registers_garment_without_dressing_actio
     class ObservationRoles(TurnRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is ItemExtraction:
-                return ItemExtraction(
+            if issubclass(schema, ItemExtraction):
+                return extraction(
+                    schema,
                     actions=[
                         ItemAction(
                             source_owner="LINA",
@@ -182,7 +186,7 @@ async def test_current_wear_description_registers_garment_without_dressing_actio
                                 "wearable_slots": ["Chest"],
                             },
                         )
-                    ]
+                    ],
                 )
             return await super().structured(*args, **kwargs)
 

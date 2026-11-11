@@ -38,6 +38,7 @@ ACTION = {
     "evidence": TEXT.split(" Lina sits", maxsplit=1)[0],
 }
 STAGING = {
+    "explicit": [],
     "changes": [
         {
             "entity_id": "LINA",
@@ -77,9 +78,13 @@ class SharedRoles(TurnRoles):
                             content=json.dumps(
                                 {
                                     "actions": self.actions,
+                                    "condition_updates": [],
+                                    "scene_updates": [],
+                                    "final_frame_actions": [],
                                     **(
                                         {"staging": self.staging}
                                         if schema is SharedItemExtraction
+                                        and json.loads(args[1]).get("scene_staging") is not None
                                         else {}
                                     ),
                                 }
@@ -147,7 +152,7 @@ async def test_placed_item_and_pose_survive_forty_dialogue_turns(monkeypatch):
         original = deepcopy(registry_of(state.entity_states)["snapshots"])
         state.max_memory_turns = 10
         await db.commit()
-        roles.actions, roles.staging = [], {"changes": [], "props": []}
+        roles.actions, roles.staging = [], {"changes": [], "props": [], "explicit": []}
         monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", 'Lina says, "All right."')
         for _ in range(40):
             events = [

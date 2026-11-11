@@ -8,7 +8,7 @@ import pytest
 
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.engine.narrated_items import runtime as items_runtime
-from backend.engine.narrated_items.schema import ItemExtraction
+from backend.engine.narrated_items.schema import SharedItemExtraction
 from backend.engine.scene_staging import runtime as staging_runtime
 from backend.engine.scene_staging.schema import SceneExtraction
 from backend.engine.scene_staging.state import KEY, project
@@ -77,8 +77,12 @@ async def test_one_transfer_in_a_twenty_npc_scene_keeps_every_other_inventory(mo
     manager, people = crowd
     narration = "Person 0 hands the first coin to Hero."
     provider = AsyncMock(
-        return_value=ItemExtraction.model_validate(
+        return_value=SharedItemExtraction.model_validate(
             {
+                "condition_updates": [],
+                "scene_updates": [],
+                "final_frame_actions": [],
+                "staging": {"changes": [], "props": [], "explicit": []},
                 "actions": [
                     {
                         "item_id": "item-0-0",
@@ -88,7 +92,7 @@ async def test_one_transfer_in_a_twenty_npc_scene_keeps_every_other_inventory(mo
                         "disposition": "carried",
                         "evidence": narration,
                     }
-                ]
+                ],
             }
         )
     )
@@ -123,6 +127,8 @@ async def test_pose_update_in_crowded_scene_retains_bystander_facts_and_roster(m
     provider = AsyncMock(
         return_value=SceneExtraction.model_validate(
             {
+                "props": [],
+                "explicit": [],
                 "changes": [
                     {
                         "entity_id": "N0",
@@ -134,7 +140,7 @@ async def test_pose_update_in_crowded_scene_retains_bystander_facts_and_roster(m
                             "target": "N19",
                         },
                     }
-                ]
+                ],
             }
         )
     )
@@ -151,6 +157,48 @@ async def test_pose_update_in_crowded_scene_retains_bystander_facts_and_roster(m
     assert facts["N0"]["posture"] == "sitting"
     assert facts["N0"]["placement"]["target"] == "N19"
     assert facts["N19"]["posture"] == "standing"
+
+
+@pytest.mark.parametrize("missing", [None, "changes", "props", "explicit"])
+async def test_standalone_staging_distinguishes_missing_from_explicit_empty(
+    monkeypatch, crowd, missing
+):
+    manager, _ = crowd
+    narration = "Person 0 sits beside Person 19."
+    manager.state.entity_states[KEY] = {
+        "scene_id": "ROOM",
+        "status": "ready",
+        "actors": {
+            "N19": {"origin": "", "posture": {"value": "standing", "evidence": "Earlier fact"}}
+        },
+    }
+    packet = {
+        "changes": [{"entity_id": "N0", "posture": "sitting", "evidence": narration}],
+        "props": [],
+        "explicit": [],
+    }
+    if missing:
+        packet.pop(missing)
+    provider = AsyncMock(return_value=SceneExtraction.model_validate(packet))
+    monkeypatch.setattr(
+        staging_runtime.GameMasterLLM,
+        "for_role",
+        lambda *_: SimpleNamespace(model="mock", aexecute_complex_task=provider),
+    )
+    await staging_runtime.reconcile_narration(manager, narration, completed=True)
+    provider.assert_awaited_once()
+    result = manager.state.entity_states[KEY]
+    assert result.get("unconfirmed_sections", []) == ([missing] if missing else [])
+    payload = json.loads(provider.await_args.args[1])
+    facts = project(manager.state, payload["present_cast"])
+    if missing == "changes":
+        assert "N19" in result["unconfirmed_actors"]
+        assert "N19" not in facts
+    else:
+        assert facts["N0"]["posture"] == "sitting"
+        assert facts["N19"]["posture"] == "standing"
+    wire = provider.await_args.kwargs["response_schema"]
+    assert set(wire["required"]) == {"changes", "props", "explicit"}
 
 
 @pytest.mark.parametrize("module", [items_runtime, staging_runtime])

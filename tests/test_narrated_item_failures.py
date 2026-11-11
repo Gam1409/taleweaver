@@ -85,7 +85,7 @@ async def test_failed_item_check_retains_narration_emotions_and_both_owners(
     class BrokenItemRoles(TurnRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is ItemExtraction:
+            if issubclass(schema, ItemExtraction):
                 raise error
             return await super().structured(*args, **kwargs)
 

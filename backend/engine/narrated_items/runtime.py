@@ -13,7 +13,12 @@ from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
-from backend.engine.narrated_items import evidence, independent_state, reference_schema
+from backend.engine.narrated_items import (
+    evidence,
+    independent_state,
+    reference_schema,
+    response_sections,
+)
 from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
@@ -36,10 +41,18 @@ MAX_NARRATION = 16000
 MAX_CONTEXT = 64000
 
 
-def _status(manager: Any, message_id: str, narration: str, status: str, **details: Any) -> None:
+def _status(
+    manager: Any,
+    message_id: str,
+    narration: str,
+    status: str,
+    *,
+    handled: bool = False,
+    **details: Any,
+) -> None:
     previous = (manager.state.entity_states or {}).get(KEY) or {}
     processed = previous.get("processed_message_ids", [])
-    if status == "complete":
+    if status == "complete" or handled:
         processed = [*processed, message_id][-128:]
     manager.state.entity_states = {
         **(manager.state.entity_states or {}),
@@ -67,9 +80,16 @@ async def reconcile_items(
 ) -> list[str]:
     physical_conditions.discard(manager)
     manager._pending_scene_continuity = None
-    staging_enabled = shared_staging.begin(manager, narration)
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
+    staging_enabled = shared_staging.begin(
+        manager,
+        narration,
+        reuse=(
+            message_id in ledger.get("processed_message_ids", [])
+            and ledger.get("source_hash") == hashlib.sha256(narration.encode()).hexdigest()
+        ),
+    )
     if (
         not completed
         or not message_id
@@ -111,7 +131,6 @@ async def reconcile_items(
         scope=f"{manager.state.session_id}:{message_id}:{manager.state.current_scene_id}",
     )
     scene_context = {**scene_context, "scene_description": catalog.room_passages}
-    response_model = SharedItemExtraction if staging_enabled else ItemExtraction
     payload = json.dumps(
         {
             "completed_narration": catalog.narration_passages,
@@ -159,18 +178,23 @@ async def reconcile_items(
                 + independent_state.INSTRUCTIONS
                 + (STAGING_INSTRUCTIONS if staging_enabled else ""),
                 payload,
-                response_model,
+                SharedItemExtraction,
                 llm.model,
                 game_id=manager.game_id,
                 operation="narrated_items",
                 phase="reconciliation",
-                response_schema=reference_schema.build(response_model, catalog),
+                response_schema=reference_schema.build(
+                    SharedItemExtraction if staging_enabled else ItemExtraction,
+                    catalog,
+                    complete=True,
+                ),
             ),
             timeout=role_timeout(manager.user, "small"),
         )
+        sections = response_sections.read(result, staging=staging_enabled)
         original_actions = result.actions if isinstance(result, ItemExtraction) else None
         result = evidence.bind(result, narration, catalog=catalog)
-        shared_staging.propose(manager, result)
+        shared_staging.propose(manager, result, unconfirmed_sections=sections.staging_missing)
         extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
             result, actors, original_actions=original_actions
         )
@@ -235,6 +259,7 @@ async def reconcile_items(
         skipped,
         independent_allowed,
         state_rejected,
+        sections,
     )
 
 
@@ -252,14 +277,23 @@ def _finish_extraction(
     skipped: SkippedCheck | None,
     independent_allowed: bool,
     state_rejected: int,
+    sections: response_sections.Sections,
 ) -> list[str]:
     _store_changes(manager, changed, accepted, snapshot.catalog)
     shared_staging.approve_items(manager, accepted)
     if skipped is None or independent_allowed:
-        pending_conditions.complete(
-            extraction.condition_updates, set(changed) | set(snapshot.items)
+        if "condition_updates" in sections.provided:
+            pending_conditions.complete(
+                extraction.condition_updates, set(changed) | set(snapshot.items)
+            )
+        else:
+            pending_conditions.error = "The shared response did not confirm condition_updates."
+        scene_continuity.complete(
+            manager,
+            extraction.scene_updates,
+            extraction.final_frame_actions,
+            unconfirmed_sections=sections.scene_missing,
         )
-        scene_continuity.complete(manager, extraction.scene_updates, extraction.final_frame_actions)
     if skipped is not None:
         if not independent_allowed:
             pending_conditions.error = skipped.reason
@@ -270,17 +304,20 @@ def _finish_extraction(
             "needs_review",
             **skipped.details(),
             state_updates_rejected=state_rejected,
+            **sections.details(),
         )
-        return [skipped.message(), *_state_review(state_rejected)]
+        return [skipped.message(), *_state_review(state_rejected), *sections.messages()]
     _status(
         manager,
         message_id,
         narration,
-        "complete",
+        "needs_review" if sections.unconfirmed else "complete",
+        handled=True,
         accepted=accepted,
         rejected=errors,
         rejected_details=[failure.payload() for failure in failures],
         state_updates_rejected=state_rejected,
+        **sections.details(),
     )
     messages = [
         f"{changed[entry['destination_owner']]['name']}: {entry['item']['name']} ({entry['disposition']})."
@@ -291,6 +328,7 @@ def _finish_extraction(
             "Some narrated item changes need review and were not applied: " + " ".join(errors)
         )
     messages.extend(_state_review(state_rejected))
+    messages.extend(sections.messages())
     return messages
 
 

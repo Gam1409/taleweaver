@@ -9,6 +9,42 @@ room-level proxy for it, cannot be restored through independent state updates.
 The original physical/scene validators still check evidence, ownership, audience,
 operations and game time. Rejected independent updates are counted and reported.
 
+The local response parser now preserves independent sections with staging both
+enabled and disabled. With staging disabled, the wire schema and instructions
+still omit staging; the tolerant parser does not enable that feature. Each item
+candidate is revalidated against the original strict contract before any state
+is applied. A malformed item cannot discard an unrelated valid scene/body section.
+
+The active request schema requires explicit `actions`, `condition_updates`,
+`scene_updates` and `final_frame_actions` arrays. Enabled staging also requires its
+root field and `changes`, `props`, `explicit` lists. Local/saved constructors retain
+their compatible defaults. The runtime records which sections were actually
+provided before defaults and source binding can erase that distinction.
+
+A missing section is unconfirmed, rather than an explicit empty result. The
+existing debug ledger records `response_sections` and `unconfirmed_sections`,
+and the overall check needs review. Independent valid sections are retained;
+missing body checks preserve conditions, missing final actions have no confirmed
+frame, and incomplete staging retains valid independent sections. A missing pose
+section leaves poses unconfirmed; missing prop checks make old placements
+provisional; missing explicit-act checks do not certify absence of an act.
+The standalone staging fallback uses the same required lists and completeness
+checks before defaults are applied.
+
+Handled partial responses also retain their processed input ID. Repeating the
+same handled check cannot apply accepted inventory changes twice or invalidate
+confirmed staging merely because a response section was missing. Prose-only
+regeneration preserves committed outcomes; a full turn replay uses its existing
+before-turn rollback rather than reapplying partial effects.
+
+These checks establish response completeness, not semantic extraction recall.
+An explicit empty array may still miss a narrated event; an exact quote may still
+be a negation, recollection or claim. Paired scene and physical-condition gold
+cases exercise literal/literary/Russian events, unchanged controls, another owner's
+garment, treatment versus healing, partial cleaning and repeated occurrences.
+They score missed and false updates independently of a model's “all checked” claim.
+Mocked output verifies host behavior; live-model recall remains unmeasured here.
+
 Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs existing appearance and valid garment metadata. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
 
 Completed narration can update the existing worn garment's `uncovered_regions`.
@@ -28,12 +64,13 @@ items retain their original global order. A final transfer already
 applied by mechanics is not replayed through intermediate ownership states.
 
 The extraction request supplies the current narration as an ordered passage map,
-reusing the existing NPC-review source index. Item and condition `evidence` may
-select a `passage:pN` reference. The host resolves it to the exact current text
+reusing the existing NPC-review source index. Evidence selects a request-scoped
+`narration:<scope>:pN` reference; room-only facts may select `room:<scope>:pN`.
+The host resolves it to the exact current text
 before ordinary validation and persistence. Literal quotes remain supported;
 unknown references, paraphrases and combined fragments are not repaired. No extra
-model request or duplicate copy of the narration is added. Other state sections
-continue to cite literal source text.
+model request or duplicate copy of the narration is added. The same source
+catalogue binds physical, scene, item and optional staging proposals.
 
 Passage references prevent transcription mistakes; they do not prove that the
 chosen passage establishes the proposed event. Figurative prose, intentions,
@@ -61,7 +98,8 @@ Existing valid payloads keep their data shape. Invalid responses retain up to fi
 safe field paths and constraint explanations for owner inspection. Older failed
 checks expose their recorded field paths without inventing missing explanations.
 Diagnostics exclude raw model inputs, unknown custom error messages and provider
-text. Schema failures still apply no item changes; they do not infer garment data
+text. Schema-invalid item proposals and dependent chains are rejected while
+independent valid proposals remain eligible. Failures do not infer garment data
 or dispatch another model request.
 
 Skipped checks distinguish an earlier rules/ownership rejection from narration exceeding the existing 16,000-character limit. The saved reason and system notification retain known host rejection details; unexpected internal errors use a safe generic explanation. Length failures report the actual character count and unchanged limit. The boundary is inclusive, no narration is truncated, and no extra model request is dispatched. Turn-local rejection details cannot carry over to a different input, while the completed check remains in the normal saved session state. Older generic warnings cannot recover details that were not recorded.

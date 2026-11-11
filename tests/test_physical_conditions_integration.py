@@ -14,6 +14,7 @@ from backend.engine.physical_conditions.schema import KEY
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_physical_conditions import record
 from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
 
@@ -32,11 +33,11 @@ class ConditionRoles(TurnRoles):
 
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
-        if schema is ItemExtraction:
+        if issubclass(schema, ItemExtraction):
             self.calls.append((schema.__name__, args, kwargs))
             if self.fail:
                 raise TimeoutError("Simulated shared extraction failure")
-            return ItemExtraction(condition_updates=self.proposals)
+            return extraction(schema, condition_updates=self.proposals)
         return await super().structured(*args, **kwargs)
 
 
@@ -60,7 +61,7 @@ async def test_saved_reply_anchors_condition_and_next_turn_gets_fact_without_ext
         assert condition.origin.quote in reply.content
         assert condition.status == "active" and avatar.inventory == before_inventory
         assert len(roles.calls) == 3 and len(roles.prompts) == 1
-        extraction = next(call for call in roles.calls if call[0] == "ItemExtraction")
+        extraction = next(call for call in roles.calls if call[0] == "SharedItemExtraction")
         assert "PHYSICAL CONDITIONS" in extraction[1][0]
         state_id, saved = state.id, condition.model_dump()
         roles.proposals = []
@@ -211,7 +212,7 @@ async def test_item_and_condition_candidates_are_independently_applied(monkeypat
     class MixedRoles(ConditionRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is not ItemExtraction:
+            if not issubclass(schema, ItemExtraction):
                 return await super().structured(*args, **kwargs)
             self.calls.append((schema.__name__, args, kwargs))
             identity = (
@@ -225,7 +226,8 @@ async def test_item_and_condition_candidates_are_independently_applied(monkeypat
                 if bad_condition
                 else {"item_id": "UNKNOWN"}
             )
-            return ItemExtraction(
+            return extraction(
+                schema,
                 actions=[
                     ItemAction(
                         **identity,

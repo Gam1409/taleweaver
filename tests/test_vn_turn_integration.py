@@ -17,6 +17,7 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_game_loop import _seed_game_context
 
 PRIOR = "Лина и герой вместе починили сломанную полку."
@@ -43,8 +44,8 @@ class TurnRoles:
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
         self.calls.append((schema.__name__, args, kwargs))
-        if schema is ItemExtraction:
-            return ItemExtraction()
+        if issubclass(schema, ItemExtraction):
+            return extraction(schema)
         if schema is InteractionPlan:
             if self.social_failure:
                 raise TimeoutError("Simulated slow Small model")
@@ -195,7 +196,7 @@ async def test_real_vn_turn_roles_language_social_state_snapshot_and_reload(monk
         assert [call[0] for call in roles.calls] == [
             "VNProgressionIntent",
             "InteractionPlan",
-            "ItemExtraction",
+            "SharedItemExtraction",
         ]
         assert roles.roles.count("small") == 3
         assert roles.roles.count("complex") == 1

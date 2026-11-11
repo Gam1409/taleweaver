@@ -152,13 +152,16 @@ async def test_general_rule_denial_cannot_be_bypassed_by_a_bad_item_batch(monkey
         assert not read_conditions(manager.state.entity_states).conditions
 
 
-async def test_bad_item_schema_preserves_independent_shared_sections(monkeypatch):
+@pytest.mark.parametrize("staging", [False, True])
+async def test_bad_item_schema_preserves_independent_shared_sections(monkeypatch, staging):
     class MalformedRoles(IndependentRoles):
         denied = False
         actions = [{"item_id": "COAT", "source_owner": "LINA", "destination_owner": "__player__"}]
 
     async with TestSessionLocal() as db:
-        roles, user, avatar, state = await seed(monkeypatch, db, roles=MalformedRoles())
+        roles, user, avatar, state = await seed(
+            monkeypatch, db, enabled=staging, roles=MalformedRoles()
+        )
         monkeypatch.setattr("tests.test_vn_turn_integration.NARRATION", TEXT)
         db.add(
             WorldEntity(

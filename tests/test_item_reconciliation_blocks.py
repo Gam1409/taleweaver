@@ -13,6 +13,7 @@ from backend.engine.visual_novel.continuity import PLAYER, prepare_intent
 from backend.engine.visual_novel.item_rejections import rejection_reason
 from backend.models.session_state import SessionState
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_narrated_items import fixtures
 from tests.test_vn_continuity import manager as continuity_manager
 from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
@@ -29,7 +30,7 @@ def reconciliation_fixture(monkeypatch):
         _vn_player_message_id="TURN",
     )
     npc = SimpleNamespace(id="NPC", entity_type="NPC", age_years=30)
-    call = AsyncMock(return_value=ItemExtraction())
+    call = AsyncMock(return_value=extraction(ItemExtraction))
     prefix = "backend.engine.narrated_items.runtime."
     monkeypatch.setattr(prefix + "session_objects", AsyncMock(return_value=[npc]))
     monkeypatch.setattr(prefix + "actor_records", lambda *_: actors)
@@ -145,7 +146,7 @@ async def test_rejected_possession_reason_is_retained_while_independent_state_is
         assert physical["status"] == "complete"
         assert physical["accepted"] == [] and physical["rejected"] == []
         assert physical["proposed_count"] == 0
-    calls = [call for name, *call in roles.calls if name == "ItemExtraction"]
+    calls = [call for name, *call in roles.calls if name == "SharedItemExtraction"]
     assert len(calls) == 1
     import json
 

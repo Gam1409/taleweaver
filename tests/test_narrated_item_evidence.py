@@ -13,6 +13,7 @@ from backend.engine.visual_novel.continuity import PLAYER
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_narrated_items import action, run
 from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
 
@@ -42,8 +43,9 @@ async def test_rejected_proposal_evidence_survives_reload_and_owner_inspection(
     class RejectedEvidenceRoles(TurnRoles):
         async def structured(self, *args, **kwargs):
             schema = kwargs.get("response_model") or args[2]
-            if schema is ItemExtraction:
-                return ItemExtraction(
+            if issubclass(schema, ItemExtraction):
+                return extraction(
+                    schema,
                     actions=[
                         ItemAction(
                             item_id=f"SCARF-{index}",
@@ -54,7 +56,7 @@ async def test_rejected_proposal_evidence_survives_reload_and_owner_inspection(
                             basis="completed",
                         )
                         for index in range(count)
-                    ]
+                    ],
                 )
             return await super().structured(*args, **kwargs)
 

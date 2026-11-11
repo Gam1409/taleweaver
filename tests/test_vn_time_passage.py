@@ -29,7 +29,7 @@ class PassageRoles(TurnRoles):
             self.calls.append((schema.__name__, args, kwargs))
             return InteractionPlan()
         result = await super().structured(*args, **kwargs)
-        if schema is not ItemExtraction:
+        if not issubclass(schema, ItemExtraction):
             result.time_passage = self.passage
         return result
 

@@ -12,6 +12,7 @@ from backend.engine.scene_illustrations.visual_plan import inventory
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldScene
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
 
 TEXT = 'A fire burns in the fireplace. Lina points at the door. Lina: "Let us talk."'
@@ -52,10 +53,10 @@ class SceneRoles(TurnRoles):
 
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
-        if schema is ItemExtraction:
+        if issubclass(schema, ItemExtraction):
             self.calls.append((schema.__name__, args, kwargs))
-            return ItemExtraction(
-                scene_updates=self.scene_updates, final_frame_actions=self.actions
+            return extraction(
+                schema, scene_updates=self.scene_updates, final_frame_actions=self.actions
             )
         return await super().structured(*args, **kwargs)
 
