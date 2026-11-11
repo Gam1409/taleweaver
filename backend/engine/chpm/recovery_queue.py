@@ -156,6 +156,10 @@ def payload(batch: Batch) -> dict:
         "scene_id": batch.audit.scene_id,
         "recorded_game_minute": batch.audit.game_minute,
         "eligible_observers": sorted(batch.offsets),
+        "eligible_observers_by_fragment": {
+            key: sorted(actor for actor, cursor in batch.offsets.items() if int(key[1:]) >= cursor)
+            for key in batch.available
+        },
         "present_speakers_at_source": batch.audit.speakers,
         "fragments": {key: value.text for key, value in batch.available.items()},
     }

@@ -50,6 +50,7 @@ async def project(
         "present_observers": names,
         "recent_interlocutors": recent_interlocutors or [],
     }
+    instruction = INSTRUCTION
     schema = perception_fragments.Projection
     identifiers = {
         "observers": sorted(names),
@@ -57,11 +58,13 @@ async def project(
         "fragments": list(available),
     }
     if catchup is not None:
+        instruction += recovery_perception.INSTRUCTION
         payload["unreviewed_history"] = recovery_queue.payload(catchup)
         schema = recovery_perception.RecoveryProjection
         identifiers["observers"] = sorted(set(names) | set(catchup.offsets))
         identifiers["history_fragments"] = list(catchup.available)
-        if not inference.fits(settings, INSTRUCTION, payload, schema, identifiers):
+        identifiers["speaker_id"] = sorted(catchup.audit.speakers)
+        if not inference.fits(settings, instruction, payload, schema, identifiers):
             catchup.error = (
                 "Historical review remains pending: current perception needs the input budget."
             )
@@ -69,12 +72,14 @@ async def project(
             schema = perception_fragments.Projection
             identifiers["observers"] = sorted(names)
             identifiers.pop("history_fragments")
+            identifiers.pop("speaker_id")
+            instruction = INSTRUCTION
             catchup = None
     result = await inference.request(
         manager,
         settings,
         usage,
-        INSTRUCTION,
+        instruction,
         payload,
         schema,
         "perception",

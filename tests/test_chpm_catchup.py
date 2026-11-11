@@ -206,6 +206,10 @@ def test_actor_cursors_ahead_of_this_batch_are_never_rewound():
     )
     batch = recovery_queue._batch_view(row, audit, {"LINA": "Lina", "MIKI": "Miki"})
     assert batch.offsets == {"LINA": 0} and len(batch.available) == 4
+    second = audit.model_copy(update={"actors": {"LINA": 0, "MIKI": 2}})
+    batch = recovery_queue._batch_view(row, second, {"LINA": "Lina", "MIKI": "Miki"})
+    observers = recovery_queue.payload(batch)["eligible_observers_by_fragment"]
+    assert observers["h0"] == ["LINA"] and observers["h2"] == ["LINA", "MIKI"]
 
 
 def test_history_wire_contract_has_exact_fragment_keys_without_rejecting_current_perception():

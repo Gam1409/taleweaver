@@ -11,6 +11,8 @@ from backend.engine.chpm.recovery_contracts import HistoricalObservation
 from backend.engine.chpm.recovery_queue import Batch
 from backend.engine.chpm.schema import Contract
 
+INSTRUCTION = ""
+
 
 class Fragment(Contract):
     kind: Literal["speech", "public_event", "private", "unobserved", "uncertain"]
