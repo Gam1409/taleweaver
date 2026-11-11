@@ -87,6 +87,9 @@ def narration_clothing(
         + json.dumps(facts, ensure_ascii=False)
         + "\nThese current facts supersede outfits in historical dialogue, biography and prior images. "
         "Describe only visible layers. Carried possessions are not automatically worn. "
+        "known_worn_placements preserves established item positions through displacement or "
+        "occlusion. Retain those positions without treating them as a new visual observation "
+        "or inferring that other garments are absent. "
         "Unspecified clothing does not establish undress or reveal hidden garments. "
         "The continuity outcome decides changes; do not invent new clothes or clothing actions.\n"
         + conditions

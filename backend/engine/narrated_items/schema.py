@@ -202,6 +202,13 @@ must never become complete removal. Metaphor, an emotional barrier, a memory or 
 unresolved pronoun does not establish a concrete item change. Leave uncertain changes out.
 Receiving, holding or pocketing an item is not wearing it. Holding does not equip a weapon.
 Touching or holding a sleeve does not establish removal of a worn garment.
+Explicit completed placement of an ordinary owned object in a named body region uses
+disposition=worn, attachment_slot for that region and uncovered_regions=null. This is
+an item position, not garment coverage. It requires a known adult and must respect
+explicit body.attachment_slots; null means unassessed, [] means unavailable. Never
+derive anatomy from gender. Null/omitted attachment_slot preserves the same wearer's
+known placement; detaching uses carried/held. Transfer retains the same existing ID
+and clears the previous wearer's binding; receiving alone does not attach the item.
 For a clearly described ordinary object or garment with no canonical ID, new_item may
 register it. Describe only established intrinsic appearance and material; unknown details
 remain unspecified. Use the narration's language for item names and descriptions.
