@@ -43,9 +43,13 @@ systems should not independently decide for the same characters.
 When one completed NPC proposal remains invalid and another NPC has a usable
 decision, **Keep playing** defers only the rejected character. That NPC retains
 the last confirmed identity, memory, agenda and psychological state and receives
-no new dialogue, decisions or private thoughts in this controlled reply. The
+no new dialogue, decisions or private thoughts in the visible story prose. The
 existing inactive-character boundary is reused. The other decisions still need
 the shared review of the whole narration and host resolution before saving.
+
+Separately enabled portrait emotions and thoughts remain narrator-authored UI
+assessments, including for a deferred NPC. They follow the current reply's source
+binding and never authorize story actions or update confirmed psychological memory.
 
 The indicator reads **NPC Personality: partial** after that review succeeds.
 Session settings identify paused characters and their bounded rejection details;
