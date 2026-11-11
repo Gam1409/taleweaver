@@ -23,6 +23,7 @@ async def defer_move(db: AsyncSession, state: SessionState, event: Event, origin
         .where(
             ChatMessage.session_id == state.session_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
             ChatMessage.scene_id == state.current_scene_id,
         )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())

@@ -86,6 +86,7 @@ async def _latest(manager: Any) -> ChatMessage | None:
         .where(
             ChatMessage.session_id == manager.game_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
             or_(
                 ChatMessage.created_at < request.created_at,
                 and_(ChatMessage.created_at == request.created_at, ChatMessage.id < request.id),

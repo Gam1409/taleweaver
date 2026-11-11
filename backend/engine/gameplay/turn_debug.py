@@ -78,7 +78,9 @@ class DebugInteractions(TurnContext):
             return
 
         # Save the user's /debug command to DB so it can be deleted in debug mode.
-        user_chat_msg = ChatMessage(session_id=self.state.session_id, role="user", content=user_msg)
+        user_chat_msg = ChatMessage(
+            session_id=self.state.session_id, role="user", content=user_msg, is_debug=True
+        )
         self.db.add(user_chat_msg)
         await self.db.flush()
         user_msg_id = str(user_chat_msg.id)
@@ -86,7 +88,7 @@ class DebugInteractions(TurnContext):
         # Send debug info as a system message so it appears in chat.
         # Include both IDs so the frontend can attach them for deletion.
         system_chat_msg = ChatMessage(
-            session_id=self.state.session_id, role="system", content=debug_info
+            session_id=self.state.session_id, role="system", content=debug_info, is_debug=True
         )
         self.db.add(system_chat_msg)
         await self.db.flush()

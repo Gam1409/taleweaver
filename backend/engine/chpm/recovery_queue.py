@@ -57,6 +57,7 @@ async def prepare(manager: Any, turn: Any) -> Batch | None:
         .where(
             ChatMessage.session_id == manager.game_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
             or_(*eligible),
             or_(
                 ChatMessage.created_at < request.created_at,

@@ -11,7 +11,7 @@ const source = readFileSync(new URL('../src/components/game/ResponseActions.vue'
   .replace(/const props = defineProps<[^\n]+\n/, '')
   .replace('const socket = useGameSocket()', '')
 const code = ts.transpileModule(`import {computed,ref,watch,onScopeDispose} from '${import.meta.resolve('vue')}';
-import {isStoryMessage} from '${storyMessageModule}';
+import {isReplayBoundary, isStoryMessage} from '${storyMessageModule}';
 export function setup(props, socket, apiFetch) { ${source}; return {available,latest,replay,undo,canUndo}; }`, {
   compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}
 }).outputText

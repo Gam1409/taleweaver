@@ -2,6 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { nextTick, ref } from 'vue'
 import { mountSfc, settle, stubComponent } from './mountSfc.mjs'
+import { storyMessageModule } from './storyMessageModule.mjs'
+
+const storyMessages = await import(storyMessageModule)
 
 const icons = Object.fromEntries(['AlertTriangle', 'ArrowRight', 'CheckCircle2', 'Loader2',
   'RefreshCw', 'ShieldAlert', 'Wand2', 'Wrench', 'X', 'RotateCcw'].map(name => [name, stubComponent]))
@@ -50,7 +53,7 @@ function replayFixture(t, apiFetch) {
     'lucide-vue-next': icons, '@/services/http': { apiFetch },
     '@/composables/useGameSocket': { useGameSocket: () => socket },
     './RegenerateMessageButton.vue': { default: stubComponent },
-    '@/utils/storyMessages': { isStoryMessage: message => !message.is_debug && ['user', 'assistant'].includes(message.role) },
+    '@/utils/storyMessages': storyMessages,
   })
   t.after(() => v.app.unmount())
   return { ...v, socket, calls }

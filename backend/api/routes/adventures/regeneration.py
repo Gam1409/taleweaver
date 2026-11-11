@@ -121,7 +121,12 @@ async def regenerate_latest_message(
         .limit(12)
     )
     history = list(result.scalars().all())
-    if not history or history[0].role != "assistant" or history[0].id != payload.message_id:
+    if (
+        not history
+        or history[0].role != "assistant"
+        or history[0].is_debug
+        or history[0].id != payload.message_id
+    ):
         raise HTTPException(409, "The latest response changed. Refresh the chat and try again.")
     guidance = await narration_guidance(db, session, current_user)
     presentation = await prepare_rewrite(db, game_id)
@@ -201,6 +206,7 @@ async def _owned_message(
         or message is None
         or message.session_id != game_id
         or message.role != "assistant"
+        or message.is_debug
     ):
         raise HTTPException(404, "Narration not found.")
     return session, message

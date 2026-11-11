@@ -14,6 +14,7 @@ from backend.engine.clothing.profiles import (
 )
 from backend.engine.clothing.visuals import detailed_for_state
 from backend.engine.clothing.wear_provenance import source_matches
+from backend.engine.debug_transcript import not_debug_sql
 from backend.models.chat import ChatMessage
 
 
@@ -85,6 +86,7 @@ async def equipment_rows(
                 select(ChatMessage).where(
                     ChatMessage.session_id == state.session_id,
                     ChatMessage.role.in_(["assistant", "user"]),
+                    not_debug_sql(),
                     ChatMessage.id.in_(ids),
                 )
             )

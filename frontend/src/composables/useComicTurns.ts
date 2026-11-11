@@ -2,6 +2,7 @@ import { ref, computed, watch, type Ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 import type { ChatMessage } from '@/types'
+import { visibleChatMessages } from '@/utils/storyMessages'
 import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
 import { cachedComicDialogue, knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
 
@@ -157,7 +158,7 @@ export function useComicTurns(options: UseComicTurnsOptions) {
   })
 
   const gameTurns = computed<ComicTurn[]>(() =>
-    buildComicPages(messages.value || [], {
+    buildComicPages(visibleChatMessages(messages.value || [], Boolean(sheet.value?.is_debug_enabled ?? sheet.value?.debug_mode)), {
       parseUser: (msg) => parseUserMessage(msg, entities.value, npcMetadata.value),
       parseAssistant: dialogueParser.value,
     })

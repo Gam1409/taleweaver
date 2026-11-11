@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.debug_transcript import not_debug_sql, without_debug
 from backend.models.chat import ChatMessage
 
 RECENT_NARRATION_MAX_CHARS = 400
@@ -155,7 +156,7 @@ async def _load_memory_window(
     """Loads only the messages of the last `max_turns` turns plus the current one."""
     marker_res = await db.execute(
         select(ChatMessage.id, ChatMessage.created_at)
-        .where(ChatMessage.session_id == session_id, ChatMessage.role == "user")
+        .where(ChatMessage.session_id == session_id, ChatMessage.role == "user", not_debug_sql())
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(max_turns + 1)
     )
@@ -171,7 +172,7 @@ async def _load_memory_window(
     )
     window = list(msg_res.scalars().all())
     start_idx = next((i for i, m in enumerate(window) if m.id == start_id), 0)
-    return window[start_idx:]
+    return without_debug(window[start_idx:])
 
 
 def _append_message(messages: list[dict[str, str]], role: str, content: str) -> None:

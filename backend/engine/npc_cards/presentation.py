@@ -147,6 +147,7 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
             .where(
                 ChatMessage.session_id == state.session_id,
                 ChatMessage.role == "assistant",
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.id.in_(source_ids),
             )
             .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
@@ -184,6 +185,7 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         .where(
             ChatMessage.session_id == state.session_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
             or_(
                 ChatMessage.created_at > source.created_at,
                 and_(ChatMessage.created_at == source.created_at, ChatMessage.id > source.id),

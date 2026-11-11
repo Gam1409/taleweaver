@@ -4,11 +4,11 @@ import { RotateCcw, Undo2 } from 'lucide-vue-next'
 import { apiFetch } from '@/services/http'
 import { useGameSocket } from '@/composables/useGameSocket'
 import RegenerateMessageButton from './RegenerateMessageButton.vue'
-import { isStoryMessage } from '@/utils/storyMessages'
+import { isReplayBoundary, isStoryMessage } from '@/utils/storyMessages'
 
 const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean }>()
 const socket = useGameSocket()
-const latest = computed(() => [...socket.messages.value].reverse().find(isStoryMessage))
+const latest = computed(() => [...socket.messages.value].reverse().find(isReplayBoundary))
 const busy = computed(() => props.disabled || socket.inputLocked.value || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
 const available = ref(false)
 const undoBusy = computed(() => props.disabled || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
@@ -23,7 +23,7 @@ async function checkTurn() {
   checking.value = false
   checkFailed.value = false
   reason.value = 'Complete a story turn before regenerating it.'
-  if (!props.gameId || latest.value?.role !== 'assistant' || !latest.value.id) return
+  if (!props.gameId || latest.value?.role !== 'assistant' || !isStoryMessage(latest.value) || !latest.value.id) return
   if (!['connected', 'completed', 'game_over'].includes(socket.status.value)) return
   checking.value = true
   reason.value = 'Checking whether this turn can be regenerated…'

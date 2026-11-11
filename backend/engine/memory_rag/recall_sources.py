@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from backend.engine.debug_transcript import not_debug_sql
 from backend.engine.memory_rag.documents import (
     MemoryDocument,
     _bounded_document,
@@ -36,7 +37,11 @@ MAX_SUMMARIES = 12
 async def _message_ids(db: Any, sid: str, query: str, candidates: list[dict]) -> set[str]:
     base = (
         select(ChatMessage.id)
-        .where(ChatMessage.session_id == sid, ChatMessage.role.in_(["user", "assistant"]))
+        .where(
+            ChatMessage.session_id == sid,
+            ChatMessage.role.in_(["user", "assistant"]),
+            not_debug_sql(),
+        )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
     )
     ids = set(await db.scalars(base.limit(RECENT_MESSAGES)))
@@ -135,6 +140,7 @@ async def collect_documents(
             ChatMessage.session_id == state.session_id,
             ChatMessage.id.in_(sorted(ids)),
             ChatMessage.role.in_(["user", "assistant"]),
+            not_debug_sql(),
         )
         .execution_options(populate_existing=True)
     )

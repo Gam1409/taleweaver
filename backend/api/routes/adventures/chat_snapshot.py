@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
+from backend.engine.debug_transcript import DebugTranscript
 from backend.engine.gameplay.manager import GameTurnManager
 from backend.engine.gameplay.turn_suggestions import PROMPT_SUGGESTIONS_LANGUAGE_KEY
 from backend.engine.gameplay.world import AdventureLogic
@@ -29,9 +30,12 @@ async def load_chat_history(db: AsyncSession, session_id: str) -> list[dict[str,
     chat_res = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
-    return [m.to_client_dict() for m in chat_res.scalars().all()]
+    classifier = DebugTranscript()
+    return [
+        {**m.to_client_dict(), "is_debug": classifier.is_debug(m)} for m in chat_res.scalars().all()
+    ]
 
 
 async def build_session_map(

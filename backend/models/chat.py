@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import uuid6
-from sqlalchemy import JSON, ForeignKey, String, Text, event, inspect
+from sqlalchemy import JSON, Boolean, ForeignKey, String, Text, event, false, inspect
 from sqlalchemy.orm import Mapped, Session, UOWTransaction, mapped_column
 
 from backend.core.npc_presentation import public_cues
@@ -29,6 +29,9 @@ class ChatMessage(Base, TimestampMixin):
 
     # The actual message payload
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_debug: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
 
     # Scene and sequence the message was written in. The client groups the story into
     # one page per scene/sequence. Stamped automatically on flush (see below).
@@ -54,6 +57,7 @@ class ChatMessage(Base, TimestampMixin):
             "id": self.id,
             "role": self.role,
             "content": self.content,
+            "is_debug": bool(self.is_debug),
             "scene_id": self.scene_id,
             "sequence_id": self.sequence_id,
             "revision_id": self.revision_id,

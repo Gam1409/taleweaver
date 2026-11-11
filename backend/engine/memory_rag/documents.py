@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from backend.engine.debug_transcript import is_debug_message
 from backend.engine.npc_journal.clock import clock_fields
 from backend.engine.npc_journal.reading import entries as journal_entries
 from backend.engine.npc_journal.records import supported_quote
@@ -134,7 +135,7 @@ def _document(state: Any, user_id: str, **fields: Any) -> MemoryDocument:
 
 
 def _dialogue(state: Any, user_id: str, message: ChatMessage) -> list[MemoryDocument]:
-    if (message.npc_journal or {}).get("status") == "incomplete":
+    if is_debug_message(message) or (message.npc_journal or {}).get("status") == "incomplete":
         return []
     claimed = message.role == "user"
     fingerprint = content_hash(message.content)

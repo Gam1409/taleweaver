@@ -122,6 +122,7 @@ async def ready_snapshot(db: AsyncSession, session_id: str, message_id: str) -> 
         or row.status != "ready"
         or row.assistant_id != message_id
         or message is None
+        or message.is_debug
         or message.id != message_id
     ):
         raise ReplayUnavailableError(

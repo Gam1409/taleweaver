@@ -72,6 +72,7 @@ async def _conditions(
                 select(ChatMessage).where(
                     ChatMessage.session_id == state.session_id,
                     ChatMessage.role == "assistant",
+                    ChatMessage.is_debug.is_(False),
                     ChatMessage.id.in_(message_ids),
                 )
             )

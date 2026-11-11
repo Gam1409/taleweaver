@@ -5,7 +5,7 @@ import { useGameSocket } from '@/composables/useGameSocket'
 import { useNotifications } from '@/composables/useNotifications'
 import { apiFetch } from '@/services/http'
 import type { ChatMessage } from '@/types'
-import { isStoryMessage } from '@/utils/storyMessages'
+import { isReplayBoundary, isStoryMessage } from '@/utils/storyMessages'
 
 const props = defineProps<{ gameId?: string, disabled?: boolean }>()
 const socket = useGameSocket()
@@ -19,9 +19,9 @@ let disposed = false
 let generation = 0
 onScopeDispose(() => { disposed = true; generation++ })
 watch(() => props.gameId, () => { generation++; dialog.value?.close(); revisions.value = [] })
-const latest = computed(() => [...socket.messages.value].reverse().find(isStoryMessage))
+const latest = computed(() => [...socket.messages.value].reverse().find(isReplayBoundary))
 const unavailable = computed(() => props.disabled || busy.value || latest.value?.role !== 'assistant' ||
-  !latest.value.id || socket.inputLocked.value || socket.sheet.value?.agent_active ||
+  !isStoryMessage(latest.value) || !latest.value.id || socket.inputLocked.value || socket.sheet.value?.agent_active ||
   !['connected', 'completed'].includes(socket.status.value))
 const preview = computed(() => revisions.value.find(r => r.id === selected.value)?.content ?? '')
 async function request(restore = false) {

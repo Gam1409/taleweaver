@@ -82,6 +82,7 @@ async def _scene_evidence(manager: Any) -> tuple[str, str]:
         .where(
             ChatMessage.session_id == manager.state.session_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
         )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(1)

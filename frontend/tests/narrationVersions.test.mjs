@@ -19,7 +19,7 @@ async function fixture(t, fetch) {
     .replace(/import[\s\S]*?from ['"][^'"]+['"];?/g, '')
     .replace(/defineProps<[\s\S]*?>\(\)/, `globalThis['${key}'].props`)
   source = `import {computed,ref,watch,onScopeDispose} from '${import.meta.resolve('vue')}';
-import {isStoryMessage} from '${storyMessageModule}';
+import {isReplayBoundary, isStoryMessage} from '${storyMessageModule}';
 const useGameSocket = () => globalThis['${key}'].socket;
 const useNotifications = () => ({addNotification: (...args) => globalThis['${key}'].notices.push(args)});
 const apiFetch = (...args) => globalThis['${key}'].fetch(...args);
@@ -61,6 +61,22 @@ test('debug toggles do not change the narration whose versions are restored', as
   await f.request(true)
   assert.equal(f.socket.messages.value[0].content, 'Original')
   assert.equal(f.socket.messages.value[1].content, '/debug on')
+})
+
+test('hidden world corrections and technical replies still block narration version changes', async t => {
+  let requests = 0
+  const f = await fixture(t, async () => {
+    requests++
+    return response(history)
+  })
+  for (const message of [
+    { id: 'edit', role: 'user', content: '/debug heal', is_debug: true },
+    { id: 'technical', role: 'assistant', content: 'Technical output.', is_debug: true }
+  ]) {
+    f.socket.messages.value = [f.socket.messages.value[0], message]
+    await f.request()
+    assert.equal(requests, 0)
+  }
 })
 
 test('stale restore keeps the current text and shows the server error', async t => {

@@ -10,13 +10,34 @@ const uri = code => `data:text/javascript;base64,${Buffer.from(code).toString('b
 const dialogue = uri(compile('composables/comicDialogue.ts'))
 const pages = uri(compile('composables/comicPages.ts'))
 const identity = uri(compile('utils/npcIdentity.ts'))
+const storyMessages = uri(compile('utils/storyMessages.ts'))
 const turns = compile('composables/useComicTurns.ts')
   .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
   .replace("from 'dompurify'", `from '${import.meta.resolve('dompurify')}'`)
   .replaceAll("'./comicDialogue'", JSON.stringify(dialogue))
   .replaceAll("'./comicPages'", JSON.stringify(pages))
   .replaceAll("'@/utils/npcIdentity'", JSON.stringify(identity))
+  .replaceAll("'@/utils/storyMessages'", JSON.stringify(storyMessages))
 const {resolveNpc, resolveNpcMetadata, parseAssistantContent, useComicTurns} = await import(uri(turns))
+
+test('Debug history visibility follows the session toggle while the raw transcript remains intact', () => {
+  const scope = effectScope()
+  const messages = ref([
+    { id: 'story', role: 'assistant', content: 'An ordinary reply.' },
+    { id: 'command', role: 'user', content: '/debug on', is_debug: true },
+    { id: 'result', role: 'system', content: 'Enabled.', is_debug: true },
+  ])
+  const sheet = ref({ is_debug_enabled: false, debug_mode: true })
+  const view = scope.run(() => useComicTurns({ messages, entities: ref([]), npcMetadata: ref({}), sheet }))
+  const commands = () => view.gameTurns.value.flatMap(page => page.exchanges).filter(exchange => exchange.userMessage?.id === 'command')
+  assert.equal(commands().length, 0)
+  sheet.value.is_debug_enabled = true
+  assert.equal(commands().length, 1)
+  sheet.value.is_debug_enabled = false
+  assert.equal(commands().length, 0)
+  assert.equal(messages.value.length, 3)
+  scope.stop()
+})
 const hover = uri(compile('services/hoverEntityService.ts'))
 const interaction = compile('composables/useGameInteractionState.ts')
   .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)

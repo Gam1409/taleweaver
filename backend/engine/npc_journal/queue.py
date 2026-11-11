@@ -49,6 +49,7 @@ def active_session(session_id: str, now: float) -> Exists:
         select(other.id)
         .where(
             other.session_id == session_id,
+            other.is_debug.is_(False),
             other.npc_journal["status"].as_string() == "running",
             other.npc_journal["lease_until"].as_float() > now,
         )
@@ -62,6 +63,7 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
         update(ChatMessage)
         .where(
             ChatMessage.session_id == session_id,
+            ChatMessage.is_debug.is_(False),
             ChatMessage.npc_journal["status"].as_string() == "running",
             ChatMessage.npc_journal["attempts"].as_integer() >= MAX_ATTEMPTS,
             func.coalesce(ChatMessage.npc_journal["lease_until"].as_float(), 0) <= now,
@@ -84,6 +86,7 @@ async def next_message(db: AsyncSession, session_id: str) -> str | None:
         .where(
             ChatMessage.session_id == session_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
             eligible_expression(now),
             ~active_session(session_id, now),
         )
@@ -98,6 +101,7 @@ async def next_retry_at(db: AsyncSession, session_id: str) -> float | None:
     rows = await db.scalars(
         select(ChatMessage.npc_journal).where(
             ChatMessage.session_id == session_id,
+            ChatMessage.is_debug.is_(False),
             ChatMessage.npc_journal["status"].as_string().in_(["pending", "failed", "running"]),
             or_(
                 ChatMessage.npc_journal["status"].as_string() != "pending",
@@ -121,7 +125,7 @@ async def claim(
 ) -> dict | None:
     old = message.npc_journal or {}
     now = time.time()
-    if not eligible(old, now):
+    if message.is_debug or message.role != "assistant" or not eligible(old, now):
         return None
     gaps = list(
         (
@@ -129,6 +133,7 @@ async def claim(
                 select(ChatMessage.id).where(
                     ChatMessage.session_id == message.session_id,
                     ChatMessage.role == "assistant",
+                    ChatMessage.is_debug.is_(False),
                     ChatMessage.npc_journal["status"].as_string() == "failed",
                     or_(
                         ChatMessage.created_at < message.created_at,
@@ -190,6 +195,7 @@ async def requeue_dependents(db: AsyncSession, recovered: ChatMessage) -> None:
         await db.scalars(
             select(ChatMessage).where(
                 ChatMessage.session_id == recovered.session_id,
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.npc_journal["status"].as_string() == "done",
             )
         )

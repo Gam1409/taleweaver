@@ -224,6 +224,7 @@ class TurnSuggestionsManager(TurnContext):
             .where(
                 ChatMessage.session_id == self.state.session_id,
                 ChatMessage.role == "assistant",
+                ChatMessage.is_debug.is_(False),
             )
             .order_by(ChatMessage.created_at.desc())
             .limit(1)

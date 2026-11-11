@@ -125,7 +125,11 @@ async def prepare_wardrobe_plan(
         return
     previous = await manager.db.scalar(
         select(ChatMessage)
-        .where(ChatMessage.session_id == manager.state.session_id, ChatMessage.role == "assistant")
+        .where(
+            ChatMessage.session_id == manager.state.session_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
+        )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(1)
     )

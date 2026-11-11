@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import and_, or_, select
 
+from backend.engine.debug_transcript import not_debug_sql, without_debug
 from backend.models.chat import ChatMessage
 
 
@@ -16,7 +17,11 @@ async def recent_dialogue(db: Any, state: Any) -> list[dict[str, str]]:
     starts = list(
         await db.scalars(
             select(ChatMessage)
-            .where(ChatMessage.session_id == state.session_id, ChatMessage.role == "user")
+            .where(
+                ChatMessage.session_id == state.session_id,
+                ChatMessage.role == "user",
+                not_debug_sql(),
+            )
             .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
             .limit(turn_window(state))
         )
@@ -31,4 +36,4 @@ async def recent_dialogue(db: Any, state: Any) -> list[dict[str, str]]:
             )
         )
     rows = await db.scalars(query.order_by(ChatMessage.created_at, ChatMessage.id))
-    return [{"role": row.role, "content": row.content} for row in rows]
+    return [{"role": row.role, "content": row.content} for row in without_debug(list(rows))]

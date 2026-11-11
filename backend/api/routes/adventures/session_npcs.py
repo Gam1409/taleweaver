@@ -110,6 +110,7 @@ async def list_characters(
         await db.scalars(
             select(ChatMessage.npc_journal).where(
                 ChatMessage.session_id == game_id,
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.npc_journal.is_not(None),
             )
         )
@@ -164,6 +165,7 @@ async def retry_learning(
         await db.scalars(
             select(ChatMessage).where(
                 ChatMessage.session_id == game_id,
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.npc_journal["status"].as_string() == "failed",
             )
         )

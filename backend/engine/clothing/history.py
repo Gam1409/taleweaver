@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.debug_transcript import not_debug_sql
 from backend.models.chat import ChatMessage
 
 MAX_MESSAGES = 80
@@ -24,7 +25,7 @@ async def load_history(
     query = select(ChatMessage).where(
         ChatMessage.session_id == session_id,
         ChatMessage.role.in_(["user", "assistant"]),
-        ~ChatMessage.content.startswith("/debug"),
+        not_debug_sql(),
     )
     if through is not None:
         if (

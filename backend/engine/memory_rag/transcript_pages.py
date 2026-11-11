@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import and_, or_, select
 
+from backend.engine.debug_transcript import DebugTranscript
 from backend.models.chat import ChatMessage
 
 PAGE_SIZE = 256
@@ -20,9 +21,11 @@ async def transcript_messages(db: Any, session_id: str) -> dict[str, Any]:
         ChatMessage.sequence_id,
         ChatMessage.created_at,
         ChatMessage.npc_journal,
+        ChatMessage.is_debug,
     )
     messages: dict[str, Any] = {}
     cursor = None
+    classifier = DebugTranscript()
     while True:
         query = (
             select(*columns)
@@ -44,7 +47,12 @@ async def transcript_messages(db: Any, session_id: str) -> dict[str, Any]:
         if not page:
             return messages
         for row in page:
-            if row["content"] and (row["npc_journal"] or {}).get("status") != "incomplete":
+            debug = classifier.is_debug(row)
+            if (
+                row["content"]
+                and not debug
+                and (row["npc_journal"] or {}).get("status") != "incomplete"
+            ):
                 messages[row["id"]] = SimpleNamespace(**row)
         cursor = page[-1]["created_at"], page[-1]["id"]
         if len(page) < PAGE_SIZE:

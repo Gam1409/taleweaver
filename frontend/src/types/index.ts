@@ -18,6 +18,7 @@ export interface ChatMessage {
   content: string
   timestamp: Date
   portrait_state?: PortraitState | null
+  is_debug?: boolean
   itemIds?: string[]
   /** Scene/sequence the message belongs to; the story feed shows one page per scene/sequence. */
   scene_id?: string | null

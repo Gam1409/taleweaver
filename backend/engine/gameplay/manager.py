@@ -80,6 +80,7 @@ from backend.engine.gameplay.language import (
 from backend.engine.gameplay import progression_request
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
+from backend.engine.debug_transcript import debug_message_scope, is_debug_message, without_debug
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.narrated_items.runtime import reconcile_items
@@ -456,7 +457,13 @@ class GameTurnManager:
         """
         if self.state is None:
             raise RuntimeError("Game turn context has not been initialized.")
-        cm = ChatMessage(session_id=self.state.session_id, role=role, content=content)
+        cm = ChatMessage(
+            session_id=self.state.session_id,
+            role=role,
+            content=content,
+            is_debug=bool(getattr(self, "_debug_message_scope", False))
+            or is_debug_message({"role": role, "content": content}),
+        )
         self.db.add(cm)
         await self.db.flush()
         # Attempt to unhide any referenced entities inside the message text
@@ -2175,6 +2182,7 @@ class GameTurnManager:
             session_id=self.state.session_id,
             role="assistant",
             content=response_text,
+            is_debug=bool(getattr(self, "_debug_message_scope", False)),
             portrait_state=portrait_turn.payload(response_text) if narration_completed else None,
             npc_journal={
                 "status": "pending" if narration_completed else "incomplete",
@@ -2484,7 +2492,7 @@ class GameTurnManager:
             .where(ChatMessage.session_id == self.state.session_id)
             .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
         )
-        all_msgs = list(res.scalars().all())
+        all_msgs = without_debug(list(res.scalars().all()))
         user_indices = [i for i, m in enumerate(all_msgs) if m.role == "user"]
 
         if len(user_indices) <= max_turns:
@@ -2951,8 +2959,9 @@ class GameTurnManager:
             yield item
 
     async def _handle_debug(self, user_msg: str) -> AsyncGenerator[str, None]:
-        async for item in self.interactions._handle_debug(user_msg):
-            yield item
+        with debug_message_scope(self):
+            async for item in self.interactions._handle_debug(user_msg):
+                yield item
 
     async def _handle_debug_gen_item(self, prompt: str) -> AsyncGenerator[str, None]:
         async for item in self.interactions._handle_debug_gen_item(prompt):

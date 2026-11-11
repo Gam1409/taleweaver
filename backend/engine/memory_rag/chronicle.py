@@ -9,6 +9,7 @@ from sqlalchemy import select
 from backend.core import database
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.debug_transcript import without_debug
 from backend.engine.memory_rag.documents import content_hash
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.recent import turn_window
@@ -81,6 +82,7 @@ async def _batch(db: Any, state: Any) -> dict | None:
             .execution_options(populate_existing=True)
         )
     )
+    rows = without_debug(rows)
     users = [index for index, row in enumerate(rows) if row.role == "user"]
     window = turn_window(state)
     if len(users) <= window:
