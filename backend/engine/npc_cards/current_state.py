@@ -54,8 +54,8 @@ async def _conditions(
     visible = project(state, {actor["id"]: actor}, detailed=detailed, limit=None)
     by_id = {row["id"]: {**row, "observation": "visible"} for row in visible}
     names = {row["item_id"]: row["name"] for row in (clothing or {}).get("clothing", [])}
-    # Public states disclosed in completed narration remain known when covered.
-    # Recheck the original fragment rather than exposing a private ledger description.
+    # Public facts remain known when covered. Explicit public Debug corrections
+    # use their chosen detail; narrated facts must still match their original source.
     candidates = [
         row
         for row in ledger.conditions.values()
@@ -63,24 +63,25 @@ async def _conditions(
         and row.visibility == "public"
         and row.target_id in {actor["id"], *names}
         and row.id not in by_id
-        and row.latest.kind == "narration"
+        and row.latest.kind in {"narration", "manual"}
     ]
+    message_ids = {row.latest.message_id for row in candidates if row.latest.kind == "narration"}
     messages = (
         (
             await db.scalars(
                 select(ChatMessage).where(
                     ChatMessage.session_id == state.session_id,
                     ChatMessage.role == "assistant",
-                    ChatMessage.id.in_({row.latest.message_id for row in candidates}),
+                    ChatMessage.id.in_(message_ids),
                 )
             )
         ).all()
-        if candidates
+        if message_ids
         else []
     )
     sources = {message.id: message.content for message in messages}
     for row in candidates:
-        quote = _source_quote(row, sources)
+        quote = row.detail if row.latest.kind == "manual" else _source_quote(row, sources)
         if quote:
             by_id[row.id] = {
                 "id": row.id,

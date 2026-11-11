@@ -51,6 +51,21 @@ is made, and rejected candidates do not replace confirmed facts.
 
 Existing sessions start with an empty ledger. Old narration is **not** automatically rescanned. Use the manual form to establish an older condition that is still present. Debug's legacy HP healing command does not resolve narrative injuries; resolve these explicitly in **State**.
 
+For a manual record, choose the NPC as subject, the condition kind, its specific body
+part and current detail. Fluid traces use `fluid`; another explicit physiological sign
+can use `other`. Select Public only for facts established as known to the player.
+Public manual corrections appear under **Characters > NPC > State > Physical condition**
+while that NPC is present. Private or resolved records stay out of that public card.
+This works with NPC Personality enabled or disabled. A public correction alone does
+not establish exposed skin or a visible surface for image generation.
+
+An internal condition and a visible external trace have separate records when both
+are established. Partial cleaning uses `reduce` with the remaining detail; complete
+cleaning resolves only the selected record. Wetness and other physiological signs
+are physical facts, not automatic evidence of a particular feeling or desire. The
+shared extraction can record them from completed narration, but cannot infer an
+unwritten bodily consequence or recover an old omission by itself.
+
 The timestamps read the existing authoritative session clock; recording a condition never advances it. `first_recorded_minute` is when the host first registered the fact, not an inferred onset time. `last_changed_minute` changes only on an accepted update. An omitted fact, rejected proposal or repeated check does not refresh either time. Legacy records keep unknown times until an actual change; their original onset is never invented. Full-turn replay restores the historical clock and these fields together; copies and exports preserve them.
 
 A successful extraction with zero proposals is displayed explicitly. It means the model proposed no changes, not that the host proved nothing happened or that an NPC has no physical conditions. A diagnostic-only empty ledger does not become a citable healthy-state observation in CHPM. See [VN time passages](vn-time-passages.md) for explicit multi-day skips and bounded Living World catch-up.
