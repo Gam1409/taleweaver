@@ -5,6 +5,15 @@ from typing import Any
 
 from backend.engine.memory_rag.documents import MemoryDocument, sources_hash
 
+PRESERVE_EVENT_MEANING = (
+    "Preserve the supplied event's actual type and interpersonal meaning, including adult intimacy "
+    "and emotionally significant experiences. Do not silently erase those events or recast them "
+    "as a different, merely professional interaction. Condense wording while preserving participants, "
+    "established actions, causal links, emotional or relationship consequences and unresolved effects. "
+    "Keep claims, observations and unknowns distinct; do not invent details or infer ongoing consent "
+    "from past participation. "
+)
+
 
 def pending_parts(
     sources: list[MemoryDocument], existing: list[Any]

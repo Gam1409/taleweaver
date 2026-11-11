@@ -19,6 +19,7 @@ from backend.engine.memory_rag.documents import (
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.summary_parts import (
+    PRESERVE_EVENT_MEANING,
     bounded_parts,
     language_instruction,
     pending_parts,
@@ -176,6 +177,7 @@ async def summarize_one_group(
                 "open commitments, explicit causes and consequences, and later reversals. "
                 "recorded_at is wall-clock metadata, never an in-game event date. "
                 "Missing game time stays unknown; do not invent chronology or causal links."
+                + PRESERVE_EVENT_MEANING
                 + language
             ),
             user_prompt=job.prompt,
