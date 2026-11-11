@@ -64,6 +64,30 @@ def test_all_fragments_remain_accounted_for_when_dense_text_needs_grouping():
     assert [reference for group in grouped.values() for reference in group] == source.references()
 
 
+def test_short_gestures_and_interjections_are_accounted_for_without_editing_the_prose():
+    text = "Сел.\nАх.\n."
+    source = catalog(text)
+    grouped = coverage.groups(source)
+    assert [reference for group in grouped.values() for reference in group] == list(
+        source.narration_passages
+    )
+    assert any(quote == "Ах." for quote in source.narration_passages.values())
+    assert source.narration == text
+
+
+@pytest.mark.parametrize("annotations", [{"c0": ["invalid"]}, {"c0": "items"}, "invalid"])
+def test_malformed_annotations_cannot_discard_an_independently_valid_item(annotations):
+    source = catalog("Anna removes her shirt.")
+    raw = action(destination_owner="NPC").model_dump()
+    raw["evidence"] = next(iter(source.narration_passages))
+    shared = SharedItemExtraction(actions=[raw], coverage=annotations)
+    inspected, audit = coverage.inspect(shared, source, staging=False)
+    bound = evidence.bind(inspected, source.narration, catalog=source)
+    extracted, failures, _, _ = independent_state.unpack(bound, fixtures()[0])
+    assert len(extracted.actions) == 1 and not failures
+    assert audit.status in {"unavailable", "needs_review"}
+
+
 def test_empty_answer_is_complete_only_when_every_group_was_classified_unchanged():
     source = catalog("The quiet room remains unchanged.")
     _, audit = coverage.inspect(

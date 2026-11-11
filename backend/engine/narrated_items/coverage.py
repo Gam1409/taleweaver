@@ -21,7 +21,7 @@ MAX_GROUPS = 24
 
 
 def groups(catalog: Catalog) -> dict[str, list[str]]:
-    references = catalog.references()
+    references = catalog.references(minimum=1)
     size = max(1, ceil(len(references) / MAX_GROUPS))
     return {
         f"c{index // size}": references[index : index + size]
@@ -47,7 +47,7 @@ def inspect(result: Any, catalog: Catalog, *, staging: bool) -> tuple[Any, Audit
     body = result.model_dump() if isinstance(result, BaseModel) else deepcopy(result)
     if not isinstance(body, dict):
         return body, Audit("unavailable")
-    expected, raw = groups(catalog), body.get("coverage")
+    expected, raw = groups(catalog), body.pop("coverage", None)
     if not isinstance(raw, dict):
         return body, Audit("unavailable")
     if set(raw) != set(expected):

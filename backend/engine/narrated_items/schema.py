@@ -145,6 +145,11 @@ class ItemExtraction(BaseModel):
 class SharedItemExtraction(ItemExtraction):
     """Preserve independent sections; host revalidates actions before applying them."""
 
+    coverage: Annotated[
+        Any,
+        BeforeValidator(lambda value: value, json_schema_input_type=dict[str, list[Tag]] | None),
+    ] = None
+
     staging: Annotated[
         Any,
         BeforeValidator(
