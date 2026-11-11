@@ -199,7 +199,7 @@ async def test_invalid_source_does_not_starve_a_later_source_or_get_marked_succe
 
 def test_actor_cursors_ahead_of_this_batch_are_never_rewound():
     row = SimpleNamespace(
-        content="\n".join(f"Line {index}." for index in range(12)), npc_recovery=None
+        id="historical", content="\n".join(f"Line {index}." for index in range(12)), npc_recovery=None
     )
     audit = recovery_queue.RecoveryAudit(
         content_hash="a" * 64, scene_id="S", actors={"LINA": 0, "MIKI": 9}
