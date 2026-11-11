@@ -214,7 +214,7 @@ function isNpcSpeaking(npc: any): boolean {
       </div>
     </TransitionGroup>
   </aside>
-  <NpcThoughtBubble :text="thought.text" :name="thought.name" :anchor="thought.anchor" @dismiss="closeThought" />
+  <NpcThoughtBubble :npc-id="thought.id" :text="thought.text" :name="thought.name" :anchor="thought.anchor" @dismiss="closeThought" />
 </template>
 
 <style scoped>
