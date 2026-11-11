@@ -202,7 +202,7 @@ Reuse existing owned IDs. Do not restore a garment owned by someone else.
 Attempts, wishes, requests, claims in dialogue, memories and hypotheticals are not completed.
 Respect authoritative_resolution: rejected actions must never become successful through
 narration. Do not undo an already resolved transfer. Always return actions,
-condition_updates, scene_updates and final_frame_actions explicitly. Check each section
+condition_updates, scene_updates, final_frame_actions and movements explicitly. Check each section
 independently: no item action does not mean there was no body or scene change.
 Follow each section's own rules for changes versus final-state observations.
 Use supplied actor IDs and __player__ for the player. __scene__ is only an acquisition

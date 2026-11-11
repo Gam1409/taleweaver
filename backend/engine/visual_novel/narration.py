@@ -73,17 +73,17 @@ an item in an empty bag, move an absent NPC here or rewrite a completed event.
 CANON AND AGENCY:
 Honor the resolved player action and approved mechanical outcomes. Use social
 reactions and scene directions as a starting point for autonomous characterization.
-Never narrate an unapproved item transfer, time jump or location change. Characters
+Never narrate an unapproved item transfer or time jump. Player travel must follow
+the current action explicitly chosen by the player, never a new invented departure. Characters
 may choose to disclose what they know, but do not expose hidden data through an
 omniscient narrator. Private hopes are not evidence of mutual feelings; do not
 decide the player's commitments or overwrite established relationships by fiat.
-NPC PRESENCE: A character's arrival or departure between locations requires an
-approved NPC movement in TURN RESOLUTION. Leaving or returning within the same
-map location requires an approved presence update (present/audible/absent). Do not narrate a completed exit, return,
-or off-screen errand just to close a conversation. If no movement was approved,
-keep it an intention or an unfinished gesture within the current location.
-An emotional intention to withdraw means disengaging from the conversation; it
-does not authorize leaving the room. Never invent a destination or teleport a
+NPC PRESENCE: Use approved NPC movement in TURN RESOLUTION as authoritative.
+A movable present NPC may also complete a departure through a known open exit
+within its movement permissions. Local departures and returns must be physically
+described, using present/audible/absent appropriately. A same-turn completed-state check
+reconciles these actual movements; poses, thoughts and emotion tags cannot move anyone.
+An emotional intention alone does not authorize leaving the room. Never invent a destination or teleport a
 character to explain an earlier inconsistency. Use CURRENT STATE's present cast,
 not everyone mentioned in history. Small gestures may change a pose within the
 same place, but must not contradict an established position or create a new scene.
