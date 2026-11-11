@@ -1,16 +1,28 @@
 name: Attach verified release archives
 
 on:
+  workflow_run:
+    workflows: [TaleWeaver CI, Security checks, Docker distribution, Desktop distributions]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing draft release tag
+        description: Existing draft or published release tag
         required: true
         type: string
       build_run_id:
-        description: Successful Desktop distributions run for exactly that tag commit
-        required: true
+        description: Successful Desktop distributions run for exactly that tag commit (optional)
+        required: false
         type: string
+      promote:
+        description: Publish, remove Pre-release and mark Latest after verified uploads
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-assets-${{ inputs.tag || 'v0.7.1-beta' }}
+  cancel-in-progress: false
 
 permissions:
   actions: read
@@ -18,13 +30,23 @@ permissions:
 
 jobs:
   attach:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_sha == '5c291c971ddac8fbda26ed8060b57fc2fad4a7d3')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_TAG: ${{ inputs.tag || 'v0.7.1-beta' }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      PROMOTE_RELEASE: ${{ github.event_name != 'workflow_dispatch' || inputs.promote }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -32,39 +54,17 @@ jobs:
         id: verify
         shell: bash
         run: |
-          python - <<'PY'
-          import json, os, re, subprocess
-          repo = os.environ['GITHUB_REPOSITORY']
-          tag = os.environ['RELEASE_TAG']
-          run_id = os.environ['BUILD_RUN_ID']
-          if not re.fullmatch(r'v[0-9][A-Za-z0-9._-]{0,99}', tag) or not run_id.isascii() or not run_id.isdecimal() or len(run_id) > 20:
-              raise SystemExit('Invalid release tag or build run ID.')
-          def api(path):
-              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
-          commit = api(f'commits/{tag}')['sha']
-          run = api(f'actions/runs/{run_id}')
-          if (run['head_sha'], run['path'], run['status'], run['conclusion']) != (commit, '.github/workflows/desktop.yml', 'completed', 'success'):
-              raise SystemExit('Source archives must come from successful desktop builds of the exact release commit.')
-          checks = api(f'actions/runs?head_sha={commit}&per_page=100')['workflow_runs']
-          for path in ('ci.yml', 'security.yml', 'docker.yml'):
-              matching = [item for item in checks if item['path'] == f'.github/workflows/{path}']
-              latest = max(matching, key=lambda item: (item['run_number'], item['run_attempt']), default=None)
-              if latest is None or (latest['status'], latest['conclusion']) != ('completed', 'success'):
-                  raise SystemExit(f'Release check {path} has not succeeded.')
-          releases = api('releases?per_page=100')
-          release = next((item for item in releases if item['tag_name'] == tag), None)
-          if release is None or not release['draft']:
-              raise SystemExit('Only an existing draft release can receive these archives.')
-          print(f'Verified {tag} at {commit}, desktop run {run_id}, and all release checks.')
-          PY
+          python scripts/release_assets.py inspect
       - uses: actions/download-artifact@v4
+        if: steps.verify.outputs.ready == 'true'
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.build_run_id }}
+          run-id: ${{ steps.verify.outputs.build_run_id }}
           pattern: TaleWeaver-*
           path: release-artifacts
       - name: Collect the three platform archives and generate SHA-256 checksums
+        if: steps.verify.outputs.ready == 'true'
         shell: bash
         run: |
           python - <<'PY'
@@ -84,7 +84,8 @@ jobs:
               shutil.copy2(path, dist / path.name)
           (dist / 'SHA256SUMS').write_text(''.join(sums))
           PY
-      - name: Attach to draft without publishing
+      - name: Attach verified archives
+        if: steps.verify.outputs.ready == 'true'
         shell: bash
         run: |
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
@@ -92,3 +93,8 @@ jobs:
             release-dist/TaleWeaver-linux-X64.tar.gz \
             release-dist/TaleWeaver-macos-ARM64.tar.gz \
             release-dist/SHA256SUMS
+      - name: Record verification and apply the requested release status
+        if: steps.verify.outputs.ready == 'true'
+        env:
+          BUILD_RUN_ID: ${{ steps.verify.outputs.build_run_id }}
+        run: python scripts/release_assets.py publish

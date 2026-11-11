@@ -65,10 +65,23 @@ vectors. It runs only in a fresh disposable profile and contacts no model provid
 Archives are uploaded as Actions artifacts, rather than committed into Git.
 
 For a release, create a draft for the existing version tag, then run **Attach
-verified release archives** with the successful Desktop distributions run ID.
-It requires matching source commits and successful application, security and Docker
-checks, attaches the three archives and `SHA256SUMS`, and leaves publication as a
-separate final action. Rebuilding the application is unnecessary for this transfer.
+verified release archives**. The desktop run ID is optional; by default it selects
+the latest verified build for that exact tag commit. Successful application,
+security, Docker and desktop checks are required. It attaches the three archives
+and `SHA256SUMS` to a draft or published release without rebuilding the application.
+Manual runs retain the release status unless **promote** is explicitly enabled;
+promotion publishes it, removes Pre-release and marks Latest after uploads complete.
+
+The requested `v0.7.1-beta` release also has automatic completion monitoring, pinned
+to commit `5c291c971ddac8fbda26ed8060b57fc2fad4a7d3`. Each successful required workflow
+completion rechecks all four gates, allowing whichever finishes last to publish
+the verified archives and promote that release. Pending or failed checks keep its
+status unchanged. Concurrent completion events are serialized; a recorded build
+attempt and existing assets make repeat notifications idempotent. Promotion is a
+one-time action; later notifications do not reclaim Latest from a newer release.
+The default-branch
+automation does not move the existing version tag. A manual run can bootstrap the
+same check if all source workflows had finished before monitoring was installed.
 
 For a local build with Python 3.12 and Node 22:
 
