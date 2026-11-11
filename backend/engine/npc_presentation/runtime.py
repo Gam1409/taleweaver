@@ -62,7 +62,8 @@ class PresentationTurn:
             + ", ".join(keys)
             + " and schema-defined enum identifiers in English exactly as specified. "
             "Natural-language values follow the story language. Use exact IDs from the supplied "
-            "cast. Prose-only formatting applies to the visible story, not this private footer."
+            "cast. Prose-only formatting applies to the visible story, not this private footer. "
+            "Enabled portrait output is independent of NPC Personality mode or analysis availability."
         )
 
     @property
@@ -94,9 +95,13 @@ class PresentationTurn:
             "Each entry contains " + "; ".join(fields) + ". "
             f"Only include relevant NPCs from this cast, at most {MAX_NPCS}, once each. "
             "These enabled session display options work without NPC Personality; return the "
-            "requested fields even when no psychological appraisals are provided. "
+            "requested fields even when no psychological appraisals are provided or an NPC's "
+            "dialogue decision was not assessed. This UI assessment does not authorize new "
+            "story dialogue, decisions or psychological updates. "
             "Describe their overall state NOW, whatever its cause; it is not necessarily directed "
             "at the player. Respect established identity and psychological appraisals when provided. "
+            "Use the actual situation in the completed story, not a personality label. "
+            "Outward composure alone does not establish weak feeling. "
             "General activation is not sexual arousal. "
             "Use unknown or omit an entry when unassessed; unknown never means calm. "
             "Do not invent events, possessions, knowledge, agreement or personality changes for "

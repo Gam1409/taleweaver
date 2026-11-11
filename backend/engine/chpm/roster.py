@@ -51,6 +51,8 @@ def instruction(deferred: dict[str, str]) -> str:
         "received no decision this turn. Do not invent new dialogue, decisions, agreement, "
         "goals, personality changes or private thoughts for them. They may remain present "
         "without a narrated reaction. If the scene needs their decision, it needs a new "
-        "controlled turn. The reviewer must reject violations of this boundary.\n"
+        "controlled turn. The reviewer must reject violations of this boundary. These "
+        "restrictions concern visible story prose and CHPM updates; an independently enabled "
+        "private portrait footer follows its own output contract.\n"
         + json.dumps(deferred, ensure_ascii=False)
     )
