@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 
 from backend.core import database
-from backend.engine.chpm import control_settings, host_sources, semantic_sources
+from backend.engine.chpm import control_settings, host_sources, recent_scene, semantic_sources
 from backend.engine.chpm.state import KEY, load
 from backend.engine.memory_rag.embeddings import embed_texts
 from backend.engine.memory_rag.persistence import claim_fence, retry_transaction
@@ -40,7 +40,12 @@ async def index_batch(claim: Any, user: Any) -> bool:
             mind = current.minds.get(actor)
             if mind and mind.genesis.scope.world_id == claim.session_id:
                 minds[actor] = await host_sources.reconcile(host, mind)
-        ids = {s.message_id for mind in minds.values() for s in mind.sources.values()}
+        ids = {
+            key
+            for mind in minds.values()
+            for source in mind.sources.values()
+            for key in recent_scene.dependencies(source)
+        }
         rows = await semantic_sources.messages(db, claim.session_id, ids)
         items = [
             (episode, mind)

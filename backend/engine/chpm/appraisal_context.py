@@ -158,6 +158,15 @@ def build(
                     "text": text,
                     "excerpted": len(text) < len(source.text),
                     "source_message_id": source.message_id,
+                    **(
+                        {
+                            "historical_scene_id": source.history.scene_id,
+                            "historical_game_minute": source.history.game_minute,
+                            "recovered_history_not_current_event": True,
+                        }
+                        if source.history
+                        else {}
+                    ),
                     **({"currently_observed": True} if record_id in assessed else {}),
                     **(
                         {"already_supports_states": assessed[record_id]}

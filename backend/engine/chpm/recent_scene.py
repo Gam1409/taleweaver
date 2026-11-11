@@ -167,9 +167,13 @@ def available(manager: Any, actor: str) -> ObservedScene | None:
 
 
 def dependencies(source: Any) -> set[str]:
+    from backend.engine.chpm import reports
+
     facts = getattr(source, "facts", None)
     moment = facts.last_observed_scene if facts else None
-    return {source.message_id, moment.source_message_id} if moment else {source.message_id}
+    return (
+        {source.message_id, moment.source_message_id} if moment else {source.message_id}
+    ) | reports.dependencies(source)
 
 
 def matches(moment: ObservedScene, message: Any, session_id: str) -> bool:

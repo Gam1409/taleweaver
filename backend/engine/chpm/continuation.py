@@ -178,6 +178,8 @@ def rebase_gap(turn: "Turn", actor_id: str) -> None:
 
 
 def finish(manager: Any, turn: "Turn", reply: Any) -> None:
+    from backend.engine.chpm.recovery_queue import stamp
+
     if not turn.simplified_text or not reply.content.strip():
         raise ChpmError("No ordinary RP continuation is ready to commit.")
     if reply.content != turn.simplified_text:
@@ -216,6 +218,7 @@ def finish(manager: Any, turn: "Turn", reply: Any) -> None:
         else None,
     )
     recovery.recent = [*recovery.recent, record][-8:]
+    stamp(manager, turn, reply)
     save(manager.state, result, expected_revision=turn.initial.revision)
 
 

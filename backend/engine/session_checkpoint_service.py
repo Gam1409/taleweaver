@@ -11,6 +11,7 @@ from backend.engine.checkpoint_avatar import restore as restore_avatar
 from backend.engine.checkpoint_world import capture as capture_world
 from backend.engine.checkpoint_world import restore as restore_world
 from backend.engine.checkpoint_world import validate as validate_world
+from backend.engine.chpm import recovery_queue
 from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.clothing.lifecycle import (
     CHECKPOINT_KEY,
@@ -190,6 +191,7 @@ class SessionCheckpointService:
 
         snapshot = SessionCheckpointService._build_snapshot(state, avatar, scene_label=scene_label)
         snapshot["session_status"] = game_session.status
+        snapshot["npc_recovery"] = await recovery_queue.capture(db, session_id)
         snapshot.update(await capture_world(db, state))
         snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
@@ -290,6 +292,7 @@ class SessionCheckpointService:
         if stale_ids:
             await rewind_journals(db, session_id, stale_ids)
             await db.execute(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
+        await recovery_queue.restore(db, session_id, snapshot.get("npc_recovery") or {})
 
         await db.execute(
             delete(SessionCheckpoint)

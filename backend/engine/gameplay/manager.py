@@ -2365,6 +2365,10 @@ class GameTurnManager:
             )
             await capture_completed_moment(self, assistant_chat)
             remember_completed(self, assistant_chat, completed=narration_completed)
+            if narration_completed:
+                from backend.engine.chpm import commit_sources
+
+                await commit_sources.prepare(self, chpm_runtime.current(self))
             chpm_runtime.finish(self, assistant_chat, completed=narration_completed)
         from backend.engine.memory_rag.worker import mark_dirty
 

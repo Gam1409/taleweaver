@@ -45,14 +45,16 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
         "content_hash": observed.content_hash,
         "role": "user",
     }
+    catchup = getattr(turn, "catchup", None)
     additions = [
+        *(catchup.accepted.get(actor.id, []) if catchup is not None else []),
         Source(
             **anchor,
             speaker_id=actor.id,
             kind="host_frame",
             text=host_observations.frame(facts),
             facts=facts,
-        )
+        ),
     ]
     if change:
         additions.append(Source(**anchor, speaker_id=actor.id, kind="world_event", text=change))
@@ -108,6 +110,8 @@ def narrative_identity(mind: Mind) -> dict:
 
 
 def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute: int) -> Mind:
+    from backend.engine.chpm import reports
+
     mind: Mind = turn.minds[actor_id]
     sources = []
     for entry in additions:
@@ -126,6 +130,7 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
                 speaker_id=entry.speaker_id,
                 kind="speech",
                 text=entry.quote,
+                report=reports.lineage(turn, actor_id, entry),
             )
         )
     return record_many(mind, sources, minute=minute)

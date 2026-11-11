@@ -2,6 +2,9 @@
 
 Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
 
+See [source recovery and report provenance](chpm-source-continuity.md) for bounded
+historical catch-up and observer-to-observer transmission in the existing calls.
+
 The [causal continuity guide](chpm-causal-memory.md) explains how unfinished
 purposes retain their initiating events, concrete consequences and remaining steps.
 See [release history](chpm-changelog.md) for module versions independent of data contracts.

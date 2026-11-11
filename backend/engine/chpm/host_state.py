@@ -5,7 +5,14 @@ import json
 from collections.abc import Iterable
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from backend.engine.chpm.causal_graph_contracts import Binding
 from backend.engine.chpm.core.contracts import Event, Genesis, Observe, Snapshot
@@ -14,6 +21,8 @@ from backend.engine.chpm.core.limits import MAX_EVENTS
 from backend.engine.chpm.core.reducer import apply
 from backend.engine.chpm.core.replay import restore, rewind
 from backend.engine.chpm.host_observation_contracts import HostFacts
+from backend.engine.chpm.recovery_contracts import HistoricalObservation
+from backend.engine.chpm.report_contracts import ReportLineage
 
 
 class Source(BaseModel):
@@ -36,6 +45,17 @@ class Source(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     facts: HostFacts | None = None
     graph: Binding | None = None
+    history: HistoricalObservation | None = None
+    report: ReportLineage | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result: dict = handler(self)
+        if self.history is None:
+            result.pop("history", None)
+        if self.report is None:
+            result.pop("report", None)
+        return result
 
     @property
     def reported(self) -> bool:
@@ -47,6 +67,16 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def frame_facts_only(self) -> "Source":
+        if self.report is not None and (
+            self.role != "assistant"
+            or self.kind != "speech"
+            or self.report.hops[-1].observer_id != self.speaker_id
+        ):
+            raise ValueError("A relayed report must originate in its speaker's own knowledge.")
+        if self.history is not None and (
+            self.role != "assistant" or self.kind not in {"speech", "narration"}
+        ):
+            raise ValueError("Recovered history only binds historical narration or speech.")
         if self.facts is not None and self.kind not in {"host_frame", "host_observation"}:
             raise ValueError("Only a host frame or observation can carry authoritative state.")
         if self.kind == "host_observation":
@@ -137,7 +167,7 @@ def payload(source: Source, genesis: Genesis) -> Observe:
         record_id=identifier(source, genesis),
         text=source.text,
         source_kind="reported" if source.reported else "witnessed",
-        root_ids=(fingerprint(root),),
+        root_ids=source.report.roots if source.report else (fingerprint(root),),
     )
 
 

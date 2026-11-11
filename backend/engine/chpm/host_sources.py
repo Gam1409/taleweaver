@@ -25,6 +25,8 @@ async def reconcile(manager: Any, mind: Mind) -> Mind:
 
 def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
     """Reuse a canonical post-await read without replaying invalid dependent suffixes."""
+    from backend.engine.chpm import reports
+
     hashes = {key: digest(row.content) for key, row in messages.items()}
     invalid = set()
     for source in mind.sources.values():
@@ -38,9 +40,18 @@ def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
             or row.revision_id != source.revision_id
             or hashes[source.message_id] != source.content_hash
             or (source.reported and source.evidence_quote not in row.content)
+            or (
+                source.history is not None
+                and (
+                    source.history.scene_id != row.scene_id
+                    or not source.history.evidence_span.matches(row.content, source.text)
+                )
+            )
         ):
             invalid.add(source.message_id)
         moment = source.facts.last_observed_scene if source.facts else None
+        if not reports.matches(source, messages, mind.genesis.scope.world_id, hashes):
+            invalid.add(source.message_id)
         if moment and not recent_scene.matches(
             moment, messages.get(moment.source_message_id), mind.genesis.scope.world_id
         ):

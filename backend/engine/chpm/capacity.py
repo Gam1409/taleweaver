@@ -8,6 +8,7 @@ from backend.engine.chpm.core.limits import MAX_BELIEFS, MAX_EVENTS, MAX_EXPERIE
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.observation_sources import LIMIT as OBSERVATION_LIMIT
+from backend.engine.chpm.recovery_contracts import RECOVERY_FRAGMENTS
 from backend.engine.chpm.schema import KernelState, Settings
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
@@ -16,8 +17,8 @@ from backend.engine.chpm.schema import KernelState, Settings
 # newly cited causal passages, five statement nodes, three influence edges and
 # one transition can be recorded by the existing narration reviewer. Bounded stable
 # state observations are added only when their canonical content has not been seen.
-EVENT_RESERVE = 71 + OBSERVATION_LIMIT
-SOURCE_RESERVE = 65 + OBSERVATION_LIMIT
+EVENT_RESERVE = 71 + OBSERVATION_LIMIT + RECOVERY_FRAGMENTS
+SOURCE_RESERVE = 65 + OBSERVATION_LIMIT + RECOVERY_FRAGMENTS
 BELIEF_RESERVE = 3
 EXPERIENCE_RESERVE = 2
 

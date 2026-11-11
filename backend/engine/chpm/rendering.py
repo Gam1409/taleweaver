@@ -158,20 +158,26 @@ def _candidate_key(text: str) -> str:
 
 @step("narration.review")
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
+    from backend.engine.chpm import reports
+
     available = passages.index(text)
+    payload = _review_payload(turn, available, resolution)
+    identifiers = _review_identifiers(turn, available)
+    if turn.report_origins and not inference.fits(
+        turn.initial.settings, prompts.VERIFY, payload, passages.Review, identifiers
+    ):
+        reports.disable(turn)
+        payload = _review_payload(turn, available, resolution)
+        identifiers = _review_identifiers(turn, available)
     raw: passages.Review | Verdict = await inference.request(
         manager,
         turn.initial.settings,
         turn.usage,
         prompts.VERIFY,
-        _review_payload(turn, available, resolution),
+        payload,
         passages.Review,
         "validation",
-        identifiers={
-            "actor_id": sorted(turn.decisions),
-            "speaker_id": sorted(turn.present_names),
-            "passage_id": list(available),
-        },
+        identifiers=identifiers,
     )
     if not raw.matches:
         return Verdict(
@@ -202,6 +208,8 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
 
 
 def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> dict:
+    from backend.engine.chpm import reports
+
     return {
         "contract": contract_data(turn),
         "player_request": turn.player_request,
@@ -210,6 +218,7 @@ def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> d
         "controlled_actor_ids": sorted(turn.decisions),
         "inactive_controlled_actors": turn.deferred_names,
         "passages": available,
+        "report_origins_not_world_facts": reports.context(turn),
     }
 
 
@@ -217,17 +226,12 @@ def preflight(turn: Turn) -> None:
     """Reserve prose/resolution headroom before paying for the narrator call."""
     if turn.initial.settings.mode != "live" or not turn.decisions:
         return
-    prompt, payload = inference.compose(
-        prompts.VERIFY,
-        _review_payload(turn, {}, ""),
-        passages.Review,
-        {
-            "actor_id": sorted(turn.decisions),
-            "speaker_id": sorted(turn.present_names),
-            "passage_id": [],
-        },
-    )
-    remaining = turn.initial.settings.max_input_chars - len(prompt) - len(payload)
+    from backend.engine.chpm import reports
+
+    remaining = _review_room(turn)
+    if remaining < 3072 and turn.report_origins:
+        reports.disable(turn)
+        remaining = _review_room(turn)
     # Leave space for resolution, passage keys and escaped text. The final
     # request is still checked exactly; unforeseen huge resolutions fail visibly.
     turn.reply_character_budget = min(4096, (remaining - 2048) // 2)
@@ -237,7 +241,26 @@ def preflight(turn: Turn) -> None:
         )
 
 
+def _review_room(turn: Turn) -> int:
+    payload = _review_payload(turn, {}, "")
+    prompt, content = inference.compose(
+        prompts.VERIFY, payload, passages.Review, _review_identifiers(turn, {})
+    )
+    return turn.initial.settings.max_input_chars - len(prompt) - len(content)
+
+
+def _review_identifiers(turn: Turn, available: dict) -> dict:
+    return {
+        "actor_id": sorted(turn.decisions),
+        "speaker_id": sorted(turn.present_names),
+        "passage_id": list(available),
+        "origin_id": sorted(turn.report_origins),
+    }
+
+
 def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
+    from backend.engine.chpm import reports
+
     for entry in verdict.heard:
         if (
             entry.actor_id not in turn.decisions
@@ -250,6 +273,10 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
             raise RecoverableChpmError(
                 "CHPM hearing evidence has an invalid observer, speaker, or quote."
             )
+        try:
+            reports.origin_for(turn, entry.speaker_id, entry.origin_id)
+        except ValueError as exc:
+            raise RecoverableChpmError(str(exc)) from exc
 
 
 @step("narration.repair")

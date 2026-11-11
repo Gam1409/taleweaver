@@ -4,7 +4,32 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.core.text_evidence import EvidenceSpan
+
 RECOVERY_NOTICE = "NPC analysis paused; RP continued with the last confirmed identity."
+RECOVERY_FRAGMENTS = 4
+
+
+class RecoveryAudit(BaseModel):
+    """Durable observer eligibility and progress on the canonical assistant row."""
+
+    model_config = ConfigDict(extra="forbid")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    revision_id: str | None = None
+    scene_id: str
+    game_minute: int | None = Field(default=None, ge=0)
+    actors: dict[str, Annotated[int, Field(ge=0)]] = Field(max_length=20)
+    speakers: dict[str, str] = Field(default_factory=dict, max_length=128)
+    uncertain_fragments: dict[str, list[EvidenceSpan]] = Field(default_factory=dict, max_length=20)
+    unavailable_reason: str | None = Field(default=None, max_length=120)
+    unavailable_actors: list[str] = Field(default_factory=list, max_length=20)
+
+
+class HistoricalObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    scene_id: str
+    game_minute: int | None = Field(default=None, ge=0)
+    evidence_span: EvidenceSpan
 
 
 class SimplifiedReply(BaseModel):

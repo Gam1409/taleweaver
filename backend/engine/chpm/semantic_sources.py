@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.chpm import recent_scene, reports
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import digest, fingerprint
 from backend.engine.memory_rag.documents import MemoryDocument
@@ -56,6 +57,7 @@ def episodes(
             source.kind not in KINDS
             or row is None
             or not _valid(source, row, hashes, scope.world_id)
+            or not reports.matches(source, rows, scope.world_id, hashes)
         ):
             continue
         for start in range(0, len(source.text), STRIDE):
@@ -85,8 +87,9 @@ def episodes(
                         scene_id=row.scene_id,
                         text=text,
                         provenance="reported" if source.reported else "witnessed",
-                        source_message_ids=[source.message_id],
+                        source_message_ids=sorted(recent_scene.dependencies(source)),
                         created_at=f"{order:012d}",
+                        game_minute=source.history.game_minute if source.history else None,
                     ),
                     evidence.event_id,
                     start,
@@ -105,6 +108,11 @@ def _valid(source: Any, row: Any, hashes: dict[str, str], session_id: str) -> bo
         and row.revision_id == source.revision_id
         and hashes[row.id] == source.content_hash
         and (not source.reported or source.text in row.content)
+        and (
+            source.history is None
+            or source.history.scene_id == row.scene_id
+            and source.history.evidence_span.matches(row.content, source.text)
+        )
     )
 
 

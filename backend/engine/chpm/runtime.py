@@ -76,6 +76,10 @@ class Turn:
     reconciled_minds: dict[str, Mind] = field(default_factory=dict)
     semantic_hits: dict[str, list[semantic_recall.Hit]] = field(default_factory=dict)
     scene_cues: dict[str, str] = field(default_factory=dict)
+    catchup: Any = None
+    report_origins: dict = field(default_factory=dict)
+    report_origins_enabled: bool = True
+    catchup_unavailable: list = field(default_factory=list)
 
 
 def current(manager: Any) -> Turn | None:
@@ -243,6 +247,10 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
             actor.id: Perception(actor_id=actor.id, uncertain=True) for actor in actors
         }
     else:
+        from backend.engine.chpm import recovery_queue
+
+        turn.catchup = await recovery_queue.prepare(manager, turn)
+        await release_for_model(manager)
         turn.perceptions = await perception.project(
             manager,
             turn.initial.settings,
@@ -250,6 +258,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
             observed.player_request,
             turn.names,
             recent_interlocutors=roster.recent(turn.initial, set(turn.names)),
+            **({"catchup": turn.catchup} if turn.catchup is not None else {}),
         )
     active_ids = roster.select(turn.initial, turn.perceptions)
     active = [actor for actor in actors if actor.id in active_ids]

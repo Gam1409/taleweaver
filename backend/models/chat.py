@@ -37,6 +37,8 @@ class ChatMessage(Base, TimestampMixin):
 
     # Durable optional background extraction task; old narration is not rescanned implicitly.
     npc_journal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Source-bound catch-up cursors are independent of the optional public journal worker.
+    npc_recovery: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     illustration: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     portrait_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

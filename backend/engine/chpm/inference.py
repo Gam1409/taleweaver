@@ -87,6 +87,14 @@ def model_for(manager: Any, role: str, router: Any) -> Any:
     return factory(role) if callable(factory) else router.for_role(manager.user, role)
 
 
+def fits(
+    settings: Settings, instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict
+) -> bool:
+    """Optional source enrichment must fit the existing request limit without reserving a call."""
+    prompt, content = compose(instruction, payload, schema, identifiers)
+    return len(prompt) + len(content) <= settings.max_input_chars
+
+
 def transport_options(router: Any, schema: type[BaseModel], identifiers: dict | None) -> dict:
     """Reuse the same output policy as all other technical router requests."""
     from backend.core.llm_structured_output import for_router

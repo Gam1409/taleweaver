@@ -40,28 +40,51 @@ async def project(
     names: dict[str, str],
     *,
     recent_interlocutors: list[str] | None = None,
+    catchup: Any = None,
 ) -> dict[str, Perception]:
+    from backend.engine.chpm import recovery_perception, recovery_queue
+
     available = perception_fragments.index(message)
+    payload = {
+        "fragments": available,
+        "present_observers": names,
+        "recent_interlocutors": recent_interlocutors or [],
+    }
+    schema = perception_fragments.Projection
+    identifiers = {
+        "observers": sorted(names),
+        "engaged": sorted(names),
+        "fragments": list(available),
+    }
+    if catchup is not None:
+        payload["unreviewed_history"] = recovery_queue.payload(catchup)
+        schema = recovery_perception.RecoveryProjection
+        identifiers["observers"] = sorted(set(names) | set(catchup.offsets))
+        identifiers["history_fragments"] = list(catchup.available)
+        if not inference.fits(settings, INSTRUCTION, payload, schema, identifiers):
+            catchup.error = (
+                "Historical review remains pending: current perception needs the input budget."
+            )
+            payload.pop("unreviewed_history")
+            schema = perception_fragments.Projection
+            identifiers["observers"] = sorted(names)
+            identifiers.pop("history_fragments")
+            catchup = None
     result = await inference.request(
         manager,
         settings,
         usage,
         INSTRUCTION,
-        {
-            "fragments": available,
-            "present_observers": names,
-            "recent_interlocutors": recent_interlocutors or [],
-        },
-        perception_fragments.Projection,
+        payload,
+        schema,
         "perception",
-        identifiers={
-            "observers": sorted(names),
-            "engaged": sorted(names),
-            "fragments": list(available),
-        },
+        identifiers=identifiers,
     )
     try:
-        return perception_fragments.resolve(result, available, set(names))
+        projected = perception_fragments.resolve(result, available, set(names))
+        if catchup is not None:
+            recovery_perception.bind(catchup, result)
+        return projected
     except ChpmError as exc:
         raise RecoverableChpmError(str(exc)) from exc
 

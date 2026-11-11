@@ -42,6 +42,9 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
     if result.get(KEY) is None:
         return result
     value = KernelState.model_validate(result[KEY])
+    from backend.engine.chpm import reports
+
+    roots = reports.fork_roots(value.minds, message_ids, session_id)
     invalid: dict[str, set[str]] = {}
     for actor, mind in value.minds.items():
         missing = {
@@ -52,7 +55,7 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
         }
         retained = before_messages(mind, missing)
         invalid[actor] = removed_messages(mind, retained)
-        value.minds[actor] = _fork_mind(retained, message_ids, session_id)
+        value.minds[actor] = _fork_mind(retained, message_ids, session_id, roots)
     for actor, entries in value.memories.items():
         value.memories[actor] = [
             entry.model_copy(update={"source_message_id": message_ids[entry.source_message_id]})
@@ -117,7 +120,11 @@ def fork(entity_states: dict | None, message_ids: dict[str, str], session_id: st
     return result
 
 
-def _fork_mind(mind: Mind, message_ids: dict[str, str], session_id: str) -> Mind:
+def _fork_mind(
+    mind: Mind, message_ids: dict[str, str], session_id: str, roots: dict | None = None
+) -> Mind:
+    from backend.engine.chpm import reports
+
     genesis = Genesis(
         scope=mind.genesis.scope.model_copy(update={"world_id": session_id}),
         identity=mind.genesis.identity,
@@ -133,6 +140,7 @@ def _fork_mind(mind: Mind, message_ids: dict[str, str], session_id: str) -> Mind
             source = mind.sources[event.event_id]
             source = source.model_copy(update={"message_id": message_ids[source.message_id]})
             source = host_observations.remap_frame(source, message_ids)
+            source = reports.remap(source, message_ids, roots or {}, session_id)
             if source.graph:
                 source = source.model_copy(
                     update={

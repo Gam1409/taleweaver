@@ -16,6 +16,7 @@ class Reference(Contract):
 
 class HeardReference(Reference):
     speaker_id: str
+    origin_id: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class Review(Contract):

@@ -8,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import DateTime, Table, and_, delete, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.chpm import recovery_queue
 from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
@@ -103,6 +104,7 @@ async def capture(
                 },
                 "tables": tables,
                 "journal_tasks": {key: value for key, value in tasks},
+                "npc_recovery": await recovery_queue.capture(db, session_id),
                 "messages": await rows(
                     db, ChatMessage, and_(ChatMessage.session_id == session_id, after(boundary))
                 )
@@ -160,6 +162,7 @@ async def restore(db: AsyncSession, session_id: str, snapshot: dict) -> None:
             insert(cast(Table, ChatMessage.__table__)),
             [decoded(ChatMessage.__table__, row) for row in snapshot["messages"]],
         )
+    await recovery_queue.restore(db, session_id, snapshot.get("npc_recovery") or {})
     for message_id, task in snapshot["journal_tasks"].items():
         if isinstance(task, dict) and task.get("status") == "running":
             restored_task = {"status": "pending", "attempts": 0, **clock_fields(task)}

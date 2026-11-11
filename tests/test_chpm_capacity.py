@@ -66,6 +66,7 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
         + influences
         + 1
         + capacity.OBSERVATION_LIMIT
+        + capacity.RECOVERY_FRAGMENTS
         == capacity.SOURCE_RESERVE
     )
     experiences = GroundedProposal.model_json_schema()["properties"]["experiences"]["maxItems"]
