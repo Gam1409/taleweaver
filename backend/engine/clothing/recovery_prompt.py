@@ -72,8 +72,9 @@ not a separate inventory object. Do not discard an explicitly placed ordinary ob
 merely because its canonical record is absent. Do not split attached body parts into inventory items.
 For a missing ordinary object, possession means current physical custody or body placement,
 not proof of purchase or permanent personal property. Medical supplies, disposable and
-consumable objects still qualify while they remain distinct physical objects. Their use
-does not establish consumption, disappearance or removal; those require a completed event.
+consumable objects still qualify while they remain distinct physical objects, including
+instruments temporarily placed during a procedure. Planned removal under a protocol is
+not completed removal. Their use does not establish consumption or disappearance.
 Here worn is the schema's placed-item state; the object does not become clothing.
 Leave action.uncovered_regions=null and the entry's coverage/placement fields empty.
 The action's evidence must identify the object, character and current body placement
@@ -87,6 +88,8 @@ item_id, and never use the string "null". Legacy garments with missing/invalid
 metadata require repair; do not relabel them as ordinary body objects. No currency,
 rewards, powers, statistics or whole-outfit kits. Descriptions concern established
 intrinsic appearance/material, in the story's language; unknown details stay unknown.
+A short description containing only established properties is sufficient. Missing design
+details are not a reason to omit an otherwise evidenced garment or placed ordinary object.
 Inner garments require detailed_clothing and a recorded adult age in target_actor.
 Body placements require an established adult character. Never invent an age to
 qualify a proposal. Mark underwear correctly even when its registration is unavailable.

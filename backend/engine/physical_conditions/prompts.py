@@ -7,6 +7,10 @@ To record a NEW injury, contamination, fluid trace, pain or other explicit bodil
 use operation=record with target_id, kind, part and short neutral intrinsic detail.
 Use kind=other for physical signs such as trembling or flushed skin, not emotions or intentions.
 The server assigns its condition ID.
+Record a bodily condition still present at the end of this narration, including temporary
+conditions. A completed fleeting gesture or a single vocal cue alone is not an ongoing condition.
+Item placement, clothing and poses use their existing sections; record only their explicitly
+established bodily consequences here, not a duplicate inventory or pose entry.
 For an existing condition use only condition_id: change updates its detail without clearing it;
 treat keeps an injury/pain as treated; reduce keeps a partial remaining condition;
 clean removes contamination/fluid; heal resolves an explicitly healed injury/pain;
@@ -22,6 +26,8 @@ Private is the default visibility. Public means established public information, 
 private details to another character. Do not infer current visual exposure from this flag.
 Use visibility=public for a condition explicitly observed by the player in this narration;
 an unobserved internal condition stays private. Known facts and visible surfaces remain separate.
+An internal location alone does not make a fact private when the narration explicitly establishes
+the player's knowledge of it. Public knowledge still does not establish visible skin.
 Each operation needs an evidence reference to THIS completed narration, not the player's
 request, old history, dialogue claims, imagined outcomes or a recalled earlier event.
 A full cleaning affects only that identified garment/part; a partial cleaning uses reduce.
