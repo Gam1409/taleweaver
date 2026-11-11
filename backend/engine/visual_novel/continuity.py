@@ -140,7 +140,7 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
         }
     contained = {
         str(item.get("id") if isinstance(item, dict) else item)
-        for entity in present
+        for entity in entities
         for item in _inventory(entity, _override(manager.state, entity.id))
     }
     for entity in present:
@@ -157,7 +157,7 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
             result.add(inventory, entity.id)
         if override.get("is_in_inventory", getattr(entity, "is_in_inventory", False)):
             continue
-        if not getattr(entity, "is_portable", True):
+        if not override.get("is_portable", getattr(entity, "is_portable", True)):
             continue
         result.add([_entity_item(entity, override)], SCENE)
     return result
