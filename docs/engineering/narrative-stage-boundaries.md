@@ -41,7 +41,7 @@ answer the NPC must give. New personal details belong to the active narrative ow
 
 The live proposal exposes `message_plan` as the wire name of the existing bounded
 `Intent.intention` field. It asks for the concrete intended answer, stance or proposal,
-including any newly chosen harmless personal detail needed for that answer. It is
+including any newly chosen compatible personal detail needed for that answer. It is
 a private meaning plan, not prescribed dialogue wording or a physical world update.
 Generic labels such as “share a preference” leave the actual preference undecided.
 

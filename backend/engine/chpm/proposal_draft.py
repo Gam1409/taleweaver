@@ -30,6 +30,7 @@ class Intent(Contract):
         min_length=1,
         max_length=400,
         validation_alias=AliasChoices("message_plan", "intention"),
+        serialization_alias="message_plan",
     )
     preconditions: list[IntentionCondition] = Field(max_length=2)
     reconsider_if: str = Field(min_length=1, max_length=200)

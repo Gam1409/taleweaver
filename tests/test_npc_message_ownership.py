@@ -78,6 +78,9 @@ def test_message_plan_reuses_the_existing_canonical_intention_without_a_second_s
     draft = Draft.model_validate(message_packet())
     assert draft.candidates["CONTINUE"].intention == PLAN
     assert draft.model_dump()["candidates"]["CONTINUE"]["intention"] == PLAN
+    assert draft.model_dump(by_alias=True)["candidates"]["CONTINUE"]["message_plan"] == PLAN
+    assert Draft.model_validate_json(draft.model_dump_json(by_alias=True)) == draft
+    assert Draft.model_validate_json(draft.model_dump_json()) == draft
     properties = Draft.model_json_schema()["$defs"]["Intent"]["properties"]
     assert "message_plan" in properties and "intention" not in properties
     legacy = wire_proposal()

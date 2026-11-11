@@ -26,7 +26,7 @@ def test_first_npc_turn_has_no_revision_grammar_or_invented_reference(explicit_k
     assert not empty_enums(schema)
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
-    body = Draft.model_validate(wire_proposal()).model_dump(mode="json")
+    body = Draft.model_validate(wire_proposal()).model_dump(mode="json", by_alias=True)
     assert validator.is_valid(body)
     invented = deepcopy(body)
     invented["belief_revisions"] = [proposal(belief_id="invented").model_dump(mode="json")]
@@ -38,7 +38,7 @@ def test_known_revision_ids_remain_available_and_bounded_after_an_empty_turn():
     empty = response_schema(Draft, {"belief_id": []})
     known = response_schema(Draft, {"belief_id": ["b1"]})
     assert not empty_enums(empty)
-    body = Draft.model_validate(wire_proposal()).model_dump(mode="json")
+    body = Draft.model_validate(wire_proposal()).model_dump(mode="json", by_alias=True)
     body["belief_revisions"] = [proposal(belief_id="b1").model_dump(mode="json")]
     validator = Draft202012Validator(known)
     assert validator.is_valid(body)
@@ -50,7 +50,7 @@ def test_no_citation_sources_forbids_beliefs_and_experiences_but_allows_a_decisi
     schema = response_schema(Draft, {"source_id": [], "personal_motive_ids": []})
     assert not empty_enums(schema)
     validator = Draft202012Validator(schema)
-    body = Draft.model_validate(wire_proposal()).model_dump(mode="json")
+    body = Draft.model_validate(wire_proposal()).model_dump(mode="json", by_alias=True)
     assert validator.is_valid(body)
     body["new_beliefs"] = [
         {k: v for k, v in proposal().model_dump(mode="json").items() if k != "belief_id"}
