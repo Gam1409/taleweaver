@@ -16,6 +16,7 @@ from backend.engine.chpm import (
     causal_memory,
     context,
     continuation,
+    control_settings,
     development_context,
     host_adapter,
     host_observations,
@@ -43,7 +44,7 @@ from backend.engine.chpm.schema import (
     Usage,
     Verdict,
 )
-from backend.engine.chpm.state import load, save
+from backend.engine.chpm.state import KEY, load, save
 from backend.engine.turn_replay.transactions import release_for_model
 
 logger = logging.getLogger(__name__)
@@ -159,9 +160,10 @@ def contract(turn: Turn) -> str:
 
 @step("npc.prepare")
 async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
-    state = load(manager.state)
-    if state.settings.mode == "off" or not is_vn(manager.adventure):
+    settings = control_settings.read((manager.state.entity_states or {}).get(KEY))
+    if settings.mode == "off" or not is_vn(manager.adventure):
         return ""
+    state = load(manager.state)
     input_id = getattr(manager, "_vn_player_message_id", None)
     if not input_id:
         return ""

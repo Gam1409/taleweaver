@@ -32,6 +32,13 @@ known characters and save between turns. The active limit defaults to three; see
   their legacy dialogue/social/story-director planning, and review the complete
   narration before publishing it. A semantic review remains fallible.
 
+Standard-mode turn admission reads only the supported settings envelope; it does
+not validate or use inactive psychological ledgers. This keeps an unused invalid
+mind from blocking ordinary RP or independently enabled portrait presentation.
+The saved data is preserved, not repaired or erased. Observe/Enabled admission
+still validates the full kernel before inference. Unsupported envelope versions
+and invalid settings remain errors; checkpoint/restore/copy validation is unchanged.
+
 Enabled mode requires Living World private decisions to be disabled. Rule-based
 world movement and established mechanics remain host responsibilities. A single
 session should not have two private decision systems controlling the same NPC.
