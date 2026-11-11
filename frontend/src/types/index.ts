@@ -26,6 +26,8 @@ export interface ChatMessage {
 
 /** Player-owned appearance and worn clothing projected by the server. */
 export interface PlayerClothing {
+  layout?: { form: 'humanoid' | 'non_humanoid' | 'unknown'; silhouette: 'male' | 'female' | 'neutral' }
+  attachments?: Array<{ id: string; name: string; image_url?: string | null; slot: string }>
   appearance: {
     age_years: number | null
     hair: string
@@ -40,6 +42,9 @@ export interface PlayerClothing {
     layer: number
     visible: boolean
     underwear: boolean
+    image_url?: string | null
+    slots?: string[]
+    uncovered_regions?: string[]
   }>
   detail_limited?: boolean
 }

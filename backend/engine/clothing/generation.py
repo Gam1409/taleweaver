@@ -4,7 +4,11 @@ from copy import deepcopy
 from typing import Any
 
 from backend.core.game_modes import mode_policy
-from backend.engine.clothing.profiles import reconcile_profile, sanitize_garment
+from backend.engine.clothing.profiles import (
+    attachment_item_allowed,
+    reconcile_profile,
+    sanitize_garment,
+)
 from backend.engine.clothing.settings import clothing_settings
 
 GENERATION_INSTRUCTION = """
@@ -82,17 +86,30 @@ def _actor_profile(
     if profile is not None:
         age = (profile.get("appearance") or {}).get("age_years")
         adult = isinstance(age, int) and not isinstance(age, bool) and age >= 18
+        allowed = (profile.get("body") or {}).get("attachment_slots")
         profile["worn"] = [
             worn
             for worn in profile.get("worn", [])
             if worn["item_id"] not in blocked
-            and objects.get(worn["item_id"], {}).get("clothing")
-            and (
-                not (objects.get(worn["item_id"], {}).get("clothing") or {}).get("underwear")
-                or (detailed and adult)
-            )
+            and _initial_wear_allowed(worn, objects, adult, detailed, allowed)
         ]
     actor["visual_profile"] = profile
+
+
+def _initial_wear_allowed(
+    worn: dict, objects: dict, adult: bool, detailed: bool, allowed: list | None
+) -> bool:
+    item = objects.get(worn["item_id"], {})
+    slot = worn.get("attachment_slot")
+    if slot:
+        return (
+            bool(item)
+            and adult
+            and attachment_item_allowed(item)
+            and (allowed is None or slot in allowed)
+        )
+    garment = item.get("clothing")
+    return bool(garment) and (not garment.get("underwear") or (detailed and adult))
 
 
 def normalize_manifest_clothing(manifest: dict, *, detailed: bool) -> None:

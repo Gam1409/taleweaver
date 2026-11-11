@@ -27,7 +27,10 @@ def restore(
         or not (entry.uncovered_regions or entry.restore_coverage)
         or action.disposition != "worn"
         or worn is None
-        or worn.uncovered_regions == entry.uncovered_regions
+        or (
+            worn.uncovered_regions == entry.uncovered_regions
+            and (not entry.uncovered_regions or worn.source is not None)
+        )
     ):
         return actors, [], []
     try:

@@ -12,6 +12,7 @@ const props = defineProps<{
   busy: boolean
   error: string
   updated: boolean
+  stateRevision?: unknown
 }>()
 const emit = defineEmits<{ close: []; generate: [options: PortraitOptions] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -225,6 +226,7 @@ onBeforeUnmount(() => {
           v-if="sessionId && npc.id"
           :session-id="sessionId"
           :npc-id="npc.id"
+          :state-revision="stateRevision"
           @loaded="learnedCard = $event"
         />
         <section v-else class="min-h-0 overflow-y-auto p-5 text-sm text-slate-400">

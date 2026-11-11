@@ -1691,6 +1691,7 @@ usePlayAgentAutoLoop()
       :session-id="props.id"
       v-if="portraitTarget"
       :npc="portraitTarget"
+      :state-revision="sheet"
       :busy="portraitBusy"
       :error="portraitError"
       :updated="portraitUpdated"

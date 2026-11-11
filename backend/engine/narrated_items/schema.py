@@ -2,10 +2,20 @@
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.core.text_evidence import WithEvidenceSpan
+from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.schema import Garment, Region
 from backend.engine.narrated_items.wire_contract import placement_rules
 from backend.engine.physical_conditions.schema import (
@@ -53,17 +63,34 @@ class ItemAction(WithEvidenceSpan):
         description="For worn clothing only: the final regions this garment no longer covers. Null preserves its known placement; [] explicitly restores normal coverage. Partial removal remains worn.",
     )
     basis: Literal["completed", "observed_wear", "attempt", "claim", "hypothetical", "uncertain"]
+    attachment_slot: BodySlot | None = Field(
+        default=None,
+        description="Explicit completed body placement of this owned item. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
+    )
 
     @model_validator(mode="after")
     def one_identity(self) -> "ItemAction":
         if bool(self.item_id) == bool(self.new_item):
             raise ValueError("Use an existing ID or a new item, never both.")
+        if self.attachment_slot and (
+            self.disposition != "worn" or self.uncovered_regions is not None
+        ):
+            raise ValueError(
+                "Body placement requires worn disposition without clothing displacement."
+            )
         if self.uncovered_regions is not None and (
             self.disposition != "worn"
             or len(self.uncovered_regions) != len(set(self.uncovered_regions))
         ):
             raise ValueError("Placement requires worn disposition and unique uncovered regions.")
         return self
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().preserve_legacy_shape(handler)
+        if self.attachment_slot is None:
+            result.pop("attachment_slot", None)
+        return result
 
 
 class NewOrdinaryItem(NewItem):

@@ -2,6 +2,7 @@
 
 import json
 from copy import deepcopy
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -101,7 +102,16 @@ async def test_correct_partial_wear_then_apply_only_that_garment(monkeypatch):
         actor = state.entity_states["LINA"]
         assert actor["inventory"] == [*template_inventory, corrected_item["item"]]
         assert actor["visual_profile"]["worn"] == [
-            {"item_id": corrected_item["item"]["id"], "uncovered_regions": ["pelvis"]}
+            {
+                "item_id": corrected_item["item"]["id"],
+                "uncovered_regions": ["pelvis"],
+                "source": {
+                    "request_id": None,
+                    "source_message_id": corrected_item["source_message_id"],
+                    "content_hash": sha256(TEXT.encode()).hexdigest(),
+                    "evidence": CORRECTION["placement_evidence"],
+                },
+            }
         ]
         assert avatar.inventory == player_inventory and npc.inventory == template_inventory
         assert llm.aexecute_complex_task.await_count == 2

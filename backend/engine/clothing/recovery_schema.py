@@ -10,6 +10,7 @@ from backend.schemas.authoring_completion import EquipmentSlot
 
 
 class ExistingRecoveryAction(ItemAction):
+    attachment_slot: None = None
     uncovered_regions: None = None  # Recovery placement belongs to the outer entry.
     item_id: str = Field(
         min_length=1,
@@ -26,6 +27,7 @@ class RecoveryGarment(NewItem):
 
 
 class NewRecoveryAction(ItemAction):
+    attachment_slot: None = None
     uncovered_regions: None = None
     item_id: None = Field(default=None, description="Must be null. The engine assigns new IDs.")
     new_item: RecoveryGarment = Field(

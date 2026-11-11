@@ -4,7 +4,9 @@ from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.clothing.wear_provenance import remap_profile
 from backend.engine.npc_journal.lifecycle import remap_journal
+from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -19,6 +21,10 @@ async def clone_saved_world(
     message_ids: dict[str, str],
 ) -> None:
     from .sessions import _copy_data_asset_to_session
+
+    avatar = await db.get(Avatar, copied_session.avatar_id)
+    if avatar is not None:
+        avatar.visual_profile = remap_profile(avatar.visual_profile, message_ids)
 
     # 7. Clone WorldScene
     scenes_res = await db.execute(
@@ -101,7 +107,7 @@ async def clone_saved_world(
             character=ent.character,
             gender=ent.gender,
             age_years=ent.age_years,
-            visual_profile=deepcopy(ent.visual_profile),
+            visual_profile=remap_profile(ent.visual_profile, message_ids),
             hp=ent.hp,
             max_hp=ent.max_hp,
             mana=ent.mana,

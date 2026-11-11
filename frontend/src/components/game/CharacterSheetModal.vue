@@ -4,6 +4,9 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import StatBar from './StatBar.vue'
 import SheetSpecialsPanel from './SheetSpecialsPanel.vue'
 import AppearanceAndClothing from './AppearanceAndClothing.vue'
+import EquipmentSilhouette from './EquipmentSilhouette.vue'
+import EquipmentList from './EquipmentList.vue'
+import { legacyEquipment } from '@/utils/equipmentSlots'
 import type { CharacterSheet, InventoryItem } from '@/types'
 import { getImageUrl } from '@/utils/game_icons'
 
@@ -61,39 +64,16 @@ const coreAttributes = computed(() => {
   ]
 })
 
-const SLOTS_LIST = [
-  { key: 'Head', label: 'Head', icon: 'ra-helmet' },
-  { key: 'Neck', label: 'Neck', icon: 'ra-necklace' },
-  { key: 'Chest', label: 'Chest', icon: 'ra-breastplate' },
-  { key: 'Arms', label: 'Arms', icon: 'ra-hand' },
-  { key: 'Hands', label: 'Hands', icon: 'ra-hand' },
-  { key: 'Ring_1', label: 'Ring 1', icon: 'ra-ring' },
-  { key: 'Ring_2', label: 'Ring 2', icon: 'ra-ring' },
-  { key: 'MainHand', label: 'Main Hand', icon: 'ra-sword' },
-  { key: 'OffHand', label: 'Off Hand', icon: 'ra-shield' },
-  { key: 'Legs', label: 'Legs', icon: 'ra-leg' },
-  { key: 'Feet', label: 'Feet', icon: 'ra-boot-prints' }
-]
-
-// Silhouette slot coordinates (% of silhouette container)
-const slotPositions: Record<string, { top: string, left: string }> = {
-  'Head': { top: '10%', left: '50%' },
-  'Neck': { top: '18%', left: '76%' },
-  'Chest': { top: '30%', left: '50%' },
-  'Arms': { top: '26%', left: '20%' },
-  'Hands': { top: '46%', left: '16%' },
-  'MainHand': { top: '68%', left: '16%' },
-  'Ring_1': { top: '38%', left: '82%' },
-  'Ring_2': { top: '54%', left: '82%' },
-  'OffHand': { top: '72%', left: '82%' },
-  'Legs': { top: '64%', left: '50%' },
-  'Feet': { top: '86%', left: '50%' }
-}
-
-const getSlotPlaceholderIcon = (slot: string) => {
-  const match = SLOTS_LIST.find(s => s.key === slot)
-  return match?.icon || 'ra-help'
-}
+const displayedEquipment = computed(() => {
+  const result = legacyEquipment(equipment.value)
+  for (const item of props.sheet?.clothing?.attachments || []) (result[item.slot] ||= []).push(item)
+  return result
+})
+const flatEquipment = computed(() => [
+  ...new Map(Object.values(displayedEquipment.value).flat().map(item => [item.id, item])).values()
+])
+const equipmentVariant = computed(() => props.sheet?.clothing?.layout?.silhouette || 'neutral')
+const equipmentIsList = computed(() => props.sheet?.clothing?.layout && props.sheet.clothing.layout.form !== 'humanoid')
 
 const handleImageError = (path?: string | null) => {
   if (!path) return
@@ -494,57 +474,14 @@ const onClose = () => {
 
               <!-- Centered Silhouette Display -->
               <div class="flex flex-col items-center justify-center my-auto">
-                <div class="relative w-full max-w-md sm:max-w-lg h-[360px] sm:h-[440px] silhouette-container bg-slate-950/40 rounded-3xl border border-slate-800/60 shadow-inner flex items-center justify-center overflow-hidden">
-                  <img 
-                    src="@/assets/svg/full-body-human-silhouette.svg" 
-                    class="h-full w-full object-contain opacity-45 filter brightness-[300%] contrast-75 drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]" 
-                  />
+                <EquipmentList v-if="equipmentIsList" class="w-full" :items="flatEquipment" />
+                <EquipmentSilhouette v-else class="max-w-md sm:max-w-lg" :equipment="displayedEquipment" :variant="equipmentVariant" :compact="false" :read-only="false" :mini-list="false"
+                  @select="handleUnequip($event)"
+                  @item-hover="(item, event) => emit('itemHover', { ...item, entity_type: 'ITEM' }, event)"
+                  @item-leave="emit('itemLeave')"
+                  @item-contextmenu="(slot, item, event) => emit('itemContextmenu', { ...item, equipped_slot: slot, entity_type: 'ITEM' }, event)" />
 
-                  <!-- Equipment Slot Badges on Silhouette -->
-                  <div 
-                    v-for="(pos, slot) in slotPositions" 
-                    :key="slot"
-                    class="absolute -translate-x-1/2 -translate-y-1/2 group/slot"
-                    :style="{ top: pos.top, left: pos.left }"
-                    @mouseenter="equipment[slot] && emit('itemHover', { ...equipment[slot], entity_type: 'ITEM' }, $event)"
-                    @mouseleave="emit('itemLeave')"
-                  >
-                    <div 
-                      class="w-12 h-12 sm:w-15 sm:h-15 rounded-xl sm:rounded-2xl border-2 flex items-center justify-center transition-all relative shadow-xl backdrop-blur-md"
-                      :class="[
-                        equipment[slot] 
-                          ? 'bg-slate-900 border-amber-500/70 shadow-amber-500/20 scale-105 z-10 cursor-pointer' 
-                          : 'bg-slate-950/60 border-slate-800 hover:border-slate-600'
-                      ]"
-                      @click="equipment[slot] && handleUnequip(slot)"
-                      @contextmenu.prevent="equipment[slot] && emit('itemContextmenu', { ...equipment[slot], equipped_slot: slot, entity_type: 'ITEM' }, $event)"
-                    >
-                      <!-- Tooltip with slot name -->
-                      <div class="absolute -top-7 left-1/2 -translate-x-1/2 text-xxs font-black uppercase tracking-widest text-slate-300 opacity-0 group-hover/slot:opacity-100 transition-opacity bg-slate-800/95 px-2 py-0.5 rounded border border-slate-700 z-20 shadow-xl whitespace-nowrap pointer-events-none">
-                        {{ slot.replace('_', ' ') }}
-                      </div>
-
-                      <!-- Equipped Item Display -->
-                      <template v-if="equipment[slot]">
-                        <div v-if="showImage(equipment[slot]!.image_url)" class="w-full h-full p-1">
-                          <img 
-                            :src="getImageUrl(equipment[slot]!.image_url)" 
-                            class="w-full h-full object-cover object-top rounded-lg" 
-                            @error="handleImageError(equipment[slot]!.image_url)" 
-                          />
-                        </div>
-                        <ItemImagePlaceholder v-else />
-                      </template>
-
-                      <!-- Empty Slot Placeholder -->
-                      <div v-else class="opacity-20 group-hover/slot:opacity-40 transition-opacity">
-                        <i :class="['ra text-sm sm:text-base text-slate-400', getSlotPlaceholderIcon(slot)]"></i>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <span class="text-xxs text-slate-500 mt-3">
+                <span v-if="!equipmentIsList" class="text-xxs text-slate-500 mt-3">
                   Click equipped slot to unequip · Right-click for options
                 </span>
               </div>

@@ -87,9 +87,10 @@ def _legacy(result: Any, body: dict, narration: str) -> Any:
 
 def remap(states: dict, message_ids: dict[str, str]) -> dict:
     """Copied checks retain local source IDs; missing history never borrows a quote."""
+    from backend.engine.clothing.wear_provenance import remap_states
     from backend.engine.narrated_items.runtime import KEY
 
-    result = deepcopy(states)
+    result = remap_states(states, message_ids)
     ledger = result.get(KEY)
     if not isinstance(ledger, dict):
         return result
@@ -112,8 +113,11 @@ def remap(states: dict, message_ids: dict[str, str]) -> dict:
 
 def stamp(manager: Any, message: Any) -> None:
     """Complete the existing item check's provenance after its assistant row is saved."""
+    from backend.engine.clothing.wear_provenance import stamp as stamp_wear
     from backend.engine.narrated_items.runtime import KEY
     from backend.engine.scene_staging.state import digest
+
+    stamp_wear(manager, message)
 
     states = manager.state.entity_states or {}
     ledger = states.get(KEY)

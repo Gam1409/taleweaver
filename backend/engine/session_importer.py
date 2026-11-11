@@ -10,16 +10,14 @@ import uuid6
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.archive_safety import MAX_UPLOAD_BYTES, copy_asset, validate_archive
-from backend.engine.chpm.lifecycle import fork as fork_chpm
+from backend.engine.clothing.wear_provenance import remap_profile
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.living_world.state import fork as fork_simulation
-from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
+from backend.engine.memory_rag.lifecycle import import_summaries
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
-from backend.engine.physical_conditions.ledger import remap as remap_conditions
-from backend.engine.scene_illustrations.snapshots import remap_illustrations
 from backend.engine.session_archive_access import accessible_template
-from backend.engine.visual_novel.lifecycle import remap_social_state
+from backend.engine.session_restore_sources import restore_sources
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -229,17 +227,7 @@ class SessionImporter:
                 db.add(session_state)
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
-                restore_memory(session_state, session_state_data, message_ids)
-                session_state.entity_states = fork_chpm(
-                    remap_illustrations(
-                        remap_social_state(
-                            remap_conditions(session_state.entity_states, message_ids), message_ids
-                        ),
-                        message_ids,
-                    ),
-                    message_ids,
-                    new_session_id,
-                )
+                restore_sources(avatar, session_state, session_state_data, message_ids)
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
@@ -306,7 +294,7 @@ class SessionImporter:
                         character=ent.get("character"),
                         gender=ent.get("gender"),
                         age_years=ent.get("age_years"),
-                        visual_profile=ent.get("visual_profile"),
+                        visual_profile=remap_profile(ent.get("visual_profile"), message_ids),
                         hp=ent.get("hp"),
                         max_hp=ent.get("max_hp"),
                         mana=ent.get("mana"),

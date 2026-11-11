@@ -137,3 +137,38 @@ explicit selection, only when the match is unique; paraphrases and combined frag
 are never accepted as evidence. Quote-boundary whitespace is trimmed consistently before
 preview and apply, as for live item actions; interior whitespace, case and punctuation
 still require exact matching. Length limits use Unicode characters on both client and server.
+
+### Equipment card projection
+
+NPC cards read canonical ownership and `visual_profile.worn`; they never maintain a
+second equipment inventory or issue actions. RP continues to update those records
+through the existing wardrobe and shared post-narration reconciliation passes.
+Visible garments use canonical `wearable_slots` (alternatives, not duplicate
+placements), falling back to garment coverage. Layers share one slot. Slot hover,
+keyboard focus or tap opens a viewport-constrained list inside the native dialog.
+
+Optional `visual_profile.body` records `form` (`humanoid`, `non_humanoid`, `unknown`)
+and an optional `silhouette` (`male`, `female`, `neutral`). An explicit body shape
+wins over NPC type; otherwise HUMANOID uses the silhouette, ANIMAL uses a list and
+unclassified types use a list. Gender chooses only the silhouette, never anatomy.
+Legacy player equipment keeps its existing mechanical actions and humanoid layout
+unless an explicit body form specifies otherwise.
+
+A worn ordinary object can have `attachment_slot` (`vaginal` or `anal`) without
+becoming clothing or covering other garments. The optional `body.attachment_slots`
+means unassessed when null and explicitly unavailable when empty. Completed,
+evidence-backed placement requires an established adult and cannot override an
+explicitly unavailable region. Carrying, holding or transferring removes the old
+binding. These view-only positions have no anatomical labels and are absent until
+occupied by a source-confirmed item. No extra model call is added.
+
+Partial clothing displacement remains worn and owned. A source-confirmed displaced
+garment remains known on the card even if it no longer covers its original region.
+Its optional wear `source` records the exact quote/span, narration hash and saved
+assistant message ID. The completion hook binds newly applied placements after the
+assistant is saved; wardrobe recovery binds its already-saved source directly.
+Missing, edited or foreign-session sources cannot reveal otherwise hidden items.
+Copy/import remaps proof IDs to local history; checkpoint/replay restores the same
+canonical profile. Source proof is omitted from compact model context, while current
+placement facts remain available. Underwear age/detail and scene-presence rules still
+apply. These additive fields preserve version 1 profiles and their legacy shape.

@@ -81,6 +81,16 @@ def garment_for_item(item: dict) -> Garment | None:
     return Garment.model_validate(sanitized) if sanitized is not None else None
 
 
+def attachment_item_allowed(item: dict) -> bool:
+    """Clothing and malformed garment metadata cannot be relabelled as a body object."""
+    garment = garment_for_item(item)
+    if garment is not None:
+        return garment.category == "accessory"
+    metadata = item.get("metadata_json")
+    raw = item.get("clothing", metadata.get("clothing") if isinstance(metadata, dict) else None)
+    return raw is None
+
+
 def sanitize_inventory(items: Any) -> list[dict | str]:
     """Keep canonical items and ID references; remove malformed garment specifications."""
     result: list[dict | str] = []
@@ -123,12 +133,30 @@ def validate_profile(raw: Any, inventory: Any, *, equipment: Any = None) -> Visu
     for worn in profile.worn:
         if worn.item_id not in items:
             raise ValueError("Worn garments must belong to this character.")
+        if worn.attachment_slot:
+            if not attachment_item_allowed(items[worn.item_id]):
+                raise ValueError("An ordinary garment cannot become a body attachment.")
+            slots = profile.body.attachment_slots if profile.body else None
+            if slots is not None and worn.attachment_slot not in slots:
+                raise ValueError("This body region is not available on the character.")
+            continue
         garment = garment_for_item(items[worn.item_id])
         if garment is None:
             raise ValueError("Worn items require valid garment metadata.")
         if not set(worn.uncovered_regions).issubset(garment.coverage):
             raise ValueError("Uncovered regions must be part of the garment's coverage.")
     return profile.model_copy(deep=True)
+
+
+def reasoning_profile(raw: Any) -> dict | None:
+    """Keep placement facts in model context without repeating source text and hashes."""
+    profile = load_profile(raw)
+    if profile is None:
+        return None
+    result = profile.model_dump()
+    for entry in result["worn"]:
+        entry.pop("source", None)
+    return result
 
 
 def reconcile_profile(raw: Any, inventory: Any, *, equipment: Any = None) -> dict | None:

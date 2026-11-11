@@ -4,7 +4,12 @@ from copy import deepcopy
 from typing import Any
 
 from backend.engine.character_identity import identity_profile
-from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
+from backend.engine.clothing.profiles import (
+    garment_for_item,
+    load_profile,
+    owned_items,
+    reasoning_profile,
+)
 from backend.engine.clothing.visuals import canonical_inventory, detailed_for_state
 from backend.engine.npc_presence import physically_present
 from backend.engine.visual_novel.continuity import PLAYER, possession_snapshot
@@ -117,7 +122,7 @@ def build_clothing_context(manager: Any, entities: list[Any], scenes: list[Any])
     actors = actor_records(manager, entities)
     for actor in actors.values():
         profile = load_profile(actor.pop("visual_profile"))
-        actor["visual_profile"] = profile.model_dump() if profile else None
+        actor["visual_profile"] = reasoning_profile(profile.model_dump()) if profile else None
         actor["owned_garments"] = [
             {
                 "id": item["id"],

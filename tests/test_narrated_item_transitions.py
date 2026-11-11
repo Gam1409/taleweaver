@@ -1,6 +1,7 @@
 """Partial placement and ordered item transitions retain one canonical identity."""
 
 from copy import deepcopy
+from hashlib import sha256
 
 import pytest
 from pydantic import ValidationError
@@ -27,7 +28,16 @@ def test_partial_removal_keeps_garment_owned_and_worn():
     assert not errors and len(accepted) == 1
     assert changed["NPC"]["inventory"] == actors["NPC"]["inventory"]
     assert changed["NPC"]["visual_profile"]["worn"] == [
-        {"item_id": "SHIRT", "uncovered_regions": ["torso"]}
+        {
+            "item_id": "SHIRT",
+            "uncovered_regions": ["torso"],
+            "source": {
+                "request_id": "TURN",
+                "source_message_id": None,
+                "content_hash": sha256(partial().evidence.encode()).hexdigest(),
+                "evidence": partial().evidence,
+            },
+        }
     ]
     assert changed[PLAYER] == actors[PLAYER]
 

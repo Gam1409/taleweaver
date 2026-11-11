@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.text_evidence import require_span
 from backend.engine.character_identity import identity_profile
 from backend.engine.clothing.context import resolved_inventory
-from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
+from backend.engine.clothing.equipment_view import layout
+from backend.engine.clothing.profiles import load_profile
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
+from backend.engine.npc_cards.equipment import equipment_rows
 from backend.engine.npc_presence import physically_present
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import Condition
@@ -19,30 +21,6 @@ from backend.engine.physical_conditions.visuals import project
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity
-
-
-def _clothes(actor: dict, objects: list, states: dict, visual: dict) -> list[dict]:
-    items = owned_items(actor["resolved_inventory"])
-    sources = {item.id: item for item in objects}
-    profile = load_profile(actor["visual_profile"])
-    placements = {item.item_id: item.uncovered_regions for item in profile.worn} if profile else {}
-    result = []
-    for row in visual["clothing"]:
-        identifier = row["item_id"]
-        item = items[identifier]
-        garment = garment_for_item(item)
-        source = sources.get(identifier)
-        override = states.get(identifier) or {}
-        image = override.get("image_url", source.image_url if source else item.get("image_url"))
-        result.append(
-            {
-                **row,
-                "image_url": image,
-                "layer": garment.layer if garment else 0,
-                "uncovered_regions": placements.get(identifier, []),
-            }
-        )
-    return sorted(result, key=lambda row: -row["layer"])
 
 
 def _source_quote(row: Condition, messages: dict[str, str]) -> str:
@@ -137,6 +115,11 @@ async def character_current_state(
     if not isinstance(override, dict):
         override = {}
     result: dict[str, Any] = {
+        "layout": layout(
+            override.get("visual_profile", npc.visual_profile),
+            gender=npc.gender,
+            npc_type=npc.npc_type,
+        ),
         "availability": "not_present",
         "game_minute": state.in_game_time,
         "clothing": {"status": "unavailable", "items": [], "detail_limited": True},
@@ -163,12 +146,14 @@ async def character_current_state(
     visual = visible_character(
         actor["visual_profile"], actor["resolved_inventory"], detailed=detailed
     )
-    result["conditions"] = await _conditions(db, state, actor, detailed, visual)
     if visual is None:
+        result["conditions"] = await _conditions(db, state, actor, detailed, visual)
         return result
+    clothes = await equipment_rows(db, state, actor, objects, visual)
+    result["conditions"] = await _conditions(db, state, actor, detailed, {"clothing": clothes})
     result["clothing"] = {
         "status": "available",
         "detail_limited": visual["clothing_detail_limited"],
-        "items": _clothes(actor, objects, states, visual),
+        "items": clothes,
     }
     return result

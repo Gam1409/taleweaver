@@ -2,13 +2,18 @@
 
 from typing import Any
 
-from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
+from backend.engine.clothing.profiles import (
+    attachment_item_allowed,
+    garment_for_item,
+    load_profile,
+    owned_items,
+)
 from backend.engine.clothing.schema import REGIONS, Garment, Region, VisualProfile, WornItem
 
 
 def _worn_items(profile: VisualProfile, items: dict[str, dict], equipment: Any) -> list[WornItem]:
-    worn = list(profile.worn)
-    present = {value.item_id for value in worn}
+    worn = [item for item in profile.worn if item.attachment_slot is None]
+    present = {value.item_id for value in profile.worn}
     for raw in equipment.values() if isinstance(equipment, dict) else []:
         identifier = raw.get("id") if isinstance(raw, dict) else raw
         if not isinstance(identifier, str) or identifier in present or identifier not in items:
@@ -44,7 +49,12 @@ def visible_character(
         "clothing_detail_limited": False,
     }
     # Unknown coverage cannot justify exposing the names of lower layers.
-    if any(candidates[w.item_id] is None for w in worn):
+    if any(candidates[w.item_id] is None for w in worn) or any(
+        row.attachment_slot
+        and row.item_id in items
+        and not attachment_item_allowed(items[row.item_id])
+        for row in profile.worn
+    ):
         result["clothing_detail_limited"] = True
         return result
     garments = {key: value for key, value in candidates.items() if value is not None}
@@ -78,6 +88,11 @@ def visible_character(
                 "name": name[:200] if isinstance(name, str) else "",
                 "description": garment.description if detailed is True else "",
                 "visible_regions": [region for region in REGIONS if region in visible],
+                **(
+                    {"uncovered_regions": current.uncovered_regions}
+                    if current.uncovered_regions
+                    else {}
+                ),
             }
         )
     return result

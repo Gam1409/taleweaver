@@ -1,7 +1,9 @@
 """Validate history-backed garment proposals without changing canonical possessions."""
 
 from copy import deepcopy
+from hashlib import sha256
 
+from backend.engine.clothing.body_schema import WearSource
 from backend.engine.clothing.recovery_contract import resolve_garment
 from backend.engine.clothing.recovery_evidence import evidence_issues, rejected_entry
 from backend.engine.clothing.recovery_mentions import mention_checks
@@ -88,7 +90,7 @@ def evaluate(
         skipped.extend(omitted)
         for addition in additions:
             addition["proposal_index"] = index
-            _finish_addition(actors[actor["id"]], addition, entry, index)
+            _finish_addition(actors[actor["id"]], addition, entry, index, source["content"])
             identifier = addition["item"]["id"]
             snapshot.items[identifier] = addition["item"]
             snapshot.owners[identifier] = actor["id"]
@@ -97,12 +99,14 @@ def evaluate(
     return actors, accepted, errors, list(dict.fromkeys(skipped))
 
 
-def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry, index: int) -> None:
+def _finish_addition(
+    actor: dict, addition: dict, entry: RecoveryEntry, index: int, text: str
+) -> None:
     addition["source_message_id"] = entry.source_message_id
     addition["uncovered_regions"] = list(dict.fromkeys(entry.uncovered_regions))
     addition["placement_evidence"] = entry.placement_evidence
     if entry.uncovered_regions or entry.restore_coverage:
-        _set_partial_wear(actor, addition)
+        _set_partial_wear(actor, addition, text)
     if entry.restore_coverage:
         addition["restore_coverage"] = True
     # Only newly recovered acquisitions use the synthetic evaluation source.
@@ -121,10 +125,18 @@ def _finish_addition(actor: dict, addition: dict, entry: RecoveryEntry, index: i
         ]
 
 
-def _set_partial_wear(actor: dict, addition: dict) -> None:
+def _set_partial_wear(actor: dict, addition: dict, text: str) -> None:
     for worn in actor["visual_profile"]["worn"]:
         if worn["item_id"] == addition["item"]["id"]:
             worn["uncovered_regions"] = addition["uncovered_regions"]
+            if addition["uncovered_regions"]:
+                worn["source"] = WearSource(
+                    source_message_id=addition["source_message_id"],
+                    content_hash=sha256(text.encode()).hexdigest(),
+                    evidence=addition["placement_evidence"],
+                ).model_dump()
+            else:
+                worn.pop("source", None)
 
 
 def evaluated_preview(

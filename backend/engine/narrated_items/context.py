@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from backend.engine.clothing.profiles import reasoning_profile
+
 _ITEM_FIELDS = (
     "id",
     "name",
@@ -20,7 +22,10 @@ def actor_context(actors: dict) -> list[dict]:
         row = {key: actor.get(key) for key in ("id", "name", "age_years")}
         profile = actor.get("visual_profile")
         if isinstance(profile, dict):
-            row["visual_profile"] = {"worn": profile.get("worn", [])}
+            compact = reasoning_profile(profile) or profile
+            row["visual_profile"] = {
+                key: compact[key] for key in ("worn", "body") if key in compact
+            }
         result.append(row)
     return result
 

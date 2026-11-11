@@ -2,7 +2,19 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+
+from backend.engine.clothing.body_schema import BodyLayout, BodySlot, WearSource
 
 Region = Literal["head", "torso", "arms", "pelvis", "legs", "feet", "hands"]
 REGIONS: tuple[Region, ...] = ("head", "torso", "arms", "pelvis", "legs", "feet", "hands")
@@ -10,6 +22,14 @@ REGIONS: tuple[Region, ...] = ("head", "torso", "arms", "pelvis", "legs", "feet"
 
 class _VisualModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result: dict = handler(self)
+        for key in ("body", "attachment_slot", "source"):
+            if key in result and result[key] is None:
+                result.pop(key)
+        return result
 
 
 class Appearance(_VisualModel):
@@ -42,6 +62,14 @@ class Garment(_VisualModel):
 class WornItem(_VisualModel):
     item_id: str = Field(min_length=1, max_length=100)
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
+    attachment_slot: BodySlot | None = None
+    source: WearSource | None = None
+
+    @model_validator(mode="after")
+    def coherent(self) -> "WornItem":
+        if self.attachment_slot and self.uncovered_regions:
+            raise ValueError("Body placement cannot carry clothing displacement.")
+        return self
 
     @field_validator("uncovered_regions")
     @classmethod
@@ -55,6 +83,7 @@ class VisualProfile(_VisualModel):
     version: Literal[1] = 1
     appearance: Appearance = Field(default_factory=Appearance)
     worn: list[WornItem] = Field(default_factory=list, max_length=32)
+    body: BodyLayout | None = None
 
     @field_validator("worn")
     @classmethod

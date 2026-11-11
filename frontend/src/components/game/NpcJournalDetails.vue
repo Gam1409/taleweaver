@@ -7,7 +7,7 @@ import NpcCardPreferences from './NpcCardPreferences.vue'
 import NpcNarrativeInsights from './NpcNarrativeInsights.vue'
 import NpcCurrentState from './NpcCurrentState.vue'
 
-const props = defineProps<{ sessionId: string; npcId: string }>()
+const props = defineProps<{ sessionId: string; npcId: string; stateRevision?: unknown }>()
 const history = ref<NpcHistoryKind>('general')
 const activeTab = ref<'state' | 'history'>('state')
 const historyPanel = ref<HTMLElement | null>(null)
@@ -39,6 +39,10 @@ const { details, loading, error, load } = useNpcJournal(
   toRef(props, 'npcId'),
   settings.showState,
   history
+)
+watch(
+  () => props.stateRevision,
+  () => { void load() }
 )
 const tabId = computed(
   () => `npc-history-${encodeURIComponent(props.sessionId)}-${encodeURIComponent(props.npcId)}`

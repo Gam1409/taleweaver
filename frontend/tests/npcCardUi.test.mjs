@@ -147,7 +147,7 @@ export function setup() { ${source}; return { history, navigateTabs, tabId, acti
   assert.match(state.tabId.value, /s2-new-character/)
 })
 
-test('current state distinguishes unobserved, unavailable and empty observations', async () => {
+test('current state shows confirmed facts without immersion-breaking diagnostics', async () => {
   const ui = await component('NpcCurrentState')
   const state = {
     availability: 'present', game_minute: 480,
@@ -159,24 +159,60 @@ test('current state distinguishes unobserved, unavailable and empty observations
   assert.match(observed, /&lt;script&gt;Bandage&lt;\/script&gt;/)
   assert.doesNotMatch(observed, /<script\b/)
   const absent = await render(ui, { state: { ...state, availability: 'not_present' } })
-  assert.match(absent, /not currently visible/)
-  assert.doesNotMatch(absent, /Bandage|Treated/)
+  assert.doesNotMatch(absent, /not currently visible|Bandage|Treated/)
   const unknown = await render(ui, { state: { ...state, clothing: { status: 'unavailable', items: [] }, conditions: { status: 'unavailable', items: [] } } })
-  assert.match(unknown, /Clothing details are not confirmed/)
-  assert.match(unknown, /Current physical conditions are not confirmed/)
+  assert.doesNotMatch(unknown, /Clothing details are not confirmed|Current physical conditions are not confirmed/)
   assert.doesNotMatch(unknown, /No known physical conditions recorded/)
 })
 
-test('clothing tiles use item images and mark partial displacement without HTML injection', async () => {
-  const ui = await component('NpcClothingTile', 'const getImageUrl = path => path;')
-  const item = { item_id: 'coat', name: '<b>Coat</b>', image_url: '/coat.png', layer: 2, description: '<script>detail</script>', visible_regions: ['arms'], uncovered_regions: ['torso'] }
-  const html = await render(ui, { item })
-  assert.match(html, /src="\/coat.png"/)
+test('equipment lists preserve partial placement and escape item text', async () => {
+  const ui = await component('EquipmentList')
+  const item = { id: 'coat', name: '<b>Coat</b>', image_url: '/coat.png', layer: 2, description: '<script>detail</script>', uncovered_regions: ['torso'] }
+  const html = await render(ui, { items: [item] })
   assert.match(html, /Partially displaced/)
   assert.match(html, /&lt;b&gt;Coat&lt;\/b&gt;/)
   assert.doesNotMatch(html, /<script\b|<b>/)
-  const missing = await render(ui, { item: { ...item, image_url: null, uncovered_regions: [] } })
+  const missing = await render(ui, { items: [{ ...item, image_url: null, uncovered_regions: [] }] })
   assert.doesNotMatch(missing, /<img\b|Partially displaced/)
+})
+
+test('equipment icons use canonical images at 14 px with a missing-image fallback', async () => {
+  const ui = await component('EquipmentItemIcon', 'const getImageUrl = path => path;')
+  const html = await render(ui, { item: { id: 'coat', name: '<script>Coat</script>', image_url: '/coat.png' } })
+  assert.match(html, /src="\/coat.png"/)
+  assert.match(html, /h-3\.5 w-3\.5/)
+  assert.doesNotMatch(html, /<script\b/)
+  const missing = await render(ui, { item: { id: 'coat', name: 'Coat', image_url: null } })
+  assert.doesNotMatch(missing, /<img\b/)
+  assert.match(missing, /ra-vest/)
+})
+
+test('silhouettes show overlapping layers and only occupied unlabelled body positions', async t => {
+  const path = new URL('../src/utils/equipmentSlots.ts', import.meta.url)
+  const utility = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+  const key = `__equipmentSlots${sequence++}`
+  globalThis[key] = await import(`data:text/javascript;base64,${Buffer.from(utility).toString('base64')}`)
+  t.after(() => delete globalThis[key])
+  const ui = await component('EquipmentSilhouette', `
+import { ref } from '${import.meta.resolve('vue')}';
+const {EQUIPMENT_SLOTS, BODY_ITEM_SLOTS} = globalThis['${key}'];
+const maleSilhouette='male.svg', femaleSilhouette='female.png';
+const useEquipmentHover=()=>({active:ref(''),target:ref(null),style:ref({}),close:()=>{}});`)
+  const empty = await render(ui, { equipment: {}, variant: 'female', class: 'parent-width' })
+  assert.match(empty, /data-silhouette="female"/)
+  assert.match(empty, /src="female.png"/)
+  assert.match(empty, /parent-width/)
+  assert.equal((empty.match(/data-equipment-slot=/g) || []).length, 11)
+  assert.doesNotMatch(empty, /BodyAnal|BodyVaginal|NSFW/)
+  const layered = await render(ui, { variant: 'male', equipment: {
+    Feet: [{ id: 'boot', name: 'Boots' }, { id: 'sock', name: '<b>Socks</b>' }],
+    BodyAnal: [{ id: 'sensor', name: 'Medical sensor' }],
+  } })
+  assert.match(layered, /src="male.svg"/)
+  assert.equal((layered.match(/data-equipment-slot=/g) || []).length, 12)
+  assert.match(layered, /aria-label="Feet: Boots: &lt;b&gt;Socks&lt;\/b&gt;"/)
+  assert.match(layered, /aria-label="Medical sensor"/)
+  assert.doesNotMatch(layered, /BodyVaginal|>Anal<|>Vaginal<|<b>/)
 })
 
 test('missing portrait offers generation next to the avatar before advanced options', async () => {

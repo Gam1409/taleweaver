@@ -7,6 +7,7 @@ export interface NpcVisibleGarment {
   layer: number
   visible_regions: string[]
   uncovered_regions: string[]
+  slots?: string[]
 }
 
 export interface NpcKnownCondition {
@@ -22,6 +23,10 @@ export interface NpcKnownCondition {
 }
 
 export interface NpcCurrentState {
+  layout?: {
+    form: 'humanoid' | 'non_humanoid' | 'unknown'
+    silhouette: 'male' | 'female' | 'neutral'
+  }
   availability: 'present' | 'not_present'
   game_minute: number
   clothing: {

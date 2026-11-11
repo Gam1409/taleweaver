@@ -4,8 +4,10 @@ import json
 from typing import Any
 
 from backend.engine.clothing.context import actor_records, detail_settings
+from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.visuals import character_visuals
 from backend.engine.physical_conditions.presentation import narration_block
+from backend.engine.visual_novel.continuity import PLAYER
 
 
 class _NarratedNPC:
@@ -22,6 +24,35 @@ class _NarratedNPC:
         return getattr(self._entity, name)
 
 
+def _known_placements(actor: dict, detailed: bool) -> list[dict]:
+    profile = load_profile(actor.get("visual_profile"))
+    if profile is None:
+        return []
+    items = owned_items(actor["resolved_inventory"], equipment=actor.get("equipment"))
+    age = profile.appearance.age_years
+    adult = age is not None and age >= 18
+    result = []
+    for worn in profile.worn:
+        if worn.item_id not in items or not (worn.uncovered_regions or worn.attachment_slot):
+            continue
+        if worn.source is None and actor["id"] != PLAYER:
+            continue
+        garment = garment_for_item(items[worn.item_id])
+        if (worn.attachment_slot and not adult) or (
+            garment and garment.underwear and not (adult and detailed)
+        ):
+            continue
+        result.append(
+            {
+                "item_id": worn.item_id,
+                "name": items[worn.item_id].get("name", ""),
+                "uncovered_regions": worn.uncovered_regions,
+                **({"attachment_slot": worn.attachment_slot} if worn.attachment_slot else {}),
+            }
+        )
+    return result
+
+
 def narration_clothing(
     manager: Any, visible: list[Any], all_entities: list[Any]
 ) -> tuple[list[Any], str]:
@@ -31,6 +62,13 @@ def narration_clothing(
         actor_id: character_visuals(actor, actor["resolved_inventory"], detailed=detailed)
         for actor_id, actor in actors.items()
     }
+    for actor_id, actor in actors.items():
+        visual = visuals.get(actor_id)
+        if visual is None:
+            continue
+        placements = _known_placements(actor, detailed)
+        if placements:
+            visual["known_worn_placements"] = placements
     entities = [
         _NarratedNPC(entity, visuals.get(entity.id)) if entity.entity_type == "NPC" else entity
         for entity in visible

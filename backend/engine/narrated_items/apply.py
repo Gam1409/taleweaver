@@ -8,7 +8,6 @@ from uuid import NAMESPACE_URL, uuid5
 from backend.core.text_evidence import require_span
 from backend.engine.clothing.classification import classify_action
 from backend.engine.clothing.profiles import (
-    garment_for_item,
     load_profile,
     owned_items,
     validate_profile,
@@ -18,6 +17,7 @@ from backend.engine.narrated_items import transitions
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
+from backend.engine.narrated_items.wear import placement, unchanged_observation, validate_wear
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
 
@@ -80,7 +80,7 @@ def _remove(actor: dict, item_id: str) -> None:
 
 
 def _receive(
-    actor: dict, item: dict, disposition: str, detailed: bool, uncovered: list | None = None
+    actor: dict, item: dict, disposition: str, detailed: bool, worn: WornItem | None = None
 ) -> None:
     identifier = item["id"]
     owned = owned_items(actor["inventory"], equipment=actor["equipment"])
@@ -91,26 +91,23 @@ def _receive(
     ] + [deepcopy(item)]
     if disposition != "worn":
         return
-    garment = garment_for_item(item)
     raw = actor.get("visual_profile")
     profile = load_profile(raw)
     if profile is None and not raw:
         profile = VisualProfile()
         profile.appearance.age_years = actor.get("age_years")
-    if garment is None or profile is None:
+    if profile is None or worn is None:
         raise ValueError(
             "Wearing requires valid garment metadata and an existing appearance profile."
         )
-    age = actor.get("age_years")
-    if garment.underwear and not (detailed and type(age) is int and age >= 18):
-        raise ItemPolicyError("inner_wear_policy")
+    validate_wear(actor, item, profile, worn, detailed)
     if identifier not in {entry.item_id for entry in profile.worn}:
-        profile.worn.append(WornItem(item_id=identifier, uncovered_regions=uncovered or []))
+        profile.worn.append(worn)
     actor["visual_profile"] = validate_profile(
         profile.model_dump(), actor["resolved_inventory"], equipment=actor["equipment"]
     ).model_dump()
     # Clothing layers coexist in worn; receiving an item never equips it as a weapon.
-    for slot in item.get("wearable_slots") or []:
+    for slot in (item.get("wearable_slots") or []) if worn.attachment_slot is None else []:
         if actor["id"] == PLAYER and not actor["equipment"].get(slot):
             actor["equipment"][slot] = deepcopy(item)
 
@@ -193,31 +190,20 @@ def _apply_batch(
             actual_owner = snapshot.owners.get(identifier, action.source_owner)
             if actual_owner == action.destination_owner and action.source_owner != actual_owner:
                 continue  # Already applied by the mechanics pass; never duplicate or unequip it.
-            profile = load_profile(actors[action.destination_owner].get("visual_profile"))
-            if (
-                action.basis == "observed_wear"
-                and profile
-                and any(
-                    row.item_id == identifier
-                    and (
-                        action.uncovered_regions is None
-                        or row.uncovered_regions == action.uncovered_regions
-                    )
-                    for row in profile.worn
-                )
-            ):
+            if unchanged_observation(action, actors[action.destination_owner], identifier):
                 continue
-            uncovered = action.uncovered_regions
-            if uncovered is None and actual_owner == action.destination_owner and profile:
-                uncovered = next(
-                    (row.uncovered_regions for row in profile.worn if row.item_id == identifier), []
-                )
+            worn = placement(
+                action,
+                actors[action.destination_owner],
+                identifier,
+                same_owner=actual_owner == action.destination_owner,
+                narration=narration,
+                request_id=message_id,
+            )
             candidate = deepcopy(actors)
             if actual_owner in candidate:
                 _remove(candidate[actual_owner], identifier)
-            _receive(
-                candidate[action.destination_owner], item, action.disposition, detailed, uncovered
-            )
+            _receive(candidate[action.destination_owner], item, action.disposition, detailed, worn)
             actors = candidate
             snapshot.items[identifier] = item
             snapshot.owners[identifier] = action.destination_owner
