@@ -10,7 +10,7 @@ A self-hosted storytelling studio for character-driven roleplay, visual novels, 
 Build a world, give its characters a history, and bring each moment to life with illustrations and voices.
 
 [![CI](https://github.com/Gam1409/taleweaver/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gam1409/taleweaver/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.7.0--beta-f59e0b)](version.json)
+[![Version](https://img.shields.io/badge/version-0.7.1--beta-f59e0b)](version.json)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-0ea5e9.svg)](LICENSE)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
@@ -206,7 +206,7 @@ Your saves and assets live on your TaleWeaver host. Story context is sent to the
 
 ### Desktop Apps · Beta
 
-Download the matching archive from **[v0.7.0-beta](https://github.com/Gam1409/taleweaver/releases/tag/v0.7.0-beta)**, extract the complete folder, and launch the application. Development builds remain available under [Desktop distributions → Artifacts](https://github.com/Gam1409/taleweaver/actions/workflows/desktop.yml?query=event%3Aworkflow_dispatch).
+Download the matching archive from **[v0.7.1-beta](https://github.com/Gam1409/taleweaver/releases/tag/v0.7.1-beta)**, extract the complete folder, and launch the application. Development builds remain available under [Desktop distributions → Artifacts](https://github.com/Gam1409/taleweaver/actions/workflows/desktop.yml?query=event%3Aworkflow_dispatch).
 
 | Platform | Launch | Notes |
 | --- | --- | --- |
