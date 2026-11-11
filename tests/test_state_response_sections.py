@@ -7,6 +7,8 @@ import pytest
 
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.narrated_items.coverage import groups
+from backend.engine.narrated_items.evidence import Catalog
 from backend.engine.narrated_items.runtime import KEY, reconcile_items
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.physical_conditions.ledger import read as conditions
@@ -19,6 +21,20 @@ from tests.test_vn_turn_integration import final_payload
 
 TEXT = "Lina has ink on her hand. A lamp stays lit beside the door."
 FIELDS = ("actions", "condition_updates", "scene_updates", "final_frame_actions")
+WIRE_FIELDS = {*FIELDS, "coverage"}
+
+
+def annotations(catalog):
+    labels = {
+        "Lina has ink on her hand.": "conditions",
+        "A lamp stays lit beside the door.": "scene",
+    }
+    return {
+        key: list(
+            dict.fromkeys(labels[catalog.resolve(ref, allow_room=False).quote] for ref in refs)
+        )
+        for key, refs in groups(catalog).items()
+    }
 
 
 class SectionRoles(SharedRoles):
@@ -30,6 +46,7 @@ class SectionRoles(SharedRoles):
             return await super().structured(*args, **kwargs)
         self.calls.append((model.__name__, args, kwargs))
         body = {key: [] for key in FIELDS}
+        body["coverage"] = annotations(Catalog(TEXT, scope="sections"))
         body["condition_updates"] = [
             {
                 "operation": "record",
@@ -83,29 +100,37 @@ async def test_partial_response_does_not_masquerade_as_a_complete_unchanged_chec
         check = state.entity_states[KEY]
         assert check["status"] == ("needs_review" if omitted else "complete")
         assert check.get("unconfirmed_sections", []) == ([omitted] if omitted else [])
+        audit = check["extraction_coverage"]
+        assert audit["status"] == (
+            "needs_review" if omitted in {"condition_updates", "scene_updates"} else "complete"
+        )
         assert bool(conditions(state.entity_states).conditions) is (omitted != "condition_updates")
         assert bool(scene(state.entity_states).records) is (omitted != "scene_updates")
         assert len(roles.calls) == 3
         assert check["message_id"] in check["processed_message_ids"]
         schema = roles.calls[-1][2]["response_schema"]
-        assert set(schema["required"]) == set(FIELDS)
+        assert set(schema["required"]) == WIRE_FIELDS
         assert "staging" not in schema["properties"]
 
 
 def test_complete_wire_contract_requires_explicit_sections_without_changing_local_models():
     from jsonschema import Draft202012Validator
 
-    from backend.engine.narrated_items.evidence import Catalog
     from backend.engine.narrated_items.reference_schema import build
     from backend.engine.narrated_items.response_sections import read
     from backend.engine.narrated_items.schema import SharedItemExtraction
 
     catalog = Catalog(TEXT, "", scope="test")
     before = ItemExtraction.model_json_schema()
-    packet = {key: [] for key in FIELDS}
+    packet = {**{key: [] for key in FIELDS}, "coverage": annotations(catalog)}
     wire = build(ItemExtraction, catalog, complete=True)
     validator = Draft202012Validator(wire)
     assert validator.is_valid(packet)
+    assert not validator.is_valid(
+        {key: value for key, value in packet.items() if key != "coverage"}
+    )
+    assert not validator.is_valid({**packet, "coverage": {}})
+    assert not validator.is_valid({**packet, "coverage": None})
     assert not validator.is_valid({})
     assert not validator.is_valid({"actions": []})
     assert ItemExtraction.model_json_schema() == before
@@ -164,7 +189,6 @@ async def test_missing_staging_subsection_keeps_independent_confirmed_sections(
 async def test_router_modes_keep_independent_data_and_original_section_presence(
     monkeypatch, mode, omit
 ):
-    from backend.engine.narrated_items.evidence import Catalog
     from backend.engine.narrated_items.reference_schema import build
     from backend.engine.narrated_items.response_sections import read
     from backend.engine.narrated_items.schema import SharedItemExtraction
@@ -174,6 +198,7 @@ async def test_router_modes_keep_independent_data_and_original_section_presence(
     router.model, router.custom_response_format = "vendor/model", mode
     wire = build(ItemExtraction, Catalog(TEXT, scope="wire"), complete=True)
     packet = {key: [] for key in FIELDS}
+    packet["coverage"] = annotations(Catalog(TEXT, scope="wire"))
     packet["actions"] = [{"item_id": "COAT", "source_owner": "LINA"}]
     packet["scene_updates"] = [
         {
@@ -209,4 +234,4 @@ async def test_router_modes_keep_independent_data_and_original_section_presence(
     if mode == "json_schema":
         advertised = requests[0]["response_format"]["json_schema"]["schema"]
         assert "staging" not in advertised["properties"]
-        assert set(advertised["required"]) == set(FIELDS)
+        assert set(advertised["required"]) == WIRE_FIELDS

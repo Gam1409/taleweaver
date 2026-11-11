@@ -193,8 +193,8 @@ def test_story_planner_gets_scene_development_before_the_last_400_characters() -
     history = [{"role": "assistant", "content": text}]
     prompt = build_pass1_user_prompt("STATE", "I wait.", history, for_story_initiative=True)
     assert "Lina decides to finish the repairs." in prompt
-    assert '[angry] " Hand me the brush."' in prompt
-    assert "<sigh>" not in prompt
+    assert text.strip() in prompt
+    assert '[angry] "<sigh> Hand me the brush."' in prompt
     assert "only for resolving references" not in prompt
     assert history[0]["content"] == text
 
