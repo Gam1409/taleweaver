@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 export const stubComponent = { render: () => null }
 
 // Exercise real component templates and event handlers without a browser or network.
-export function mountSfc(path, initialProps, dependencies = {}) {
+export function loadSfc(path, dependencies = {}) {
   const source = readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8')
   const { descriptor } = parse(source)
   const code = ts.transpileModule(compileScript(descriptor, {
@@ -20,9 +20,18 @@ export function mountSfc(path, initialProps, dependencies = {}) {
   new Function('require', 'module', 'exports', code)(
     name => dependencies[name] ?? require(name), module, module.exports,
   )
-  const node = (type, text = '') => Object.assign(new EventTarget(), {
-    type, text, props: {}, children: [], parent: null, value: '', getRootNode: () => body,
-  })
+  return module.exports.default
+}
+
+export function mountSfc(path, initialProps, dependencies = {}) {
+  const component = loadSfc(path, dependencies)
+  const node = (type, text = '') => {
+    const element = Object.assign(new EventTarget(), {
+      type, text, props: {}, children: [], parent: null, value: '', getRootNode: () => body,
+    })
+    Object.defineProperty(element, 'options', { get: () => element.children.filter(child => child.type === 'option') })
+    return element
+  }
   const root = node('root'), body = node('body')
   const remove = child => {
     const children = child.parent?.children
@@ -52,13 +61,16 @@ export function mountSfc(path, initialProps, dependencies = {}) {
     },
     remove, setText: (node, text) => { node.text = text },
     setElementText(node, text) { node.text = text; node.children = [] },
-    patchProp: (node, key, _old, value) => { node.props[key] = value },
+    patchProp: (node, key, _old, value) => {
+      node.props[key] = value
+      if (key === 'value') { node.value = value; node._value = value }
+    },
     parentNode: node => node.parent,
     nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1],
     querySelector: selector => selector === 'body' ? body : null,
   })
   const props = reactive(initialProps)
-  const app = renderer.createApp({ render: () => h(module.exports.default, props) })
+  const app = renderer.createApp({ render: () => h(component, props) })
   app.mount(root)
   const all = () => {
     const walk = node => [node, ...node.children.flatMap(walk)]

@@ -15,6 +15,7 @@ export interface WardrobeRecoveryPreview {
   rejected_sources?: Record<string, string> | null
   skipped?: string[] | null
   model_role?: string | null
+  source_roles?: Record<string, string>
   accepted: {
     proposal_index?: number
     item: {
@@ -28,6 +29,8 @@ export interface WardrobeRecoveryPreview {
     uncovered_regions?: string[]
     placement_evidence?: string
     restore_coverage?: boolean
+    attachment_slot?: 'vaginal' | 'anal'
+    source_role?: 'assistant' | 'user'
   }[]
 }
 const props = defineProps<{
@@ -65,11 +68,12 @@ const emit = defineEmits<{ command: [value: string] }>()
       class="rounded bg-cyan-900 px-3 py-2 disabled:opacity-40"
       @click="emit('command', `/debug wardrobe_preview ${JSON.stringify(npcId)} ${modelRole}`)"
     >
-      Restore clothing from history…
+      Restore clothing & placed items from history…
     </button>
     <p class="text-slate-400">
-      Preview missing clothing from up to 80 recent story messages. Nothing changes until you apply.
-      Check later removals and transfers before accepting.
+      Preview missing clothing and body-placed items from up to 80 recent story messages. Nothing
+      changes until you apply. Check later removals and transfers before accepting. Player
+      descriptions can be proposed as manual corrections; select them explicitly to confirm.
     </p>
     <div v-if="preview" class="space-y-2">
       <p
@@ -96,10 +100,10 @@ const emit = defineEmits<{ command: [value: string] }>()
       </p>
       <p v-if="preview.notes" class="text-amber-200">{{ preview.notes }}</p>
       <p v-if="!preview.accepted.length && !preview.errors.length">
-        No confirmed missing clothing was proposed.
+        No supported missing clothing or placed items were proposed.
       </p>
       <div v-if="preview.accepted.length" class="flex flex-wrap items-center gap-3">
-        <span>Choose garments to restore: {{ selected.length }} selected.</span>
+        <span>Choose items to restore: {{ selected.length }} selected.</span>
         <button
           type="button"
           :disabled="busy"
@@ -136,9 +140,22 @@ const emit = defineEmits<{ command: [value: string] }>()
             :disabled="busy || typeof entry.proposal_index !== 'number'"
             class="mt-1"
           />
-          {{ entry.item.name }} — {{ entry.disposition === 'worn' ? 'Worn' : 'Inventory' }}
+          {{ entry.item.name }} —
+          {{
+            entry.attachment_slot ? 'Placed' : entry.disposition === 'worn' ? 'Worn' : 'Inventory'
+          }}
         </label>
         <p>{{ entry.item.description }}</p>
+        <p v-if="entry.attachment_slot">Body placement: {{ entry.attachment_slot }}</p>
+        <p
+          v-if="
+            entry.source_role === 'user' ||
+            preview.source_roles?.[entry.source_message_id] === 'user'
+          "
+          class="text-amber-200"
+        >
+          Player message — selecting this item confirms a manual state correction.
+        </p>
         <p v-if="entry.item.clothing">
           Layer {{ entry.item.clothing.layer }} · {{ entry.item.clothing.coverage.join(', ')
           }}{{ entry.item.clothing.underwear ? ' · Underwear' : '' }}
@@ -170,6 +187,7 @@ const emit = defineEmits<{ command: [value: string] }>()
         :sources="preview.rejected_sources"
         :token="preview.token"
         :busy="busy"
+        :source-roles="preview.source_roles"
         @command="emit('command', $event)"
       />
       <p
@@ -189,7 +207,7 @@ const emit = defineEmits<{ command: [value: string] }>()
         class="rounded bg-emerald-900 px-3 py-2 disabled:opacity-40"
         @click="emit('command', `/debug wardrobe_apply ${preview.token} ${selected.join(',')}`)"
       >
-        Restore selected clothing
+        Restore selected items
       </button>
     </div>
   </section>

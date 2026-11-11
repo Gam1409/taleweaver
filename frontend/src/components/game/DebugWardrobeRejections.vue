@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugWardrobeCorrection from './DebugWardrobeCorrection.vue'
+import DebugBodyPlacementCorrection from './DebugBodyPlacementCorrection.vue'
 import { ref, watch } from 'vue'
 export interface WardrobeRejection {
   index: number
@@ -13,23 +14,30 @@ export interface WardrobeRejection {
   coverage: string[]
   uncovered_regions: string[]
   reasons: string[]
+  attachment_slot?: 'vaginal' | 'anal'
 }
 const props = defineProps<{
   entries: WardrobeRejection[]
   sources?: Record<string, string> | null
   token?: string
   busy?: boolean
+  sourceRoles?: Record<string, string>
 }>()
 const emit = defineEmits<{ command: [value: string] }>()
 const selectedQuote = ref({ index: -1, text: '' })
-watch(() => props.token, () => { selectedQuote.value = { index: -1, text: '' } })
+watch(
+  () => props.token,
+  () => {
+    selectedQuote.value = { index: -1, text: '' }
+  }
+)
 function captureSelection(index: number, event: Event) {
   const element = event.currentTarget as HTMLElement
   const selection = window.getSelection()
   const range = selection?.rangeCount === 1 ? selection.getRangeAt(0) : null
   selectedQuote.value = {
     index,
-    text: range && element.contains(range.commonAncestorContainer) ? range.toString() : '',
+    text: range && element.contains(range.commonAncestorContainer) ? range.toString() : ''
   }
 }
 </script>
@@ -49,6 +57,12 @@ function captureSelection(index: number, event: Event) {
         Basis: {{ entry.basis }} · Disposition: {{ entry.disposition }}
       </p>
       <p class="break-all text-xs text-slate-400">Cited message: {{ entry.source_message_id }}</p>
+      <p v-if="sourceRoles?.[entry.source_message_id] === 'user'" class="text-xs text-amber-200">
+        Player message — requires your explicit confirmation in Debug.
+      </p>
+      <p v-if="entry.attachment_slot" class="text-xs">
+        Body placement: {{ entry.attachment_slot }}
+      </p>
       <p class="font-bold">Proposed item quote</p>
       <blockquote class="whitespace-pre-wrap break-words border-l-2 border-rose-800 pl-2">
         {{ entry.evidence }}
@@ -65,7 +79,9 @@ function captureSelection(index: number, event: Event) {
       </div>
       <details v-if="sources?.[entry.source_message_id]" class="rounded bg-slate-900 p-2">
         <summary class="cursor-pointer text-cyan-200">
-          Original assistant message — compare the exact wording
+          Original
+          {{ sourceRoles?.[entry.source_message_id] === 'user' ? 'player' : 'assistant' }} message —
+          compare the exact wording
         </summary>
         <pre
           @mouseup="captureSelection(entry.index, $event)"
@@ -73,12 +89,25 @@ function captureSelection(index: number, event: Event) {
           class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs select-text"
           >{{ sources[entry.source_message_id] }}</pre>
       </details>
-      <p v-else class="text-amber-200">
-        The cited assistant message was not found in the reviewed history.
-      </p>
+      <p v-else class="text-amber-200">The cited message was not found in the reviewed history.</p>
       <DebugWardrobeCorrection
-        v-if="token && sources?.[entry.source_message_id] && entry.coverage.length"
+        v-if="
+          token &&
+          sources?.[entry.source_message_id] &&
+          entry.coverage.length &&
+          !entry.attachment_slot
+        "
         :key="`${token}:${entry.index}`"
+        :entry="entry"
+        :source="sources[entry.source_message_id]!"
+        :token="token"
+        :busy="!!busy"
+        :selected-quote="selectedQuote.index === entry.index ? selectedQuote.text : ''"
+        @command="emit('command', $event)"
+      />
+      <DebugBodyPlacementCorrection
+        v-if="token && sources?.[entry.source_message_id] && entry.attachment_slot"
+        :key="`${token}:${entry.index}:placement`"
         :entry="entry"
         :source="sources[entry.source_message_id]!"
         :token="token"
