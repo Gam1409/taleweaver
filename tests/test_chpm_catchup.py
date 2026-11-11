@@ -199,7 +199,9 @@ async def test_invalid_source_does_not_starve_a_later_source_or_get_marked_succe
 
 def test_actor_cursors_ahead_of_this_batch_are_never_rewound():
     row = SimpleNamespace(
-        id="historical", content="\n".join(f"Line {index}." for index in range(12)), npc_recovery=None
+        id="historical",
+        content="\n".join(f"Line {index}." for index in range(12)),
+        npc_recovery=None,
     )
     audit = recovery_queue.RecoveryAudit(
         content_hash="a" * 64, scene_id="S", actors={"LINA": 0, "MIKI": 9}
@@ -279,3 +281,34 @@ async def test_optional_history_cannot_overflow_an_otherwise_valid_current_perce
         assert "unreviewed_history" not in request.call_args.args[4]
         assert request.call_args.args[5] is perception_fragments.Projection
         assert batch.error and not batch.checked
+
+
+@pytest.mark.parametrize("kind", ["checkpoint", "turn"])
+async def test_legacy_snapshots_clear_source_progress_created_after_the_snapshot(kind):
+    from backend.engine.turn_replay import snapshot
+
+    async with TestSessionLocal() as db:
+        manager, turn, reply = await context(db)
+        audit = deepcopy(reply.npc_recovery)
+        reply.npc_recovery = None
+        await db.commit()
+        if kind == "checkpoint":
+            checkpoint = await SessionCheckpointService.create_checkpoint(
+                db, manager.game_id, "manual"
+            )
+            data = deepcopy(checkpoint.state_snapshot)
+            data.pop("npc_recovery")
+            checkpoint.state_snapshot = data
+        else:
+            data = await snapshot.capture(db, manager.game_id)
+            data.pop("npc_recovery")
+        await db.commit()
+        reply.npc_recovery = audit
+        await db.commit()
+        if kind == "checkpoint":
+            await SessionCheckpointService.restore_checkpoint(db, manager.game_id, checkpoint.id)
+        else:
+            await snapshot.restore(db, manager.game_id, data)
+        await db.commit()
+        await db.refresh(reply)
+        assert reply.npc_recovery is None
