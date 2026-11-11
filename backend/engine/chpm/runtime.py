@@ -44,7 +44,6 @@ from backend.engine.chpm.schema import (
     Verdict,
 )
 from backend.engine.chpm.state import load, save
-from backend.engine.npc_presentation.runtime import defer_characters
 from backend.engine.turn_replay.transactions import release_for_model
 
 logger = logging.getLogger(__name__)
@@ -168,8 +167,6 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
         return ""
     old = current(manager)
     if old is not None and old.input_id == input_id:
-        if not old.simplified:
-            defer_characters(manager, set(old.usage.actor_failures))
         return contract(old) if buffered(manager) else ""
     turn = Turn(
         state, input_id, player_request=message, gap_cursors=dict(state.recovery.gap_cursors)
@@ -211,7 +208,6 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
         _preparation_failed(manager, turn, exc)
     if turn.usage.status != "failed":
         turn.usage.status = "prepared" if state.settings.mode == "live" else "shadow"
-        defer_characters(manager, set(turn.usage.actor_failures))
     manager._chpm_publish_after_commit = buffered(manager)
     return contract(turn) if buffered(manager) else ""
 

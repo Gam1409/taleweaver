@@ -250,17 +250,33 @@ async def test_live_shaped_initiation_to_continuation_survives_a_peers_local_fai
         assert saved.minds["LINA"] == before.minds["LINA"]
 
 
-async def test_only_the_paused_npcs_new_thoughts_and_emotions_are_excluded(monkeypatch):
+@pytest.mark.parametrize("failure_kind", ["schema", "semantic"])
+@pytest.mark.parametrize(
+    "preferences,expected",
+    [
+        ({}, None),
+        ({"emotion_palette": True}, {"emotion": "fear", "intensity": 80}),
+        ({"character_thoughts": True}, {"thought": "An unconfirmed new thought."}),
+        (
+            {"emotion_palette": True, "character_thoughts": True},
+            {"emotion": "fear", "intensity": 80, "thought": "An unconfirmed new thought."},
+        ),
+    ],
+)
+async def test_paused_decision_does_not_disable_independent_narrator_presentation(
+    monkeypatch, preferences, expected, failure_kind
+):
     from backend.engine.npc_presentation.settings import KEY as PORTRAIT_KEY
 
     roles = LocalFailureRoles()
-    roles.with_portraits = True
+    roles.with_portraits = bool(preferences)
+    roles.failure_kind = failure_kind
     install(monkeypatch, roles)
     async with TestSessionLocal() as db:
         user, state = await seed_pair(db)
         state.entity_states = {
             **state.entity_states,
-            PORTRAIT_KEY: {"emotion_palette": True, "character_thoughts": True},
+            PORTRAIT_KEY: preferences,
         }
         await db.commit()
         host, _ = await play(db, user)
@@ -269,8 +285,16 @@ async def test_only_the_paused_npcs_new_thoughts_and_emotions_are_excluded(monke
         host, _ = await play(db, user, "Мила, расскажи чуть подробнее.")
         saved = load(host.state)
         reply = await db.get(ChatMessage, saved.actors["MILA"].reply_id)
-        assert set(reply.portrait_state["npcs"]) == {"MILA"}
-        assert reply.portrait_state["npcs"]["MILA"]["thought"] == "I can explain my point."
+        cues = reply.to_client_dict()["portrait_state"]
+        if expected is None:
+            assert cues is None
+        else:
+            assert set(cues["npcs"]) == {"LINA", "MILA"}
+            assert cues["npcs"]["LINA"] == expected
+        assert "Лина:" not in reply.content
+        assert saved.usage.actor_failures.keys() == {"LINA"}
+        assert not saved.usage.simplified
+        assert saved.actors["LINA"] == before.actors["LINA"]
         assert saved.minds["LINA"] == before.minds["LINA"]
 
 

@@ -280,6 +280,15 @@ Remaining work includes measuring missed extraction and reviewing portrait-state
 consistency. Model evaluation needs matched, repeated live runs after the owner
 resumes them; the current live-test pause remains in effect.
 
+The portrait-path audit also found a direct availability dependency: localized
+CHPM proposal failures filtered that NPC's otherwise valid narrator-authored
+emotion and thought. This gate has been removed, including cached preparation.
+Personality and available appraisals continue to inform the narrator; they are
+not a prerequisite for the separately enabled display. Cues remain bound to the
+published prose and never commit psychological memory or authorize new decisions.
+No fixed mapping from a qualitative appraisal to a palette label/intensity was
+introduced. Semantic agreement and literary quality still need live evaluation.
+
 ## Extraction completeness and omission baseline
 
 The follow-up audit found two host integration gaps: strict item parsing could

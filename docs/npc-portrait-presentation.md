@@ -13,6 +13,15 @@ The existing narrator request supplies an optional `<npc-state>` JSON footer aft
 
 Story language and machine data have separate contracts: prose and thoughts follow the selected story language, while JSON keys and emotion identifiers keep their specified English spelling. A compact reminder accompanies the current turn so long histories do not leave the footer requirement only in the initial system prompt. NPC Personality's simplified-RP fallback still supports the same display data.
 
+Availability is independent of NPC Personality's off, shadow, live, partial or
+simplified mode. Personality still matters to the content: the narrator uses the
+character's identity, current situation and available psychological appraisals.
+Neither a failed NPC decision nor a temporarily inactive controlled actor vetoes
+otherwise valid narrator-authored portrait cues. Displayed thoughts and emotions
+do not authorize new story dialogue or decisions, and do not confirm or write
+psychological updates. Inner feeling and outward expression may differ; qualitative
+CHPM levels are not automatically converted to portrait colors or percentages.
+
 The reminder is also carried into narration repair and the ordinary replacement writer when a reply is rejected. Replacements require their own footer: an emotion or thought attached to rejected prose is never copied onto the replacement. Hovering or focusing the NPC Personality status exposes a fixed explanation of its recovery reason. With system diagnostics enabled, `npc.behavior_fallback` records the reason and safe exception type/source frames when available, without exception messages or model output.
 
 The owner-only NPC Personality settings retain the last two proposal validation messages in the bounded recovery history. During cooldown, **Most recent rejected NPC proposal** shows those earlier messages separately from the current turn's zero analysis usage. For older saves, the panel can read the previous turn snapshot when it belongs to the same session and selected cast. This is inspection only: it does not restore the snapshot, advance time, change psychology or call a model. If neither source still contains the messages, no rejection reason is invented. NPC journal entries and RAG embeddings remain separate from confirmed psychological updates.
@@ -60,7 +69,7 @@ Color associations have common patterns and cultural differences; this is an exp
 
 ## Verification
 
-Offline backend tests cover streaming marker splits, malformed metadata, opt-in combinations, scope/ownership, settings conflicts and replay, prose binding, ordinary turn publication and narration revisions. Frontend tests cover palette/schema agreement, Unicode limits, defaults, historical selection and settings persistence. The browser fixture checks hover/focus/Escape, escaped thought text, no hover requests, independent effects and narrow-screen placement:
+Offline backend tests cover streaming marker splits, malformed metadata, opt-in combinations, scope/ownership, settings conflicts and replay, prose binding, ordinary turn publication and narration revisions. The real-turn mode matrix covers off/shadow/live Personality and localized proposal failures; cached partial preparation and simplified recovery cannot suppress independent cues or turn them into confirmed psychology. Frontend tests cover palette/schema agreement, Unicode limits, defaults, historical selection and settings persistence. The browser fixture checks hover/focus/Escape, escaped thought text, no hover requests, independent effects and narrow-screen placement:
 
 ```sh
 cd frontend

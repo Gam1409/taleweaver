@@ -95,6 +95,7 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
         assert event.kwargs["selected_count"] == 1
 
 
+@pytest.mark.parametrize("mode", ["off", "shadow", "live"])
 @pytest.mark.parametrize(
     "preferences,expected",
     [
@@ -106,11 +107,15 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
         ),
     ],
 )
-async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
-    setup_test_db, monkeypatch, preferences, expected
+async def test_vn_presentation_uses_the_same_narrator_call_in_every_personality_mode(
+    setup_test_db, monkeypatch, preferences, expected, mode
 ):
+    from backend.engine.chpm import inference, rendering
     from backend.engine.chpm.runtime import current
-    from tests.test_vn_turn_integration import TurnRoles, final_payload, install_roles, seed_vn
+    from backend.engine.chpm.schema import KernelState, Settings
+    from backend.engine.chpm.state import KEY as CHPM_KEY
+    from tests.test_chpm_turn import ChpmRoles
+    from tests.test_vn_turn_integration import final_payload, install_roles, seed_vn
 
     body = 'Лина: "Спасибо. Теперь можно поговорить."'
     footer = (
@@ -131,7 +136,7 @@ async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
         + "</npc-state>"
     )
 
-    class PresentationRoles(TurnRoles):
+    class PresentationRoles(ChpmRoles):
         async def stream(self, *args, **kwargs):
             self.prompts.append((args, kwargs))
 
@@ -145,15 +150,31 @@ async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
 
     roles = PresentationRoles()
     install_roles(monkeypatch, roles)
+    monkeypatch.setattr(inference, "GameMasterLLM", roles)
+    monkeypatch.setattr(rendering, "GameMasterLLM", roles)
     async with TestSessionLocal() as db:
         user, _, state, _ = await seed_vn(db)
-        state.entity_states = {**state.entity_states, KEY: preferences}
+        state.entity_states = {
+            **state.entity_states,
+            KEY: preferences,
+            CHPM_KEY: KernelState(
+                settings=Settings(mode=mode, actor_ids=["LINA"], failure_policy="strict")
+            ).model_dump(),
+        }
         await db.commit()
         manager = GameTurnManager(db, "session-1", user)
         events = [event async for event in manager.process_turn("Давай поговорим.")]
         final = final_payload(events)
         assert final["status"] == "success", "".join(events)
-        assert current(manager) is None  # No NPC Personality turn or decisions exist.
+        assert current(manager) is None  # Completed turns release their turn-local analysis.
+        assert (
+            roles.chpm_calls
+            == {
+                "off": [],
+                "shadow": ["perception", "proposal"],
+                "live": ["perception", "proposal", "validation"],
+            }[mode]
+        )
         assert final["sheet"]["portrait_preferences"] == {
             "emotion_palette": False,
             "character_thoughts": False,
@@ -175,6 +196,9 @@ async def test_vn_presentation_without_personality_uses_the_same_narrator_call(
         assert "enabled for this reply" in prompt
         assert "without NPC Personality" in prompt
         assert "JSON keys" in prompt and "English" in prompt
+        narrator_context = json.dumps(roles.prompts[0], ensure_ascii=False)
+        assert "Values honesty." in narrator_context
+        assert ("CHPM DIALOGUE CONTRACT" in narrator_context) is (mode == "live")
         last_input = roles.prompts[0][1]["messages"][-1]["content"]
         assert "PORTRAIT OUTPUT" in last_input
         assert "private metadata keys and enum identifiers" in last_input
