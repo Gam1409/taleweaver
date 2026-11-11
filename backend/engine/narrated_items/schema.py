@@ -176,6 +176,16 @@ Only room environment facts may cite scene_continuity.scene_description referenc
 References belong only to this request; never reuse an ID from history or another source.
 Do not return source labels or evidence offsets: they are assigned by the host.
 Quoted/recalled/planned actions are not new events merely because their words repeat.
+Classify every extraction_coverage_groups key in coverage. Use the union of changed
+domains in its source references: items, conditions, scene, and staging when enabled.
+Every listed domain needs its corresponding evidence-backed proposal. Check each
+event, including multiple changes within one reference and later consequences.
+Use ["unchanged"] for genuinely unchanged state, ["historical"] only when the whole
+group concerns recollection/quotation/plans rather than current changes, or
+["uncertain"] for an unresolved interpretation. These three tags are exclusive.
+A mixed group with any current change uses its current domains; do not mark the
+whole group historical. Cite the exact current occurrence, not its later retelling.
+Mark ambiguity for review rather than guessing an object from a literary metaphor.
 Report only completed taking, handing over, putting in a pocket/bag, wearing or removing
 an item, with an exact contiguous quote identifying the item and the participants.
 Also report explicit current worn clothing descriptions using basis=observed_wear,

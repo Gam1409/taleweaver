@@ -183,6 +183,12 @@ must be a DIFFERENT NPC in present_speakers; passage_id identifies spoken words
 that this observer could clearly hear. Omit private/inaudible speech,
 thoughts, narrator exposition, ambiguous attribution and player speech. Do not
 invent observations just to fill this optional list. Claims remain quotations.
+For heard entries, origin_id may cite report_origins_not_world_facts only when the
+actual spoken claim conveys that source's concrete meaning. Its known_by must be
+this speaker_id. Otherwise use origin_id=null, including unrelated new dialogue.
+An origin may itself be reported or historical; neither a relay nor repetition
+confirms world truth. Check who heard the current utterance independently of who
+knew its origin. Do not expose ancestor text or another actor's private knowledge.
 For each selected non-null agenda_change, return exactly one agenda_evidence entry:
 actor_id and the same passage_id used in that NPC's evidence, explicitly expressing
 the selected undertaking, withdrawal or completion claim. Use only the passage ID;

@@ -11,7 +11,22 @@ from backend.engine.chpm.recovery_contracts import HistoricalObservation
 from backend.engine.chpm.recovery_queue import Batch
 from backend.engine.chpm.schema import Contract
 
-INSTRUCTION = ""
+INSTRUCTION = """
+Also classify EVERY unreviewed_history fragment in history_fragments, keyed by its
+supplied h-ID. These are older saved events, not the current player input.
+Use kind=speech only for clearly attributed spoken words, with a speaker_id KEY
+from present_speakers_at_source; use public_event for perceptible narration.
+For each fragment choose observers only from its eligible_observers_by_fragment
+list. A prior turn's eligibility is not proof that this NPC heard every passage.
+Use private, unobserved or uncertain with observers=[] and speaker_id=null when
+appropriate; a mixed private/public fragment is uncertain. Do not expose private
+thoughts or infer observers from later knowledge. For public_event use speaker_id=null.
+Classify only the supplied fragments; adjacent story context can resolve attribution
+but cannot supply omitted events. No past decisions, emotional updates, new world
+outcomes or present ongoing actions may be reconstructed by this classification.
+The host retains exact text, scene, game minute and unresolved fragments separately.
+Return current fragments and history_fragments as separate objects in the schema.
+"""
 
 
 class Fragment(Contract):
