@@ -3,18 +3,25 @@
 INSTRUCTIONS = """
 PHYSICAL CONDITIONS: condition_updates is a small list of changes proved by completed_narration.
 Use only current subject IDs in actors/items and exact condition IDs in physical_conditions.
-To record a NEW injury, contamination, fluid trace or pain, use operation=record with target_id,
-kind, part and short neutral intrinsic detail. The server assigns its condition ID.
+To record a NEW injury, contamination, fluid trace, pain or other explicit bodily condition,
+use operation=record with target_id, kind, part and short neutral intrinsic detail.
+Use kind=other for physical signs such as trembling or flushed skin, not emotions or intentions.
+The server assigns its condition ID.
 For an existing condition use only condition_id: change updates its detail without clearing it;
 treat keeps an injury/pain as treated; reduce keeps a partial remaining condition;
 clean removes contamination/fluid; heal resolves an explicitly healed injury/pain;
 remove resolves explicitly eliminated contamination/fluid/other. Never clean a wound into nonexistence.
 A wiped surface does not empty an internal region. Stitching/disinfection is treatment, not healing.
+Record an internal condition and an external trace separately when both are explicitly established;
+each uses its own part and evidence. A change to one does not automatically change the other.
 Fluid, wetness, dirt and bodily traces are neutral physical facts, not feelings or personality traits.
+An emotional label alone does not prove a bodily sign; a bodily sign alone does not prove a desire.
 Do not infer pregnancy, diagnoses, quantities, undress or any new consequence not explicitly established.
 For the same subject/kind/part reuse the active condition ID. Never restate all unchanged records.
 Private is the default visibility. Public means established public information, not permission to reveal
 private details to another character. Do not infer current visual exposure from this flag.
+Use visibility=public for a condition explicitly observed by the player in this narration;
+an unobserved internal condition stays private. Known facts and visible surfaces remain separate.
 Each operation needs an evidence reference to THIS completed narration, not the player's
 request, old history, dialogue claims, imagined outcomes or a recalled earlier event.
 A full cleaning affects only that identified garment/part; a partial cleaning uses reduce.
