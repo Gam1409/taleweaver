@@ -8,8 +8,7 @@
 import { ref, watch, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
-import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
-import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
+import SessionNpcModals from '@/components/game/SessionNpcModals.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
 import { useSessionPlaytime } from '@/composables/useSessionPlaytime'
 import { useLivingWorldPresence } from '@/composables/useLivingWorldPresence'
@@ -1681,21 +1680,17 @@ usePlayAgentAutoLoop()
       @exit-session="showExitModal = true"
     />
 
-    <SessionCharactersModal
-      v-if="showCharactersModal"
+    <SessionNpcModals
       :session-id="props.id"
-      @close="showCharactersModal = false"
-      @select="openPortrait"
-    />
-    <NpcPortraitModal
-      :session-id="props.id"
-      v-if="portraitTarget"
+      :directory-open="showCharactersModal"
       :npc="portraitTarget"
       :state-revision="sheet"
       :busy="portraitBusy"
       :error="portraitError"
       :updated="portraitUpdated"
-      @close="closePortrait"
+      @close-directory="showCharactersModal = false"
+      @select="openPortrait"
+      @close-card="closePortrait"
       @generate="regeneratePortrait"
     />
 
