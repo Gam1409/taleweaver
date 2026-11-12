@@ -42,8 +42,8 @@ watch(localPrompt, (newVal) => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="show && selectedVisual" class="fixed inset-0 z-[250] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/70">
-        <div class="modal-content w-full max-w-xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl">
+      <div v-if="show && selectedVisual" class="authoring-modal-overlay fixed inset-0 z-[250] flex items-center justify-center p-6 backdrop-blur-2xl bg-slate-950/70">
+        <div class="authoring-dialog modal-content w-full max-w-xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl">
           <div class="p-6 space-y-5">
             <div class="flex justify-between items-center">
               <div class="space-y-1">

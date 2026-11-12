@@ -397,10 +397,10 @@ function confirmDelete() {
     <Teleport to="body">
       <div
         v-if="showModal"
-        class="fixed inset-0 z-[200] p-4 sm:p-6 bg-black/85 backdrop-blur-md flex items-center justify-center animate-fade-in"
+        class="authoring-modal-overlay fixed inset-0 z-[200] p-4 sm:p-6 bg-black/85 backdrop-blur-md flex items-center justify-center animate-fade-in"
         @click.self="closeModal"
       >
-        <div class="relative bg-slate-900 border border-white/10 rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh] overflow-hidden my-auto">
+        <div class="authoring-dialog relative bg-slate-900 border border-white/10 rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh] overflow-hidden my-auto">
           <!-- Fixed Header -->
           <div class="shrink-0 px-6 sm:px-8 pt-6 pb-4 flex items-center justify-between border-b border-white/5 bg-slate-900">
             <div class="flex items-center gap-3">
@@ -742,8 +742,8 @@ function confirmDelete() {
 
     <!-- Delete Confirmation Modal -->
     <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="fixed inset-0 z-[210] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" @click.self="cancelDelete">
-        <div class="bg-slate-900 border border-rose-500/20 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+      <div v-if="showDeleteConfirm" class="authoring-modal-overlay fixed inset-0 z-[210] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" @click.self="cancelDelete">
+        <div class="authoring-dialog bg-slate-900 border border-rose-500/20 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
           <h4 class="text-sm font-black text-white uppercase tracking-wider">Delete Sequence?</h4>
           <p class="text-xs text-slate-400">
             Are you sure you want to remove this sequence chapter? Remaining sequences will be re-ordered.

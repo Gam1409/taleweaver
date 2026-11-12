@@ -7,7 +7,7 @@ import { apiFetch } from '@/services/http'
 import type { ChatMessage } from '@/types'
 import { isReplayBoundary, isStoryMessage } from '@/utils/storyMessages'
 
-const props = defineProps<{ gameId?: string, disabled?: boolean }>()
+const props = defineProps<{ gameId?: string, disabled?: boolean, menu?: boolean }>()
 const socket = useGameSocket()
 const { addNotification } = useNotifications()
 const dialog = ref<HTMLDialogElement>()
@@ -56,10 +56,12 @@ async function request(restore = false) {
 </script>
 
 <template>
-  <button type="button" :disabled="unavailable" title="Narration versions" aria-label="Narration versions"
-    class="h-9 min-w-9 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-slate-700/70 disabled:opacity-40" @click="request()">
-    <History :size="18" />
+  <button type="button" :role="menu ? 'menuitem' : undefined" :disabled="unavailable" title="Narration versions" aria-label="Narration versions"
+    class="shrink-0 text-slate-300 disabled:opacity-40" :class="menu ? 'action-menu-item' : 'h-9 min-w-9 rounded-lg p-2 hover:bg-slate-700/70'" @click="request()">
+    <History :size="18" :class="{ 'text-slate-400': menu }" />
+    <span v-if="menu" class="action-menu-copy"><span class="action-menu-title">Narration versions</span><span class="action-menu-description">Review and restore earlier wording</span></span>
   </button>
+  <Teleport to="body">
   <dialog ref="dialog" aria-label="Narration versions" class="w-[min(40rem,90vw)] max-h-[85dvh] rounded-xl border border-slate-600 bg-slate-900 p-5 text-slate-100 backdrop:bg-black/70">
     <h2 class="text-lg font-bold">Narration versions</h2>
     <p class="my-3 text-sm text-slate-300">Restoring replaces the latest narration only. It does not replay actions or restore world state. Derived poses will need confirmation.</p>
@@ -74,4 +76,5 @@ async function request(restore = false) {
       <button type="button" :disabled="unavailable || !selected || selected === current" class="rounded bg-amber-600 px-4 py-2 disabled:opacity-40" @click="request(true)">Restore text</button>
     </div>
   </dialog>
+  </Teleport>
 </template>

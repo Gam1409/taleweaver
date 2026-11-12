@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createSSRApp, h, ref, reactive, effectScope, nextTick } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { parse, compileScript } from '@vue/compiler-sfc'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import ts from 'typescript'
 
 let sequence = 0
@@ -13,6 +13,7 @@ async function component(name, inject = '') {
   let source = compileScript(descriptor, { id: name, inlineTemplate: true }).content
   source = source.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
+    if (path === 'lucide-vue-next') return statement.replace(/['"]lucide-vue-next['"]/, `'${import.meta.resolve('lucide-vue-next')}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })
@@ -20,6 +21,31 @@ async function component(name, inject = '') {
   return (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)).default
 }
 const render = (component, props) => renderToString(createSSRApp({ render: () => h(component, props) }))
+
+test('the production game screen enables the approved character presentation', async () => {
+  const game = readFileSync(new URL('../src/views/GameView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(game)
+  const nodes = [descriptor.template.ast]
+  let boundary
+  while (nodes.length) {
+    const node = nodes.shift()
+    if (node.tag === 'SessionNpcModals') { boundary = node; break }
+    nodes.push(...(node.children || []))
+  }
+  assert.ok(boundary, 'GameView must expose the character directory and card')
+  const compiled = compileTemplate({ source: boundary.loc.source, filename: 'GameCharacterBoundary.vue', id: 'game-character-boundary', ssr: true, ssrCssVars: [] })
+  assert.deepEqual(compiled.errors, [])
+  const code = compiled.code.replace(/from "(vue(?:\/server-renderer)?)"/g, (_, name) => `from '${import.meta.resolve(name)}'`)
+  const { ssrRender } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+  let presentation
+  const app = createSSRApp({
+    ssrRender,
+    data: () => ({ props: { id: 'session' }, showCharactersModal: false, portraitTarget: { id: 'mira', name: 'Mira' }, sheet: {}, portraitBusy: false, portraitError: '', portraitUpdated: false, openPortrait() {}, closePortrait() {}, regeneratePortrait() {} }),
+    components: { SessionNpcModals: { props: { refined: Boolean }, setup(props) { presentation = props.refined; return () => null } } },
+  })
+  await renderToString(app)
+  assert.equal(presentation, true, 'The real game route must use the refined card, just like its preview')
+})
 
 test('emotion-only estimates do not fabricate relationship scores; text is escaped', async () => {
   const ui = await component('NpcNarrativeInsights')
@@ -31,6 +57,24 @@ test('emotion-only estimates do not fabricate relationship scores; text is escap
   assert.match(scores, /\+12/)
   assert.match(scores, /-3/)
   assert.doesNotMatch(scores, /Last observed emotion:/)
+})
+
+test('the collapsible overview preserves learned facts and escaped claim text', async () => {
+  const ui = await component('NpcGeneralOverview')
+  const entries = Array.from({ length: 4 }, (_, index) => ({ id: String(index), text: index === 0 ? '<script>Claim</script>' : `Known fact ${index}`, source: index === 0 ? 'claimed' : 'observed' }))
+  const html = await render(ui, { entries })
+  assert.match(html, /General overview/)
+  assert.match(html, /Known fact 3/)
+  assert.match(html, /Claim:/)
+  assert.match(html, /&lt;script&gt;Claim&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|<details[^>]*open/i)
+})
+
+test('the compact overview keeps unobserved state and arbitrary private fields hidden', async () => {
+  const ui = await component('NpcCardOverview')
+  const html = await render(ui, { card: { name: 'Mira', description: '<script>Archivist</script>', inventory: ['PRIVATE_INVENTORY'], current_state: { availability: 'not_present', conditions: { items: [{ id: 'hidden', detail: 'HIDDEN_OBSERVATION' }] } } }, showIndicators: false })
+  assert.match(html, /&lt;script&gt;Archivist&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|PRIVATE_INVENTORY|HIDDEN_OBSERVATION/i)
 })
 
 test('history tabs show general facts and empty-state without arbitrary private fields', async t => {
@@ -113,6 +157,7 @@ test('history tabs support keyboard activation and reset for a different charact
   source = `import { computed, ref, watch, toRef, onScopeDispose as onBeforeUnmount } from '${import.meta.resolve('vue')}';
 const useNpcJournal = () => ({ details: ref(null), loading: ref(false), error: ref(''), load: () => {} });
 const useNpcCardSettings = () => ({ showState: ref(false) });
+const UserRound = {}, Layers2 = {}, History = {};
 const setInterval = () => 0;
 export function setup() { ${source}; return { history, navigateTabs, tabId, activeTab, navigateSections }; }`
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText

@@ -1,3 +1,5 @@
+@import './session-fonts/alegreya-sans.css';
+
 @font-face {
   font-family: 'Acme';
   src: url('/assets/fonts/acme-latin-400-normal.woff2') format('woff2');
@@ -52,6 +54,12 @@
 
 :root {
   --app-height: 100vh;
+}
+
+html[data-session-script='arabic'] .comic-bubble-text,
+html[data-session-script='cjk'] .comic-bubble-text {
+  font-style: normal;
+  letter-spacing: normal;
 }
 
 @supports (height: 100dvh) {

@@ -154,11 +154,11 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div
         v-if="isDialogOpen"
-        class="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-6 animate-fade-in"
+        class="authoring-modal-overlay fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-6 animate-fade-in"
         @click.self="closeDialog"
       >
         <div
-          class="w-full max-w-3xl max-h-[85vh] bg-slate-900 border border-white/10 rounded-2xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-up"
+          class="authoring-dialog w-full max-w-3xl max-h-[85vh] bg-slate-900 border border-white/10 rounded-2xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-up"
         >
           <!-- Modal Header -->
           <div class="p-3.5 sm:p-5 border-b border-white/10 flex items-center justify-between gap-3 bg-slate-950/50">

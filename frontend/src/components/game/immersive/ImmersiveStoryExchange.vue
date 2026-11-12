@@ -4,6 +4,7 @@
  * engine events, GM narration caption boxes, NPC dialogue bubbles, and item discovery cards.
  */
 import { ref } from 'vue'
+import { proseDirection } from '@/utils/sessionTypography'
 import { configState } from '@/store/config'
 import { audioService } from '@/services/audioService'
 import { getItemIcon, getTypeColor, getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
@@ -133,6 +134,7 @@ function getEntityForHover(nameOrEntity: any) {
           <!-- Content: Name Tag, Target Addressee & Speech -->
           <p
             class="comic-bubble-text text-sm sm:text-base leading-relaxed font-semibold"
+            :dir="proseDirection(props.exchange.userSpeechText || '')"
             :class="props.exchange.userIsDialogue ? 'italic text-white' : 'text-emerald-100'"
           >
             <!-- Speaker Tag -->
@@ -237,7 +239,7 @@ function getEntityForHover(nameOrEntity: any) {
           </button>
 
           <!-- Narrative Text with Inline "GAME MASTER" Badge -->
-          <div class="comic-narration-text text-sm sm:text-base leading-relaxed text-slate-100">
+          <div class="comic-narration-text comic-bubble-text text-sm sm:text-base leading-relaxed text-slate-100" :dir="proseDirection(dlg.text)">
             <span
               class="inline-flex items-center align-middle mr-2.5 not-italic select-none px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-sans font-black text-[10px] uppercase tracking-[0.2em] shadow-sm"
             >
@@ -286,7 +288,7 @@ function getEntityForHover(nameOrEntity: any) {
             isSpeakingBubble(dlg.voiceTag ? `[${dlg.voiceTag}] ${dlg.text}` : dlg.text, dlg.speaker) ? (dlg.isPlayer ? 'ring-2 ring-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.5)] scale-[1.01]' : 'ring-2 ring-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.5)] scale-[1.01]') : ''
           ]"
         >
-          <p class="comic-bubble-text text-sm sm:text-base leading-relaxed font-medium italic text-white">
+          <p class="comic-bubble-text text-sm sm:text-base leading-relaxed font-medium italic text-white" :dir="proseDirection(dlg.text)">
             <!-- Speaker Tag -->
             <span
               class="inline-flex items-center align-baseline mr-1.5 not-italic select-none px-2 py-0.5 rounded-lg border font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer transition-all shadow-sm"
@@ -385,7 +387,7 @@ function getEntityForHover(nameOrEntity: any) {
 <style scoped>
 .comic-narration-text,
 .comic-bubble-text {
-  font-family: 'Acme', sans-serif;
+  font-family: var(--session-font, 'Alegreya Sans'), sans-serif;
   letter-spacing: 0.02em;
 }
 

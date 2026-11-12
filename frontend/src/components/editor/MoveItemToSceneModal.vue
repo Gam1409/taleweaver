@@ -71,10 +71,10 @@ function handleConfirm() {
     <Transition name="modal">
       <div
         v-if="show"
-        class="fixed inset-0 z-[220] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60"
+        class="authoring-modal-overlay fixed inset-0 z-[220] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60"
         @click.self="emit('close')"
       >
-        <div class="modal-content w-full max-w-xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div class="authoring-dialog modal-content w-full max-w-xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
           <div class="p-6 border-b border-white/5">
             <div class="flex items-start justify-between gap-4">
               <div class="space-y-1">

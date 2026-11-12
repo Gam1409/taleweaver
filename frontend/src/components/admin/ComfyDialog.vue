@@ -20,7 +20,7 @@ onBeforeUnmount(() => {
     <dialog
       ref="dialog"
       :aria-label="title"
-      class="comfy-dialog m-auto h-[90dvh] max-h-[100dvh] w-[min(1280px,96vw)] max-w-none overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 p-0 text-slate-100 max-sm:h-[100dvh] max-sm:w-full max-sm:rounded-none"
+      class="workspace-dialog comfy-dialog m-auto h-[90dvh] max-h-[100dvh] w-[min(1280px,96vw)] max-w-none overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 p-0 text-slate-100 max-sm:h-[100dvh] max-sm:w-full max-sm:rounded-none"
       :class="{ 'comfy-dialog-maximized': maximized }"
       @cancel.prevent="emit('close')"
     >

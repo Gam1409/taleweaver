@@ -104,3 +104,21 @@ To prevent terminal commands from hanging or consuming excessive tokens:
 
 * **Avoid Terminal Pagers:** Always run Git commands with `--no-pager` (e.g. `git --no-pager diff`, `git --no-pager log -n 5`).
 * **Prevent Token Flooding:** Never dump huge files directly to terminal output; use `head -n 50 <file>` or targeted views.
+
+## 4. GitHub Publication Review (Owner Requirement)
+
+- Before every GitHub write, inspect the exact outgoing content: code diffs,
+  commit titles and bodies, PR titles and descriptions, issues, comments,
+  attachments, screenshots, logs and release notes.
+- Publish only the technical information needed for the requested change.
+  Do not include private preview addresses, credentials or tokens, private
+  account/game/session data, user-specific local paths, raw tool transcripts
+  or conversation excerpts without the owner's explicit instruction to publish
+  that information.
+- Keep private preview links in the chat. Do not add them to GitHub PRs,
+  issues, comments or repository documentation by default.
+- Re-read the final payload and verify the target repository and visibility
+  before submitting. Remove unrelated or private context rather than copying
+  tool output or chat text into GitHub.
+- Authorization to implement or push code does not authorize publishing
+  unrelated private information. Keep commit messages neutral and technical.

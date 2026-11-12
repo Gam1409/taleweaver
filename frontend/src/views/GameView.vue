@@ -42,6 +42,7 @@ import DebugModal from '@/components/game/DebugModal.vue'
 import { api } from '@/composables/useApi'
 import { configState, refreshConfig } from '@/store/config'
 import { useGameSocket } from '@/composables/useGameSocket'
+import { useSessionTypography } from '@/composables/useSessionTypography'
 import { useNotifications } from '@/composables/useNotifications'
 import { useGameAutoSpeak } from '@/composables/useGameAutoSpeak'
 import { useGameUiFeedback } from '@/composables/useGameUiFeedback'
@@ -233,6 +234,7 @@ const {
   cancelTurnError,
   isLegacyFormat,
 } = useGameSocket()
+useSessionTypography(useGameSocket().language)
 
 useSessionPlaytime(() => props.id, () => ['connected', 'loading', 'completed', 'game_over'].includes(status.value))
 useLivingWorldPresence(() => props.id, () => status.value !== 'disconnected')
@@ -1686,6 +1688,7 @@ usePlayAgentAutoLoop()
     />
 
     <SessionNpcModals
+      refined
       :session-id="props.id"
       :directory-open="showCharactersModal"
       :npc="portraitTarget"

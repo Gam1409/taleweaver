@@ -17,6 +17,9 @@ _MESSAGES = {
         "{name}はその場所へ移動できないため、ここに残ります。",
     ),
     "Chinese": ("{name}留在这里。", "{name}无法前往那个地点，因此留在这里。"),
+    "Traditional Chinese": ("{name}留在這裡。", "{name}無法前往那個地點，因此留在這裡。"),
+    "Arabic": ("{name}: البقاء هنا.", "{name}: تعذر الانتقال إلى ذلك المكان، والبقاء هنا."),
+    "Korean": ("{name}: 여기에 머뭅니다.", "{name}: 그 장소로 이동할 수 없어 여기에 머뭅니다."),
     "Portuguese": ("{name} fica aqui.", "{name} não pode ir a esse local e fica aqui."),
 }
 
@@ -34,6 +37,9 @@ _ARRIVALS = {
     "Italian": "{name} si sposta in {place}.",
     "Japanese": "{name}は{place}へ移動しました。",
     "Chinese": "{name}移动到了{place}。",
+    "Traditional Chinese": "{name}移動到了{place}。",
+    "Arabic": "{name}: الانتقال إلى {place}.",
+    "Korean": "{name}: 이동한 장소 — {place}.",
     "Portuguese": "{name} vai para {place}.",
 }
 

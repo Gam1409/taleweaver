@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useAuthoringTheme } from '@/composables/useAuthoringTheme'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { createUuid } from '@/utils/uuid'
@@ -24,6 +25,8 @@ import AdventureRuleModeSelector from '@/components/create-adventure/AdventureRu
 import AdventureWorldConstraints from '@/components/create-adventure/AdventureWorldConstraints.vue'
 import AdventureCharacterSettings from '@/components/create-adventure/AdventureCharacterSettings.vue'
 import AdventureClothingSettings from '@/components/create-adventure/AdventureClothingSettings.vue'
+
+useAuthoringTheme()
 
 const router = useRouter()
 const route = useRoute()
@@ -494,18 +497,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full min-h-0 overflow-y-auto bg-slate-950 text-slate-200 font-sans p-3 sm:p-5 md:p-6 lg:p-8">
-    <header class="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div class="workspace-view authoring-view adventure-create-view h-full min-h-0 overflow-y-auto bg-slate-950 text-slate-200 font-sans p-3 sm:p-5 md:p-6 lg:p-8">
+    <header class="authoring-heading max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="text-xl sm:text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Generate Adventure</h1>
         <p class="text-slate-500 mt-0.5 sm:mt-1 tracking-wide text-xs sm:text-sm">Weave the parameters of your next odyssey.</p>
       </div>
       <div class="flex items-center gap-2.5 sm:gap-3">
         <!-- Mode Switcher -->
-        <div class="inline-flex p-1 rounded-xl bg-slate-900/90 border border-white/10 shadow-md">
+        <div class="authoring-mode-switch inline-flex p-1 rounded-xl bg-slate-900/90 border border-white/10 shadow-md">
           <button
             type="button"
             @click="setGeneratorMode('simple')"
+            :aria-pressed="generatorMode === 'simple'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
             :class="generatorMode === 'simple'
               ? 'bg-gradient-to-r from-aether-primary to-cyan-500 text-white shadow'
@@ -517,6 +521,7 @@ onMounted(() => {
           <button
             type="button"
             @click="setGeneratorMode('advanced')"
+            :aria-pressed="generatorMode === 'advanced'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
             :class="generatorMode === 'advanced'
               ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
@@ -593,7 +598,7 @@ onMounted(() => {
         </div>
 
         <!-- 1. Concept Prompt Card -->
-        <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-4">
+        <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
               <div class="flex items-center gap-2">
@@ -640,7 +645,7 @@ onMounted(() => {
         </div>
 
         <!-- 2. Game Mode Selector (RPG, Story, Chat) -->
-        <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-3">
+        <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-3">
           <div>
             <span class="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Step 2</span>
             <h3 class="text-xs sm:text-sm font-black text-white uppercase tracking-wider mt-0.5">Game Mode</h3>
@@ -706,7 +711,7 @@ onMounted(() => {
       <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
         <!-- Configuration Panel (Left / Column 1) -->
         <div class="flex flex-col h-full space-y-4 sm:space-y-6">
-          <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
+          <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
             <section v-if="isCoverMode" class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3.5 sm:p-4 space-y-3.5">
               <div>
                 <p class="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Cover Source</p>
@@ -857,7 +862,7 @@ onMounted(() => {
         <button
           @click="handleCreate"
           :disabled="isGenerating || isLoadingCatalogs || !hasLlmConfig"
-          class="group relative w-full sm:w-auto px-6 sm:px-10 md:px-14 py-3 sm:py-3.5 md:py-4 bg-gradient-to-br from-aether-primary to-aether-secondary rounded-2xl font-black text-white shadow-2xl shadow-aether-primary/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden cursor-pointer"
+          class="authoring-create-submit group relative w-full sm:w-auto px-6 sm:px-10 md:px-14 py-3 sm:py-3.5 md:py-4 bg-gradient-to-br from-aether-primary to-aether-secondary rounded-2xl font-black text-white shadow-2xl shadow-aether-primary/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden cursor-pointer"
         >
           <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
           <div class="relative flex items-center justify-center gap-3 md:gap-4">

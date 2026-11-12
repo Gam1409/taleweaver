@@ -85,6 +85,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       :key="slot.key"
       type="button"
       :data-equipment-slot="slot.key"
+      :data-slot-occupied="slot.items.length > 0"
       :style="{ top: slot.top, left: slot.left }"
       :aria-label="
         [slot.label, ...slot.items.map(item => item.name)].filter(Boolean).join(': ') || 'Contents'

@@ -29,6 +29,15 @@ from tests.test_game_loop import _seed_game_context
         ("ru", "Russian"),
         ("ru-RU", "Russian"),
         ("ja", "Japanese"),
+        ("ar-SA", "Arabic"),
+        ("ko-KR", "Korean"),
+        ("zh-Hans", "Chinese"),
+        ("zh-TW", "Traditional Chinese"),
+        ("zh_Hant_TW", "Traditional Chinese"),
+        ("zh-Hans-TW", "Chinese"),
+        ("zh_Hans_HK", "Chinese"),
+        ("zh-Hant-CN", "Traditional Chinese"),
+        ("Traditional Chinese", "Traditional Chinese"),
         ("Spanish", "Spanish"),
         (" en ", "English"),
         ("", None),
@@ -57,7 +66,17 @@ async def test_language_saved_reloaded_and_isolated(auth_client):
     first = await _create_adventure(auth_client, "First")
     second = await _create_adventure(auth_client, "Second")
     path = f"/api/adventures/{first['game_id']}"
-    for language in ("Russian", "Spanish", "Japanese", "English", "Russian"):
+    for language in (
+        "Russian",
+        "Spanish",
+        "Japanese",
+        "Arabic",
+        "Korean",
+        "Chinese",
+        "Traditional Chinese",
+        "English",
+        "Russian",
+    ):
         response = await auth_client.patch(f"{path}/content-language", json={"language": language})
         assert response.status_code == 200, response.text
         assert response.json()["language"] == language
@@ -79,6 +98,22 @@ async def test_language_saved_reloaded_and_isolated(auth_client):
     assert snapshot.json()["language"] == "Russian"
     reset = await auth_client.patch(f"{path}/content-language", json={"language": ""})
     assert reset.json()["language"] == "Spanish"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "requested,expected", [("zh-Hans-TW", "Chinese"), ("zh-Hant-CN", "Traditional Chinese")]
+)
+async def test_explicit_chinese_script_survives_session_reload(auth_client, requested, expected):
+    ids = await _create_adventure(auth_client)
+    path = f"/api/adventures/{ids['game_id']}"
+    response = await auth_client.patch(f"{path}/content-language", json={"language": requested})
+    assert response.status_code == 200, response.text
+    assert response.json()["language"] == expected
+    assert response.json()["prompt_suggestions"] == SUGGESTIONS[expected]
+    snapshot = await auth_client.get(f"{path}/chat")
+    assert snapshot.status_code == 200, snapshot.text
+    assert snapshot.json()["language"] == expected
 
 
 @pytest.mark.asyncio

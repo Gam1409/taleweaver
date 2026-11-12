@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthoringTheme } from '@/composables/useAuthoringTheme'
+import EditorNavigation from '@/components/editor/EditorNavigation.vue'
 import type { ClothingDraft } from '@/services/clothingAuthoring'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -49,6 +51,7 @@ import SceneRoutePanel from '@/components/editor/SceneRoutePanel.vue'
 import ExitRoutePanel from '@/components/editor/ExitRoutePanel.vue'
 import EditExitModal from '@/components/editor/EditExitModal.vue'
 import NpcCombatModal from '@/components/editor/NpcCombatModal.vue'
+import ProtagonistImportConfirmDialog from '@/components/editor/ProtagonistImportConfirmDialog.vue'
 
 // Utilities
 import { fixNewlines, isNpcEntity, isObjectEntity, mergeUniqueById, formatBytes, makeSafeFilename, getImageExtension, itemTypePrefix, sanitizeEditorIdToken } from '@/utils/editor_utils'
@@ -56,6 +59,8 @@ import { fixNewlines, isNpcEntity, isObjectEntity, mergeUniqueById, formatBytes,
 const props = defineProps<{
   adventureId: string
 }>()
+
+useAuthoringTheme()
 
 const router = useRouter()
 const route = useRoute()
@@ -995,7 +1000,7 @@ async function fetchAdventure() {
   }
 }
 
-const { exportEntity, importEntity } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
+const { exportEntity, importEntity, isProtagonistImportPending, confirmProtagonistImport, cancelProtagonistImport } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
 
 let debugInfoRevision = 0
 async function fetchDebugInfo() {
@@ -2392,9 +2397,9 @@ watch(
 </script>
 
 <template>
-  <div tabindex="0" role="region" aria-label="Adventure editor" class="h-full min-h-0 bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
+  <div tabindex="0" role="region" aria-label="Adventure editor" class="workspace-view authoring-view adventure-editor-view h-full min-h-0 bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
     <!-- Ambient Background -->
-    <div v-if="debugData?.adventure?.image_url" class="absolute inset-0 pointer-events-none z-0 opacity-20">
+    <div v-if="debugData?.adventure?.image_url" class="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-20">
       <img :src="ASSET_BASE + debugData.adventure.image_url" class="w-full h-full object-cover blur-3xl scale-110" />
       <div class="absolute inset-0 bg-slate-950/60"></div>
     </div>
@@ -2418,68 +2423,16 @@ watch(
       </div>
       
       <div v-else class="space-y-6">
-        <nav class="lg:hidden flex gap-2 overflow-x-auto pb-2">
-          <button
-            v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
-            :key="tab.key"
-            @click="activeTab = tab.key"
-            :class="[
-              'shrink-0 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-[0.15em] transition-all border flex items-center gap-2',
-              activeTab === tab.key
-                ? 'bg-emerald-600/80 border-emerald-500 text-white'
-                : 'bg-slate-900/50 border-white/10 text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            <span>{{ tab.label }}</span>
-            <span
-              v-if="tab.key === 'sequences' && Array.isArray(adventure?.sequences) && adventure.sequences.length > 0"
-              class="px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
-            >
-              {{ adventure.sequences.length }}
-            </span>
-            <span
-              v-if="tab.key === 'validation' && validationBadgeText()"
-              :class="['px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none', validationBadgeClass()]"
-            >
-              {{ validationBadgeText() }}
-            </span>
-          </button>
-        </nav>
-
         <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
-          <aside class="hidden lg:block">
-            <div class="sticky top-24 bg-slate-900/40 border border-white/5 rounded-2xl p-3 backdrop-blur-md">
-              <div class="space-y-1">
-                <button
-                  v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
-                  :key="tab.key"
-                  @click="activeTab = tab.key"
-                  :class="[
-                    'w-full text-left px-3 py-2 rounded-xl text-xs font-black uppercase tracking-[0.18em] transition-all flex items-center justify-between gap-2',
-                    activeTab === tab.key
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
-                  ]"
-                >
-                  <span>{{ tab.label }}</span>
-                  <span
-                    v-if="tab.key === 'sequences' && Array.isArray(adventure?.sequences) && adventure.sequences.length > 0"
-                    class="px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
-                  >
-                    {{ adventure.sequences.length }}
-                  </span>
-                  <span
-                    v-if="tab.key === 'validation' && validationBadgeText()"
-                    :class="['px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none', validationBadgeClass()]"
-                  >
-                    {{ validationBadgeText() }}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </aside>
+          <EditorNavigation
+            v-model="activeTab"
+            :tabs="editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
+            :sequence-count="Array.isArray(adventure?.sequences) ? adventure.sequences.length : 0"
+            :validation-text="validationBadgeText()"
+            :validation-class="validationBadgeClass()"
+          />
 
-          <div class="space-y-10 min-w-0 relative">
+          <div class="authoring-content space-y-6 min-w-0 relative">
             <WorldBriefEditor v-if="activeTab === 'world'" :adventure-id="adventureId" />
             <WorldTab
               v-if="activeTab === 'world'"
@@ -2820,6 +2773,8 @@ watch(
       :fix-newlines="fixNewlines"
     />
 
+    <ProtagonistImportConfirmDialog v-if="isProtagonistImportPending" @confirm="confirmProtagonistImport" @cancel="cancelProtagonistImport" />
+
     <ManualVisionModal 
       :show="showPromptDialog"
       :adventure-id="adventureId"
@@ -2931,12 +2886,13 @@ watch(
       @close="showDebug = false"
     />
 
+    <Teleport to="body">
     <div
       v-if="showDeleteConfirmDialog"
-      class="fixed inset-0 z-[320] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      class="authoring-modal-overlay fixed inset-0 z-[320] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       @click="closeDeleteConfirmDialog"
     >
-      <div class="w-full max-w-lg rounded-2xl border border-red-500/30 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
+      <div class="authoring-dialog w-full max-w-lg rounded-2xl border border-red-500/30 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
         <div class="px-6 py-5 border-b border-white/10 flex items-start gap-3">
           <div class="w-10 h-10 rounded-full border border-red-400/40 bg-red-500/15 flex items-center justify-center shrink-0">
             <i class="ra ra-skull text-red-300"></i>
@@ -2971,10 +2927,10 @@ watch(
 
     <div
       v-if="showRegenerateAllConfirmDialog"
-      class="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      class="authoring-modal-overlay fixed inset-0 z-[310] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       @click="cancelRegenerateAllDialog"
     >
-      <div class="w-full max-w-lg rounded-2xl border border-amber-500/25 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
+      <div class="authoring-dialog w-full max-w-lg rounded-2xl border border-amber-500/25 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
         <div class="px-6 py-5 border-b border-white/10 flex items-start gap-3">
           <div class="w-10 h-10 rounded-full border border-amber-400/40 bg-amber-500/15 flex items-center justify-center shrink-0">
             <i class="ra ra-warning text-amber-300"></i>
@@ -3013,7 +2969,7 @@ watch(
       </div>
     </div>
 
-
+    </Teleport>
 
     <input
       ref="uploadInput"

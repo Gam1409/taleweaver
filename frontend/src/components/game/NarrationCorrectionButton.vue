@@ -5,7 +5,7 @@ import {
   CORRECTION_MAX_LENGTH, clearCorrection, correctionPresets, getCorrection, queueCorrection,
 } from '@/services/narrationCorrection'
 
-const props = defineProps<{ gameId?: string; disabled?: boolean }>()
+const props = defineProps<{ gameId?: string; disabled?: boolean; menu?: boolean }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const input = ref<HTMLTextAreaElement | null>(null)
 const custom = ref(false)
@@ -40,11 +40,12 @@ watch(() => [props.gameId, props.disabled], () => dialog.value?.close())
 </script>
 
 <template>
-  <button type="button" :disabled="disabled || !gameId" aria-label="Correct the narrator"
+  <button type="button" :role="menu ? 'menuitem' : undefined" :disabled="disabled || !gameId" aria-label="Correct the narrator"
     :title="pending ? `Correction queued: ${pending.label}` : 'Correct the narrator'"
-    aria-haspopup="dialog" class="relative shrink-0 rounded-lg border border-slate-700/70 bg-transparent p-2 text-slate-300 hover:border-amber-400 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+    aria-haspopup="dialog" class="relative shrink-0 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed" :class="menu ? 'action-menu-item' : 'rounded-lg border border-slate-700/70 bg-transparent p-2 hover:border-amber-400 hover:text-amber-300'"
     @click="open">
-    <Pencil :size="16" aria-hidden="true" />
+    <Pencil :size="16" aria-hidden="true" :class="{ 'text-amber-300': menu }" />
+    <span v-if="menu" class="action-menu-copy"><span class="action-menu-title">Correct narrator</span><span class="action-menu-description">{{ pending ? `Queued: ${pending.label}` : 'Queue a note for the next response' }}</span></span>
     <span v-if="pending" class="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-slate-950" aria-hidden="true" />
     <span class="sr-only" role="status">{{ pending ? 'Correction queued for the next response' : '' }}</span>
   </button>

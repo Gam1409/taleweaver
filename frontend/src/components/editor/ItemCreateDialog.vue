@@ -37,9 +37,9 @@ function reviewDraft(draft: ItemDraft) {
 <template>
   <Teleport to="body">
     <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="create-item-title" tabindex="-1"
-      class="fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+      class="authoring-modal-overlay fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
       @click.self="emit('close')">
-      <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 shadow-2xl space-y-5">
+      <div class="authoring-dialog w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 shadow-2xl space-y-5">
         <div class="flex items-start justify-between gap-4">
           <h2 id="create-item-title" class="flex items-center gap-2 text-lg font-black text-white"><Plus class="h-5 w-5 text-emerald-400" />Add item</h2>
           <button type="button" aria-label="Close add item" class="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white" @click="emit('close')"><X class="h-5 w-5" /></button>

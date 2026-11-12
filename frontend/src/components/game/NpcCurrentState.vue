@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { NpcCurrentState } from '@/types/npcCurrentState'
 import type { EquipmentDisplay, EquipmentDisplayItem } from '@/utils/equipmentSlots'
 import EquipmentSilhouette from './EquipmentSilhouette.vue'
 import EquipmentList from './EquipmentList.vue'
 
-const props = defineProps<{ state?: NpcCurrentState }>()
+const props = defineProps<{ state?: NpcCurrentState; compact?: boolean }>()
+const showEmpty = ref(false)
 const equipment = computed(() => {
   const result: EquipmentDisplay = {}
   for (const item of props.state?.clothing.items || []) {
@@ -34,12 +35,13 @@ const statuses = { active: 'Active', treated: 'Treated', reduced: 'Reduced' }
   <section
     v-if="state?.availability === 'present'"
     aria-label="Clothing and physical condition"
-    class="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+    class="npc-current-state grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
   >
     <section class="min-w-0 space-y-3" aria-label="Clothing">
       <h3 class="font-semibold text-slate-100">Clothing</h3>
+      <label v-if="compact && state.layout?.form === 'humanoid'" class="flex items-center gap-2 text-xs text-slate-400"><input v-model="showEmpty" type="checkbox" class="accent-amber-400" />Show empty slots</label>
       <template v-if="state.layout?.form === 'humanoid'">
-        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" />
+        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" :data-hide-empty="compact && !showEmpty" />
         <EquipmentList v-if="unassigned.length" :items="unassigned" />
       </template>
       <EquipmentList v-else :items="allItems" />

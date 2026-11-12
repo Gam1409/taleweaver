@@ -64,14 +64,14 @@ function describeTarget(targetType: string, targetId?: string | null): string {
   <div
     v-if="props.open"
     ref="dialog"
-    class="fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    class="authoring-modal-overlay fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
     role="dialog"
     aria-modal="true"
     aria-labelledby="ai-fix-title"
     tabindex="-1"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-3xl rounded-2xl border border-violet-500/30 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="authoring-dialog w-full max-w-3xl rounded-2xl border border-violet-500/30 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
       <div class="px-6 py-5 border-b border-white/10 flex items-start justify-between gap-4 shrink-0">
         <div class="flex items-start gap-3 min-w-0">
           <div class="w-10 h-10 rounded-full border border-violet-400/40 bg-violet-500/15 flex items-center justify-center shrink-0 mt-0.5">
