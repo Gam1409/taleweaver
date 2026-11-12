@@ -58,9 +58,9 @@ function getSceneLabel(sceneId?: string | null): string {
     </div>
     <!-- NPCs -->
     <section v-if="editorNpcs.length" class="space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 class="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Notable Inhabitants ({{ editorNpcs.length }})</h3>
-        <div class="flex items-center gap-4">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <button @click="emit('regen-all', 'npc', true)" :disabled="isBatchGenerating['npc']" class="text-xs font-bold text-cyan-500 hover:text-cyan-400 flex items-center gap-2 uppercase tracking-widest transition-colors">
             <i class="ra ra-wand" :class="{ 'animate-spin': isBatchGenerating['npc'] }"></i> Generate Missing
           </button>

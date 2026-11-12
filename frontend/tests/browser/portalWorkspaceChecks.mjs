@@ -89,7 +89,7 @@ export async function checkPortalWorkspace(page, url) {
   await button('New adventure').click()
   await button('Save world blueprint').waitFor()
   await page.waitForFunction(() => window.portalFixture.requests.some(path => path.endsWith('/world-brief')))
-  assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-workspace-theme')), false)
+  assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-workspace-theme')), true)
   assert.deepEqual(await page.evaluate(() => window.portalFixture.unhandled), [])
   await page.goto(url)
   await button('Generate world').click()

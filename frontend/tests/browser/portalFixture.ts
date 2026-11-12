@@ -1,3 +1,4 @@
+import { createAuthoringFixture } from './authoringFixture'
 import { settingsService } from '../../src/services/settingsService'
 import { emptyWorldBrief } from '../../src/services/worldBrief'
 import type { AdventureTemplateSummary, GameSession } from '../../src/types'
@@ -7,6 +8,7 @@ const avatar = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://ww
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 export function createPortalFixture() {
+  const authoring = createAuthoringFixture()
   let templates: AdventureTemplateSummary[] = [
     { template_id: 'coast', title: 'Letters from the Coast', teaser: 'A forgotten letter, a quiet harbour, and a light across the water.', image_url: artwork('background5'), rule_enforcement_mode: 'rpg', selected_tone: 'Mystery', selected_image_styles: [{ id: 'watercolour', name: 'Watercolour' }], quest_count: 3, has_update: true, available_version: '1.2', version: '1.1' },
     { template_id: 'observatory', title: 'The Last Observatory', teaser: 'Follow a trail of star charts through a city above the clouds.', image_url: artwork('background4'), rule_enforcement_mode: 'story', selected_tone: 'Wonder', selected_image_styles: [{ id: 'painterly', name: 'Painterly' }], quest_count: 2, version: '1.0' },
@@ -27,6 +29,7 @@ export function createPortalFixture() {
     available_constants: { llm_providers: [{ id: 'openai', name: 'OpenAI' }, { id: 'ollama', name: 'Ollama' }], image_providers: [{ id: 'openai', name: 'OpenAI' }], predefined_llm_models: { openai: ['demo-model'] }, predefined_image_models: {} },
   }
   const requests: string[] = [], unhandled: string[] = []
+  const writes: Array<{ path: string; method: string; body: any }> = []
   const memory = { enabled: false, provider: 'openai', base_url: '', model: '', timeout_seconds: 30 }
   const diagnostics = { enabled: false, detailed_logging: false }
   let serial = 0
@@ -34,17 +37,27 @@ export function createPortalFixture() {
   function draft(id: string) {
     if (!drafts.has(id)) drafts.set(id, {
       id, title: 'New adventure', ...templates.find(t => t.template_id === id),
-      plot: '', rules: '', intro_text: '', walkthrough: '', original_prompt: '',
+      plot: 'Discover why the lighthouse records vanished from the archive.', rules: 'Investigate the coast, compare clues and ask the archivists for help.', intro_text: 'The old archive is quiet after the rain.', walkthrough: '', original_prompt: '',
       min_scenes: 1, max_scenes: 5, min_items: 0, max_items: 10,
-      scripts: [], start_scene_id: 'archive', selected_style_id: '', selected_tone_id: '',
+      scripts: [], sequences: [], quests: [], awards: [], start_scene_id: 'ARCHIVE', selected_style_id: '', selected_tone_id: '',
     })
     return drafts.get(id)!
   }
   function respond(path: string, method: string, body: any): Response {
     const json = Response.json
     requests.push(`${method} ${path}`)
+    if (method !== 'GET') writes.push({ path, method, body: path.startsWith('/auth/') ? { redacted: true } : body })
+    const authoringResponse = authoring.respond(path, method, body, draft)
+    if (authoringResponse) return authoringResponse
     if (path === '/auth/bootstrap-status') return json({ has_admin: true, has_users: true, app_version: '0.7.1-beta', password_policy: { min_length: 8, requires_complexity: false } })
     if (path === '/auth/me') return json(user)
+    if (path === '/auth/token') return body?.username === 'Storykeeper' && body?.password === 'preview-only'
+      ? json({ access_token: 'fictional-preview', token_type: 'bearer' })
+      : json({ detail: 'Use the fictional sign-in shown above the preview.' }, { status: 401 })
+    if (path === '/auth/recover') return body?.username === 'Storykeeper' && body?.recovery_code === 'DEMO1-DEMO2'
+      ? json({ access_token: 'fictional-preview', token_type: 'bearer' })
+      : json({ detail: 'Use the fictional recovery code shown above the preview.' }, { status: 401 })
+    if (path === '/auth/media-session') return json({ status: 'preview-only' })
     if (path === '/users/me/preferences') { Object.assign(user, body); return json(user) }
     if (path === '/users/me/bio') { user.bio = body.bio; return json(user) }
     if (path === '/users/me/sessions') return json(sessions.map(s => ({ ...s, xp: 120, sequences: [], sequences_completed: 1, sequences_total: s.quest_count })))
@@ -77,7 +90,6 @@ export function createPortalFixture() {
       Object.assign(draft(id), body)
       return json({ adventure_id: id, game_id: id, avatar_id: 'Alex' })
     }
-    if (path.endsWith('/editor/assets')) return json({ adventure: draft(path.split('/')[2]), protagonist: null, npcs: [], objects: [], entities_all: [], scenes: [{ id: 'archive', name: 'The Old Archive', description: 'Shelves of coastal maps.', exits: [] }] })
     if (path.endsWith('/world-brief')) {
       const value = draft(path.split('/')[2])
       if (method === 'PUT') value.world_brief = body
@@ -99,5 +111,5 @@ export function createPortalFixture() {
     unhandled.push(`${method} ${path}`)
     return json({ detail: 'This operation needs the running application. No external request was sent.' }, { status: 501 })
   }
-  return { user, requests, unhandled, respond }
+  return { user, requests, unhandled, writes, respond }
 }

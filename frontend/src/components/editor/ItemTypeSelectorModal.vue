@@ -181,8 +181,8 @@ function handleConfirmChange() {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="show" class="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
-        <div class="modal-content w-full max-w-3xl bg-slate-900 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div v-if="show" class="authoring-modal-overlay fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
+        <div class="authoring-dialog modal-content w-full max-w-3xl bg-slate-900 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
           <!-- Header -->
           <div class="p-6 pb-4 border-b border-white/5">
             <div class="flex justify-between items-center mb-4">

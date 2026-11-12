@@ -452,15 +452,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <Teleport to="body" :disabled="!isFullscreen">
   <div
     :class="[
       'script-editor-container flex flex-col rounded-xl border border-white/10 bg-slate-950/90 transition-all overflow-hidden',
-      isFullscreen ? 'fixed inset-4 z-50 shadow-2xl bg-slate-950 border-amber-500/50' : 'relative',
+      isFullscreen ? 'authoring-dialog script-editor-fullscreen fixed inset-4 z-[450] shadow-2xl bg-slate-950 border-amber-500/50' : 'relative',
     ]"
   >
     <!-- Header / Toolbar -->
     <div
-      class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b border-white/5 bg-slate-900/70 select-none"
+      class="relative flex flex-wrap shrink-0 items-center justify-between gap-2 px-3.5 py-2 border-b border-white/5 bg-slate-900/70 select-none"
     >
       <!-- Label & Help -->
       <div class="flex items-center gap-2 min-w-0">
@@ -479,10 +480,10 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <div v-if="helpText" class="group relative flex items-center">
+        <div v-if="helpText" class="group flex items-center">
           <HelpCircle class="w-3.5 h-3.5 text-slate-500 hover:text-white cursor-help transition-colors" />
           <div
-            class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-[10px] text-slate-300 font-normal normal-case tracking-normal rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 z-50 space-y-1.5"
+            class="absolute top-full left-3 right-3 mt-1 max-w-sm p-3 bg-slate-800 text-[10px] text-slate-300 font-normal normal-case tracking-normal rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 z-50 space-y-1.5"
           >
             <div>{{ helpText }}</div>
             <div class="text-[9px] text-amber-300 font-mono border-t border-white/10 pt-1">
@@ -501,7 +502,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Actions -->
-      <div v-if="showActions" class="flex items-center gap-1.5 shrink-0">
+      <div v-if="showActions" class="flex flex-wrap max-w-full items-center gap-1.5 shrink-0">
         <!-- Scripting Engine Docs (?) Button -->
         <button
           type="button"
@@ -520,7 +521,7 @@ onBeforeUnmount(() => {
         </button>
 
         <!-- Snippets Dropdown -->
-        <div class="relative group">
+        <div class="group">
           <button
             type="button"
             class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-bold text-slate-300 transition-colors border border-white/5"
@@ -530,7 +531,7 @@ onBeforeUnmount(() => {
             <span class="hidden md:inline">Snippets</span>
           </button>
           <div
-            class="absolute right-0 top-full mt-1 w-56 p-1.5 bg-slate-900 border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 space-y-1"
+            class="absolute right-3 top-full mt-1 w-56 max-w-[calc(100%_-_1.5rem)] max-h-[40dvh] overflow-y-auto p-1.5 bg-slate-900 border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all z-50 space-y-1"
           >
             <button
               v-for="(snip, idx) in availableSnippets"
@@ -596,7 +597,7 @@ onBeforeUnmount(() => {
     <!-- Scripting Guide / API Reference Drawer -->
     <div
       v-if="showApiDocs"
-      class="border-b border-white/10 bg-slate-900/95 p-3.5 text-xs space-y-2.5 max-h-72 overflow-y-auto"
+      class="script-editor-docs border-b border-white/10 bg-slate-900/95 p-3.5 text-xs space-y-2.5 max-h-72 overflow-y-auto"
     >
       <div class="flex items-center justify-between pb-1.5 border-b border-white/10">
         <div class="flex items-center gap-2">
@@ -697,10 +698,10 @@ onBeforeUnmount(() => {
 
     <!-- Main Editor Canvas -->
     <div
-      class="relative flex-1 min-h-0 bg-slate-950 font-mono text-xs overflow-hidden"
+      class="script-editor-canvas relative flex-1 min-h-0 bg-slate-950 font-mono text-xs overflow-hidden"
       :style="{
-        '--cm-min-height': isFullscreen ? '400px' : minHeight,
-        minHeight: isFullscreen ? '400px' : minHeight,
+        '--cm-min-height': isFullscreen ? '0px' : minHeight,
+        minHeight: isFullscreen ? '0px' : minHeight,
         maxHeight: isFullscreen ? 'none' : maxHeight,
       }"
     >
@@ -737,7 +738,7 @@ onBeforeUnmount(() => {
     <!-- Output / Results Drawer -->
     <div
       v-if="showOutputPanel && (syntaxResult || runResult)"
-      class="border-t border-white/10 bg-slate-900/95 p-3 text-xs font-mono space-y-2 max-h-48 overflow-y-auto"
+      class="script-editor-output border-t border-white/10 bg-slate-900/95 p-3 text-xs font-mono space-y-2 max-h-48 overflow-y-auto"
     >
       <div class="flex items-center justify-between">
         <span class="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-slate-400">
@@ -797,9 +798,19 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style>
+.script-editor-fullscreen {
+  min-height: 0;
+  min-width: 0;
+}
+.script-editor-fullscreen > :is(.script-editor-docs, .script-editor-output) {
+  min-height: 0;
+  max-height: 25dvh;
+  flex-shrink: 1;
+}
 .codemirror-wrapper {
   overflow: hidden;
   height: 100%;
