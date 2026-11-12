@@ -3,6 +3,8 @@
 INSTRUCTIONS = """
 ITEM STATE: Use condition_updates kind=item_state for a known item's changed contents,
 inscription, supply, cleanliness, form or another explicitly established mutable property.
+Known items include items and the optional item_state_targets catalog. The latter contains
+visible state-only subjects; it never authorizes transferring, consuming or creating an item.
 part is an extensible stable lowercase property key (letters, digits, underscores; 80 max),
 not a value. Examples: contents, fill_level, wetness, temperature, charge, sharpness.
 Inspect existing item_state records first. Reuse their condition_id for the SAME property,
