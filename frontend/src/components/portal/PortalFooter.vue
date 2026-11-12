@@ -7,7 +7,7 @@ const licensesOpen = ref(false)
 </script>
 
 <template>
-  <footer class="workspace-footer mt-auto py-8 border-t border-white/5 text-center">
+  <footer class="workspace-footer mt-8 sm:mt-10 py-8 border-t border-white/5 text-center">
     <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
       © 2026 Anton Kuprin (fork of TaleWeaver by Jean Schmitz) • Released under MIT License • TaleWeaver v{{ configState.appVersion }}
     </p>

@@ -19,6 +19,7 @@ import {
   Image
 } from 'lucide-vue-next'
 import { formatCatalogLabel } from '@/composables/usePortalFilters'
+import ActionGroupMenu from '@/components/game/immersive/ActionGroupMenu.vue'
 
 const props = defineProps<{
   sessions: GameSession[]
@@ -42,15 +43,6 @@ const sentinelRef = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 let scrollContainer: HTMLElement | null = null
 
-function toggleMenu(id: string, ev: MouseEvent) {
-  ev.stopPropagation()
-  activeMenuId.value = activeMenuId.value === id ? null : id
-}
-
-function handleGlobalClick() {
-  activeMenuId.value = null
-}
-
 function handleScroll() {
   if (!scrollContainer) return
   if (scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 400) {
@@ -59,7 +51,6 @@ function handleScroll() {
 }
 
 onMounted(() => {
-  window.addEventListener('click', handleGlobalClick)
 
   if (sentinelRef.value) {
     scrollContainer = sentinelRef.value.closest('.overflow-y-auto') as HTMLElement | null
@@ -79,7 +70,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('click', handleGlobalClick)
   if (scrollContainer) {
     scrollContainer.removeEventListener('scroll', handleScroll)
   }
@@ -150,7 +140,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
 
     <!-- Table Container -->
     <div v-else class="rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-md overflow-hidden shadow-2xl">
-      <div class="overflow-x-auto">
+      <div class="portal-table-scroll overflow-x-auto">
         <table class="w-full text-left text-xs sm:text-sm text-slate-300">
           <thead class="bg-black/40 border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
             <tr>
@@ -309,48 +299,17 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
                     <FileText class="w-4 h-4" />
                   </button>
 
-                  <!-- More Actions Dropdown -->
-                  <div class="relative">
-                    <button
-                      @click="toggleMenu(session.game_id, $event)"
-                      class="p-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
-                      title="More actions"
-                    >
-                      <MoreVertical class="w-4 h-4" />
-                    </button>
-
-                    <!-- Dropdown Menu -->
-                    <div
-                      v-if="activeMenuId === session.game_id"
-                      class="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-slate-900 border border-white/15 p-1.5 shadow-2xl z-30 divide-y divide-white/5"
-                    >
-                      <div class="py-1">
-                        <button
-                          @click="$emit('export', session.game_id); activeMenuId = null"
-                          class="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-2"
-                        >
-                          <Download class="w-3.5 h-3.5" />
-                          <span>Export (.ads)</span>
-                        </button>
-                        <button
-                          @click="$emit('copy', session.game_id); activeMenuId = null"
-                          class="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-2"
-                        >
-                          <Copy class="w-3.5 h-3.5" />
-                          <span>Duplicate Session</span>
-                        </button>
-                      </div>
-                      <div class="pt-1">
-                        <button
-                          @click="$emit('delete', session.game_id, session.adventure_title); activeMenuId = null"
-                          class="w-full text-left px-3 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/20 flex items-center gap-2"
-                        >
-                          <Trash2 class="w-3.5 h-3.5" />
-                          <span>Delete Session</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <ActionGroupMenu
+                    :model-value="activeMenuId === session.game_id"
+                    :label="`Session actions: ${session.adventure_title}`"
+                    :icon="MoreVertical"
+                    icon-only
+                    @update:model-value="activeMenuId = $event ? session.game_id : null"
+                  >
+                    <button type="button" role="menuitem" class="action-menu-item" @click="$emit('export', session.game_id)"><Download aria-hidden="true" /><span>Export (.ads)</span></button>
+                    <button type="button" role="menuitem" class="action-menu-item" @click="$emit('copy', session.game_id)"><Copy aria-hidden="true" /><span>Duplicate Session</span></button>
+                    <button type="button" role="menuitem" class="action-menu-item workspace-danger" @click="$emit('delete', session.game_id, session.adventure_title)"><Trash2 aria-hidden="true" /><span class="action-menu-title">Delete Session</span></button>
+                  </ActionGroupMenu>
 
                 </div>
               </td>

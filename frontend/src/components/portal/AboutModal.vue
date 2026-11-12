@@ -1,34 +1,33 @@
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { configState } from '@/store/config'
 
-defineProps<{
-  isOpen: boolean
-}>()
-
-const emit = defineEmits(['close'])
-
+const props = defineProps<{ isOpen: boolean }>()
+const emit = defineEmits<{ close: [] }>()
+const dialog = ref<HTMLDialogElement>()
 const currentYear = new Date().getFullYear()
+watch(() => props.isOpen, async open => {
+  await nextTick()
+  const modal = dialog.value
+  if (!modal) return
+  if (open && !modal.open) modal.showModal()
+  if (!open && modal.open) modal.close()
+}, { immediate: true })
+onBeforeUnmount(() => dialog.value?.close())
+function onBackdrop(event: MouseEvent) {
+  if (event.target !== dialog.value) return
+  const box = dialog.value!.getBoundingClientRect()
+  if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.value?.close()
+}
 </script>
 
 <template>
-  <Transition
-    enter-active-class="transition duration-300 ease-out"
-    enter-from-class="opacity-0"
-    enter-to-class="opacity-100"
-    leave-active-class="transition duration-200 ease-in"
-    leave-from-class="opacity-100"
-    leave-to-class="opacity-0"
-  >
-    <div v-if="isOpen" class="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#02060c]/80 backdrop-blur-sm">
-      <div 
-        class="w-full max-w-lg bg-[#0a111c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden relative"
-        @click.stop
-      >
-        <!-- Decoration -->
-        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-aether-primary/50 via-purple-500/50 to-aether-primary/50"></div>
-        
+  <Teleport to="body">
+    <dialog ref="dialog" class="about-dialog font-ui" aria-label="About TaleWeaver" @close="emit('close')" @click="onBackdrop">
+      <div class="about-shell">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-aether-primary/50 via-purple-500/50 to-aether-primary/50" aria-hidden="true" />
         <!-- Header -->
-        <div class="px-8 pt-8 pb-6 text-center">
+        <div class="shrink-0 px-8 pt-8 pb-6 text-center">
           <div class="inline-block p-4 rounded-2xl bg-white/5 border border-white/10 mb-4">
             <img src="@/assets/svg/app-logo.svg" class="w-12 h-12 drop-shadow-[0_0_10px_rgba(78,222,163,0.4)]" alt="Logo" />
           </div>
@@ -36,8 +35,7 @@ const currentYear = new Date().getFullYear()
           <p class="text-aether-primary/60 text-xs font-bold uppercase tracking-[0.3em]">Chronicle Intelligence</p>
         </div>
 
-        <!-- Content -->
-        <div class="px-8 pb-8 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div role="region" aria-label="About content" tabindex="0" class="about-content min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 sm:px-8 pb-6 space-y-6">
           <div class="space-y-4">
             <div class="flex items-center justify-between py-3 border-b border-white/5">
               <span class="text-xs font-black text-slate-500 uppercase tracking-widest">Version</span>
@@ -120,19 +118,24 @@ const currentYear = new Date().getFullYear()
             </p>
           </div>
 
-          <div class="pt-4 flex justify-center sticky bottom-0 bg-[#0a111c] py-4">
+        </div>
+        <footer class="shrink-0 flex justify-center border-t border-white/10 bg-[#0a111c] px-6 py-4">
             <button 
-              @click="emit('close')"
+              @click="dialog?.close()"
               class="px-8 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-black text-white uppercase tracking-widest hover:bg-white/10 hover:border-white/20 transition-all"
             >
               Close Archive
             </button>
-          </div>
-        </div>
+        </footer>
       </div>
-
-      <!-- Backdrop click -->
-      <div class="absolute inset-0 z-[-1]" @click="emit('close')"></div>
-    </div>
-  </Transition>
+    </dialog>
+  </Teleport>
 </template>
+
+<style scoped>
+.about-dialog { width: min(512px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 0; overflow: hidden; border: 1px solid #ffffff1a; border-radius: 18px; background: #0a111c; color: #e2e8f0; box-shadow: 0 24px 90px #0009; }
+.about-dialog::backdrop { background: #02060ccc; backdrop-filter: blur(5px); }
+.about-shell { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); position: relative; }
+.about-content { scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+.about-dialog :is(button, [tabindex]):focus-visible { outline: 2px solid #d6b46f; outline-offset: 2px; }
+</style>

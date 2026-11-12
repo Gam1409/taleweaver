@@ -74,9 +74,6 @@ defineEmits<{
             <option value="chat">Chat Mode</option>
             <option value="vn">Visual Novel Mode</option>
           </select>
-          <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
-            ▾
-          </div>
         </div>
 
         <!-- Tone Filter Dropdown -->
@@ -98,9 +95,6 @@ defineEmits<{
               {{ tone.name }}
             </option>
           </select>
-          <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
-            ▾
-          </div>
         </div>
 
         <!-- Style Filter Dropdown -->
@@ -122,9 +116,6 @@ defineEmits<{
               {{ style.name }}
             </option>
           </select>
-          <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
-            ▾
-          </div>
         </div>
 
         <!-- View Mode Switcher (Grid vs Table) -->

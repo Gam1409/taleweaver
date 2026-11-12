@@ -4,7 +4,7 @@ import { Database } from 'lucide-vue-next'
 import { memoryRagService } from '@/services/memoryRagService'
 import type { MemoryIndexStatus } from '@/services/memoryRagService'
 
-const props = defineProps<{ templateId: string; title: string }>()
+const props = defineProps<{ templateId: string; title: string; menuItem?: boolean }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const status = ref<MemoryIndexStatus | null>(null)
 const busy = ref(false)
@@ -62,6 +62,8 @@ async function perform(): Promise<void> {
 <template>
   <button
     type="button"
+    :role="menuItem ? 'menuitem' : undefined"
+    :class="{ 'action-menu-item': menuItem }"
     class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-2 rounded-lg"
     @click.stop="open"
   >

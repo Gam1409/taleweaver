@@ -16,6 +16,7 @@ const props = defineProps<{
   icon: Component
   modelValue: boolean
   glow?: boolean
+  iconOnly?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>()
 const id = useId()
@@ -54,6 +55,7 @@ async function open(last = false) {
   emit('update:modelValue', true)
   await nextTick()
   place()
+  await nextTick()
   const choices = items()
   choices[last ? choices.length - 1 : 0]?.focus()
 }
@@ -127,12 +129,14 @@ onMounted(() => {
   if (panel.value) observer.observe(panel.value)
   document.addEventListener('pointerdown', onOutside)
   window.addEventListener('resize', onResize)
+  window.addEventListener('scroll', onResize, true)
   window.visualViewport?.addEventListener('resize', onResize)
 })
 onBeforeUnmount(() => {
   observer?.disconnect()
   document.removeEventListener('pointerdown', onOutside)
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('scroll', onResize, true)
   window.visualViewport?.removeEventListener('resize', onResize)
 })
 </script>
@@ -151,9 +155,9 @@ onBeforeUnmount(() => {
     @keydown="onTriggerKey"
   >
     <component :is="icon" class="group-icon" aria-hidden="true" />
-    <span>{{ label }}</span>
+    <span :class="{ 'sr-only': iconOnly }">{{ label }}</span>
     <span v-if="glow" class="update-dot" aria-label="New activity" />
-    <ChevronDown class="group-chevron hidden sm:block" aria-hidden="true" />
+    <ChevronDown v-if="!iconOnly" class="group-chevron hidden sm:block" aria-hidden="true" />
   </button>
   <Teleport to="body">
     <Transition name="action-group">
@@ -249,6 +253,7 @@ onBeforeUnmount(() => {
   scrollbar-width: thin;
 }
 .action-group-heading {
+  overflow-wrap: anywhere;
   padding: 7px 10px 11px;
   margin-bottom: 4px;
   border-bottom: 1px solid rgb(100 116 139 / 0.25);

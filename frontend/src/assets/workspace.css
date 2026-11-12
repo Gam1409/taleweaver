@@ -1,6 +1,19 @@
 [data-workspace-theme="archive"] {
+  color-scheme: dark;
   --session-font: "Alegreya Sans";
   font-family: "Alegreya Sans", sans-serif;
+}
+[data-workspace-theme="archive"] :where(*) { scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+[data-workspace-theme="archive"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-workspace-theme="archive"] ::-webkit-scrollbar-track { background: transparent; }
+[data-workspace-theme="archive"] ::-webkit-scrollbar-thumb { background: #475569; border-radius: 999px; }
+[data-workspace-theme="archive"] select:not([multiple]):not([size]) {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 14px;
+  background-position: right 12px center;
 }
 .workspace-view { background: #080e18; }
 .workspace-view :is(.font-black, .font-extrabold) { font-weight: 600; }
