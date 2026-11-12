@@ -50,6 +50,11 @@ const currentYear = new Date().getFullYear()
             </div>
 
             <div class="flex items-center justify-between py-3 border-b border-white/5">
+              <span class="text-xs font-black text-slate-500 uppercase tracking-widest">Fork creator</span>
+              <span class="text-xs font-bold text-slate-300">Anton Kuprin</span>
+            </div>
+
+            <div class="flex items-center justify-between py-3 border-b border-white/5">
               <span class="text-xs font-black text-slate-500 uppercase tracking-widest">License</span>
               <span class="text-xs font-bold text-aether-primary hover:underline cursor-help" title="MIT License: Free to use, modify, and distribute.">MIT License</span>
             </div>

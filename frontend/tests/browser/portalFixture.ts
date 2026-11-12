@@ -19,7 +19,7 @@ export function createPortalFixture() {
   const user = { id: 'demo-reader', username: 'Storykeeper', role: 'admin', profile_image_url: avatar, bio: 'Collector of unfinished maps and stories from the coast.', adventure_count: 2, total_xp: 240, recovery_codes_remaining: 6, default_language: 'English', earned_awards: [] }
   const settings: Record<string, any> = {
     app_version: '0.7.1-beta', keys: { openai: { masked: 'Demo provider · no real key', is_env: false } },
-    is_llm_configured: true, is_t2i_configured: false,
+    is_llm_configured: true, is_t2i_configured: true,
     llm_settings: copy(settingsService.llmForm.value), t2i_settings: copy(settingsService.t2iForm.value),
     tts_settings: copy(settingsService.ttsForm.value), game_settings: copy(settingsService.gameForm.value),
     image_styles_catalog: [{ id: 'watercolour', name: 'Watercolour', description: 'Soft edges and painted light.', instruction: '' }, { id: 'painterly', name: 'Painterly', description: 'Atmospheric brushwork.', instruction: '' }],
