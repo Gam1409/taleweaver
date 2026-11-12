@@ -9,7 +9,7 @@ page.on('pageerror', error => errors.push(error.message))
 const base = process.env.FRONTEND_URL || 'http://127.0.0.1:5203'
 const card = () => page.getByRole('dialog', { name: 'Mira — Character', exact: true })
 try {
-  await page.goto(base + '/tests/browser/groupedActions.html?mode=vn')
+  await page.goto(base + '/tests/browser/groupedActions.html?mode=vn&original-card=1')
   await page.getByRole('button', { name: 'Change portrait of Mira', exact: true }).click()
   await card().getByRole('region', { name: 'Clothing and physical condition', exact: true }).waitFor()
   await card().getByRole('button', { name: /^Chest: Work jacket/ }).focus()
@@ -17,7 +17,7 @@ try {
   assert.match(await page.getByRole('tooltip').textContent(), /Work jacket/)
   assert.match(await page.getByRole('tooltip').textContent(), /Linen shirt/)
   await card().getByRole('tab', { name: 'History', exact: true }).click()
-  await card().getByText('Mira keeps the archive and its coastal charts.', { exact: true }).first().waitFor()
+  await card().locator('section[aria-label="Character history"]').getByText('Mira keeps the archive and its coastal charts.', { exact: true }).first().waitFor()
   await card().getByRole('tab', { name: /^History with your character/ }).click()
   await card().getByText('Mira showed Alex the sealed letter.', { exact: true }).first().waitFor()
   await card().getByRole('tab', { name: 'State & clothing', exact: true }).click()

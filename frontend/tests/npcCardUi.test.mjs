@@ -13,6 +13,7 @@ async function component(name, inject = '') {
   let source = compileScript(descriptor, { id: name, inlineTemplate: true }).content
   source = source.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
+    if (path === 'lucide-vue-next') return statement.replace(/['"]lucide-vue-next['"]/, `'${import.meta.resolve('lucide-vue-next')}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })
@@ -31,6 +32,24 @@ test('emotion-only estimates do not fabricate relationship scores; text is escap
   assert.match(scores, /\+12/)
   assert.match(scores, /-3/)
   assert.doesNotMatch(scores, /Last observed emotion:/)
+})
+
+test('the collapsible overview preserves learned facts and escaped claim text', async () => {
+  const ui = await component('NpcGeneralOverview')
+  const entries = Array.from({ length: 4 }, (_, index) => ({ id: String(index), text: index === 0 ? '<script>Claim</script>' : `Known fact ${index}`, source: index === 0 ? 'claimed' : 'observed' }))
+  const html = await render(ui, { entries })
+  assert.match(html, /General overview/)
+  assert.match(html, /Known fact 3/)
+  assert.match(html, /Claim:/)
+  assert.match(html, /&lt;script&gt;Claim&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|<details[^>]*open/i)
+})
+
+test('the compact overview keeps unobserved state and arbitrary private fields hidden', async () => {
+  const ui = await component('NpcCardOverview')
+  const html = await render(ui, { card: { name: 'Mira', description: '<script>Archivist</script>', inventory: ['PRIVATE_INVENTORY'], current_state: { availability: 'not_present', conditions: { items: [{ id: 'hidden', detail: 'HIDDEN_OBSERVATION' }] } } }, showIndicators: false })
+  assert.match(html, /&lt;script&gt;Archivist&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|PRIVATE_INVENTORY|HIDDEN_OBSERVATION/i)
 })
 
 test('history tabs show general facts and empty-state without arbitrary private fields', async t => {
@@ -113,6 +132,7 @@ test('history tabs support keyboard activation and reset for a different charact
   source = `import { computed, ref, watch, toRef, onScopeDispose as onBeforeUnmount } from '${import.meta.resolve('vue')}';
 const useNpcJournal = () => ({ details: ref(null), loading: ref(false), error: ref(''), load: () => {} });
 const useNpcCardSettings = () => ({ showState: ref(false) });
+const UserRound = {}, Layers2 = {}, History = {};
 const setInterval = () => 0;
 export function setup() { ${source}; return { history, navigateTabs, tabId, activeTab, navigateSections }; }`
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
@@ -157,7 +177,7 @@ test('current state shows confirmed facts without immersion-breaking diagnostics
   const observed = await render(ui, { state })
   assert.match(observed, /Treated|game minute 480/)
   assert.match(observed, /&lt;script&gt;Bandage&lt;\/script&gt;/)
-  assert.doesNotMatch(observed, /<script\b/)
+  assert.doesNotMatch(observed, /<script\b/i)
   const absent = await render(ui, { state: { ...state, availability: 'not_present' } })
   assert.doesNotMatch(absent, /not currently visible|Bandage|Treated/)
   const unknown = await render(ui, { state: { ...state, clothing: { status: 'unavailable', items: [] }, conditions: { status: 'unavailable', items: [] } } })
@@ -181,7 +201,7 @@ test('equipment icons use canonical images at 14 px with a missing-image fallbac
   const html = await render(ui, { item: { id: 'coat', name: '<script>Coat</script>', image_url: '/coat.png' } })
   assert.match(html, /src="\/coat.png"/)
   assert.match(html, /h-3\.5 w-3\.5/)
-  assert.doesNotMatch(html, /<script\b/)
+  assert.doesNotMatch(html, /<script\b/i)
   const missing = await render(ui, { item: { id: 'coat', name: 'Coat', image_url: null } })
   assert.doesNotMatch(missing, /<img\b/)
   assert.match(missing, /ra-vest/)

@@ -66,7 +66,7 @@ createApp({
       return '?' + query.toString()
     }
     const detail = ref<HTMLDialogElement>(), detailTitle = ref('')
-    const charactersOpen = ref(false), portrait = ref<PortraitTarget | null>(null), portraitError = ref('')
+    const charactersOpen = ref(false), portrait = ref<PortraitTarget | null>(params.get('panel') === 'character' ? { id: 'MIRA', name: 'Mira' } : null), portraitError = ref('')
     function openCharacter(npc: PortraitTarget) { portraitError.value = ''; portrait.value = npc }
     const headerOnly = new URLSearchParams(window.location.search).has('header-only')
     const header = ref<any>({ sceneName: 'The Old Archive', adventureTitle: 'Letters from the Coast', gameTime: { dateShort: 'Day 3', time: '18:42' }, exp: 120, trackedQuest: { title: 'A letter without an address' } })
@@ -131,7 +131,7 @@ createApp({
       settingsOpen.value ? h(SessionSettingsModal, { sessionId: 'grouping-preview', mode: mode.value, initialTurns: memory.value.turns, initialCompression: memory.value.enableCompression, initialAutoSpeakNarration: memory.value.autoSpeakNarration, initialAutoSpeakDialogues: memory.value.autoSpeakDialogues, onClose: () => { settingsOpen.value = false }, onSave: value => { memory.value = value; record('settings:save:' + JSON.stringify(value)); settingsOpen.value = false } }) : null,
       h(MapModal, { open: mapOpen.value, mapData, nodes: mapData.nodes, onClose: () => { mapOpen.value = false } }),
       h(CharacterSheetModal, { open: sheetOpen.value, sheet: socket.sheet.value, onClose: () => { sheetOpen.value = false } }),
-      h(SessionNpcModals, { sessionId: 'grouping-preview', directoryOpen: charactersOpen.value, npc: portrait.value, busy: false, error: portraitError.value, updated: false, onCloseDirectory: () => { charactersOpen.value = false }, onSelect: openCharacter, onCloseCard: () => { portrait.value = null }, onGenerate: () => { portraitError.value = 'Portrait generation is not connected in this preview.' } }),
+      h(SessionNpcModals, { sessionId: 'grouping-preview', refined: !params.has('original-card'), directoryOpen: charactersOpen.value, npc: portrait.value, busy: false, error: portraitError.value, updated: false, onCloseDirectory: () => { charactersOpen.value = false }, onSelect: openCharacter, onCloseCard: () => { portrait.value = null }, onGenerate: () => { portraitError.value = 'Portrait generation is not connected in this preview.' } }),
       h('dialog', { ref: detail, class: 'm-auto w-80 max-w-[90vw] rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 backdrop:bg-black/70' }, [
         h('h2', { class: 'text-lg font-bold mb-3' }, detailTitle.value),
         h('p', { class: 'text-sm text-slate-400 mb-5' }, 'This action opens the existing session panel. Preview data is fictional.'),

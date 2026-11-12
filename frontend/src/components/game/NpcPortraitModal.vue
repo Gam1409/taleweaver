@@ -13,6 +13,7 @@ const props = defineProps<{
   error: string
   updated: boolean
   stateRevision?: unknown
+  refined?: boolean
 }>()
 const emit = defineEmits<{ close: []; generate: [options: PortraitOptions] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -54,6 +55,7 @@ onBeforeUnmount(() => {
   <dialog
     ref="dialog"
     aria-labelledby="npc-portrait-heading"
+    :class="{ 'npc-card-refined': refined }"
     class="m-auto h-[min(54rem,92dvh)] max-h-[92dvh] w-[calc(100%_-_1rem)] max-w-6xl overflow-hidden rounded-2xl border border-white/15 bg-slate-900 p-0 text-slate-200 shadow-2xl backdrop:bg-black/75 sm:w-[calc(100%_-_2rem)]"
     @cancel.prevent="emit('close')"
   >
@@ -79,11 +81,11 @@ onBeforeUnmount(() => {
         </button>
       </header>
       <div
-        class="flex min-h-0 flex-1 flex-col sm:grid sm:grid-cols-[15rem_minmax(0,1fr)] lg:grid-cols-[18rem_minmax(0,1fr)]"
+        class="npc-card-workspace flex min-h-0 flex-1 flex-col sm:grid sm:grid-cols-[15rem_minmax(0,1fr)] lg:grid-cols-[18rem_minmax(0,1fr)]"
       >
         <aside
           aria-label="Character profile"
-          class="npc-card-scroll grid max-h-[38dvh] shrink-0 grid-cols-[5.5rem_minmax(0,1fr)] gap-3 overflow-y-auto border-b border-white/10 bg-slate-950/35 p-4 sm:block sm:max-h-none sm:border-b-0 sm:border-r sm:p-5"
+          class="npc-profile npc-card-scroll grid max-h-[38dvh] shrink-0 grid-cols-[5.5rem_minmax(0,1fr)] gap-3 overflow-y-auto border-b border-white/10 bg-slate-950/35 p-4 sm:block sm:max-h-none sm:border-b-0 sm:border-r sm:p-5"
         >
           <div class="space-y-3">
             <img
@@ -95,6 +97,7 @@ onBeforeUnmount(() => {
             />
             <div
               v-else
+              data-empty-portrait
               class="flex h-28 items-center justify-center rounded-xl bg-black/20 text-center text-xs text-slate-500 sm:h-64"
             >
               No portrait yet
@@ -114,7 +117,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <section class="min-w-0 sm:mt-5" aria-label="Character description">
-            <h3 class="text-sm font-semibold text-slate-100">About {{ characterName }}</h3>
+            <h3 class="text-sm font-semibold text-slate-100">{{ refined ? characterName : `About ${characterName}` }}</h3>
             <p
               v-if="learnedCard?.gender || learnedCard?.age_years != null"
               class="mt-2 text-xs text-slate-400"
@@ -131,6 +134,7 @@ onBeforeUnmount(() => {
             >
             <p
               v-if="description"
+              data-profile-description
               class="npc-card-scroll mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-sm leading-relaxed text-slate-300 sm:max-h-48"
             >
               {{ description }}
@@ -138,25 +142,6 @@ onBeforeUnmount(() => {
             <p v-else class="mt-2 text-sm text-slate-400">
               You have not learned much about this character yet.
             </p>
-            <div
-              v-if="learnedCard?.overview?.length"
-              class="mt-4 hidden border-t border-white/10 pt-3 sm:block"
-            >
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                General overview
-              </h4>
-              <ul class="mt-2 space-y-2 text-sm leading-relaxed text-slate-300">
-                <li
-                  v-for="entry in learnedCard.overview.slice(0, 3)"
-                  :key="entry.id"
-                  class="whitespace-pre-wrap break-words"
-                >
-                  <span v-if="entry.source === 'claimed'" class="mr-1 text-xs text-amber-200"
-                    >Claim:</span
-                  >{{ entry.text }}
-                </li>
-              </ul>
-            </div>
           </section>
           <p v-if="error" role="alert" class="col-span-2 mt-3 text-sm text-rose-300">{{ error }}</p>
           <p v-if="updated" role="status" class="col-span-2 mt-3 text-sm text-emerald-300">
@@ -227,6 +212,7 @@ onBeforeUnmount(() => {
           :session-id="sessionId"
           :npc-id="npc.id"
           :state-revision="stateRevision"
+          :refined="refined"
           @loaded="learnedCard = $event"
         />
         <section v-else class="min-h-0 overflow-y-auto p-5 text-sm text-slate-400">
@@ -260,3 +246,5 @@ onBeforeUnmount(() => {
   border-radius: 999px;
 }
 </style>
+
+<style scoped src="./NpcPortraitRefined.css"></style>
