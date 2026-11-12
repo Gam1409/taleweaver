@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { MoreVertical } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { FolderInput, Settings2, RefreshCw, RotateCcw, Trash2 } from 'lucide-vue-next'
+import ActionGroupMenu from '@/components/game/immersive/ActionGroupMenu.vue'
 
 const props = defineProps<{
   activeSection: 'templates' | 'sessions'
@@ -11,7 +12,6 @@ const props = defineProps<{
   updateCount?: number
   isUpdatingAll?: boolean
 }>()
-
 const emit = defineEmits<{
   (e: 'changeSection', section: 'templates' | 'sessions'): void
   (e: 'import', kind?: 'templates' | 'sessions'): void
@@ -20,176 +20,39 @@ const emit = defineEmits<{
   (e: 'delete-all-sessions'): void
   (e: 'update-all'): void
 }>()
-
-const isMenuOpen = ref(false)
-const menuRef = ref<HTMLElement | null>(null)
-
-function toggleMenu() {
-  isMenuOpen.value = !isMenuOpen.value
-}
-
-function handleClickOutside(event: MouseEvent) {
-  if (menuRef.value && !menuRef.value.contains(event.target as Node)) {
-    isMenuOpen.value = false
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('mousedown', handleClickOutside)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('mousedown', handleClickOutside)
-})
-
-function runAndClose(action: 'import' | 'restore' | 'delete-all' | 'update-all') {
-  isMenuOpen.value = false
-  if (action === 'import') emit('import', props.activeSection)
-  else if (action === 'restore') emit('restore-defaults')
-  else if (action === 'update-all') emit('update-all')
-  else if (action === 'delete-all') {
-    if (props.activeSection === 'templates') emit('delete-all-adventures')
-    else emit('delete-all-sessions')
-  }
-}
+const menuOpen = ref(false)
+const isLibrary = computed(() => props.activeSection === 'templates')
+const deleting = computed(() => isLibrary.value ? props.isDeletingTemplates : props.isDeletingSessions)
+const count = computed(() => (isLibrary.value ? props.templateCount : props.sessionCount) || 0)
+watch(() => props.activeSection, () => { menuOpen.value = false })
 </script>
 
 <template>
-  <div class="flex items-end justify-between gap-3 mb-6 sm:mb-8 lg:mb-12">
-    <div class="min-w-0 flex-1">
-      <h2 class="text-2xl sm:text-3xl lg:text-5xl font-black text-white font-display tracking-tight mb-1 sm:mb-2">
-        {{ props.activeSection === 'templates' ? 'Library' : 'Game sessions' }}
-      </h2>
-      <p class="text-xs sm:text-sm lg:text-lg text-slate-500 font-narrative italic opacity-80 line-clamp-2">
-        {{ props.activeSection === 'templates' ? 'Manage your world blueprints.' : 'Manage your active playthroughs.' }}
-      </p>
+  <header class="portal-heading">
+    <div class="min-w-0">
+      <p class="portal-eyebrow">Your archive</p>
+      <h2>{{ isLibrary ? 'Library' : 'Game sessions' }}</h2>
+      <p class="portal-subtitle">{{ isLibrary ? 'Every world begins with a story.' : 'Pick up a story where you left it.' }}</p>
     </div>
-
-    <!-- Desktop / Tablet: inline action buttons -->
-    <div class="hidden sm:flex items-center gap-3 shrink-0">
-      <div v-if="props.activeSection === 'templates'" class="flex gap-2">
-        <button
-          v-if="(props.updateCount || 0) > 0"
-          class="px-3 lg:px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-cyan-500/20 transition-all flex items-center gap-2 shadow-lg shadow-cyan-500/5 disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="props.isUpdatingAll"
-          @click="emit('update-all')"
-          :title="`Update all ${props.updateCount} adventure(s) with newer versions`"
-        >
-          <i :class="props.isUpdatingAll ? 'ra ra-cycle animate-spin' : 'ra ra-clockwise'"></i>
-          <span class="hidden lg:inline">{{ props.isUpdatingAll ? 'Updating All...' : `Update All (${props.updateCount})` }}</span>
-          <span class="lg:hidden">{{ props.isUpdatingAll ? 'Updating...' : `Update (${props.updateCount})` }}</span>
-        </button>
-        <button
-          class="px-3 lg:px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="(props.templateCount || 0) === 0 || !!props.isDeletingTemplates"
-          @click="emit('delete-all-adventures')"
-        >
-          <i class="ra ra-burning-embers"></i>
-          <span class="hidden lg:inline">{{ props.isDeletingTemplates ? 'Deleting...' : 'Delete All Adventures' }}</span>
-          <span class="lg:hidden">{{ props.isDeletingTemplates ? 'Deleting...' : 'Delete All' }}</span>
-        </button>
-        <button
-          class="px-3 lg:px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
-          @click="emit('import', 'templates')"
-        >
-          <i class="ra ra-download"></i>
-          <span class="hidden lg:inline">Import Adventure</span>
-          <span class="lg:hidden">Import</span>
-        </button>
-        <button
-          class="px-3 lg:px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
-          title="Restore default adventures"
-          @click="emit('restore-defaults')"
-        >
-          <i class="ra ra-recycle"></i>
-          <span class="hidden lg:inline">Restore Defaults</span>
-          <span class="lg:hidden">Restore</span>
-        </button>
-      </div>
-      <div v-else-if="props.activeSection === 'sessions'" class="flex gap-2">
-        <button
-          class="px-3 lg:px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="(props.sessionCount || 0) === 0 || !!props.isDeletingSessions"
-          @click="emit('delete-all-sessions')"
-        >
-          <i class="ra ra-trash"></i>
-          <span class="hidden lg:inline">{{ props.isDeletingSessions ? 'Deleting...' : 'Delete All Sessions' }}</span>
-          <span class="lg:hidden">{{ props.isDeletingSessions ? 'Deleting...' : 'Delete All' }}</span>
-        </button>
-        <button
-          class="px-3 lg:px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] lg:text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
-          @click="emit('import', 'sessions')"
-        >
-          <i class="ra ra-download"></i>
-          <span class="hidden lg:inline">Import Session</span>
-          <span class="lg:hidden">Import</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Mobile: overflow menu -->
-    <div class="relative sm:hidden shrink-0" ref="menuRef">
-      <button
-        @click="toggleMenu"
-        class="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
-        title="Actions"
-        aria-label="Actions"
-      >
-        <MoreVertical class="w-5 h-5" />
+    <div class="portal-heading-actions">
+      <button type="button" class="workspace-button" @click="emit('import', activeSection)">
+        <FolderInput aria-hidden="true" />
+        <span>{{ isLibrary ? 'Import adventure' : 'Import session' }}</span>
       </button>
-
-      <Transition
-        enter-active-class="transition duration-100 ease-out"
-        enter-from-class="transform scale-95 opacity-0"
-        enter-to-class="transform scale-100 opacity-100"
-        leave-active-class="transition duration-75 ease-in"
-        leave-from-class="transform scale-100 opacity-100"
-        leave-to-class="transform scale-95 opacity-0"
-      >
-        <div
-          v-if="isMenuOpen"
-          class="absolute right-0 top-12 z-30 w-52 bg-[#0d1117] border border-white/10 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] overflow-hidden backdrop-blur-xl"
-        >
-          <button
-            v-if="props.activeSection === 'templates' && (props.updateCount || 0) > 0"
-            class="w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-cyan-300 hover:text-white hover:bg-cyan-500/10 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="props.isUpdatingAll"
-            @click="runAndClose('update-all')"
-          >
-            <i :class="props.isUpdatingAll ? 'ra ra-cycle animate-spin text-sm' : 'ra ra-clockwise text-sm'"></i>
-            <span>{{ props.isUpdatingAll ? 'Updating All...' : `Update All (${props.updateCount})` }}</span>
-          </button>
-          <button
-            class="w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-3"
-            @click="runAndClose('import')"
-          >
-            <i class="ra ra-download text-sm"></i>
-            {{ props.activeSection === 'templates' ? 'Import Adventure' : 'Import Session' }}
-          </button>
-          <button
-            v-if="props.activeSection === 'templates'"
-            class="w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-3"
-            @click="runAndClose('restore')"
-          >
-            <i class="ra ra-recycle text-sm"></i>
-            Restore Defaults
-          </button>
-          <div class="h-[1px] bg-white/5 mx-2 my-1"></div>
-          <button
-            class="w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-red-500/10 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="(props.activeSection === 'templates' ? (props.templateCount || 0) === 0 : (props.sessionCount || 0) === 0) || (props.activeSection === 'templates' ? !!props.isDeletingTemplates : !!props.isDeletingSessions)"
-            @click="runAndClose('delete-all')"
-          >
-            <i :class="props.activeSection === 'templates' ? 'ra ra-burning-embers text-sm' : 'ra ra-trash text-sm'"></i>
-            <span v-if="props.activeSection === 'templates'">
-              {{ props.isDeletingTemplates ? 'Deleting...' : 'Delete All Adventures' }}
-            </span>
-            <span v-else>
-              {{ props.isDeletingSessions ? 'Deleting...' : 'Delete All Sessions' }}
-            </span>
-          </button>
-        </div>
-      </Transition>
+      <ActionGroupMenu v-model="menuOpen" label="Manage" :icon="Settings2" :glow="isLibrary && !!updateCount">
+        <button v-if="isLibrary && (updateCount || 0) > 0" type="button" role="menuitem" class="action-menu-item" :disabled="isUpdatingAll" @click="emit('update-all')">
+          <RefreshCw :class="{ 'animate-spin': isUpdatingAll }" aria-hidden="true" />
+          <span class="action-menu-copy"><span class="action-menu-title">{{ isUpdatingAll ? 'Updating…' : `Update all (${updateCount})` }}</span><span class="action-menu-description">Apply available adventure updates</span></span>
+        </button>
+        <button v-if="isLibrary" type="button" role="menuitem" class="action-menu-item" @click="emit('restore-defaults')">
+          <RotateCcw aria-hidden="true" />
+          <span class="action-menu-copy"><span class="action-menu-title">Restore defaults</span><span class="action-menu-description">Restore the bundled adventures</span></span>
+        </button>
+        <button type="button" role="menuitem" class="action-menu-item workspace-danger" :disabled="count === 0 || !!deleting" @click="isLibrary ? emit('delete-all-adventures') : emit('delete-all-sessions')">
+          <Trash2 aria-hidden="true" />
+          <span class="action-menu-copy"><span class="action-menu-title">{{ deleting ? 'Deleting…' : isLibrary ? 'Delete all adventures' : 'Delete all sessions' }}</span><span class="action-menu-description">Review and confirm before deleting</span></span>
+        </button>
+      </ActionGroupMenu>
     </div>
-  </div>
+  </header>
 </template>

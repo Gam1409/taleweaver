@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkspaceTheme } from '@/composables/useWorkspaceTheme'
+useWorkspaceTheme()
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { configState } from '@/store/config'
@@ -318,7 +320,7 @@ const navCategories: NavCategory[] = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden">
+  <div class="workspace-view workspace-admin min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden">
     
     <!-- SIDEBAR -->
     <aside class="w-72 bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col p-5 h-screen sticky top-0 z-20">
@@ -334,8 +336,14 @@ const navCategories: NavCategory[] = [
         </div>
       </div>
 
+      <label class="mb-2 text-sm text-slate-400 lg:hidden" for="admin-section">Administration section</label>
+      <select id="admin-section" v-model="activeSection" class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-200 lg:hidden">
+        <optgroup v-for="category in navCategories" :key="category.title" :label="category.title">
+          <option v-for="item in category.items" :key="item.id" :value="item.id">{{ item.label }}</option>
+        </optgroup>
+      </select>
       <!-- Grouped Navigation -->
-      <nav class="flex-grow space-y-5 overflow-y-auto pr-1 custom-scrollbar">
+      <nav class="hidden lg:block flex-grow space-y-5 overflow-y-auto pr-1 custom-scrollbar">
         <div v-for="category in navCategories" :key="category.title" class="space-y-1">
           <div class="px-3 text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">
             {{ category.title }}

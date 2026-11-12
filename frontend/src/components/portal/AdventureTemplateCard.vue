@@ -109,7 +109,7 @@ const hasLicenseInfo = computed(() => {
 </script>
 
 <template>
-  <article class="rounded-xl border border-white/10 bg-aether-surface/20 flex flex-col relative group">
+  <article class="adventure-cover-card rounded-xl border border-white/10 bg-aether-surface/20 flex flex-col relative group">
     <!-- Top Cover Area -->
     <div class="aspect-[4/3] sm:aspect-[3/2] relative bg-black/30">
       <div class="absolute inset-0 overflow-hidden rounded-t-xl">
@@ -295,7 +295,7 @@ const hasLicenseInfo = computed(() => {
         <div v-if="props.template.version" class="hidden sm:flex items-center gap-1.5 opacity-60">
           <span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">v{{ props.template.version }}</span>
         </div>
-        <p v-if="props.template.teaser" class="hidden sm:block text-[11px] sm:text-xs font-bold text-emerald-500/80 uppercase tracking-widest line-clamp-3 leading-relaxed whitespace-pre-wrap">
+        <p v-if="props.template.teaser" class="adventure-teaser hidden sm:block text-[11px] sm:text-xs font-bold text-emerald-500/80 uppercase tracking-widest line-clamp-3 leading-relaxed whitespace-pre-wrap">
           {{ fixNewlines(props.template.teaser) }}
         </p>
       </div>

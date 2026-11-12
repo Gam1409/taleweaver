@@ -3,9 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { AdventureTemplateSummary } from '@/types'
 import type { LibrarySessions } from '@/composables/librarySessions'
 import { Loader2, BookOpen } from 'lucide-vue-next'
-import PortalCreateAdventureCard from './PortalCreateAdventureCard.vue'
-import GenerateWorldCard from './GenerateWorldCard.vue'
-import ImportExamplesCard from './ImportExamplesCard.vue'
+import PortalCreationToolbar from './PortalCreationToolbar.vue'
 import PendingAdventureCard from './PendingAdventureCard.vue'
 import AdventureTemplateCard from './AdventureTemplateCard.vue'
 
@@ -87,22 +85,8 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-6">
-    <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-4">
-      <PortalCreateAdventureCard @click="$emit('create')" />
-
-      <GenerateWorldCard @generate="$emit('generate-world')" />
-      
-      <ImportExamplesCard 
-        v-if="!isSeeding" 
-        @import="$emit('import-samples')" 
-      />
-
-      <!-- Loading indicator for seeding -->
-      <div v-if="isSeeding" class="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl bg-white/5 gap-3 h-full min-h-[220px]">
-        <div class="w-8 h-8 border-2 border-aether-primary/10 border-t-aether-primary rounded-full animate-spin"></div>
-        <span class="text-xxs text-aether-primary uppercase tracking-widest font-bold">Importing Tales...</span>
-      </div>
-
+    <PortalCreationToolbar :is-seeding="isSeeding" @create="$emit('create')" @generate-world="$emit('generate-world')" @import-samples="$emit('import-samples')" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
       <PendingAdventureCard
         v-for="pending in pendingCards"
         :key="`pending-${pending.adventureId}`"

@@ -2,8 +2,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { AdventureTemplateSummary } from '@/types'
 import type { LibrarySessions } from '@/composables/librarySessions'
-import { Edit3, MoreVertical, Download, Trash2, Image, RefreshCw, Sword, BookOpen, MessageSquare, Sparkles, Plus, Compass, Loader2, Copy } from 'lucide-vue-next'
+import { Edit3, MoreVertical, Download, Trash2, Image, RefreshCw, Sword, BookOpen, MessageSquare, Loader2, Copy } from 'lucide-vue-next'
 import { formatCatalogLabel } from '@/composables/usePortalFilters'
+import PortalCreationToolbar from './PortalCreationToolbar.vue'
 import PendingAdventureCard from './PendingAdventureCard.vue'
 import AdventurePlayActions from './AdventurePlayActions.vue'
 import MemoryIndexActions from './MemoryIndexActions.vue'
@@ -123,40 +124,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
 
 <template>
   <div class="space-y-4">
-    <!-- Quick Action Bar in Table View -->
-    <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
-      <div class="flex items-center gap-2">
-        <button
-          @click="$emit('create')"
-          class="px-3.5 py-2 rounded-xl bg-aether-primary/20 border border-aether-primary/40 text-aether-primary text-xs font-bold uppercase tracking-wider hover:bg-aether-primary/30 transition-all flex items-center gap-2 shadow-lg shadow-aether-primary/10"
-        >
-          <Plus class="w-4 h-4" />
-          <span>New Adventure</span>
-        </button>
-
-        <button
-          @click="$emit('generate-world')"
-          class="px-3.5 py-2 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold uppercase tracking-wider hover:bg-purple-500/30 transition-all flex items-center gap-2 shadow-lg shadow-purple-500/10"
-        >
-          <Sparkles class="w-4 h-4" />
-          <span>Generate World</span>
-        </button>
-
-        <button
-          v-if="!props.isSeeding"
-          @click="$emit('import-samples')"
-          class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs font-bold uppercase tracking-wider hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
-        >
-          <Compass class="w-4 h-4" />
-          <span>Import Samples</span>
-        </button>
-      </div>
-
-      <div v-if="props.isSeeding" class="flex items-center gap-2 text-xs text-aether-primary font-bold">
-        <Loader2 class="w-4 h-4 animate-spin" />
-        <span>Importing sample tales...</span>
-      </div>
-    </div>
+    <PortalCreationToolbar :is-seeding="isSeeding" @create="$emit('create')" @generate-world="$emit('generate-world')" @import-samples="$emit('import-samples')" />
 
     <!-- Pending Creations Cards (if any) -->
     <div v-if="props.pendingCards.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">

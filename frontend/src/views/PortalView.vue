@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkspaceTheme } from '@/composables/useWorkspaceTheme'
+useWorkspaceTheme()
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { configState } from '@/store/config'
 import { authState } from '@/store/auth'
@@ -324,7 +326,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 bg-[#050b14] text-slate-200 font-ui overflow-hidden">
+  <div class="workspace-view flex h-full min-h-0 bg-[#050b14] text-slate-200 font-ui overflow-hidden">
     <PortalSidebar
       :is-admin="isAdmin"
       :active-section="activeSection"
@@ -338,7 +340,7 @@ onUnmounted(() => {
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col relative overflow-hidden min-w-0">
       <!-- Scrollable Content -->
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10" :class="activeSection === 'profile' ? 'lg:p-10' : ''">
+      <div class="workspace-content flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10" :class="activeSection === 'profile' ? 'lg:p-10' : ''">
         
         <SetupWarningBanner :active-section="activeSection" />
 

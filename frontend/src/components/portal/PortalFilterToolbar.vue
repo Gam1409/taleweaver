@@ -29,7 +29,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="mb-6 rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-md p-3 sm:p-4 shadow-xl transition-all">
+  <div class="portal-filters mb-6 rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-md p-3 sm:p-4 shadow-xl transition-all">
     <!-- Main Toolbar Row -->
     <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
       
@@ -37,7 +37,8 @@ defineEmits<{
       <div class="relative flex-1 min-w-[200px]">
         <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         <input
-          type="text"
+          type="search"
+          :aria-label="props.section === 'templates' ? 'Search adventures' : 'Search sessions'"
           :value="props.searchQuery"
           @input="$emit('update:search-query', ($event.target as HTMLInputElement).value)"
           :placeholder="props.section === 'templates' ? 'Search adventures by name, concept, creator...' : 'Search sessions by title, scene, notes...'"
@@ -55,10 +56,10 @@ defineEmits<{
       </div>
 
       <!-- Controls Row on mobile / Desktop Right Controls -->
-      <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 lg:gap-3">
+      <div class="grid grid-cols-2 sm:flex sm:flex-nowrap items-center gap-2 lg:gap-3">
         
         <!-- Type Filter (Dropdown or Buttons) -->
-        <div class="relative flex-1 sm:flex-none">
+        <div class="relative min-w-0 flex-1 sm:flex-none">
           <select
             :value="props.selectedType"
             @change="$emit('update:selected-type', ($event.target as HTMLSelectElement).value as RuleTypeFilter)"
@@ -79,7 +80,7 @@ defineEmits<{
         </div>
 
         <!-- Tone Filter Dropdown -->
-        <div class="relative flex-1 sm:flex-none">
+        <div class="relative min-w-0 flex-1 sm:flex-none">
           <select
             :value="props.selectedTone"
             @change="$emit('update:selected-tone', ($event.target as HTMLSelectElement).value)"
@@ -103,7 +104,7 @@ defineEmits<{
         </div>
 
         <!-- Style Filter Dropdown -->
-        <div class="relative flex-1 sm:flex-none">
+        <div class="relative min-w-0 flex-1 sm:flex-none">
           <select
             :value="props.selectedStyle"
             @change="$emit('update:selected-style', ($event.target as HTMLSelectElement).value)"
