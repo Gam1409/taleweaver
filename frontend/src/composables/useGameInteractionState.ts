@@ -1,7 +1,8 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 import { gameCommandService } from '@/services/gameCommandService'
-import { isConsumableEntity, normalizeHoverEntity } from '@/services/hoverEntityService'
+import { isConsumableEntity } from '@/services/hoverEntityService'
+import { useGameHoverTooltip } from './useGameHoverTooltip'
 
 type ContextMenuState = {
   x: number
@@ -31,59 +32,10 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
     onDirectAction,
   } = options
 
-  const hoveredEntity = ref<any>(null)
-  const mousePos = ref({ x: 0, y: 0 })
-  const tooltipImageFailed = ref(false)
+  const hover = useGameHoverTooltip()
+  const { hoveredEntity, tooltipImageFailed, handleHover } = hover
   const contextMenu = ref<ContextMenuState>(null)
-
-  const tooltipStyle = computed(() => {
-    if (!hoveredEntity.value) return {}
-    const OFFSET = 20
-    const VERTICAL_LIFT = 34
-    const EDGE_GAP = 8
-    const mx = mousePos.value.x
-    const my = mousePos.value.y
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
-    const tooltipWidth = Math.max(280, Math.min(384, viewportWidth - EDGE_GAP * 2))
-
-    const availableBelow = Math.max(0, viewportHeight - my - OFFSET - EDGE_GAP)
-    const availableAbove = Math.max(0, my - OFFSET - EDGE_GAP)
-    const renderAbove = availableBelow < 300 && availableAbove > availableBelow
-
-    // Flip left if tooltip would overflow right edge
-    const x = mx + OFFSET + tooltipWidth > viewportWidth
-      ? mx - tooltipWidth - OFFSET
-      : mx + OFFSET
-
-    const maxLeft = Math.max(EDGE_GAP, viewportWidth - tooltipWidth - EDGE_GAP)
-    const clampedLeft = Math.min(Math.max(EDGE_GAP, x), maxLeft)
-
-    const style: Record<string, string> = {
-      left: `${clampedLeft}px`,
-      width: `${tooltipWidth}px`,
-      maxWidth: `calc(100vw - ${EDGE_GAP * 2}px)`,
-      maxHeight: `${Math.max(220, (renderAbove ? availableAbove : availableBelow))}px`,
-    }
-
-    if (renderAbove) {
-      style.bottom = `${Math.max(EDGE_GAP, viewportHeight - my + 10 + VERTICAL_LIFT)}px`
-      style.top = 'auto'
-    } else {
-      style.top = `${Math.max(EDGE_GAP, my + 10 - VERTICAL_LIFT)}px`
-      style.bottom = 'auto'
-    }
-    return style
-  })
-
-
   const isConsumableHover = computed(() => isConsumableEntity(hoveredEntity.value))
-
-  const handleHover = (ent: any, event: MouseEvent) => {
-    tooltipImageFailed.value = false
-    hoveredEntity.value = normalizeHoverEntity(ent)
-    mousePos.value = { x: event.clientX, y: event.clientY }
-  }
 
   const handleChatNpcHover = (name: string, event: MouseEvent) => {
     const normalizedName = String(name || '').trim().toLowerCase()
@@ -109,9 +61,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
           inventory: sheet.inventory || [],
           stats: sheet.stats,
         }
-        tooltipImageFailed.value = false
-        hoveredEntity.value = normalizeHoverEntity(playerEntity)
-        mousePos.value = { x: event.clientX, y: event.clientY }
+        handleHover(playerEntity, event)
         return
       }
     }
@@ -123,9 +73,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
       ? { ...(metadata || {}), ...fromEntities, entity_type: 'NPC' }
       : metadata ? { ...metadata, entity_type: 'NPC' } : resolved || { name, entity_type: 'NPC' }
 
-    tooltipImageFailed.value = false
-    hoveredEntity.value = normalizeHoverEntity(mergedNpc)
-    mousePos.value = { x: event.clientX, y: event.clientY }
+    handleHover(mergedNpc, event)
   }
 
   const onTooltipImageError = (): void => {
@@ -145,7 +93,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
       title: menu.title,
     }
 
-    hoveredEntity.value = null
+    hover.closeHover()
   }
 
   const openInventoryContextMenu = (item: any, event: MouseEvent) => {
@@ -161,7 +109,7 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
       title: menu.title,
     }
 
-    hoveredEntity.value = null
+    hover.closeHover()
   }
 
   const handleMenuSelect = async (item: any) => {
@@ -182,11 +130,8 @@ export function useGameInteractionState(options: UseGameInteractionStateOptions)
   })
 
   return {
-    hoveredEntity,
-    mousePos,
-    tooltipImageFailed,
+    ...hover,
     contextMenu,
-    tooltipStyle,
     isConsumableHover,
     handleHover,
     handleChatNpcHover,

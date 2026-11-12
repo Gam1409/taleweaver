@@ -1,7 +1,7 @@
 """Reuse the item extraction call and commit facts with their actual assistant source."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.engine_detailed_trace import sync_step
@@ -10,17 +10,36 @@ from backend.engine.physical_conditions.references import bind_records
 from backend.engine.physical_conditions.schema import KEY
 
 
+async def player_report(manager: Any, message_id: str) -> tuple[str, str] | None:
+    from backend.models.chat import ChatMessage
+
+    message = await manager.db.get(ChatMessage, message_id)
+    if (
+        message
+        and message.role == "user"
+        and not message.is_debug
+        and message.session_id == manager.state.session_id
+    ):
+        return message.id, message.content
+    return None
+
+
 @dataclass
 class Pending:
     proposals: list[Any]
     targets: set[str]
     before: Any
     error: str = ""
+    item_targets: set[str] = field(default_factory=set)
+    player_message: tuple[str, str] | None = None
 
-    def complete(self, proposals: list[Any], targets: set[str]) -> None:
+    def complete(
+        self, proposals: list[Any], targets: set[str], *, item_targets: set[str] | None = None
+    ) -> None:
         self.proposals = deepcopy(proposals)
         self.targets = set(targets)
         self.error = ""
+        self.item_targets = set(item_targets or ())
 
 
 def discard(manager: Any) -> None:
@@ -69,6 +88,8 @@ def finish(manager: Any, message: Any) -> list[str]:
             message_id=message.id,
             session_id=manager.state.session_id,
             minute=int(manager.state.in_game_time or 0),
+            item_targets=pending.item_targets,
+            player_message=pending.player_message,
         )
         if bindings:
             result[KEY]["last_check"]["reference_bindings"] = bindings

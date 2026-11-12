@@ -8,6 +8,8 @@ from uuid import NAMESPACE_URL, uuid5
 from pydantic import ValidationError
 
 from backend.core.text_evidence import require_span
+from backend.engine.physical_conditions.item_state import player_source
+from backend.engine.physical_conditions.item_state import validate as validate_item_state
 from backend.engine.physical_conditions.schema import (
     KEY,
     MAX_ACTIVE,
@@ -122,7 +124,9 @@ def _update(
     visual = _visual_fields(proposal)
     changed.visual_detail, changed.visual_region = visual["visual_detail"], visual["visual_region"]
     changed.updated_revision = ledger.revision + 1
-    fact_fields = ("status", "detail", "visibility", "visual_detail", "visual_region")
+    fact_fields: tuple[str, ...] = ("status", "detail", "visibility")
+    if current.kind != "item_state":
+        fact_fields += ("visual_detail", "visual_region")
     if any(getattr(changed, field) != getattr(current, field) for field in fact_fields):
         changed.last_changed_minute = minute
     return changed
@@ -163,6 +167,8 @@ def apply(
     session_id: str,
     minute: int,
     manual: bool = False,
+    item_targets: set[str] | None = None,
+    player_message: tuple[str, str] | None = None,
 ) -> tuple[dict, list[str], list[str]]:
     """One failed operation does not erase other records or unrelated accepted operations."""
     ledger = read(states).model_copy(deep=True)
@@ -177,6 +183,10 @@ def apply(
     for index, raw in enumerate(entries):
         try:
             proposal = ConditionProposal.model_validate(raw)
+            proposal = validate_item_state(
+                proposal, ledger, item_targets or set(), narration, message_id, manual=manual
+            )
+            reported_by = player_source(proposal, player_message)
             source = _source(proposal, narration, message_id, manual)
             condition = (
                 _record(
@@ -192,6 +202,9 @@ def apply(
                 if proposal.operation == "record"
                 else _update(ledger, proposal, source, targets, recorded_minute)
             )
+            if reported_by and condition.kind != "item_state":
+                raise ValueError("Player reports are supported only for item state.")
+            condition.reported_by = reported_by
             ledger.conditions[condition.id] = condition
             ledger.events.append(
                 Event(
@@ -199,6 +212,9 @@ def apply(
                     operation=proposal.operation,
                     revision=ledger.revision + 1,
                     source=source,
+                    detail=condition.detail if condition.kind == "item_state" else "",
+                    minute=recorded_minute if condition.kind == "item_state" else None,
+                    reported_by=reported_by,
                 )
             )
             accepted.append(condition.id)
@@ -230,8 +246,10 @@ def remap(states: dict | None, message_ids: dict[str, str]) -> dict:
     ledger = read(result)
     sources = [source for row in ledger.conditions.values() for source in (row.origin, row.latest)]
     sources.extend(event.source for event in ledger.events)
+    sources.extend(row.reported_by for row in ledger.conditions.values() if row.reported_by)
+    sources.extend(event.reported_by for event in ledger.events if event.reported_by)
     for source in sources:
-        if source.kind != "narration":
+        if source.kind not in {"narration", "player"}:
             continue
         source.message_id = message_ids.get(source.message_id or "")
         if source.message_id is None:

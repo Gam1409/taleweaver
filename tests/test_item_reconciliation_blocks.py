@@ -26,7 +26,7 @@ def reconciliation_fixture(monkeypatch):
         state=SimpleNamespace(entity_states={}, session_id="SESSION", current_scene_id="ROOM"),
         game_id="SESSION",
         user=SimpleNamespace(),
-        db=SimpleNamespace(),
+        db=SimpleNamespace(get=AsyncMock(return_value=None)),
         _vn_player_message_id="TURN",
     )
     npc = SimpleNamespace(id="NPC", entity_type="NPC", age_years=30)

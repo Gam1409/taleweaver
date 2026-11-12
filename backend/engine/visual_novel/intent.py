@@ -14,6 +14,7 @@ from backend.engine.memory_rag.prompts import recall_block, recall_enabled
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
 from backend.engine.physical_conditions.presentation import context as physical_context
 from backend.engine.physical_conditions.presentation import targets_from_actors
+from backend.engine.physical_conditions.scope import item_scope
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
@@ -153,6 +154,11 @@ bag. Theft must resolve success against an existing victim possession, keeping
 its canonical ID and removing it from the previous owner, including worn items.
 Failed theft leaves ownership unchanged. Clothing creation never represents theft.
 Never replace an existing item's identity by changing its name or base description.
+Filling, emptying, writing, cleaning, creasing and partial consumption change a state
+dimension, not identity. Resolve the player's factual statements against current state
+and world rules; clearly confirm or reject the result in narrative_description.
+The post-narration condition ledger owns these item states. Do not consume a container
+when only its contents are depleted, or invent a numeric remainder from an unknown amount.
 Use updated_inventory_items.condition_note for actual wear, dirt or damage while
 retaining the original item; a condition note cannot create a new weapon or function.
 Use new_inventory_items/removed_inventory_item_ids for confirmed player transfers,
@@ -240,7 +246,11 @@ def build_progression_context(
         from backend.engine.visual_novel.continuity import SCENE, possession_snapshot
 
         snapshot = possession_snapshot(manager, entities)
-        condition_targets.update(snapshot.items)
+        source = getattr(manager, "_scene_continuity_scope", None)
+        state_rows = getattr(source, "item_state_entities", None)
+        condition_targets.update(
+            item_scope(manager, list(state_rows) if state_rows is not None else entities).item_ids
+        )
         npcs = list(snapshot.npcs.values())
         loose_items = _items(
             [

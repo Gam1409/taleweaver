@@ -79,6 +79,7 @@ class _WorldSnapshot:
     exits: list[WorldExit]
     all_scenes: list[WorldScene]
     all_exits: list[WorldExit]
+    item_state_entities: list[WorldEntity] | None = None
 
 
 class TurnLlmContextBuilder:
@@ -187,11 +188,7 @@ class TurnLlmContextBuilder:
                 WorldScene.id == current_scene_id, WorldScene.session_id == game_id
             )
         )
-        ent_res = await db.execute(
-            select(WorldEntity).where(
-                WorldEntity.session_id == game_id, WorldEntity.is_in_inventory.is_(False)
-            )
-        )
+        ent_res = await db.execute(select(WorldEntity).where(WorldEntity.session_id == game_id))
         exit_res = await db.execute(
             select(WorldExit).where(
                 WorldExit.session_id == game_id,
@@ -207,7 +204,8 @@ class TurnLlmContextBuilder:
         scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == game_id))
         all_exits_res = await db.execute(select(WorldExit).where(WorldExit.session_id == game_id))
 
-        all_entities = list(ent_res.scalars().all())
+        item_state_entities = list(ent_res.scalars().all())
+        all_entities = [row for row in item_state_entities if not row.is_in_inventory]
         apply_entity_overrides(all_entities, self.manager.state.entity_states or {})
         return _WorldSnapshot(
             current_scene=scene_res.scalars().first(),
@@ -215,6 +213,7 @@ class TurnLlmContextBuilder:
             exits=orient_exits(list(exit_res.scalars().all()), current_scene_id),
             all_scenes=list(scenes_res.scalars().all()),
             all_exits=list(all_exits_res.scalars().all()),
+            item_state_entities=item_state_entities,
         )
 
     def _partition_scene_entities(
@@ -288,11 +287,13 @@ class TurnLlmContextBuilder:
         """Returns the (mechanics, narration) CURRENT STATE blocks."""
         state = self.manager.state
         adventure = self.manager.adventure
+        item_entities = getattr(world, "item_state_entities", None)
         self.manager._scene_continuity_scope = SceneScope(
             state.current_scene_id,
             frozenset({"__player__", state.current_scene_id, *(row.id for row in visible)}),
             str(getattr(world.current_scene, "description", "") or ""),
             tuple(world.all_entities),
+            tuple(item_entities) if item_entities is not None else None,
         )
         state_kwargs: dict[str, Any] = {
             "current_scene": world.current_scene,
@@ -317,7 +318,7 @@ class TurnLlmContextBuilder:
         clothing_block = ""
         if is_vn(adventure):
             state_kwargs["entities"], clothing_block = narration_clothing(
-                self.manager, visible, world.all_entities
+                self.manager, visible, world.all_entities, item_entities=item_entities
             )
             state_kwargs["entities"] = without_legacy_journal(
                 self.manager, state_kwargs["entities"]

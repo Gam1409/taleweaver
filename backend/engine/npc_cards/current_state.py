@@ -100,6 +100,11 @@ async def _conditions(
                 "kind": ledger.conditions[row["id"]].kind,
                 "part": ledger.conditions[row["id"]].part,
                 "last_changed_minute": ledger.conditions[row["id"]].last_changed_minute,
+                **(
+                    {"detail": ledger.conditions[row["id"]].detail}
+                    if ledger.conditions[row["id"]].kind == "item_state"
+                    else {}
+                ),
             }
             for row in by_id.values()
         ],

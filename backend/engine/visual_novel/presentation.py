@@ -1,11 +1,14 @@
 """Public VN character views exclude authored secrets as well as simulated thoughts."""
 
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.game_modes import mode_policy
 from backend.engine.npc_journal.records import journal_of
+from backend.engine.physical_conditions.item_state import project as item_states
+from backend.engine.visual_novel.continuity import _open_container
 from backend.engine.visual_novel.state import public_profile
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
@@ -48,7 +51,21 @@ async def session_is_vn(db: AsyncSession, state: SessionState) -> bool:
 def public_entity(entity: dict[str, Any], state: SessionState) -> dict[str, Any]:
     """Only ordinary player responses use this view; model/save data remain complete."""
     if str(entity.get("entity_type", "")).upper() != "NPC":
-        return entity
+        result = dict(item_states([entity], state.entity_states)[0])
+        if isinstance(result.get("inventory"), list):
+            accessible = str(
+                entity.get("item_type") or ""
+            ).upper() != "CONTAINER" or _open_container(
+                SimpleNamespace(
+                    item_type=entity.get("item_type"), metadata_json=entity.get("metadata_json")
+                ),
+                entity,
+            )
+            # Keep the legacy inventory shape; only the new live-property enrichment is gated.
+            result["inventory"] = item_states(
+                result["inventory"], state.entity_states if accessible else None
+            )
+        return result
     result = {key: value for key, value in entity.items() if key in PUBLIC_NPC_FIELDS}
     result["narrative_role"] = (
         "major"

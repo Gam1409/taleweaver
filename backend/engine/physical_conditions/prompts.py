@@ -1,6 +1,43 @@
 """Physical events share the existing post-narration extraction request."""
 
 INSTRUCTIONS = """
+ITEM STATE: Use condition_updates kind=item_state for a known item's changed contents,
+inscription, supply, cleanliness, form or another explicitly established mutable property.
+Known items include items and the optional item_state_targets catalog. The latter contains
+visible state-only subjects; it never authorizes transferring, consuming or creating an item.
+part is an extensible stable lowercase property key (letters, digits, underscores; 80 max),
+not a value. Examples: contents, fill_level, wetness, temperature, charge, sharpness.
+Inspect existing item_state records first. Reuse their condition_id for the SAME property,
+even when wording or language changes. Never create synonymous properties for one fact.
+Keep independent properties separate; fullness does not describe the kind of contents.
+Do not enumerate unobserved properties or fill in defaults from common knowledge.
+Existing physical condition records remain authoritative too. Do not restate their
+same fact as another property. When a completed change explicitly resolves an existing
+trace, update that record with its supported operation; do not leave a contradictory trace.
+Keep the existing item ID, intrinsic description, ownership, placement and artwork.
+Use record only for a new dimension, then change with its existing condition_id.
+Never create a replacement item because it became full, empty, dirty, clean, creased,
+smoothed, written on or depleted. These are current states, including negative states;
+do not resolve/remove them. Each dimension is independent: cleaning does not smooth it.
+Use a short EXACT excerpt as detail, from evidence (or player_evidence when supplied).
+Partial states such as half full or a little water remaining are valid. Record exact
+amounts only when explicitly established; never calculate an unknown remainder.
+Contents and supplies here are descriptive facts, not another inventory. Existing
+separately identified components still require their canonical transfer/consumption
+contracts. Do not delete a container when its contents are used up or duplicate them.
+State-only changes need no item action. Never copy obsolete intrinsic-state prose over
+current saved state. Omission leaves every dimension unchanged.
+PLAYER REPORTS: player_report is the current saved user turn, not confirmed world truth.
+It can supply an item fact only after authoritative_resolution and completed_narration
+accept it under the world's rules. Questions, intentions, hypotheticals, denied actions
+and assertions contradicted by the completed outcome are not accepted facts.
+Optionally set player_evidence to an exact, unique excerpt of player_report and detail
+to an exact excerpt of it. Still cite completed_narration in evidence as confirmation
+of that result. Without such confirmation, retain saved state and omit the update.
+Only item_state supports player_evidence; leave it empty for other physical conditions.
+For multiple changes to one dimension, use source order and a distinct occurrence for
+each change. The final accepted state supersedes earlier states; do not restate unchanged facts.
+
 PHYSICAL CONDITIONS: condition_updates is a small list of changes proved by completed_narration.
 Use only current subject IDs in actors/items and exact condition IDs in physical_conditions.
 To record a NEW injury, contamination, fluid trace, pain or other explicit bodily condition,

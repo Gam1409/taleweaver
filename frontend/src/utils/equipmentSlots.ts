@@ -1,8 +1,15 @@
+export interface ItemStateValue {
+  dimension: string
+  detail: string
+  last_changed_minute?: number | null
+}
+
 export interface EquipmentDisplayItem {
   id: string
   name: string
   image_url?: string | null
   description?: string
+  current_state?: ItemStateValue[]
   layer?: number
   uncovered_regions?: string[]
   [key: string]: unknown

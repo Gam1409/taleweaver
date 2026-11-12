@@ -2,18 +2,20 @@
 import { computed, ref, watch } from 'vue'
 import { HeartPulse, Plus, Save } from 'lucide-vue-next'
 
-type Kind = 'injury' | 'contamination' | 'fluid' | 'pain' | 'other'
+type Kind = 'injury' | 'contamination' | 'fluid' | 'pain' | 'other' | 'item_state'
 type Operation = 'record' | 'change' | 'treat' | 'reduce' | 'clean' | 'heal' | 'remove'
 interface Source { kind: string; message_id?: string; quote: string }
 interface Condition {
   id: string; target_id: string; kind: Kind; part: string; detail: string
   status: string; visibility: 'public' | 'private'; origin: Source; latest: Source
   first_recorded_minute?: number | null; last_changed_minute?: number | null
+  reported_by?: Source | null
 }
 interface Ledger {
   revision: number; conditions: Record<string, Condition>
   subjects: { id: string; name: string }[]; error?: string
   archived_resolved: number; archived_events: number
+  events?: { condition_id: string; detail?: string; minute?: number | null }[]
   last_check: { status?: string; reason?: string; rejected?: string[]; accepted?: string[]; proposed_count?: number; minute?: number }
 }
 const props = defineProps<{ data?: Ledger; busy: boolean }>()
@@ -36,13 +38,14 @@ const extractionStats = computed(() => {
   return { proposed: check.proposed_count, applied, rejected: check.proposed_count - applied, minute: check.minute }
 })
 function gameMinute(value?: number | null) { return value == null ? 'unknown' : `${value} game min` }
-const kinds: Kind[] = ['injury', 'contamination', 'fluid', 'pain', 'other']
+const kinds: Kind[] = ['injury', 'contamination', 'fluid', 'pain', 'other', 'item_state']
 const labels: Record<Operation, string> = {
   record: 'Record condition', change: 'Correct description', treat: 'Treat — keep condition',
   reduce: 'Reduce — keep remainder', clean: 'Fully clean', heal: 'Fully heal', remove: 'Fully remove',
 }
 const operations = computed<Operation[]>(() => {
   if (!current.value) return ['record']
+  if (current.value.kind === 'item_state') return ['change']
   if (['injury', 'pain'].includes(current.value.kind)) return ['change', 'treat', 'reduce', 'heal']
   return ['change', 'reduce', ...(current.value.kind === 'other' ? [] : ['clean'] as Operation[]), 'remove']
 })
@@ -117,6 +120,13 @@ function save() {
               <p v-if="row.latest.message_id" class="break-all">Message: {{ row.latest.message_id }}</p>
               <p v-if="row.latest.kind === 'unavailable'">The original message is unavailable in this copy; the saved fact was retained.</p>
               <p v-if="row.origin.message_id && row.origin.message_id !== row.latest.message_id" class="break-all mt-1">First recorded: {{ row.origin.message_id }}</p>
+              <div v-if="row.reported_by" class="mt-2">
+                <p>Player report (accepted by the completed turn): {{ row.reported_by.message_id || 'source unavailable' }}</p>
+                <blockquote class="border-l border-slate-600 pl-2 whitespace-pre-wrap break-words">{{ row.reported_by.quote }}</blockquote>
+              </div>
+              <ol v-if="row.kind === 'item_state'" class="mt-2 space-y-1" aria-label="Recent property history">
+                <li v-for="(event, index) in (data.events || []).filter(event => event.condition_id === row.id && event.detail)" :key="index">{{ gameMinute(event.minute) }}: {{ event.detail }}</li>
+              </ol>
               <p class="mt-1">Game clock — first recorded: {{ gameMinute(row.first_recorded_minute) }}; last changed: {{ gameMinute(row.last_changed_minute) }}. Recording time is not necessarily onset time.</p>
             </details>
           </article>
@@ -126,6 +136,7 @@ function save() {
           <p class="text-xs text-slate-400">Changes affect this session only and are marked as manual. No model call or time advance.</p>
           <label class="state-label">Subject<select v-model="target" aria-label="Subject" class="state-field" :disabled="!!current || busy"><option v-for="subject in data.subjects" :key="subject.id" :value="subject.id">{{ subject.name }} [{{ subject.id }}]</option></select></label>
           <label class="state-label">Kind<select v-model="kind" aria-label="Kind" class="state-field" :disabled="!!current || busy"><option v-for="value in kinds" :key="value" :value="value">{{ value }}</option></select></label>
+          <p v-if="kind === 'item_state'" class="text-xs text-slate-400">Item area is a stable property key, such as contents, fill_level, cleanliness or form. Use lowercase letters, digits and underscores. Reuse existing properties; empty and clean are values.</p>
           <label class="state-label">Body part or item area<input v-model="part" class="state-field" maxlength="80" required :disabled="!!current || busy" /></label>
           <label class="state-label">Operation<select v-model="operation" aria-label="Operation" class="state-field" :disabled="busy || current?.status === 'resolved'"><option v-for="value in operations" :key="value" :value="value">{{ labels[value] }}</option></select></label>
           <label class="state-label">Current detail<textarea v-model="detail" class="state-field min-h-24" maxlength="320" required :disabled="busy || current?.status === 'resolved'" /></label>

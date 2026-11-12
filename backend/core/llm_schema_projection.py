@@ -10,6 +10,7 @@ from typing import Any
 
 from backend.core.llm_schema_choices import prune_unavailable
 from backend.core.llm_schema_merge import SchemaProjectionError, intersect
+from backend.core.llm_schema_values import json_equal
 
 
 @dataclass(frozen=True)
@@ -111,19 +112,70 @@ def _conditional(node: dict | bool, condition: dict, local: set[str]) -> dict:
                 if branch is not False
             ]
         }
-    predicate = condition["if"]
-    fields = predicate.get("properties", {})
-    if len(fields) != 1 or "else" in condition:
-        raise SchemaProjectionError("The conditional requires local schema validation.")
-    field, rule = next(iter(fields.items()))
-    choices = node.get("properties", {}).get(field, {}).get("enum")
-    if "const" not in rule or not choices or predicate.get("required") != [field]:
-        raise SchemaProjectionError("The conditional requires a finite discriminator.")
+    field, expected = _discriminator(condition)
+    properties = node.get("properties", {})
+    if field not in properties and node.get("additionalProperties") is False:
+        return node
+    choices = _finite_choices(properties.get(field, {}))
+    if not choices:
+        raise SchemaProjectionError("The discriminator requires local schema validation.")
     branches = []
     for value in choices:
         branch = intersect(node, {"properties": {field: {"const": value}}})
-        if value == rule["const"]:
+        if json_equal(value, expected):
             branch = intersect(branch, {"required": [field]})
             branch = intersect(branch, _node(condition.get("then", {}), local))
         branches.append(branch)
+    if field not in node.get("required", []) and all(
+        json_equal(value, expected) for value in choices
+    ):
+        if node.get("additionalProperties") is not False:
+            raise SchemaProjectionError(
+                "An optional discriminator requires a closed object schema."
+            )
+        branches.append(intersect(node, {"properties": {field: False}}))
     return {"anyOf": branches}
+
+
+def _discriminator(condition: dict) -> tuple[str, Any]:
+    predicate = condition["if"]
+    if (
+        set(condition) - {"if", "then"}
+        or not isinstance(predicate, dict)
+        or set(predicate) != {"properties", "required"}
+    ):
+        raise SchemaProjectionError("The conditional requires local schema validation.")
+    fields = predicate.get("properties", {})
+    if not isinstance(fields, dict) or len(fields) != 1:
+        raise SchemaProjectionError("The conditional requires local schema validation.")
+    field, rule = next(iter(fields.items()))
+    if not isinstance(rule, dict) or set(rule) != {"const"}:
+        raise SchemaProjectionError("The conditional requires local schema validation.")
+    if predicate.get("required") != [field]:
+        raise SchemaProjectionError("The conditional requires a finite discriminator.")
+    return field, rule["const"]
+
+
+def _finite_choices(rule: dict | bool) -> list[Any]:
+    if rule is False:
+        return []
+    if not isinstance(rule, dict):
+        raise SchemaProjectionError("The conditional requires a finite discriminator.")
+    if "const" in rule:
+        return _scalar_choices([rule["const"]])
+    if "enum" in rule:
+        choices = rule["enum"]
+        if not isinstance(choices, list):
+            raise SchemaProjectionError("The conditional requires a finite discriminator.")
+        return _scalar_choices(choices)
+    if rule.get("type") == "null":
+        return [None]
+    if "anyOf" in rule:
+        return [value for branch in rule["anyOf"] for value in _finite_choices(branch)]
+    raise SchemaProjectionError("The conditional requires a finite discriminator.")
+
+
+def _scalar_choices(choices: list[Any]) -> list[Any]:
+    if any(type(value) not in {str, int, float, bool, type(None)} for value in choices):
+        raise SchemaProjectionError("Composite discriminators require local schema validation.")
+    return choices

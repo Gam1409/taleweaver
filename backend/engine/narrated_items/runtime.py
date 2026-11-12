@@ -31,6 +31,7 @@ from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INS
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
 from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
+from backend.engine.physical_conditions.scope import ItemScope, item_scope
 from backend.engine.scene_continuity import runtime as scene_continuity
 from backend.engine.scene_continuity.prompts import INSTRUCTIONS as SCENE_INSTRUCTIONS
 from backend.engine.scene_staging import shared as shared_staging
@@ -79,6 +80,17 @@ def _identified_actors(manager: Any, rows: list[Any]) -> dict:
     for identifier, actor in actors.items():
         actor.update(identity_facts(identities[identifier]))
     return actors
+
+
+async def _condition_scope(
+    manager: Any, pending: physical_conditions.Pending, rows: list[Any], snapshot: Any, scene: dict
+) -> ItemScope:
+    pending.player_message = await physical_conditions.player_report(
+        manager, str(getattr(manager, "_vn_player_message_id", "") or "")
+    )
+    scope = item_scope(manager, rows, snapshot=snapshot, visible=scene.get("public_subjects", []))
+    pending.item_targets = set(scope.item_ids)
+    return scope
 
 
 @step("items.scene.conditions.reconcile")
@@ -133,6 +145,7 @@ async def reconcile_items(
     actors = _identified_actors(manager, rows)
     snapshot = possession_snapshot(manager, rows)
     scene_context = await scene_continuity.prepare(manager)
+    scope = await _condition_scope(manager, pending_conditions, rows, snapshot, scene_context)
     catalog = evidence.Catalog(
         narration,
         str(scene_context.get("scene_description", "")),
@@ -146,13 +159,21 @@ async def reconcile_items(
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
+            "player_report": pending_conditions.player_message[1]
+            if pending_conditions.player_message
+            else "",
             "actors": actor_context(actors),
             "items": item_context(snapshot.items),
+            **(
+                {"item_state_targets": item_context(scope.additional_items)}
+                if scope.additional_items
+                else {}
+            ),
             "owners": snapshot.owners,
             "movement_context": await narrated_movement.prepare(manager, rows, narration),
             "detailed_clothing": detail_settings(manager)["detailed"],
             "physical_conditions": condition_context(
-                manager.state, set(actors) | set(snapshot.items)
+                manager.state, set(actors) | set(scope.item_ids)
             ),
             "scene_continuity": scene_context,
             "scene_staging": shared_staging.prepare(manager, actors, rows),
@@ -231,7 +252,7 @@ async def reconcile_items(
         state_rejected = 0
         if denied:
             extraction, state_rejected = independent_state.select(
-                manager, extraction, denied, set(actors) | set(snapshot.items)
+                manager, extraction, denied, set(actors) | set(scope.item_ids)
             )
         narrated_movement.complete(
             manager,
@@ -302,7 +323,9 @@ def _finish_extraction(
     if skipped is None or independent_allowed:
         if "condition_updates" in sections.provided:
             pending_conditions.complete(
-                extraction.condition_updates, set(changed) | set(snapshot.items)
+                extraction.condition_updates,
+                set(changed) | pending_conditions.item_targets,
+                item_targets=pending_conditions.item_targets,
             )
         else:
             pending_conditions.error = "The shared response did not confirm condition_updates."

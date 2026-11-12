@@ -9,6 +9,12 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
 
 ## Core Engineering Rules
 
+0. **Neutral Commit Messages (Owner Requirement)**:
+   - Keep commit titles and bodies neutral and technical. Do not mention or imply
+     NSFW, sexual, erotic or adult-content contexts in commit messages, including
+     names of sexual organs and suggestive anatomical references.
+   - Describe the affected contract, behavior, validation or user interface instead.
+
 1. **Clean Code & Modularity (No Monster Files)**:
    - Target module size is **< 400 lines** (max warning threshold: 600 lines).
    - **Never dump new features or monolithic code directly into existing oversized files** (`editor.py`, `gameplay_logic.py`, `templates.py`, `turn_guardrails.py`, `llm_router.py`, etc.).

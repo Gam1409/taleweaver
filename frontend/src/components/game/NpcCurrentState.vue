@@ -25,7 +25,8 @@ const kinds = {
   contamination: 'Contamination',
   fluid: 'Fluid',
   pain: 'Pain',
-  other: 'Physical condition'
+  other: 'Physical condition',
+  item_state: 'Item state'
 }
 const statuses = { active: 'Active', treated: 'Treated', reduced: 'Reduced' }
 </script>

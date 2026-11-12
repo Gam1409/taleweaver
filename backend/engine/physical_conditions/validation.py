@@ -23,6 +23,7 @@ _REASONS = {
     "model_type": "A condition proposal object is required.",
 }
 _RULES = {
+    "Item state requires a stable lowercase property key.",
     "Recording requires target, kind, part and detail, without an existing condition ID.",
     "An update references only its existing condition ID, not a new target or body part.",
     "A description change requires the new detail.",
