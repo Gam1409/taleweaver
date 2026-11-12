@@ -1,4 +1,4 @@
-import { createApp, h, nextTick, ref } from 'vue'
+import { createApp, h, nextTick, ref, watch } from 'vue'
 import '../../src/assets/main.css'
 import 'rpg-awesome/css/rpg-awesome.min.css'
 import ImmersiveHeader from '../../src/components/game/immersive/ImmersiveHeader.vue'
@@ -25,6 +25,7 @@ window.fetch = async (input, options) => {
   requests.push(path)
   const settingsReply = sessionSettingsFixture.respond(path, options?.method || 'GET', typeof options?.body === 'string' ? JSON.parse(options.body) : undefined)
   if (settingsReply) return settingsReply
+  if (path.includes('/illustrations?')) return Response.json({ available: false, reason: 'Image generation is not connected in this preview.', image_url: null })
   if (path.endsWith('/chat/replay')) return replayFailure ? Response.json({ detail: 'Snapshot check unavailable' }, { status: 503 }) : Response.json({ available: true, message_id: 'answer' })
   if (path.endsWith('/versions')) return Response.json({ versions: [{ id: 'original', content: 'The archive is quiet.', origin: 'original' }], current_revision_id: 'original' })
   if (path.endsWith('/chat/regenerate')) return Response.json({ id: 'answer', role: 'assistant', content: 'A soft knock comes from the neighbouring room.\n\nMira: "The letter is waiting on the table."', timestamp: new Date(), narration_correction_applied: true })
@@ -50,7 +51,14 @@ const mapData = {
 
 createApp({
   setup() {
-    const mapOpen = ref(false), sheetOpen = ref(false), settingsOpen = ref(new URLSearchParams(window.location.search).get('panel') === 'settings'), mode = ref<'rpg' | 'vn'>('rpg')
+    const params = new URLSearchParams(window.location.search)
+    const mapOpen = ref(false), sheetOpen = ref(false), settingsOpen = ref(params.get('panel') === 'settings'), mode = ref<'rpg' | 'vn'>(params.get('mode') === 'vn' ? 'vn' : 'rpg')
+    watch(mode, value => { socket.sheet.value = { ...socket.sheet.value!, rule_enforcement_mode: value } }, { immediate: true })
+    function modeHref(value: 'rpg' | 'vn') {
+      const query = new URLSearchParams(params)
+      query.set('mode', value)
+      return '?' + query.toString()
+    }
     const detail = ref<HTMLDialogElement>(), detailTitle = ref('')
     const headerOnly = new URLSearchParams(window.location.search).has('header-only')
     const header = ref<any>({ sceneName: 'The Old Archive', adventureTitle: 'Letters from the Coast', gameTime: { dateShort: 'Day 3', time: '18:42' }, exp: 120, trackedQuest: { title: 'A letter without an address' } })
@@ -77,8 +85,11 @@ createApp({
       setDebug(value: boolean) { socket.sheet.value = { ...socket.sheet.value!, debug_mode: value } },
     } })
     return () => h('main', { class: 'h-dvh flex flex-col bg-slate-950 text-slate-100' }, [
-      h('div', { class: 'h-7 shrink-0 flex items-center justify-between gap-3 border-b border-slate-800 px-4 text-[10px] text-slate-400' }, [
-        h('span', 'Current interface · grouped actions · fictional preview'),
+      h('div', { class: 'min-h-8 shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-800 px-3 py-1 text-[10px] text-slate-400' }, [
+        h('span', { class: 'hidden sm:inline' }, 'Fictional interface preview'),
+        h('nav', { 'aria-label': 'Preview mode', class: 'flex items-center gap-1' }, (['rpg', 'vn'] as const).map(value =>
+          h('a', { href: modeHref(value), 'aria-current': mode.value === value ? 'page' : undefined, class: 'rounded border px-2 py-0.5 ' + (mode.value === value ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-transparent hover:text-slate-100') }, value === 'vn' ? 'Visual mode' : 'RPG')
+        )),
         h('a', { href: '/layouts.html', class: 'text-amber-300 hover:underline' }, 'Design examples'),
       ]),
       h('div', { class: 'flex-1 min-h-0' }, headerOnly ? h(ImmersiveHeader, {
