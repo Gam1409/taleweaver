@@ -39,6 +39,12 @@ try {
     (process.env.FRONTEND_URL || 'http://127.0.0.1:5193') + '/tests/browser/npcPresentation.html'
   )
   const rin = page.locator('[tabindex="0"]').filter({ hasText: 'Dr. Rin' })
+  const hoverPortrait = async () => {
+    await rin.scrollIntoViewIfNeeded()
+    // Finish fixture-page scrolling before hover; scrolling intentionally dismisses thoughts.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await rin.hover()
+  }
   await rin.waitFor()
   await page.getByRole('button', { name: 'Move player here', exact: true }).click()
   assert.equal(
@@ -48,7 +54,7 @@ try {
   assert.equal(await page.getByText(/Works without NPC Personality/).count(), 1)
   assert.equal(await page.getByText('Item and travel checks').count(), 0)
   assert.match(await rin.getAttribute('style'), /12,\s*10,\s*18/)
-  await rin.hover()
+  await hoverPortrait()
   const bubble = page.getByRole('tooltip')
   await bubble.waitFor({ state: 'visible' })
   assert.equal(
@@ -93,10 +99,10 @@ try {
   )
   await page.getByText('Thoughts only', { exact: true }).click()
   assert.doesNotMatch((await rin.getAttribute('style')) || '', /12,\s*10,\s*18/)
-  await rin.hover()
+  await hoverPortrait()
   await bubble.waitFor({ state: 'visible' })
   await page.getByText('Disable effects', { exact: true }).click()
-  await rin.hover()
+  await hoverPortrait()
   await bubble.waitFor({ state: 'hidden' })
   await page.getByLabel('Мысли персонажей', { exact: true }).check()
   await Promise.all([
@@ -115,7 +121,7 @@ try {
   await bubble.waitFor({ state: 'hidden' })
   await page.emulateMedia({ reducedMotion: 'no-preference' })
   const beforeAnimation = calls.length
-  await rin.hover()
+  await hoverPortrait()
   await bubble.waitFor({ state: 'visible' })
   assert.ok(
     await bubble.evaluate(element =>

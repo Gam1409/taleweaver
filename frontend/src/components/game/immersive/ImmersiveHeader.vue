@@ -166,8 +166,8 @@ const emit = defineEmits<{
 }
 @media (max-width: 520px) {
   .game-header {
-    gap: 9px 10px;
-    padding: 11px 12px;
+    gap: 5px 10px;
+    padding: 8px 12px;
   }
   .game-header-title {
     grid-column: 1/-1;

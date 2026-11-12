@@ -251,7 +251,7 @@ function handleExitMouseMove(event: MouseEvent) {
       <div
         v-if="props.sceneExits && props.sceneExits.length > 0"
         ref="exitsContainerRef"
-        class="relative"
+        class="scene-hotspots-anchor relative"
       >
         <button
           type="button"
@@ -284,7 +284,7 @@ function handleExitMouseMove(event: MouseEvent) {
         <Transition name="popover">
           <div
             v-if="showExitsPopover"
-            class="absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-80 md:w-96 max-w-sm bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-3 flex flex-col gap-2"
+            class="scene-hotspots-popover absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-80 md:w-96 max-w-sm bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-3 flex flex-col gap-2"
           >
             <!-- Header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -354,7 +354,7 @@ function handleExitMouseMove(event: MouseEvent) {
       <div
         v-if="props.items && props.items.length > 0"
         ref="discoveriesContainerRef"
-        class="relative"
+        class="scene-hotspots-anchor relative"
       >
         <button
           type="button"
@@ -380,7 +380,7 @@ function handleExitMouseMove(event: MouseEvent) {
         <Transition name="popover">
           <div
             v-if="showDiscoveriesPopover"
-            class="absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-[28rem] md:w-[32rem] max-w-lg bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-3 flex flex-col gap-2"
+            class="scene-hotspots-popover absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-[28rem] md:w-[32rem] max-w-lg bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-3 flex flex-col gap-2"
           >
             <!-- Header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -466,7 +466,7 @@ function handleExitMouseMove(event: MouseEvent) {
       <div
         v-if="props.systemMessages && props.systemMessages.length > 0"
         ref="systemContainerRef"
-        class="relative"
+        class="scene-hotspots-anchor relative"
       >
         <button
           type="button"
@@ -492,7 +492,7 @@ function handleExitMouseMove(event: MouseEvent) {
         <Transition name="popover">
           <div
             v-if="showSystemPopover"
-            class="absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-96 md:w-[32rem] max-w-lg bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl p-3 flex flex-col gap-2"
+            class="scene-hotspots-popover absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-96 md:w-[32rem] max-w-lg bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl p-3 flex flex-col gap-2"
           >
             <!-- Header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -591,6 +591,18 @@ function handleExitMouseMove(event: MouseEvent) {
   vertical-align: middle;
 }
 
+@media (min-width: 768px) {
+  .scene-hotspots-anchor { position: static; }
+  .scene-hotspots-popover { max-width: min(32rem, 100%); }
+}
+@media (max-width: 767px) {
+  .scene-hotspots-popover {
+    left: auto;
+    right: 0;
+    width: calc(100vw - 3rem);
+    max-width: 28rem;
+  }
+}
 /* Popover Transitions */
 .popover-enter-active, .popover-leave-active {
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -611,5 +623,8 @@ function handleExitMouseMove(event: MouseEvent) {
 @keyframes toolTipIn {
   from { opacity: 0; transform: translateY(6px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover-enter-active, .popover-leave-active { transition-duration: .001ms; }
 }
 </style>

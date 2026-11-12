@@ -188,7 +188,7 @@ function isNpcSpeaking(npc: any): boolean {
           <ImagePlus class="w-3.5 h-3.5" />
         </button>
 
-        <div v-if="isNpcSpeaking(npc)" class="absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce">
+        <div v-if="isNpcSpeaking(npc)" class="speaker-badge absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce" title="Speaking">
           Speaking
         </div>
 
@@ -203,7 +203,7 @@ function isNpcSpeaking(npc: any): boolean {
         </div>
 
         <!-- Name & Role Overlay with Gradient & Strong Shadow -->
-        <div class="absolute inset-x-0 bottom-0 pt-8 pb-2 px-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center text-center pointer-events-none z-10">
+        <div class="portrait-caption absolute inset-x-0 bottom-0 pt-8 pb-2 px-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center text-center pointer-events-none z-10">
           <h4 class="text-[11px] sm:text-xs font-black text-white group-hover:text-amber-300 transition-colors uppercase tracking-wider drop-shadow-[0_2px_3px_rgba(0,0,0,1)] truncate w-full">
             {{ npc.name }}
           </h4>
@@ -237,6 +237,27 @@ function isNpcSpeaking(npc: any): boolean {
   gap: 3rem;
   padding: 24px 12px;
   height: max-content;
+}
+@media (max-width: 639px) {
+  .game-character-stage { max-height: 152px; }
+  .emotion-stage { max-height: 168px; }
+  .emotion-portrait { width: 96px; aspect-ratio: 4/5; }
+  .portrait-caption h4 {
+    white-space: normal;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .speaker-badge {
+    width: 9px;
+    height: 9px;
+    top: 12px;
+    right: 10px;
+    padding: 0;
+    font-size: 0;
+    animation: none;
+  }
 }
 @media (min-width: 640px) {
   .game-character-stage { max-height: 100%; }
