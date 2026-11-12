@@ -3,6 +3,8 @@
 from copy import deepcopy
 from typing import Any, Literal
 
+from backend.core.llm_schema_values import json_equal
+
 
 class SchemaProjectionError(ValueError):
     """The wire representation needs a weaker, explicitly reported output mode."""
@@ -79,16 +81,21 @@ def _finite(result: dict, left: dict, right: dict) -> dict | Literal[False]:
 
 
 def _accepts(value: Any, node: dict) -> bool:
-    if "const" in node and (type(value), value) != (type(node["const"]), node["const"]):
+    if "const" in node and not json_equal(value, node["const"]):
         return False
-    if "enum" in node and not any(
-        (type(value), value) == (type(item), item) for item in node["enum"]
-    ):
+    if "enum" in node and not any(json_equal(value, item) for item in node["enum"]):
         return False
-    expected = node.get("type")
-    types = {"null": type(None), "string": str, "boolean": bool, "integer": int}
-    if expected in types and type(value) is not types[expected]:
+    if not _accepts_type(value, node.get("type")):
         return False
     if isinstance(value, str):
         return bool(node.get("minLength", 0) <= len(value) <= node.get("maxLength", len(value)))
     return True
+
+
+def _accepts_type(value: Any, expected: Any) -> bool:
+    if expected == "integer":
+        return type(value) is int or (type(value) is float and bool(value.is_integer()))
+    if expected == "number":
+        return type(value) in {int, float}
+    types = {"null": type(None), "string": str, "boolean": bool, "array": list, "object": dict}
+    return expected not in types or type(value) is types[expected]
