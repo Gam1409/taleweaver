@@ -8,7 +8,11 @@ page.on('pageerror', error => errors.push(error.message))
 page.setDefaultTimeout(10000)
 const base = process.env.FRONTEND_URL || 'http://127.0.0.1:5203'
 const session = () => page.getByRole('button', { name: 'Session', exact: true }).click()
-const closeDetail = () => page.getByRole('button', { name: 'Close preview panel', exact: true }).click()
+const closeDetail = async () => {
+  const settings = page.getByRole('button', { name: 'Close session settings', exact: true })
+  if (await settings.count()) await settings.click()
+  else await page.getByRole('button', { name: 'Close preview panel', exact: true }).click()
+}
 try {
   await page.goto(base + '/tests/browser/groupedActions.html?header-only=1')
   await page.locator('.game-header').waitFor()
