@@ -91,10 +91,10 @@ function openNsfwGate() {
     <Teleport to="body">
       <div
         v-if="showNsfwGate"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+        class="authoring-modal-overlay fixed inset-0 z-[280] flex items-center justify-center bg-black/70 backdrop-blur-sm"
         @click.self="showNsfwGate = false"
       >
-        <div class="w-80 rounded-2xl border border-pink-400/30 bg-slate-950 p-6 shadow-2xl">
+        <div class="authoring-dialog w-80 rounded-2xl border border-pink-400/30 bg-slate-950 p-6 shadow-2xl">
           <h3 class="text-sm font-black text-pink-300 uppercase tracking-widest">Enable NSFW</h3>
           <p class="mt-2 text-xs text-slate-400">
             Type <code class="text-pink-300">NSFW</code> to confirm.

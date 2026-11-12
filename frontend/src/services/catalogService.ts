@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import { createUuid } from '@/utils/uuid'
 import type { CatalogTile } from '@/types'
+import { confirmAction } from './confirmAction'
 
 type CatalogGenerationState = {
   modal_generating: boolean
@@ -86,13 +87,15 @@ class CatalogService {
    * Remove a catalog item by index.
    * Requires user confirmation before deletion.
    */
-  removeItem(type: 'styles' | 'tones', index: number) {
-    if (!confirm('Are you sure you want to delete this item?')) {
-      return
-    }
-
+  async removeItem(type: 'styles' | 'tones', index: number): Promise<boolean> {
     const catalog = type === 'styles' ? this.imageStylesCatalog : this.toneCatalog
-    catalog.value.splice(index, 1)
+    const target = catalog.value[index]
+    if (!target) return false
+    if (!await confirmAction({ title: type === 'styles' ? 'Delete image style' : 'Delete narrative tone', message: `Delete "${target.name}" from this catalog?`, confirmLabel: 'Delete' })) return false
+    const currentIndex = catalog.value.findIndex(item => item.id === target.id)
+    if (currentIndex < 0) return false
+    catalog.value.splice(currentIndex, 1)
+    return true
   }
 
   // ============ CATALOG PERSISTENCE ============

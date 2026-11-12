@@ -6,10 +6,18 @@ import NpcRelationship from './NpcRelationship.vue'
 import NpcCardPreferences from './NpcCardPreferences.vue'
 import NpcNarrativeInsights from './NpcNarrativeInsights.vue'
 import NpcCurrentState from './NpcCurrentState.vue'
+import NpcGeneralOverview from './NpcGeneralOverview.vue'
+import NpcCardOverview from './NpcCardOverview.vue'
+import { History, Layers2, UserRound } from 'lucide-vue-next'
 
-const props = defineProps<{ sessionId: string; npcId: string; stateRevision?: unknown }>()
+const props = defineProps<{ sessionId: string; npcId: string; stateRevision?: unknown; refined?: boolean }>()
 const history = ref<NpcHistoryKind>('general')
-const activeTab = ref<'state' | 'history'>('state')
+const activeTab = ref<'overview' | 'state' | 'history'>(props.refined ? 'overview' : 'state')
+const sections = computed(() => [
+  ...(props.refined ? [{ id: 'overview' as const, label: 'Overview', icon: UserRound }] : []),
+  { id: 'state' as const, label: 'State & clothing', icon: Layers2 },
+  { id: 'history' as const, label: 'History', icon: History }
+])
 const historyPanel = ref<HTMLElement | null>(null)
 watch(
   history,
@@ -22,7 +30,7 @@ watch(
   () => [props.sessionId, props.npcId],
   () => {
     history.value = 'general'
-    activeTab.value = 'state'
+    activeTab.value = props.refined ? 'overview' : 'state'
   },
   { flush: 'sync' }
 )
@@ -50,14 +58,14 @@ const tabId = computed(
 function navigateSections(event: KeyboardEvent): void {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
-  const selected =
+  const index = sections.value.findIndex(section => section.id === activeTab.value)
+  const next =
     event.key === 'Home'
-      ? 'state'
+      ? 0
       : event.key === 'End'
-        ? 'history'
-        : activeTab.value === 'state'
-          ? 'history'
-          : 'state'
+        ? sections.value.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + sections.value.length) % sections.value.length
+  const selected = sections.value[next]!.id
   activeTab.value = selected
   const container = (event.currentTarget as HTMLElement).closest('[role="tablist"]')
   container?.querySelector<HTMLButtonElement>(`[data-section="${selected}"]`)?.focus()
@@ -104,26 +112,27 @@ const categories: Record<string, string> = {
     <div
       role="tablist"
       aria-label="Character details"
-      class="grid shrink-0 grid-cols-2 gap-1 border-b border-white/10 bg-slate-950/40 p-3"
+      class="npc-journal-navigation grid shrink-0 gap-1 border-b border-white/10 bg-slate-950/40 p-3"
+      :class="refined ? 'grid-cols-3' : 'grid-cols-2'"
     >
       <button
-        v-for="tab in ['state', 'history'] as const"
-        :id="`${tabId}-section-${tab}`"
-        :key="tab"
+        v-for="tab in sections"
+        :id="`${tabId}-section-${tab.id}`"
+        :key="tab.id"
         type="button"
         role="tab"
-        :data-section="tab"
-        :aria-selected="activeTab === tab"
-        :aria-controls="`${tabId}-section-${tab}-panel`"
-        :tabindex="activeTab === tab ? 0 : -1"
+        :data-section="tab.id"
+        :aria-selected="activeTab === tab.id"
+        :aria-controls="`${tabId}-section-${tab.id}-panel`"
+        :tabindex="activeTab === tab.id ? 0 : -1"
         class="rounded-lg px-3 py-3 font-semibold focus-visible:outline-amber-300"
         :class="
-          activeTab === tab ? 'bg-amber-400/15 text-amber-100' : 'text-slate-400 hover:bg-white/5'
+          activeTab === tab.id ? 'bg-amber-400/15 text-amber-100' : 'text-slate-400 hover:bg-white/5'
         "
-        @click="activeTab = tab"
+        @click="activeTab = tab.id"
         @keydown="navigateSections"
       >
-        {{ tab === 'state' ? 'State & clothing' : 'History' }}
+        <component :is="tab.icon" v-if="refined" class="mx-auto mb-1 h-4 w-4" aria-hidden="true" />{{ tab.label }}
       </button>
     </div>
     <p v-if="error" role="alert" class="shrink-0 p-4 text-rose-300">
@@ -137,6 +146,9 @@ const categories: Record<string, string> = {
       ref="historyPanel"
       class="npc-history-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5"
     >
+      <section v-if="refined" v-show="activeTab === 'overview'" :id="`${tabId}-section-overview-panel`" role="tabpanel" :aria-labelledby="`${tabId}-section-overview`" tabindex="0">
+        <NpcCardOverview :card="details" :show-indicators="settings.showState.value" />
+      </section>
       <section
         v-show="activeTab === 'state'"
         :id="`${tabId}-section-state-panel`"
@@ -167,8 +179,8 @@ const categories: Record<string, string> = {
           The automatic portrait could not finish. Character information is saved; open Portrait
           options to retry.
         </p>
-        <NpcCurrentState :state="details.current_state" />
-        <details class="rounded-xl border border-slate-700 p-3">
+        <NpcCurrentState :state="details.current_state" :compact="refined" />
+        <details v-if="!refined" class="rounded-xl border border-slate-700 p-3">
           <summary class="cursor-pointer font-semibold">
             Relationships and emotional estimates
           </summary>
@@ -180,6 +192,7 @@ const categories: Record<string, string> = {
           />
         </details>
         <NpcCardPreferences :settings="settings" />
+        <NpcGeneralOverview :entries="details.overview" />
       </section>
       <section
         v-show="activeTab === 'history'"

@@ -13,8 +13,8 @@ const emit = defineEmits<{
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="show" class="fixed inset-0 z-[600] flex items-center justify-center p-12 backdrop-blur-3xl bg-slate-950/90">
-        <div class="modal-content w-full max-w-6xl h-[80vh] bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
+      <div v-if="show" class="authoring-modal-overlay fixed inset-0 z-[600] flex items-center justify-center p-12 backdrop-blur-3xl bg-slate-950/90">
+        <div class="authoring-dialog modal-content w-full max-w-6xl h-[80vh] bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
           <div class="p-8 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
             <div class="flex items-center gap-4">
               <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">

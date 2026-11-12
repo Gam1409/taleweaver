@@ -1,0 +1,126 @@
+import assert from 'node:assert/strict'
+import process from 'node:process'
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] })
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' })
+page.setDefaultTimeout(10000)
+const errors = []
+page.on('pageerror', error => errors.push(error.message))
+const base = process.env.FRONTEND_URL || 'http://127.0.0.1:5203'
+const dialog = () => page.getByRole('dialog', { name: 'Session settings', exact: true })
+const tab = name => dialog().getByRole('tab', { name, exact: false })
+const open = async () => {
+  await page.getByRole('button', { name: 'Session', exact: true }).click()
+  await page.getByRole('menuitem', { name: /Session settings/ }).click()
+  await dialog().waitFor()
+}
+const bounds = async () => {
+  const box = await dialog().boundingBox()
+  const viewport = page.viewportSize()
+  assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height)
+  const save = await dialog().getByRole('button', { name: 'Save Settings', exact: true }).boundingBox()
+  assert.ok(save.y >= box.y && save.y + save.height <= box.y + box.height)
+  assert.equal(await dialog().evaluate(node => node.scrollWidth <= node.clientWidth), true)
+  assert.equal(await page.getByRole('tabpanel').count(), 1)
+  assert.equal(await dialog().evaluate(node => {
+    const workspace = node.querySelector('.settings-workspace').getBoundingClientRect()
+    return ['.settings-navigation', '.settings-content'].every(selector => {
+      const region = node.querySelector(selector).getBoundingClientRect()
+      return region.height > 0 && region.top >= workspace.top - 1 && region.bottom <= workspace.bottom + 1
+    })
+  }), true, 'Navigation and content must remain inside the space above the fixed footer')
+}
+const sectionSpacing = async () => {
+  const boxes = await page.getByRole('tabpanel').locator('.settings-widget, details').evaluateAll(nodes =>
+    nodes.filter(node => !nodes.some(other => other !== node && other.contains(node)))
+      .map(node => node.getBoundingClientRect()).filter(box => box.height > 0)
+      .map(box => ({ top: box.top, bottom: box.bottom }))
+  )
+  assert.ok(boxes.length >= 3)
+  for (let index = 1; index < boxes.length; index++) assert.ok(boxes[index].top - boxes[index - 1].bottom >= 16, 'Settings cards need a consistent gap, including components with multiple roots.')
+}
+try {
+  await page.goto(base + '/tests/browser/groupedActions.html?panel=settings')
+  await dialog().getByLabel('Amount of narration').waitFor()
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await sectionSpacing()
+    await page.getByRole('tabpanel').locator('details').first().evaluate(node => { node.open = true })
+    await sectionSpacing()
+    await page.getByRole('tabpanel').locator('details').first().evaluate(node => { node.open = false })
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  assert.equal(await dialog().getByRole('tab').count(), 3)
+  await page.waitForFunction(() => document.querySelector('[aria-label="Portrait presentation"] input')?.disabled === false)
+  const initialRequests = await page.evaluate(() => window.groupedActionsFixture.requests.length)
+  await dialog().getByLabel('Amount of narration').selectOption('rich')
+  await tab('Memory & audio').click()
+  await dialog().getByLabel('Narrator Turn Memory', { exact: true }).fill('100')
+  assert.equal(await dialog().getByLabel('Memory turns', { exact: true }).inputValue(), '100')
+  await dialog().getByLabel('Narrator Turn Memory', { exact: true }).fill('1')
+  assert.equal(await dialog().getByLabel('Memory turns', { exact: true }).inputValue(), '1')
+  await dialog().getByLabel('Narrator Turn Memory', { exact: true }).fill('27')
+  await dialog().getByRole('checkbox', { name: /^Auto-Speak Characters/ }).uncheck()
+  await tab('Characters').click()
+  await dialog().getByLabel(/Glow brightness/).fill('75')
+  await tab('Story & world').click()
+  assert.equal(await dialog().getByLabel('Amount of narration').inputValue(), 'rich')
+  await tab('Memory & audio').click()
+  assert.equal(await dialog().getByLabel('Narrator Turn Memory', { exact: true }).inputValue(), '27')
+  assert.equal(await dialog().getByRole('checkbox', { name: /^Auto-Speak Characters/ }).isChecked(), false)
+  await tab('Characters').click()
+  assert.equal(await dialog().getByLabel(/Glow brightness/).inputValue(), '75')
+  assert.equal(await page.evaluate(() => window.groupedActionsFixture.requests.length), initialRequests, 'Switching tabs must retain mounted forms without fetching again')
+  await tab('Characters').focus()
+  await page.keyboard.press('Home')
+  assert.equal(await tab('Story & world').getAttribute('aria-selected'), 'true')
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await tab('Memory & audio').getAttribute('aria-selected'), 'true')
+  await page.keyboard.press('End')
+  assert.equal(await tab('Characters').getAttribute('aria-selected'), 'true')
+  // A save error in a collapsed form on another tab must become visible.
+  await page.evaluate(() => window.groupedActionsFixture.failSettingsSave('dynamic-locations'))
+  await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('[role="alert"]')?.textContent?.includes('Could not save exploration settings.'))
+  assert.equal(await tab('Story & world').getAttribute('aria-selected'), 'true')
+  assert.equal(await dialog().getByRole('alert').isVisible(), true)
+  assert.equal(await page.evaluate(() => window.groupedActionsFixture.events.some(value => value.startsWith('settings:save:'))), false)
+  await page.evaluate(() => window.groupedActionsFixture.failSettingsSave(''))
+  await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
+  await dialog().waitFor({ state: 'hidden' })
+  const saved = await page.evaluate(() => window.groupedActionsFixture.events.find(value => value.startsWith('settings:save:')))
+  assert.deepEqual(JSON.parse(saved.slice('settings:save:'.length)), { turns: 27, enableCompression: true, autoSpeakNarration: true, autoSpeakDialogues: false })
+  const writes = await page.evaluate(() => window.groupedActionsFixture.settingsWrites)
+  assert.deepEqual(writes.map(item => item.endpoint), ['narrator-settings', 'dynamic-locations', 'dynamic-locations', 'portrait-settings', 'session-visual-presets'])
+  assert.equal(writes.find(item => item.endpoint === 'portrait-settings').body.settings.brightness, 75)
+  await open()
+  await tab('Memory & audio').click()
+  assert.equal(await dialog().getByLabel('Narrator Turn Memory', { exact: true }).inputValue(), '27')
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 })
+    for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
+      await tab(name).click()
+      await bounds()
+    }
+  }
+  for (const [width, height] of [[720, 450], [844, 390], [320, 400]]) {
+    await page.setViewportSize({ width, height })
+    for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
+      await tab(name).click()
+      await bounds()
+    }
+  }
+  await page.keyboard.press('Escape')
+  await dialog().waitFor({ state: 'hidden' })
+  await page.evaluate(() => window.groupedActionsFixture.setMode('vn'))
+  await open()
+  await dialog().locator('summary').filter({ hasText: /^Visual novel narration$/ }).click()
+  await dialog().getByRole('radio', { name: /^Brisk/ }).waitFor()
+  await tab('Characters').click()
+  await dialog().locator('summary').filter({ hasText: /^NPC Personality/ }).waitFor()
+  await bounds()
+  await dialog().getByRole('button', { name: 'Cancel', exact: true }).click()
+  await dialog().waitFor({ state: 'hidden' })
+  assert.deepEqual(errors, [])
+  console.log('PASS: settings sections, draft retention, keyboard navigation, save failure/retry, original payload, mode gates and responsive bounds.')
+} finally { await browser.close() }

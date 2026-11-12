@@ -74,7 +74,7 @@ async function suggest() {
   </button>
   <Teleport to="body">
     <dialog ref="dialog" aria-label="NPC personality details" @cancel.prevent="close"
-      class="m-auto w-[calc(100%_-_2rem)] max-w-2xl max-h-[85dvh] overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 text-slate-200 shadow-2xl backdrop:bg-slate-950/75 backdrop:backdrop-blur-sm">
+      class="authoring-dialog m-auto w-[calc(100%_-_2rem)] max-w-2xl max-h-[85dvh] overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 text-slate-200 shadow-2xl backdrop:bg-slate-950/75 backdrop:backdrop-blur-sm">
       <header class="flex items-center justify-between gap-4">
         <h3 class="text-lg font-black text-emerald-400">Personality details</h3>
         <button type="button" @click="close" aria-label="Close personality details" class="rounded-lg px-3 py-2 hover:bg-white/10">✕</button>

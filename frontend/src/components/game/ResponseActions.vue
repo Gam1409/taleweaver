@@ -6,7 +6,7 @@ import { useGameSocket } from '@/composables/useGameSocket'
 import RegenerateMessageButton from './RegenerateMessageButton.vue'
 import { isReplayBoundary, isStoryMessage } from '@/utils/storyMessages'
 
-const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean }>()
+const props = defineProps<{ gameId?: string; disabled?: boolean; compact?: boolean; menu?: boolean }>()
 const socket = useGameSocket()
 const latest = computed(() => [...socket.messages.value].reverse().find(isReplayBoundary))
 const busy = computed(() => props.disabled || socket.inputLocked.value || ['connecting', 'loading'].includes(socket.status.value) || !!socket.sheet.value?.agent_active)
@@ -60,22 +60,22 @@ async function undo() {
 </script>
 
 <template>
-  <div class="flex items-center gap-2" :class="compact ? 'shrink-0' : 'flex-wrap p-2'" aria-label="Response actions">
-    <RegenerateMessageButton :game-id="gameId" :disabled="disabled" :compact="compact" show-label />
-    <button type="button" :disabled="busy || !available" :title="reason"
+  <div class="flex" :class="menu ? 'flex-col items-stretch' : compact ? 'items-center gap-2 shrink-0' : 'items-center gap-2 flex-wrap p-2'" aria-label="Response actions">
+    <RegenerateMessageButton :game-id="gameId" :disabled="disabled" :compact="compact" :menu="menu" show-label />
+    <button type="button" :role="menu ? 'menuitem' : undefined" :disabled="busy || !available" :title="reason"
       class="flex shrink-0 items-center gap-2 border text-xs text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
-      :class="compact ? 'rounded-xl border-slate-700/80 bg-slate-900/90 px-3 py-1.5 font-bold hover:border-amber-400' : 'rounded-lg border-slate-600 px-3 py-2'"
+      :class="menu ? 'action-menu-item' : compact ? 'rounded-xl border-slate-700/80 bg-slate-900/90 px-3 py-1.5 font-bold hover:border-amber-400' : 'rounded-lg border-slate-600 px-3 py-2'"
       @click="replay">
-      <RotateCcw :size="15" /> <span :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Regenerate' : 'Regenerate turn' }}</span>
+      <RotateCcw :size="15" :class="{ 'text-amber-400': menu }" /><span v-if="menu" class="action-menu-copy"><span class="action-menu-title">Regenerate turn</span><span class="action-menu-description">Repeat the action and its consequences</span></span><span v-else :class="{ 'uppercase tracking-wider': compact }">{{ compact ? 'Regenerate' : 'Regenerate turn' }}</span>
     </button>
-    <button v-if="socket.sheet.value?.debug_mode" type="button" :disabled="!canUndo" :title="available ? 'Undo the whole last turn and its consequences.' : 'Use a Chronicles checkpoint for older turns.'"
-      class="flex shrink-0 items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-200 disabled:opacity-40 disabled:cursor-not-allowed"
+    <button v-if="socket.sheet.value?.debug_mode" type="button" :role="menu ? 'menuitem' : undefined" :disabled="!canUndo" :title="available ? 'Undo the whole last turn and its consequences.' : 'Use a Chronicles checkpoint for older turns.'"
+      class="flex shrink-0 items-center gap-2 text-xs text-rose-200 disabled:opacity-40 disabled:cursor-not-allowed" :class="menu ? 'action-menu-item' : 'rounded-lg border border-rose-500/40 px-3 py-1.5'"
       @click="undo">
-      <Undo2 :size="15" /> Undo turn
+      <Undo2 :size="15" :class="{ 'text-rose-300': menu }" /><span v-if="menu" class="action-menu-copy"><span class="action-menu-title text-rose-200">Undo turn</span><span class="action-menu-description">Remove the last action and its outcome</span></span><span v-else>Undo turn</span>
     </button>
-    <span v-if="!compact && !available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
-    <button v-if="checkFailed" type="button" :disabled="busy || checking"
-      class="flex items-center gap-1 rounded-lg border border-amber-400/40 px-3 py-1.5 text-xs text-amber-200 disabled:opacity-40"
+    <span v-if="!compact && !menu && !available && !busy" class="text-xs text-slate-400">{{ reason }}</span>
+    <button v-if="checkFailed" type="button" :role="menu ? 'menuitem' : undefined" data-menu-keep-open :disabled="busy || checking"
+      class="flex items-center gap-1 text-xs text-amber-200 disabled:opacity-40" :class="menu ? 'action-menu-item' : 'rounded-lg border border-amber-400/40 px-3 py-1.5'"
       @click="checkTurn">
       <RotateCcw :size="13" /> Retry turn check
     </button>

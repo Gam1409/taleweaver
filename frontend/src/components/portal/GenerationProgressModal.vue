@@ -228,8 +228,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in font-ui">
-    <div class="w-full max-w-2xl h-[80vh] flex flex-col rounded-2xl bg-[#070e17]/95 border border-white/10 shadow-[0_0_50px_rgba(56,189,248,0.15)] overflow-hidden">
+  <div class="workspace-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in font-ui">
+    <div class="workspace-dialog w-full max-w-2xl h-[80vh] flex flex-col rounded-2xl bg-[#070e17]/95 border border-white/10 shadow-[0_0_50px_rgba(56,189,248,0.15)] overflow-hidden">
       <!-- Modal Header -->
       <div class="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#0a1424]">
         <div>

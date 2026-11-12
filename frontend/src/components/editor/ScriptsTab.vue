@@ -453,14 +453,15 @@ async function saveScript() {
       </div>
     </div>
 
+    <Teleport to="body">
     <!-- Script Editor Modal -->
     <div
       v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+      class="authoring-modal-overlay fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
       @click="closeModal"
     >
       <div
-        class="bg-slate-900 border border-white/15 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto"
+        class="authoring-dialog bg-slate-900 border border-white/15 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto"
         @click.stop
       >
         <!-- Modal Header -->
@@ -725,11 +726,11 @@ async function saveScript() {
     <!-- Delete Confirmation Modal -->
     <div
       v-if="showDeleteConfirmModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+      class="authoring-modal-overlay fixed inset-0 z-[210] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
       @click="showDeleteConfirmModal = false"
     >
       <div
-        class="bg-slate-900 border border-white/15 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4"
+        class="authoring-dialog bg-slate-900 border border-white/15 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4"
         @click.stop
       >
         <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
@@ -759,5 +760,6 @@ async function saveScript() {
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>

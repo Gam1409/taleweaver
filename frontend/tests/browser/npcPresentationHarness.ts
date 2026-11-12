@@ -11,6 +11,7 @@ import type { PortraitPreferences } from '../../src/utils/npcPresentation'
 createApp({
   setup() {
     const preferences = ref<PortraitPreferences>({ emotion_palette: true, character_thoughts: true, brightness: 40 })
+    Object.assign(window, { npcPresentationFixture: { setMaximum() { for (const cue of Object.values(cues)) cue.intensity = 100; preferences.value = { emotion_palette: true, character_thoughts: true, brightness: 100 } } } })
     const thoughtsOnly = () => { preferences.value = { ...preferences.value, emotion_palette: false, character_thoughts: true } }
     const off = () => { preferences.value = { ...preferences.value, character_thoughts: false, emotion_palette: false } }
     const settings = ref<InstanceType<typeof SessionPortraitSettings> | null>(null)

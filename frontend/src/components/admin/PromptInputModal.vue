@@ -48,9 +48,9 @@ const handleGenerate = () => {
 
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div v-if="isOpen" class="workspace-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/85 backdrop-blur-sm" @click="emit('close')"></div>
-      <div class="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-fade-in">
+      <div class="workspace-dialog relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-fade-in">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
           <div>

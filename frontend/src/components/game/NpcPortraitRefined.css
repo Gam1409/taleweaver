@@ -1,0 +1,158 @@
+.npc-card-refined {
+  width: min(1060px, calc(100% - 32px));
+  height: min(800px, 92dvh);
+  border-color: #334155;
+  border-radius: 17px;
+  background: #0c1321;
+}
+.npc-card-refined > div > header {
+  padding: 22px 25px 19px;
+  border-color: #283449;
+  background: #0a111e;
+}
+.npc-card-refined :deep(h2) {
+  font-weight: 600;
+  font-size: 21px;
+}
+.npc-card-refined .npc-card-workspace {
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+.npc-card-refined .npc-profile {
+  padding: 20px;
+  border-color: #283449;
+}
+.npc-card-refined .npc-profile img {
+  height: 210px;
+  border-radius: 11px;
+}
+.npc-card-refined [data-empty-portrait] {
+  height: 152px;
+  border: 1px dashed #334155;
+}
+.npc-card-refined [data-profile-description] {
+  display: none;
+}
+.npc-card-refined .npc-profile > section {
+  margin-top: 20px;
+}
+.npc-card-refined .npc-profile :deep(h3) {
+  font-weight: 600;
+}
+.npc-card-refined .npc-profile button {
+  font-weight: 500;
+  background: #d4b06d;
+}
+.npc-card-refined .npc-profile details {
+  margin-top: 20px;
+  border-color: #283449;
+}
+.npc-card-refined :deep(.npc-journal-navigation) {
+  padding: 13px 18px;
+  background: #0a111e;
+}
+.npc-card-refined :deep(.npc-journal-navigation button) {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 7px;
+}
+.npc-card-refined :deep(.npc-journal-navigation [aria-selected='true']) {
+  background: #d4b06d12;
+  color: #ddc394;
+  box-shadow: inset 0 0 0 1px #8c764648;
+}
+.npc-card-refined :deep(.npc-history-scroll) {
+  padding: 24px;
+}
+.npc-card-refined :deep(.npc-card-overview > section:first-child) {
+  padding-bottom: 5px;
+}
+.npc-card-refined :deep(.npc-card-overview > section:first-child p:last-child) {
+  line-height: 1.8;
+}
+.npc-card-refined :deep(.npc-current-state) {
+  grid-template-columns: minmax(0, 290px) minmax(0, 1fr);
+}
+.npc-card-refined :deep(.equipment-silhouette) {
+  height: 350px;
+  border-radius: 13px;
+}
+.npc-card-refined
+  :deep(.equipment-silhouette[data-hide-empty='true'] [data-slot-occupied='false']) {
+  display: none;
+}
+.npc-card-refined :deep([aria-label='Physical condition'] li) {
+  border-color: #334155;
+  background: #111c2d;
+}
+.npc-card-refined :deep([aria-label='Physical condition'] li p) {
+  font-weight: 400;
+}
+.npc-card-refined :deep([aria-label='Physical condition'] li .text-rose-200) {
+  color: #c3cfdd;
+}
+.npc-card-refined :deep([aria-label='Attitude toward your character']) {
+  background: #111a2a;
+  border-color: #2e3c50;
+}
+.npc-card-refined > div > footer {
+  padding: 10px 24px;
+  border-color: #283449;
+  background: #0a111e;
+}
+.npc-card-refined > div > footer button {
+  font-size: 12px;
+  padding: 7px 17px;
+  border-color: #344258;
+  border-radius: 8px;
+}
+@media (max-width: 900px) {
+  .npc-card-refined :deep(.npc-current-state) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .npc-card-refined :deep(.equipment-silhouette) {
+    max-width: 340px;
+  }
+}
+@media (max-width: 639px) {
+  .npc-card-refined {
+    width: calc(100% - 20px);
+    height: 94dvh;
+    max-height: 94dvh;
+    border-radius: 13px;
+  }
+  .npc-card-refined > div > header {
+    padding: 15px 17px;
+  }
+  .npc-card-refined .npc-card-workspace {
+    display: flex;
+  }
+  .npc-card-refined .npc-profile {
+    padding: 15px 17px;
+    grid-template-columns: 90px minmax(0, 1fr);
+    max-height: 27dvh;
+  }
+  .npc-card-refined [data-empty-portrait],
+  .npc-card-refined .npc-profile img {
+    height: 105px;
+  }
+  .npc-card-refined .npc-profile > section {
+    margin-top: 0;
+  }
+  .npc-card-refined .npc-profile button {
+    padding: 7px;
+    font-size: 10px;
+  }
+  .npc-card-refined .npc-profile details {
+    margin-top: 0;
+  }
+  .npc-card-refined :deep(.npc-journal-navigation) {
+    padding: 9px;
+  }
+  .npc-card-refined :deep(.npc-journal-navigation button) {
+    font-size: 10px;
+    padding: 8px 3px;
+  }
+  .npc-card-refined :deep(.npc-history-scroll) {
+    padding: 18px 16px;
+  }
+}

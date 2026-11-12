@@ -79,8 +79,8 @@ async function save() {
 
 <template>
   <Teleport to="body">
-    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="new-npc-title" tabindex="-1" class="fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" @click.self="!saving && emit('close')">
-      <div class="max-h-[90dvh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 shadow-2xl">
+    <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="new-npc-title" tabindex="-1" class="authoring-modal-overlay fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" @click.self="!saving && emit('close')">
+      <div class="authoring-dialog max-h-[90dvh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 shadow-2xl">
         <header class="flex items-center justify-between gap-4"><h2 id="new-npc-title" class="flex items-center gap-2 text-lg font-black text-white"><Plus class="h-5 w-5 text-emerald-400" />New NPC</h2><button type="button" aria-label="Close new NPC" :disabled="saving" @click="emit('close')" class="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-50"><X class="h-5 w-5" /></button></header>
         <p class="text-sm text-slate-400">Describe a character, their personality, clothes and any belongings. Generate a draft, review it, then save the character and selected items together. Uses the Small / Utility model.</p>
         <fieldset :disabled="busy || saving || !validScene" class="space-y-4">

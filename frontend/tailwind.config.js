@@ -4,10 +4,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Acme', 'sans-serif'],
+        display: ['var(--session-font, "Acme")', 'sans-serif'],
         narrative: ['Newsreader', 'serif'],
-        ui: ['Acme', 'sans-serif'],
-        sans: ['Acme', 'sans-serif'], // Default to UI font
+        ui: ['var(--session-font, "Acme")', 'sans-serif'],
+        sans: ['var(--session-font, "Acme")', 'sans-serif'],
       },
       fontSize: {
         'xxs': ['0.75rem', { lineHeight: '1rem' }],    // 12px

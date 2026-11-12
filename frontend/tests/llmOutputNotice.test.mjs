@@ -33,8 +33,8 @@ test('native and cloud connections do not promise universal schema enforcement',
   }
 })
 
-test('notice belongs to connection settings outside collapsed generation options', () => {
+test('connection settings omit the technical compatibility notice', () => {
   const parent = readFileSync(new URL('../src/components/admin/RoleGenerationSettings.vue', import.meta.url), 'utf8')
-  assert.ok(parent.indexOf('<LlmOutputNotice') < parent.indexOf('<details'))
+  assert.doesNotMatch(parent, /LlmOutputNotice/)
   assert.doesNotMatch(source, /notificationService|useNotifications|emit\(/)
 })

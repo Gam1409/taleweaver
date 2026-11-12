@@ -12,6 +12,7 @@ defineProps<{
   busy: boolean
   error: string
   updated: boolean
+  refined?: boolean
 }>()
 const emit = defineEmits<{
   closeDirectory: []
@@ -32,6 +33,7 @@ const emit = defineEmits<{
     v-if="npc"
     :session-id="sessionId"
     :npc="npc"
+    :refined="refined"
     :state-revision="stateRevision"
     :busy="busy"
     :error="error"

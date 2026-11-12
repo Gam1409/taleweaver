@@ -48,8 +48,8 @@ onBeforeUnmount(() => { disposed = true; document.body.style.overflow = previous
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" @click.self="emit('close')">
-      <section ref="dialog" role="dialog" aria-modal="true" aria-labelledby="concordia-title" class="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl" @keydown="trap" @keydown.esc="emit('close')">
+    <div class="authoring-modal-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" @click.self="emit('close')">
+      <section ref="dialog" role="dialog" aria-modal="true" aria-labelledby="concordia-title" class="authoring-dialog flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl" @keydown="trap" @keydown.esc="emit('close')">
         <header class="flex items-center justify-between border-b border-white/10 px-5 py-4 sm:px-7">
           <div class="flex items-center gap-3"><Globe2 class="h-6 w-6 text-cyan-400" /><div><h2 id="concordia-title" class="text-lg font-black text-white">Living World</h2><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/70">Concordia · Experimental</p></div></div>
           <button type="button" aria-label="Close Living World" class="rounded-xl p-2 text-white/50 transition hover:bg-white/10 hover:text-white" @click="emit('close')"><X class="h-5 w-5" /></button>

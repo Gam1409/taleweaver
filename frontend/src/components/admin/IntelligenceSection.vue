@@ -359,7 +359,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
     </div>
 
     <!-- Filter Sub-Tabs -->
-    <div class="flex items-center gap-1.5 p-1.5 bg-slate-900/70 border border-slate-800 rounded-2xl overflow-x-auto">
+    <nav aria-label="Intelligence sections" class="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-900/70 border border-slate-800 rounded-2xl">
       <button
         @click="activeTab = 'all'"
         :class="[
@@ -419,7 +419,7 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
         <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
         Local Endpoints & Memory
       </button>
-    </div>
+    </nav>
 
     <!-- PASS 1: MECHANICS (Simple Model) -->
     <div

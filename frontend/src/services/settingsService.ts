@@ -7,6 +7,7 @@ import { normalizeSampling } from '@/services/llmSampling'
 import { normalizeParallel } from '@/services/llmParallel'
 import type { OllamaRole } from '@/services/ollamaRoleSettings'
 import { refreshConfig } from '@/store/config'
+import { confirmAction } from './confirmAction'
 
 /**
  * SettingsService manages all admin configuration:
@@ -383,7 +384,7 @@ class SettingsService {
    * Requires user confirmation before deletion.
    */
   async deleteApiKey(provider: string) {
-    if (!confirm(`Are you sure you want to remove the API key for ${provider}? This will stop related AI services from functioning.`)) {
+    if (!await confirmAction({ title: 'Remove provider key', message: `Remove the API key for ${provider}? Models requiring this key will stop functioning.`, confirmLabel: 'Remove key' })) {
       return
     }
 

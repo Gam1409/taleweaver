@@ -1,0 +1,107 @@
+[
+  {
+    "id": "application",
+    "source": "LICENSE",
+    "sha256": "2774a4f857c156ec50fca421c94848c33057e1743978e771f1ae551b70d9faec"
+  },
+  {
+    "id": "samples",
+    "source": "LICENSE-CC-BY-NC-4.0",
+    "sha256": "6a863df92769fae449086c55ac4c928127921be312bc3376295aa23af562d3ed"
+  },
+  {
+    "id": "acme",
+    "source": "frontend/public/assets/fonts/licenses/ACME-LICENSE.txt",
+    "sha256": "1fc56f4ea15b4421a2e467197ec985cda92bfd3db4d145835f1735eedd1237d1"
+  },
+  {
+    "id": "newsreader",
+    "source": "frontend/public/assets/fonts/licenses/NEWSREADER-LICENSE.txt",
+    "sha256": "26028ec4e13b650065fa525a09532176f8a668b76ff849ea01c564a7480f91e7"
+  },
+  {
+    "id": "orbitron",
+    "source": "frontend/public/assets/fonts/licenses/ORBITRON-LICENSE.txt",
+    "sha256": "c857b511bfc98c65d8140bba69b3e68943efc96216b6c612b62eac04c6eac803"
+  },
+  {
+    "id": "press-start-2p",
+    "source": "frontend/public/assets/fonts/licenses/PRESS-START-2P-LICENSE.txt",
+    "sha256": "98e451fe911e5ee4a1a45359535dc30ea7df28b8d9a9cd1f741778efab1387ee"
+  },
+  {
+    "id": "rpg-awesome",
+    "source": "frontend/public/assets/fonts/licenses/RPG-AWESOME-LICENSE.md",
+    "sha256": "c45aed04a3e83b3828d2c71c9e1260af0b9d6d9f41f7f42e9f24d76eb748d464"
+  },
+  {
+    "id": "alegreya-sans",
+    "source": "frontend/public/assets/fonts/session/alegreya-sans/OFL.txt",
+    "sha256": "0677891e6a143f297350d260ad766ad33bfc18ed5fa4f213acf648d6b597ec1a"
+  },
+  {
+    "id": "baloo-bhaijaan-2",
+    "source": "frontend/public/assets/fonts/session/baloo-bhaijaan-2/OFL.txt",
+    "sha256": "ad09b05dc8bc678c9daf7c4c5f7ef1f55e5726127f4330b2e98e40b9dffcb860"
+  },
+  {
+    "id": "m-plus-rounded-1c",
+    "source": "frontend/public/assets/fonts/session/m-plus-rounded-1c/OFL.txt",
+    "sha256": "64a7bd79d7e69545e66d003153e7e4999910cbb15249a19ae2a49c472637c7e0"
+  },
+  {
+    "id": "noto-sans-sc",
+    "source": "frontend/public/assets/fonts/session/noto-sans-sc/OFL.txt",
+    "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+  },
+  {
+    "id": "noto-sans-tc",
+    "source": "frontend/public/assets/fonts/session/noto-sans-tc/OFL.txt",
+    "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+  },
+  {
+    "id": "noto-sans-kr",
+    "source": "frontend/public/assets/fonts/session/noto-sans-kr/OFL.txt",
+    "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+  },
+  {
+    "id": "vue",
+    "source": "npm:vue@3.5.45/LICENSE",
+    "sha256": "1bb85cc9b13b81ef41c81c51866172fc345e0503c86726a6755b796590b70175"
+  },
+  {
+    "id": "vue-router",
+    "source": "npm:vue-router@4.6.4/LICENSE",
+    "sha256": "91a2845c4db44e7497b514b98634a674c737986ad0db81599307cf733bf850b2"
+  },
+  {
+    "id": "lucide-vue-next",
+    "source": "npm:lucide-vue-next@1.0.0/LICENSE",
+    "sha256": "668dcc52803480e0a026b31140a4cae668772663cd764e5991d252eef03f98db"
+  },
+  {
+    "id": "dompurify",
+    "source": "npm:dompurify@3.4.17/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "id": "dagre",
+    "source": "npm:dagre@0.8.5/LICENSE",
+    "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+  },
+  {
+    "id": "roughjs",
+    "source": "npm:roughjs@4.6.6/LICENSE",
+    "sha256": "dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d"
+  },
+  {
+    "id": "pixi.js",
+    "source": "npm:pixi.js@8.22.0/LICENSE",
+    "sha256": "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473"
+  },
+  {
+    "id": "dompurify-mpl",
+    "source": "npm:dompurify/LICENSE-MPL",
+    "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+  }
+]

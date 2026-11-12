@@ -44,7 +44,7 @@ test('saving untouched unchecked controls establishes exclusive policies for eve
   assert.match(cards, /parallel_requests: parallelForSave\(localForm\.value\.parallel_requests\)/)
 })
 
-test('each connection renders an accessible bounded control outside collapsed generation options', () => {
+test('each connection keeps its bounded parallel control inside general settings', () => {
   const file = readFileSync(new URL('../src/components/admin/RoleParallelSettings.vue', import.meta.url), 'utf8')
   const { descriptor, errors } = parse(file)
   assert.deepEqual(errors, [])
@@ -56,7 +56,9 @@ test('each connection renders an accessible bounded control outside collapsed ge
   assert.match(file, /:for="`parallel-\$\{role\}`"/)
   assert.match(file, /world changes are applied sequentially/)
   const parent = readFileSync(new URL('../src/components/admin/RoleGenerationSettings.vue', import.meta.url), 'utf8')
-  assert.ok(parent.indexOf('<RoleParallelSettings') < parent.indexOf('<details'))
+  assert.match(parent, /<details[^>]*:data-general-role="role"[\s\S]*?<summary[^>]*>General settings<\/summary>[\s\S]*?<RoleParallelSettings[\s\S]*?<\/details>/)
+  assert.equal((parent.match(/<details\b/g) || []).length, 1)
+  assert.doesNotMatch(parent, />Generation settings<\/summary>/)
   const cards = readFileSync(new URL('../src/components/admin/IntelligenceSection.vue', import.meta.url), 'utf8')
   assert.equal(cards.match(/<RoleGenerationSettings\s/g).length, 5)
 })
