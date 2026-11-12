@@ -1,5 +1,9 @@
 import { createApp, h, nextTick, ref } from 'vue'
 import '../../src/assets/main.css'
+import ImmersiveHeader from '../../src/components/game/immersive/ImmersiveHeader.vue'
+import { configState } from '../../src/store/config'
+import { audioService } from '../../src/services/audioService'
+import { updateNpcBehaviorStatus } from '../../src/composables/useNpcBehaviorStatus'
 import ImmersiveGameView from '../../src/components/game/ImmersiveGameView.vue'
 import MapModal from '../../src/components/game/MapModal.vue'
 import CharacterSheetModal from '../../src/components/game/CharacterSheetModal.vue'
@@ -28,6 +32,7 @@ socket.messages.value = [
   { id: 'action', role: 'user', content: 'I open the door of the old archive and look around.', timestamp: new Date() },
   { id: 'answer', role: 'assistant', content: 'The old archive smells of paper and rain. Evening light fades beyond the window.\n\nMira: "You found the letter. I was hoping you would come."\n\nOwen: "The lighthouse mark is on the map, too."', timestamp: new Date() },
 ] as ChatMessage[]
+socket.setLanguage = async value => { socket.language.value = value; events.push(`language:${value}`); return true }
 socket.sendMessage = async () => { events.push('replay') }
 socket.deleteMessage = async () => { events.push('undo') }
 const mapData = {
@@ -40,6 +45,8 @@ createApp({
   setup() {
     const mapOpen = ref(false), sheetOpen = ref(false), mode = ref<'rpg' | 'vn'>('rpg')
     const detail = ref<HTMLDialogElement>(), detailTitle = ref('')
+    const headerOnly = new URLSearchParams(window.location.search).has('header-only')
+    const header = ref<any>({ sceneName: 'The Old Archive', adventureTitle: 'Letters from the Coast', gameTime: { dateShort: 'Day 3', time: '18:42' }, exp: 120, trackedQuest: { title: 'A letter without an address' } })
     const suggestions = ref(['Examine the seal on the letter.', 'Study the map of the coast.', 'Ask Mira about the lighthouse.'])
     function record(name: string) { events.push(name) }
     async function show(name: string) {
@@ -50,6 +57,9 @@ createApp({
     }
     Object.assign(window, { groupedActionsFixture: {
       events, requests,
+      setHeader(value: Record<string, unknown>) { header.value = { ...header.value, ...value } },
+      setSpeech(enabled: boolean, playing = false, auto = false) { configState.isTtsEnabled = enabled; audioService.isPlaying.value = playing; audioService.autoSpeechEnabled.value = auto },
+      setBehavior(value: unknown) { updateNpcBehaviorStatus('grouping-preview', value) },
       setReplayFailure(value: boolean) { replayFailure = value },
       refreshReplayCheck() { socket.status.value = socket.status.value === 'connected' ? 'completed' : 'connected' },
       setMode(value: 'rpg' | 'vn') { mode.value = value },
@@ -61,18 +71,23 @@ createApp({
         h('span', 'Current interface · grouped actions · fictional preview'),
         h('a', { href: '/layouts.html', class: 'text-amber-300 hover:underline' }, 'Design examples'),
       ]),
-      h('div', { class: 'flex-1 min-h-0' }, h(ImmersiveGameView, {
+      h('div', { class: 'flex-1 min-h-0' }, headerOnly ? h(ImmersiveHeader, {
+        ...header.value, mode: mode.value, debugMode: !!socket.sheet.value?.debug_mode, sessionId: 'grouping-preview',
+        onOpenQuests: () => show('Quests'), onOpenChronicles: () => show('Chronicles'), onOpenSettings: () => show('Session settings'),
+        onOpenDebug: () => show('Debug inspector'), onExitSession: () => show('Exit session'), onToggleMobileInteract: () => show('Interact'),
+      }) : h(ImmersiveGameView, {
         gameId: 'grouping-preview', messages: socket.messages.value, status: socket.status.value,
         sheet: socket.sheet.value, entities: socket.entities.value, npcMetadata: {}, inventory: socket.sheet.value?.inventory || [],
-        sceneExits: [], sceneSwitches: [], items: [], mode: mode.value, currentSceneName: 'The Old Archive',
+        sceneExits: [], sceneSwitches: [], items: [], mode: mode.value, currentSceneName: header.value.sceneName,
         currentSceneImage: new URL(`${import.meta.env.BASE_URL}assets/background/background5.jpg`, window.location.origin).href,
-        gameTime: { dateShort: 'Day 3', time: '18:42' }, exp: 120, adventureTitle: 'Letters from the Coast',
-        trackedQuest: { title: 'A letter without an address' }, worldMemories: [{ id: 'seal' }], promptSuggestions: suggestions.value,
+        gameTime: header.value.gameTime, exp: header.value.exp, adventureTitle: header.value.adventureTitle,
+        trackedQuest: header.value.trackedQuest, worldMemories: [{ id: 'seal' }], promptSuggestions: suggestions.value,
         onOpenMap: () => { record('World map'); mapOpen.value = true },
         onOpenSheet: () => { record('Hero & inventory'); sheetOpen.value = true },
         onOpenQuests: () => show('Quests'), onOpenChronicles: () => show('Chronicles'),
         onOpenMemories: () => show('World memories'), onOpenCharacters: () => show('Characters'),
         onOpenDebug: () => show('Debug inspector'), onOpenWalkthrough: () => show('Adventure hints'),
+        onExitSession: () => show('Exit session'),
         onOpenSettings: () => show('Session settings'),
         onRefreshSuggestions: () => { suggestions.value = ['Check the date on the letter.', 'Compare the two lighthouse marks.'] },
         onSend: text => { record(`send:${text}`) },

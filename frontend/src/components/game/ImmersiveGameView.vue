@@ -236,7 +236,7 @@ defineExpose({
     <ImmersiveHeader
       :scene-name="props.currentSceneName || props.sheet?.current_scene"
       :active-sequence="props.activeSequence"
-      :adventure-title="props.sheet?.adventure_title"
+      :adventure-title="props.sheet?.adventure_title || props.adventureTitle"
       :creator="props.sheet?.creator"
       :copyright="props.sheet?.copyright"
       :tracked-quest="props.trackedQuest"

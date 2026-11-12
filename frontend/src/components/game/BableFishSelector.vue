@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, onMounted } from 'vue'
+import { Languages } from 'lucide-vue-next'
 import { useGameSocket } from '@/composables/useGameSocket'
 
+const props = defineProps<{ subtle?: boolean }>()
 const triggerRef = ref<HTMLElement | null>(null)
 const dropdownStyle = computed(() => {
   if (!triggerRef.value) return {}
@@ -112,7 +114,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="bable-fish-container relative z-[100] animate-fade-in">
+  <div :class="{ 'header-language': props.subtle }" class="bable-fish-container relative z-[100] animate-fade-in">
     <!-- Fish Button -->
     <button
       ref="triggerRef"
@@ -126,7 +128,8 @@ onUnmounted(() => {
       :title="hasActiveLanguage ? `Translation: ${languages.find(l => l.code === language)?.name || 'Default'}` : 'Bable Fish Translation'"
       :aria-label="hasActiveLanguage ? `Translation active: ${languages.find(l => l.code === language)?.name || 'Default'}` : 'Open Bable Fish translation'"
     >
-      <i
+      <Languages v-if="props.subtle" class="w-4 h-4" aria-hidden="true" />
+      <i v-else
         :class="[
           'ra ra-fish text-base transition-all duration-300',
           hasActiveLanguage
@@ -222,4 +225,5 @@ onUnmounted(() => {
     box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.1), 0 0 18px -2px rgba(34, 211, 238, 0.55);
   }
 }
+.header-language>button{background:transparent;border-color:rgb(100 116 139 / .25);box-shadow:none;border-radius:9px;color:#94a3b8}.header-language>button:hover{color:#fde68a;border-color:rgb(251 191 36 / .35);background:rgb(251 191 36 / .07)}.header-language>button.bable-fish-active{color:#8ec7d2;border-color:rgb(103 169 184 / .35);animation:none;box-shadow:none}
 </style>
