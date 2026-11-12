@@ -30,7 +30,8 @@ def test_automatic_promotion_is_scoped_and_manual_promotion_is_opt_in():
     assert inputs["build_run_id"]["required"] is False
     assert config["concurrency"]["cancel-in-progress"] is False
     job = config["jobs"]["attach"]
-    assert "5c291c971ddac8fbda26ed8060b57fc2fad4a7d3" in job["if"]
+    assert "head_sha" not in job["if"]
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
     assert "head_repository.full_name == github.repository" in job["if"]
     steps = job["steps"]
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))

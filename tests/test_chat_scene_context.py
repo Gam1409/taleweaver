@@ -49,6 +49,7 @@ async def test_new_chat_messages_get_current_scene_and_sequence(setup_test_db):
             "id": second.id,
             "role": "assistant",
             "content": "Dark basement.",
+            "is_debug": False,
             "scene_id": "BASEMENT",
             "sequence_id": "SEQ_2",
             "revision_id": second.revision_id,
