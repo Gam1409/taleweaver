@@ -6,22 +6,8 @@
  * and Hints/Walkthrough, plus dynamic LLM prompt suggestion popup list.
  */
 import { ref, onBeforeUnmount } from 'vue'
-import ResponseActions from '@/components/game/ResponseActions.vue'
-import NarrationCorrectionButton from '@/components/game/NarrationCorrectionButton.vue'
-import {
-  Scroll,
-  Map as MapIcon,
-  User,
-  Users,
-  History,
-  Lightbulb,
-  BrainCircuit,
-  Terminal,
-  Sparkles,
-  RefreshCw,
-  X,
-  HelpCircle,
-} from 'lucide-vue-next'
+import ImmersiveActionGroups from './ImmersiveActionGroups.vue'
+import { Lightbulb, Sparkles, RefreshCw, X } from 'lucide-vue-next'
 
 const props = defineProps<{
   gameId?: string
@@ -54,6 +40,7 @@ const emit = defineEmits<{
   selectSuggestion: [suggestion: string]
 }>()
 
+const groupsRef = ref<InstanceType<typeof ImmersiveActionGroups>>()
 const showIdeasPopup = ref(false)
 const ideasWrapperRef = ref<HTMLElement | null>(null)
 
@@ -66,18 +53,17 @@ function toggleIdeasPopup() {
 }
 
 function openIdeasPopup() {
+  groupsRef.value?.close()
   showIdeasPopup.value = true
   if (!props.promptSuggestions?.length) {
     handleShuffleClick()
   }
-  setTimeout(() => {
-    document.addEventListener('mousedown', handleOutsideClick)
-  }, 0)
+  document.addEventListener('pointerdown', handleOutsideClick)
 }
 
 function closeIdeasPopup() {
   showIdeasPopup.value = false
-  document.removeEventListener('mousedown', handleOutsideClick)
+  document.removeEventListener('pointerdown', handleOutsideClick)
 }
 
 function handleShuffleClick() {
@@ -85,7 +71,7 @@ function handleShuffleClick() {
   emit('shuffleSuggestions')
 }
 
-function handleOutsideClick(event: MouseEvent) {
+function handleOutsideClick(event: PointerEvent) {
   const target = event.target as Node | null
   if (!target) return
   if (ideasWrapperRef.value && !ideasWrapperRef.value.contains(target)) {
@@ -99,129 +85,41 @@ function handleSelectSuggestion(suggestion: string) {
 }
 
 onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', handleOutsideClick)
+  document.removeEventListener('pointerdown', handleOutsideClick)
 })
 </script>
 
 <template>
   <div class="game-action-bar relative flex items-center justify-between px-2 sm:px-4 py-2 border-b border-slate-800/60 gap-2 sm:gap-3">
-    <!-- Quick Modals Buttons -->
-    <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
-      <!-- Quests Button -->
-      <button v-if="props.mode !== 'vn'"
-        type="button"
-        @click="emit('openQuests')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        :class="{ 'ring-2 ring-amber-400/40': props.questGlow }"
-        title="Open Quest Log"
-      >
-        <Scroll class="w-4 h-4 text-amber-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Quests</span>
-        <span v-if="props.trackedQuest" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-      </button>
-
-      <!-- World Map Button -->
-      <button
-        type="button"
-        @click="emit('openMap')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-sky-400 hover:bg-sky-500/10 text-slate-200 hover:text-sky-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        :class="{ 'ring-2 ring-sky-400/40': props.mapGlow }"
-        title="Open World Map"
-      >
-        <MapIcon class="w-4 h-4 text-sky-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Map</span>
-      </button>
-
-      <!-- Hero & Inventory Button -->
-      <button
-        type="button"
-        @click="emit('openSheet')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 hover:bg-emerald-500/10 text-slate-200 hover:text-emerald-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        :class="{ 'ring-2 ring-emerald-400/40': props.inventoryGlow }"
-        title="Open Character Sheet & Inventory"
-      >
-        <User class="w-4 h-4 text-emerald-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">{{ props.mode === 'vn' ? 'Profile' : 'Hero' }}</span>
-        <span v-if="props.inventory?.length" class="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[9px] font-black rounded-full">
-          {{ props.inventory.length }}
-        </span>
-      </button>
-
-      <!-- Chronicles Timeline -->
-      <button
-        type="button"
-        @click="emit('openChronicles')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-400 hover:bg-indigo-500/10 text-slate-200 hover:text-indigo-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        title="Open Chronicles Timeline"
-      >
-        <History class="w-4 h-4 text-indigo-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Log</span>
-      </button>
-
-      <!-- Hints / Walkthrough -->
-      <button v-if="props.mode !== 'vn'"
-        type="button"
-        @click="emit('openWalkthrough')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-amber-400 hover:bg-amber-500/10 text-slate-200 hover:text-amber-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        title="Adventure Hints & Walkthrough"
-      >
-        <HelpCircle class="w-4 h-4 text-amber-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Hints</span>
-      </button>
-
-      <!-- World Memories & Chronicle -->
-      <button
-        type="button"
-        @click="emit('openMemories')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-purple-400 hover:bg-purple-500/10 text-slate-200 hover:text-purple-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-        title="World Memories & Chronicle"
-      >
-        <BrainCircuit class="w-4 h-4 text-purple-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Memories</span>
-        <span v-if="props.worldMemories?.length" class="px-1.5 py-0.2 bg-purple-500/20 text-purple-300 text-[9px] font-black rounded-full">
-          {{ props.worldMemories.length }}
-        </span>
-      </button>
-
-      <ResponseActions :game-id="props.gameId" :disabled="props.isEvaluating" compact />
-
-      <!-- Debug Panel Button (Debug Mode Only) -->
-      <button
-        v-if="props.debugMode"
-        type="button"
-        @click="emit('openDebug')"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/60 hover:border-cyan-400 hover:bg-cyan-500/10 text-cyan-300 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer shadow-cyan-950/30"
-        title="Open Unified Debug Inspector"
-      >
-        <Terminal class="w-4 h-4 text-cyan-400" />
-        <span class="hidden sm:inline uppercase tracking-wider">Debug</span>
-      </button>
-
-      <button type="button" title="Characters you have met" aria-label="Characters" class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900/90 text-slate-200 hover:border-amber-400 text-xs font-bold" @click="emit('openCharacters')">
-        <Users class="w-4 h-4 text-amber-300" /><span class="hidden sm:inline">Characters</span>
-      </button>
-
-      <NarrationCorrectionButton :game-id="gameId" />
-    </div>
+    <ImmersiveActionGroups ref="groupsRef" class="flex-1" :game-id="props.gameId" :is-evaluating="props.isEvaluating" :mode="props.mode"
+      :inventory="props.inventory" :tracked-quest="props.trackedQuest" :world-memories="props.worldMemories"
+      :inventory-glow="props.inventoryGlow" :map-glow="props.mapGlow" :quest-glow="props.questGlow"
+      :debug-mode="props.debugMode" @open="closeIdeasPopup"
+      @open-quests="emit('openQuests')" @open-map="emit('openMap')" @open-sheet="emit('openSheet')"
+      @open-chronicles="emit('openChronicles')" @open-walkthrough="emit('openWalkthrough')"
+      @open-memories="emit('openMemories')" @open-characters="emit('openCharacters')" @open-debug="emit('openDebug')" />
     <!-- Ideas Section with Animated Popup List -->
-    <div ref="ideasWrapperRef" class="relative shrink-0">
+    <div ref="ideasWrapperRef" class="relative shrink-0" @keydown.esc.stop.prevent="closeIdeasPopup">
       <!-- Ideas Trigger Button (Always in English) -->
       <button
         type="button"
         @click="toggleIdeasPopup"
-        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer group/ideas"
+        class="flex shrink-0 min-h-11 sm:min-h-0 items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer group/ideas"
         :class="[
           showIdeasPopup
             ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-2 ring-amber-400/30'
             : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-amber-200'
         ]"
         title="Prompt Suggestions & Ideas"
+        aria-label="Ideas"
+        aria-haspopup="dialog"
+        :aria-expanded="showIdeasPopup"
       >
         <Lightbulb class="w-3.5 h-3.5 text-amber-400 transition-transform duration-300 group-hover/ideas:rotate-12 group-hover/ideas:scale-110" />
-        <span class="uppercase tracking-wider text-[11px]">Ideas</span>
+        <span class="hidden sm:inline uppercase tracking-wider text-[11px]">Ideas</span>
         <span
           v-if="props.promptSuggestions?.length"
-          class="px-1.5 py-0.2 bg-amber-400/20 text-amber-300 text-[9px] font-black rounded-full tabular-nums"
+          class="hidden sm:inline px-1.5 py-0.2 bg-amber-400/20 text-amber-300 text-[9px] font-black rounded-full tabular-nums"
         >
           {{ Math.min(props.promptSuggestions.length, 5) }}
         </span>
@@ -314,6 +212,10 @@ onBeforeUnmount(() => {
 .popup-slide-leave-to {
   opacity: 0;
   transform: translateY(10px) scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-slide-enter-active, .popup-slide-leave-active { transition-duration: .001ms; }
 }
 
 .custom-scrollbar::-webkit-scrollbar {
