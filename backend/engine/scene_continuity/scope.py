@@ -10,3 +10,4 @@ class SceneScope:
     targets: frozenset[str]
     description: str
     entities: tuple[Any, ...]
+    item_state_entities: tuple[Any, ...] | None = None

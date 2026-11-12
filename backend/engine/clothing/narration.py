@@ -7,6 +7,7 @@ from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.visuals import character_visuals
 from backend.engine.physical_conditions.presentation import narration_block
+from backend.engine.physical_conditions.scope import item_scope
 from backend.engine.visual_novel.continuity import PLAYER
 
 
@@ -54,7 +55,11 @@ def _known_placements(actor: dict, detailed: bool) -> list[dict]:
 
 
 def narration_clothing(
-    manager: Any, visible: list[Any], all_entities: list[Any]
+    manager: Any,
+    visible: list[Any],
+    all_entities: list[Any],
+    *,
+    item_entities: list[Any] | None = None,
 ) -> tuple[list[Any], str]:
     actors = actor_records(manager, all_entities)
     detailed = detail_settings(manager)["detailed"]
@@ -74,11 +79,14 @@ def narration_clothing(
         for entity in visible
     ]
     facts = [visual for visual in visuals.values() if visual is not None]
+    scope = item_scope(
+        manager, item_entities if item_entities is not None else all_entities, visible=visible
+    )
     conditions = narration_block(
         manager.state,
         actors,
         detailed=detailed,
-        visible_item_ids={entity.id for entity in visible if entity.entity_type == "OBJECT"},
+        visible_item_ids=set(scope.public_ids),
     )
     if not facts:
         return entities, conditions

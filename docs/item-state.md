@@ -12,6 +12,10 @@ is open: `cleanliness`, `form`, `contents`, `fill_level`, `inscription`, `supply
 `wetness`, `temperature`, `charge` and `sharpness` are examples, not an exhaustive list.
 Values remain short source excerpts rather than a fixed enumeration.
 
+Known visible fixed objects can retain properties too. State eligibility does not
+make a non-portable object transferable. Hidden, off-scene and inaccessible subjects
+remain unavailable; a shadow world row does not expose an NPC's carried possession.
+
 A flask can have `contents: water` and `fill_level: half full`; a shirt can be dirty,
 slightly damp and crumpled at the same time. Each property has one active record.
 `record` establishes it; `change` references its existing condition ID. Repeated

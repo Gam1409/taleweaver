@@ -14,6 +14,7 @@ from backend.engine.memory_rag.prompts import recall_block, recall_enabled
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
 from backend.engine.physical_conditions.presentation import context as physical_context
 from backend.engine.physical_conditions.presentation import targets_from_actors
+from backend.engine.physical_conditions.scope import item_scope
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
@@ -245,7 +246,11 @@ def build_progression_context(
         from backend.engine.visual_novel.continuity import SCENE, possession_snapshot
 
         snapshot = possession_snapshot(manager, entities)
-        condition_targets.update(snapshot.items)
+        source = getattr(manager, "_scene_continuity_scope", None)
+        state_rows = getattr(source, "item_state_entities", None)
+        condition_targets.update(
+            item_scope(manager, list(state_rows) if state_rows is not None else entities).item_ids
+        )
         npcs = list(snapshot.npcs.values())
         loose_items = _items(
             [
