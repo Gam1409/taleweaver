@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 export async function checkFooterLicenses(page, url) {
   await page.setViewportSize({ width: 1440, height: 1000 })
@@ -16,7 +17,7 @@ export async function checkFooterLicenses(page, url) {
   for (const value of options) {
     await select.selectOption(value)
     await page.waitForFunction(() => document.querySelector('[aria-label="License text"]').getAttribute('aria-busy') === 'false')
-    assert.ok((await body.innerText()).length > 200, value)
+    assert.ok((await body.locator('pre').textContent()).length > 200, value)
     assert.equal(await modal.getByRole('alert').count(), 0, value)
   }
   await select.selectOption('application')
@@ -25,6 +26,8 @@ export async function checkFooterLicenses(page, url) {
   await modal.getByRole('link', { name: 'Download text', exact: true }).click()
   const download = await downloadEvent
   assert.equal(download.suggestedFilename(), 'taleweaver-MIT.txt')
+  assert.equal(await download.failure(), null)
+  assert.equal(await readFile(await download.path(), 'utf8'), await body.locator('pre').textContent())
   await download.delete()
   await page.keyboard.press('Escape')
   await modal.waitFor({ state: 'hidden' })

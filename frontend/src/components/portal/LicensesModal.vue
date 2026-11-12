@@ -10,6 +10,7 @@ const selectedId = ref('application')
 const selected = computed(() => LICENSE_CATALOG.find(item => item.id === selectedId.value)!)
 const groups = [...new Set(LICENSE_CATALOG.map(item => item.group))]
 const text = ref(''), error = ref(''), loading = ref(false)
+const downloadUrl = ref('')
 const cache = new Map<string, string>()
 let request: AbortController | undefined
 
@@ -38,8 +39,16 @@ async function load() {
   }
 }
 watch(selectedId, load)
+watch(text, value => {
+  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
+  downloadUrl.value = value ? URL.createObjectURL(new Blob([value], { type: 'text/plain;charset=utf-8' })) : ''
+})
 onMounted(() => { dialog.value?.showModal(); void load() })
-onBeforeUnmount(() => { request?.abort(); dialog.value?.close() })
+onBeforeUnmount(() => {
+  request?.abort()
+  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
+  dialog.value?.close()
+})
 </script>
 
 <template>
@@ -67,7 +76,7 @@ onBeforeUnmount(() => { request?.abort(); dialog.value?.close() })
           <pre v-else class="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-slate-300">{{ text }}</pre>
         </section>
         <footer class="flex shrink-0 items-center justify-between gap-4 border-t border-slate-700/60 p-4 sm:px-6">
-          <a :href="selected.url" download class="text-sm text-amber-200 hover:underline">Download text</a>
+          <a :href="downloadUrl || undefined" :download="selected.url.split('/').pop()" :aria-disabled="!downloadUrl" :tabindex="downloadUrl ? 0 : -1" class="text-sm text-amber-200 hover:underline">Download text</a>
           <button type="button" class="rounded-xl border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800" @click="dialog?.close()">Close</button>
         </footer>
       </div>
