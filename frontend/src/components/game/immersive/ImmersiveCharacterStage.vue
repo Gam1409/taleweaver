@@ -218,17 +218,28 @@ function isNpcSpeaking(npc: any): boolean {
 </template>
 
 <style scoped>
-/* Reserve space inside the scrollport so the portrait's outer halo stays visible. */
+/* Separate adjacent halos and reserve the same room at scrollport edges. */
+.game-character-stage {
+  padding-block: 0;
+  max-height: 7.25rem;
+}
+.game-character-stage > div {
+  gap: 2rem;
+  padding-block: 16px;
+  height: max-content;
+}
+/* The strongest emotion halo has 36px blur and 4px spread. */
 .emotion-stage {
   padding: 0;
-  max-height: 7.5rem;
+  max-height: 8.25rem;
 }
 .emotion-stage > div {
-  gap: 1rem;
-  padding: 12px;
+  gap: 3rem;
+  padding: 24px 12px;
   height: max-content;
 }
 @media (min-width: 640px) {
+  .game-character-stage { max-height: 100%; }
   .emotion-stage { width: calc(7rem + 1.5rem); max-height: 100%; }
 }
 @media (min-width: 768px) {
@@ -270,5 +281,8 @@ function isNpcSpeaking(npc: any): boolean {
   display: inline-block;
   line-height: 1;
   vertical-align: middle;
+}
+@media (prefers-reduced-motion: reduce) {
+  .npc-stage-move, .npc-stage-enter-active, .npc-stage-leave-active, .emotion-portrait { transition-duration: .001ms; }
 }
 </style>

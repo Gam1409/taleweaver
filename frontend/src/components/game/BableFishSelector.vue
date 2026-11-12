@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, onMounted } from 'vue'
-import { Languages } from 'lucide-vue-next'
+import { Fish } from 'lucide-vue-next'
 import { useGameSocket } from '@/composables/useGameSocket'
 
 const props = defineProps<{ subtle?: boolean }>()
@@ -128,7 +128,7 @@ onUnmounted(() => {
       :title="hasActiveLanguage ? `Translation: ${languages.find(l => l.code === language)?.name || 'Default'}` : 'Bable Fish Translation'"
       :aria-label="hasActiveLanguage ? `Translation active: ${languages.find(l => l.code === language)?.name || 'Default'}` : 'Open Bable Fish translation'"
     >
-      <Languages v-if="props.subtle" class="w-4 h-4" aria-hidden="true" />
+      <Fish v-if="props.subtle" class="w-4 h-4" aria-hidden="true" />
       <i v-else
         :class="[
           'ra ra-fish text-base transition-all duration-300',
