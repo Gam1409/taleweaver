@@ -47,7 +47,7 @@ async function copyResetLink() {
 
 <template>
   <div class="space-y-8 animate-fade-in">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
       <div>
         <h1 class="text-4xl font-extrabold text-white mb-2">User Management</h1>
         <p class="text-slate-400 text-sm">Create and manage accounts for your TaleWeaver domain.</p>
@@ -83,7 +83,7 @@ async function copyResetLink() {
     </div>
     <p v-if="resetLinkError" class="text-sm text-red-400">{{ resetLinkError }}</p>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-x-auto shadow-2xl">
       <table class="w-full text-left">
         <thead>
           <tr class="border-b border-slate-800 bg-slate-950/50">

@@ -53,7 +53,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="licenses-modal font-ui" aria-labelledby="licenses-title" @close="emit('close')">
+    <dialog ref="dialog" class="workspace-dialog licenses-modal font-ui" aria-labelledby="licenses-title" @close="emit('close')">
       <div class="licenses-shell">
         <header class="flex shrink-0 items-start justify-between gap-4 border-b border-slate-700/60 p-5 sm:p-6">
           <div>

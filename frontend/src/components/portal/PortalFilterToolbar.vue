@@ -31,7 +31,7 @@ defineEmits<{
 <template>
   <div class="portal-filters mb-6 rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-md p-3 sm:p-4 shadow-xl transition-all">
     <!-- Main Toolbar Row -->
-    <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+    <div class="flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-center justify-between gap-3">
       
       <!-- Left: Search Input -->
       <div class="relative flex-1 min-w-[200px]">
@@ -56,14 +56,14 @@ defineEmits<{
       </div>
 
       <!-- Controls Row on mobile / Desktop Right Controls -->
-      <div class="grid grid-cols-2 sm:flex sm:flex-nowrap items-center gap-2 lg:gap-3">
+      <div class="grid min-w-0 max-w-full grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 lg:gap-3">
         
         <!-- Type Filter (Dropdown or Buttons) -->
-        <div class="relative min-w-0 flex-1 sm:flex-none">
+        <div class="relative min-w-0 max-w-full flex-1 sm:flex-none">
           <select
             :value="props.selectedType"
             @change="$emit('update:selected-type', ($event.target as HTMLSelectElement).value as RuleTypeFilter)"
-            class="w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
+            class="w-full max-w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
             :class="props.selectedType !== 'all' ? 'border-cyan-500/50 text-cyan-300 bg-cyan-950/20' : 'border-white/10 text-slate-300 hover:border-white/20'"
             title="Filter by game mode"
             aria-label="Filter by game mode"
@@ -77,11 +77,11 @@ defineEmits<{
         </div>
 
         <!-- Tone Filter Dropdown -->
-        <div class="relative min-w-0 flex-1 sm:flex-none">
+        <div class="relative min-w-0 max-w-full flex-1 sm:flex-none">
           <select
             :value="props.selectedTone"
             @change="$emit('update:selected-tone', ($event.target as HTMLSelectElement).value)"
-            class="w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
+            class="w-full max-w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
             :class="props.selectedTone !== 'all' ? 'border-amber-500/50 text-amber-300 bg-amber-950/20' : 'border-white/10 text-slate-300 hover:border-white/20'"
             title="Filter by narrative tone"
             aria-label="Filter by narrative tone"
@@ -98,11 +98,11 @@ defineEmits<{
         </div>
 
         <!-- Style Filter Dropdown -->
-        <div class="relative min-w-0 flex-1 sm:flex-none">
+        <div class="relative min-w-0 max-w-full flex-1 sm:flex-none">
           <select
             :value="props.selectedStyle"
             @change="$emit('update:selected-style', ($event.target as HTMLSelectElement).value)"
-            class="w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
+            class="w-full max-w-full sm:w-auto appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/40 border text-xs font-semibold focus:outline-none focus:border-aether-primary/50 transition-all cursor-pointer"
             :class="props.selectedStyle !== 'all' ? 'border-purple-500/50 text-purple-300 bg-purple-950/20' : 'border-white/10 text-slate-300 hover:border-white/20'"
             title="Filter by visual style"
             aria-label="Filter by visual style"

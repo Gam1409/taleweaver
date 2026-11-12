@@ -625,9 +625,9 @@ onUnmounted(() => {
 
       <div
         v-if="isStartingSession"
-        class="fixed inset-0 z-[220] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center px-6"
+        class="workspace-dialog-overlay fixed inset-0 z-[220] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center px-6"
       >
-        <div class="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/95 p-7 shadow-2xl">
+        <div class="workspace-dialog w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/95 p-7 shadow-2xl">
           <div class="flex items-start gap-4">
             <div class="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
               <i class="ra ra-cycle animate-spin text-emerald-400 text-xl"></i>

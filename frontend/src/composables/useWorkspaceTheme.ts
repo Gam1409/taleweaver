@@ -1,5 +1,6 @@
 import { onScopeDispose } from 'vue'
 import '@/assets/workspace.css'
+import '@/assets/workspace-dialogs.css'
 
 let consumers = 0
 

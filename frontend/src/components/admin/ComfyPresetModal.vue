@@ -157,7 +157,7 @@ function create(copy = false): void {
     <dialog
       ref="dialog"
       :aria-labelledby="`${id}-title`"
-      class="preset-modal fixed inset-0 m-auto h-dvh max-h-dvh w-full max-w-none overflow-hidden border border-slate-700 bg-slate-900 p-0 text-slate-200 shadow-2xl sm:h-[min(90dvh,960px)] sm:max-h-[90dvh] sm:w-[calc(100vw-3rem)] sm:max-w-7xl sm:rounded-2xl"
+      class="workspace-dialog preset-modal fixed inset-0 m-auto h-dvh max-h-dvh w-full max-w-none overflow-hidden border border-slate-700 bg-slate-900 p-0 text-slate-200 shadow-2xl sm:h-[min(90dvh,960px)] sm:max-h-[90dvh] sm:w-[calc(100vw-3rem)] sm:max-w-7xl sm:rounded-2xl"
       @cancel.prevent="emit('close')"
     >
       <div class="flex h-full min-h-0 flex-col">

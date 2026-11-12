@@ -20,7 +20,10 @@ const desktop = ref(true)
 let previousFocus: HTMLElement | null = null
 onMounted(() => {
   const media = window.matchMedia('(min-width: 1024px)')
-  const update = () => { desktop.value = media.matches }
+  const update = () => {
+    desktop.value = media.matches
+    if (desktop.value && props.isMobileOpen) emit('close-mobile')
+  }
   update()
   media.addEventListener('change', update)
   onScopeDispose(() => media.removeEventListener('change', update))

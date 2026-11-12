@@ -73,7 +73,7 @@ async function perform(): Promise<void> {
   <Teleport to="body">
     <dialog
       ref="dialog"
-      class="memory-dialog w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-white/15 bg-slate-900 p-0 text-left text-slate-200 shadow-2xl"
+      class="workspace-dialog memory-dialog w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-white/15 bg-slate-900 p-0 text-left text-slate-200 shadow-2xl"
       :aria-labelledby="`memory-index-title-${props.templateId}`"
       @click.stop
       @mousedown.stop

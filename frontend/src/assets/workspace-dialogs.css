@@ -1,0 +1,15 @@
+/* Route context also reaches dialogs teleported outside the workspace view. */
+[data-workspace-theme="archive"] .workspace-dialog-overlay { background: #030812c9; backdrop-filter: blur(8px); }
+[data-workspace-theme="archive"] .workspace-dialog { min-width: 0; border-color: #334155; color: #cbd5e1; background: #101827; font-family: "Alegreya Sans", sans-serif; box-shadow: 0 24px 80px #0007; }
+[data-workspace-theme="archive"] .workspace-dialog:not(.preset-modal, .comfy-dialog) { border-radius: 18px; }
+[data-workspace-theme="archive"] .workspace-dialog-overlay > .workspace-dialog:not([class*="max-h-"]) { max-height: calc(100dvh - 24px); overflow-y: auto; }
+[data-workspace-theme="archive"] .workspace-dialog :is(.font-black, .font-extrabold) { font-weight: 600; }
+[data-workspace-theme="archive"] .workspace-dialog .uppercase { text-transform: none; letter-spacing: .025em; }
+[data-workspace-theme="archive"] .workspace-dialog :is(input, select, textarea) { font-size: 15px; border-radius: 10px; }
+[data-workspace-theme="archive"] .workspace-dialog :is(input, select, textarea, button):focus-visible { outline: 2px solid #d6b46f; outline-offset: 3px; }
+[data-workspace-theme="archive"] .workspace-dialog :is(.text-xxs, .text-\[10px\], .text-\[11px\]) { font-size: 12px; line-height: 1.5; }
+[data-workspace-theme="archive"] .workspace-dialog [class~="text-aether-primary"] { color: #e5c789; }
+@media (max-width: 639px) {
+  [data-workspace-theme="archive"] .workspace-dialog-overlay { padding: 12px; }
+  [data-workspace-theme="archive"] .workspace-dialog :is(.p-8, .p-10) { padding: 20px; }
+}

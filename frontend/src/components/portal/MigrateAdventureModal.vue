@@ -41,11 +41,11 @@ function onCover() {
   >
     <div
       v-if="props.isOpen && props.template"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto"
+      class="workspace-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto"
       @click.self="emit('close')"
     >
       <div
-        class="w-full max-w-xl rounded-2xl bg-slate-900/95 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden font-ui relative"
+        class="workspace-dialog w-full max-w-xl rounded-2xl bg-slate-900/95 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden font-ui relative"
       >
         <!-- Modal Header -->
         <div class="px-6 py-5 border-b border-white/10 flex items-start justify-between gap-4 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent">

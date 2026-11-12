@@ -23,7 +23,7 @@ function onBackdrop(event: MouseEvent) {
 
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="about-dialog font-ui" aria-label="About TaleWeaver" @close="emit('close')" @click="onBackdrop">
+    <dialog ref="dialog" class="workspace-dialog about-dialog font-ui" aria-label="About TaleWeaver" @close="emit('close')" @click="onBackdrop">
       <div class="about-shell">
         <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-aether-primary/50 via-purple-500/50 to-aether-primary/50" aria-hidden="true" />
         <!-- Header -->

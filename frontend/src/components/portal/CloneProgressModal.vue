@@ -38,8 +38,8 @@ const canClose = computed(() => Boolean(props.errorMsg) || props.stage === 'comp
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-    <div class="w-full max-w-md rounded-2xl bg-[#081425]/90 border border-white/10 shadow-[0_0_50px_rgba(78,222,163,0.15)] overflow-hidden font-ui">
+  <div class="workspace-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div class="workspace-dialog w-full max-w-md rounded-2xl bg-[#081425]/90 border border-white/10 shadow-[0_0_50px_rgba(78,222,163,0.15)] overflow-hidden font-ui">
       <div class="px-6 py-5 border-b border-white/10">
         <h3 class="text-lg font-black text-white font-display uppercase tracking-wider">{{ modalHeader }}</h3>
         <p class="text-xs text-slate-400 mt-0.5">Target: <span class="font-bold text-aether-primary">{{ props.sessionTitle }}</span></p>
