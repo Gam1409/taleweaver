@@ -1683,6 +1683,7 @@ usePlayAgentAutoLoop()
     />
 
     <SessionNpcModals
+      refined
       :session-id="props.id"
       :directory-open="showCharactersModal"
       :npc="portraitTarget"

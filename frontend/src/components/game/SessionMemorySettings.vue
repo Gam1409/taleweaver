@@ -137,11 +137,7 @@ function input(event: Event) {
   text-align: center;
   background: none;
   color: #e5d2ab;
-  font:
-    600 15px/1.5 -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font: 600 15px/1.5 var(--session-font, 'Alegreya Sans'), sans-serif;
   outline: none;
 }
 .memory-value > span {

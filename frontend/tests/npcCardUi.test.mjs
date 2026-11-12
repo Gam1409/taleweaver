@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createSSRApp, h, ref, reactive, effectScope, nextTick } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { parse, compileScript } from '@vue/compiler-sfc'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import ts from 'typescript'
 
 let sequence = 0
@@ -21,6 +21,31 @@ async function component(name, inject = '') {
   return (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)).default
 }
 const render = (component, props) => renderToString(createSSRApp({ render: () => h(component, props) }))
+
+test('the production game screen enables the approved character presentation', async () => {
+  const game = readFileSync(new URL('../src/views/GameView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(game)
+  const nodes = [descriptor.template.ast]
+  let boundary
+  while (nodes.length) {
+    const node = nodes.shift()
+    if (node.tag === 'SessionNpcModals') { boundary = node; break }
+    nodes.push(...(node.children || []))
+  }
+  assert.ok(boundary, 'GameView must expose the character directory and card')
+  const compiled = compileTemplate({ source: boundary.loc.source, filename: 'GameCharacterBoundary.vue', id: 'game-character-boundary', ssr: true, ssrCssVars: [] })
+  assert.deepEqual(compiled.errors, [])
+  const code = compiled.code.replace(/from "(vue(?:\/server-renderer)?)"/g, (_, name) => `from '${import.meta.resolve(name)}'`)
+  const { ssrRender } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+  let presentation
+  const app = createSSRApp({
+    ssrRender,
+    data: () => ({ props: { id: 'session' }, showCharactersModal: false, portraitTarget: { id: 'mira', name: 'Mira' }, sheet: {}, portraitBusy: false, portraitError: '', portraitUpdated: false, openPortrait() {}, closePortrait() {}, regeneratePortrait() {} }),
+    components: { SessionNpcModals: { props: { refined: Boolean }, setup(props) { presentation = props.refined; return () => null } } },
+  })
+  await renderToString(app)
+  assert.equal(presentation, true, 'The real game route must use the refined card, just like its preview')
+})
 
 test('emotion-only estimates do not fabricate relationship scores; text is escaped', async () => {
   const ui = await component('NpcNarrativeInsights')

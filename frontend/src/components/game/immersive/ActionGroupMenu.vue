@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  computed,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -23,12 +22,11 @@ const id = useId()
 const trigger = ref<HTMLButtonElement>()
 const panel = ref<HTMLElement>()
 let observer: ResizeObserver | undefined
-const placement = ref({ left: '12px', top: '12px', maxHeight: '360px' })
+const placement = ref({ left: '12px', top: '12px', width: '304px', maxHeight: '360px' })
 const items = () =>
   Array.from(
     panel.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') || []
   )
-const position = computed(() => ({ ...placement.value, width: 'min(19rem, calc(100vw - 24px))' }))
 
 function place() {
   const anchor = trigger.value?.getBoundingClientRect()
@@ -38,15 +36,17 @@ function place() {
   const topEdge = viewport?.offsetTop || 0
   const width = viewport?.width || window.innerWidth
   const height = viewport?.height || window.innerHeight
-  const panelWidth = Math.min(304, width - 24)
+  const panelWidth = Math.max(1, Math.min(304, width - 24))
   const above = anchor.top - topEdge - 20
   const below = topEdge + height - anchor.bottom - 20
   const upwards = above >= Math.min(panel.value.scrollHeight, 320) || above >= below
-  const available = Math.max(96, Math.min(420, upwards ? above : below))
-  const panelHeight = Math.min(panel.value.scrollHeight, available)
+  const available = Math.min(420, Math.max(0, height - 24), Math.max(96, upwards ? above : below))
+  const panelHeight = Math.min(panel.value.scrollHeight + 2, available)
+  const top = upwards ? anchor.top - panelHeight - 8 : anchor.bottom + 8
   placement.value = {
     left: `${Math.max(leftEdge + 12, Math.min(anchor.left, leftEdge + width - panelWidth - 12))}px`,
-    top: `${upwards ? Math.max(topEdge + 12, anchor.top - panelHeight - 8) : anchor.bottom + 8}px`,
+    top: `${Math.max(topEdge + 12, Math.min(top, topEdge + height - panelHeight - 12))}px`,
+    width: `${panelWidth}px`,
     maxHeight: `${available}px`
   }
 }
@@ -103,7 +103,19 @@ function onPanelKey(event: KeyboardEvent) {
 
 function onPanelClick(event: MouseEvent) {
   const button = (event.target as Element).closest('button')
-  if (button && !button.hasAttribute('data-menu-keep-open')) close()
+  if (!button || button.hasAttribute('data-menu-keep-open')) return
+  const dialog = document.activeElement?.closest<HTMLDialogElement>('dialog[open]')
+  if (dialog) {
+    dialog.addEventListener('close', () => {
+      const focused = document.activeElement
+      const lostFocus = focused === document.body ||
+        (focused && (dialog.contains(focused) || panel.value?.contains(focused)))
+      if (lostFocus && trigger.value?.isConnected && !document.querySelector('dialog[open]')) {
+        trigger.value.focus()
+      }
+    }, { once: true })
+  }
+  close(true)
 }
 
 function onOutside(event: PointerEvent) {
@@ -131,6 +143,7 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   window.addEventListener('scroll', onResize, true)
   window.visualViewport?.addEventListener('resize', onResize)
+  window.visualViewport?.addEventListener('scroll', onResize)
 })
 onBeforeUnmount(() => {
   observer?.disconnect()
@@ -138,6 +151,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   window.removeEventListener('scroll', onResize, true)
   window.visualViewport?.removeEventListener('resize', onResize)
+  window.visualViewport?.removeEventListener('scroll', onResize)
 })
 </script>
 
@@ -165,7 +179,7 @@ onBeforeUnmount(() => {
         v-show="modelValue"
         :id="`${id}-panel`"
         ref="panel"
-        :style="position"
+        :style="placement"
         role="menu"
         :inert="!modelValue"
         :aria-hidden="!modelValue"

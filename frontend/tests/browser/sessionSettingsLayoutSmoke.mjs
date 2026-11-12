@@ -22,6 +22,13 @@ const bounds = async () => {
   assert.ok(save.y >= box.y && save.y + save.height <= box.y + box.height)
   assert.equal(await dialog().evaluate(node => node.scrollWidth <= node.clientWidth), true)
   assert.equal(await page.getByRole('tabpanel').count(), 1)
+  assert.equal(await dialog().evaluate(node => {
+    const workspace = node.querySelector('.settings-workspace').getBoundingClientRect()
+    return ['.settings-navigation', '.settings-content'].every(selector => {
+      const region = node.querySelector(selector).getBoundingClientRect()
+      return region.height > 0 && region.top >= workspace.top - 1 && region.bottom <= workspace.bottom + 1
+    })
+  }), true, 'Navigation and content must remain inside the space above the fixed footer')
 }
 const sectionSpacing = async () => {
   const boxes = await page.getByRole('tabpanel').locator('.settings-widget, details').evaluateAll(nodes =>
@@ -91,6 +98,13 @@ try {
   assert.equal(await dialog().getByLabel('Narrator Turn Memory', { exact: true }).inputValue(), '27')
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 844 })
+    for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
+      await tab(name).click()
+      await bounds()
+    }
+  }
+  for (const [width, height] of [[720, 450], [844, 390], [320, 400]]) {
+    await page.setViewportSize({ width, height })
     for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
       await tab(name).click()
       await bounds()

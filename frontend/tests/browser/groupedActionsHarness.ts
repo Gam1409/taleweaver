@@ -91,6 +91,7 @@ createApp({
       failLanguageSave(value: boolean) { languageFailure = value },
       failSettingsSave(endpoint: string) { sessionSettingsFixture.failSave(endpoint) },
       setHeader(value: Record<string, unknown>) { header.value = { ...header.value, ...value } },
+      addSystemNotice(content: string) { socket.messages.value = [...socket.messages.value, { id: `notice-${++sampleIndex}`, role: 'system', content, timestamp: new Date() }] },
       setSpeech(enabled: boolean, playing = false, auto = false) { configState.isTtsEnabled = enabled; audioService.isPlaying.value = playing; audioService.autoSpeechEnabled.value = auto },
       setBehavior(value: unknown) { updateNpcBehaviorStatus('grouping-preview', value) },
       setReplayFailure(value: boolean) { replayFailure = value },

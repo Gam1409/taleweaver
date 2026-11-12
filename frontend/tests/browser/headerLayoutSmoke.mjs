@@ -37,6 +37,40 @@ try {
   assert.ok(chapter.x >= 0 && chapter.x + chapter.width <= 320)
   await page.keyboard.press('Escape')
   await page.locator('.header-chapter-details').waitFor({ state: 'hidden' })
+  await page.evaluate(() => window.groupedActionsFixture.setHeader({
+    adventureTitle: 'Coast', activeSequence: { title: 'Chapter 1', description: 'A note beside the lamp.' },
+  }))
+  for (const width of [320, 390, 640]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.locator('.header-chapter-trigger').click()
+    const shortChapter = await page.locator('.header-chapter-details').boundingBox()
+    assert.ok(shortChapter.x >= 12 && shortChapter.x + shortChapter.width <= width - 12,
+      `Short chapter metadata must keep the popup within the ${width}px viewport.`)
+    await page.keyboard.press('Escape')
+  }
+  const zoom = await page.context().newCDPSession(page)
+  await page.setViewportSize({ width: 844, height: 320 })
+  for (const scale of [2, 3]) {
+    await zoom.send('Emulation.setPageScaleFactor', { pageScaleFactor: scale })
+    for (const control of [page.locator('.header-chapter-trigger'), page.getByRole('button', { name: 'Session', exact: true })]) {
+      await control.focus()
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(250)
+      const visible = await page.evaluate(() => {
+        const panel = document.querySelector('.header-chapter-details, [role="menu"]:not([inert])').getBoundingClientRect()
+        const viewport = visualViewport
+        return { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom,
+          x: viewport.offsetLeft, y: viewport.offsetTop, width: viewport.width, height: viewport.height }
+      })
+      assert.ok(visible.left >= visible.x + 11 && visible.right <= visible.x + visible.width - 11 &&
+        visible.top >= visible.y + 11 && visible.bottom <= visible.y + visible.height - 11,
+      `Header popup must fit the short visible viewport at ${scale}x zoom: ${JSON.stringify(visible)}`)
+      await page.keyboard.press('Escape')
+    }
+    await zoom.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 })
+  }
+  await zoom.detach()
+  await page.setViewportSize({ width: 320, height: 844 })
   await page.locator('.header-quest').focus()
   await page.keyboard.press('Enter')
   await page.getByRole('heading', { name: 'Quests', exact: true }).waitFor()

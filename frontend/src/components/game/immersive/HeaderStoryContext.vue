@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { BookOpen, ChevronDown, Compass, Scroll } from 'lucide-vue-next'
 import SessionDiagnosticsId from './SessionDiagnosticsId.vue'
 import NpcBehaviorIndicator from './NpcBehaviorIndicator.vue'
@@ -19,6 +19,9 @@ const props = defineProps<{
 const emit = defineEmits<{ openQuests: [] }>()
 const details = ref(false)
 const context = ref<HTMLElement>()
+const chapter = ref<HTMLElement>()
+const chapterDetails = ref<HTMLElement>()
+const placement = ref({ left: '0px', top: 'calc(100% + 11px)', width: '320px', maxHeight: '320px' })
 const id = useId()
 const title = computed(() =>
   String(
@@ -35,11 +38,44 @@ const description = computed(() =>
 )
 const quest = computed(() => props.trackedQuest?.title || props.trackedQuest?.description || '')
 
+function placeDetails() {
+  const anchor = chapter.value?.getBoundingClientRect()
+  if (!details.value || !anchor) return
+  const viewport = window.visualViewport
+  const edge = viewport?.offsetLeft || 0
+  const width = viewport?.width || window.innerWidth
+  const topEdge = viewport?.offsetTop || 0
+  const height = viewport?.height || window.innerHeight
+  const panelWidth = Math.max(0, Math.min(320, width - 24))
+  const left = Math.max(edge + 12, Math.min(anchor.left, edge + width - panelWidth - 12))
+  const available = Math.min(320, Math.max(0, height - 24), Math.max(96, topEdge + height - anchor.bottom - 24))
+  const panelHeight = Math.min((chapterDetails.value?.scrollHeight || available) + 2, available)
+  const top = Math.max(topEdge + 12, Math.min(anchor.bottom + 11, topEdge + height - panelHeight - 12))
+  placement.value = {
+    left: `${left - anchor.left}px`, top: `${top - anchor.top}px`,
+    width: `${panelWidth}px`, maxHeight: `${available}px`
+  }
+}
+watch(details, async value => {
+  if (!value) return
+  await nextTick()
+  placeDetails()
+})
 function closeOutside(event: PointerEvent) {
   if (!context.value?.contains(event.target as Node)) details.value = false
 }
-onMounted(() => document.addEventListener('pointerdown', closeOutside))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOutside))
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOutside)
+  window.addEventListener('resize', placeDetails)
+  window.visualViewport?.addEventListener('resize', placeDetails)
+  window.visualViewport?.addEventListener('scroll', placeDetails)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeOutside)
+  window.removeEventListener('resize', placeDetails)
+  window.visualViewport?.removeEventListener('resize', placeDetails)
+  window.visualViewport?.removeEventListener('scroll', placeDetails)
+})
 </script>
 
 <template>
@@ -55,7 +91,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOutside))
       <span v-if="adventureTitle" class="header-adventure" :title="adventureTitle">{{
         adventureTitle
       }}</span>
-      <div v-if="title" class="header-chapter">
+      <div v-if="title" ref="chapter" class="header-chapter">
         <button
           type="button"
           :aria-expanded="details"
@@ -71,7 +107,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOutside))
           ><ChevronDown :class="{ expanded: details }" aria-hidden="true" />
         </button>
         <Transition name="chapter-details">
-          <section v-if="details" :id="id" class="header-chapter-details" :aria-label="title">
+          <section v-if="details" :id="id" ref="chapterDetails" :style="placement" class="header-chapter-details" :aria-label="title">
             <span class="chapter-caption">{{
               activeSequence?.order ? `Chapter ${activeSequence.order}` : 'Current chapter'
             }}</span>
@@ -261,7 +297,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOutside))
   top: calc(100% + 11px);
   z-index: 80;
   width: 320px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - 24px);
+  overflow-y: auto;
   padding: 16px;
   border: 1px solid #695533;
   border-radius: 12px;
