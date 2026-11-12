@@ -23,9 +23,26 @@ const bounds = async () => {
   assert.equal(await dialog().evaluate(node => node.scrollWidth <= node.clientWidth), true)
   assert.equal(await page.getByRole('tabpanel').count(), 1)
 }
+const sectionSpacing = async () => {
+  const boxes = await page.getByRole('tabpanel').locator('.settings-widget, details').evaluateAll(nodes =>
+    nodes.filter(node => !nodes.some(other => other !== node && other.contains(node)))
+      .map(node => node.getBoundingClientRect()).filter(box => box.height > 0)
+      .map(box => ({ top: box.top, bottom: box.bottom }))
+  )
+  assert.ok(boxes.length >= 3)
+  for (let index = 1; index < boxes.length; index++) assert.ok(boxes[index].top - boxes[index - 1].bottom >= 16, 'Settings cards need a consistent gap, including components with multiple roots.')
+}
 try {
   await page.goto(base + '/tests/browser/groupedActions.html?panel=settings')
   await dialog().getByLabel('Amount of narration').waitFor()
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await sectionSpacing()
+    await page.getByRole('tabpanel').locator('details').first().evaluate(node => { node.open = true })
+    await sectionSpacing()
+    await page.getByRole('tabpanel').locator('details').first().evaluate(node => { node.open = false })
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
   assert.equal(await dialog().getByRole('tab').count(), 3)
   await page.waitForFunction(() => document.querySelector('[aria-label="Portrait presentation"] input')?.disabled === false)
   const initialRequests = await page.evaluate(() => window.groupedActionsFixture.requests.length)

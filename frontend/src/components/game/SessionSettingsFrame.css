@@ -180,11 +180,12 @@
 .settings-section {
   animation: settings-panel-in 0.18s ease-out;
 }
-.settings-section :slotted(*) {
-  margin-bottom: 17px;
+.settings-section-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
 }
 .settings-section :deep(.settings-widget) {
-  margin-bottom: 17px;
   border-color: #2a3549;
   background: rgb(15 23 42 / 0.45);
   border-radius: 11px;

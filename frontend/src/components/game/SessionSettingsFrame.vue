@@ -153,7 +153,9 @@ defineExpose({ revealErrors })
                   <p>{{ item.hint }}</p>
                 </div>
               </div>
-              <slot :name="item.id" />
+              <div :class="{ 'settings-section-widgets': item.id !== 'memory' }">
+                <slot :name="item.id" />
+              </div>
             </section>
           </main>
         </div>
