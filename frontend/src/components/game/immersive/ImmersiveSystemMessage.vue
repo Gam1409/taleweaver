@@ -119,7 +119,7 @@ const cleanContent = computed(() => {
 
 <style scoped>
 .comic-narration-text {
-  font-family: 'Acme', sans-serif;
+  font-family: var(--session-font, 'Alegreya Sans'), sans-serif;
   letter-spacing: 0.02em;
 }
 

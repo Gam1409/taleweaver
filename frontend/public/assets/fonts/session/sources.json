@@ -1,0 +1,59 @@
+{
+  "google_fonts_revision": "2e5fa2e951237b6ae65f705693d12ca76a7f78c8",
+  "families": [
+    {
+      "family": "Alegreya Sans",
+      "directory": "alegreya-sans",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://raw.githubusercontent.com/google/fonts/2e5fa2e951237b6ae65f705693d12ca76a7f78c8/ofl/alegreyasans/OFL.txt",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=Alegreya+Sans%3Aital%2Cwght%400%2C400%3B0%2C500%3B0%2C700%3B1%2C400%3B1%2C700&display=swap",
+      "files": 35,
+      "bytes": 482704
+    },
+    {
+      "family": "Baloo Bhaijaan 2",
+      "directory": "baloo-bhaijaan-2",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://raw.githubusercontent.com/google/fonts/2e5fa2e951237b6ae65f705693d12ca76a7f78c8/ofl/baloobhaijaan2/OFL.txt",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2%3Awght%40400..800&display=swap",
+      "files": 4,
+      "bytes": 113032
+    },
+    {
+      "family": "M PLUS Rounded 1c",
+      "directory": "m-plus-rounded-1c",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://cdn.jsdelivr.net/npm/@fontsource/m-plus-rounded-1c@5.3.0/LICENSE",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c%3Awght%40400%3B700&display=swap",
+      "files": 252,
+      "bytes": 3346816
+    },
+    {
+      "family": "Noto Sans SC",
+      "directory": "noto-sans-sc",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://raw.githubusercontent.com/google/fonts/2e5fa2e951237b6ae65f705693d12ca76a7f78c8/ofl/notosanssc/OFL.txt",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40100..900&display=swap",
+      "files": 101,
+      "bytes": 4500544
+    },
+    {
+      "family": "Noto Sans TC",
+      "directory": "noto-sans-tc",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://raw.githubusercontent.com/google/fonts/2e5fa2e951237b6ae65f705693d12ca76a7f78c8/ofl/notosanstc/OFL.txt",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=Noto+Sans+TC%3Awght%40100..900&display=swap",
+      "files": 108,
+      "bytes": 4276832
+    },
+    {
+      "family": "Noto Sans KR",
+      "directory": "noto-sans-kr",
+      "license": "SIL OFL 1.1",
+      "license_url": "https://raw.githubusercontent.com/google/fonts/2e5fa2e951237b6ae65f705693d12ca76a7f78c8/ofl/notosanskr/OFL.txt",
+      "stylesheet_url": "https://fonts.googleapis.com/css2?family=Noto+Sans+KR%3Awght%40100..900&display=swap",
+      "files": 124,
+      "bytes": 3507740
+    }
+  ]
+}

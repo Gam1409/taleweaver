@@ -2,33 +2,27 @@
 import { ref, computed, onUnmounted, onMounted } from 'vue'
 import { Fish } from 'lucide-vue-next'
 import { useGameSocket } from '@/composables/useGameSocket'
+import { CONTENT_LANGUAGES } from '@/utils/sessionTypography'
 
 const props = defineProps<{ subtle?: boolean }>()
 const triggerRef = ref<HTMLElement | null>(null)
-const dropdownStyle = computed(() => {
-  if (!triggerRef.value) return {}
+const dropdownStyle = ref<Record<string, string>>({})
+function positionDropdown() {
+  if (!triggerRef.value) return
   const rect = triggerRef.value.getBoundingClientRect()
-  return {
+  const width = Math.min(208, window.innerWidth - 16)
+  dropdownStyle.value = {
     top: `${rect.bottom + 8}px`,
-    right: `${window.innerWidth - rect.right}px`
+    left: `${Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8)}px`,
+    width: `${width}px`,
+    maxHeight: `${Math.max(0, window.innerHeight - rect.bottom - 20)}px`
   }
-})
+}
 
 const { language, languageSaving, setLanguage, status, sheet } = useGameSocket()
 const selectionDisabled = computed(() => languageSaving.value || status.value === 'connecting' || status.value === 'loading' || !!sheet.value?.agent_active)
 
-const languages = [
-  { code: '', name: 'Use default', icon: 'ra-spear-head' },
-  { code: 'German', name: 'Deutsch', icon: 'ra-castle' },
-  { code: 'English', name: 'English', icon: 'ra-tower' },
-  { code: 'French', name: 'Français', icon: 'ra-fleur-de-lis' },
-  { code: 'Spanish', name: 'Español', icon: 'ra-shield' },
-  { code: 'Italian', name: 'Italiano', icon: 'ra-scroll-unfurled' },
-  { code: 'Japanese', name: '日本語', icon: 'ra-shinto-shrine' },
-  { code: 'Chinese', name: '中文', icon: 'ra-dragon' },
-  { code: 'Russian', name: 'Русский', icon: 'ra-hammer' },
-  { code: 'Portuguese', name: 'Português', icon: 'ra-anchor' },
-]
+const languages = CONTENT_LANGUAGES
 
 const isOpen = ref(false)
 const showTooltip = ref(false)
@@ -62,6 +56,7 @@ function toggleDropdown() {
   isOpen.value = !isOpen.value
   cancelTooltip()
   if (isOpen.value) {
+    positionDropdown()
     registerOutsideClick()
   } else {
     unregisterOutsideClick()
@@ -71,6 +66,13 @@ function toggleDropdown() {
 function closeDropdown() {
   isOpen.value = false
   unregisterOutsideClick()
+}
+function onDropdownKey(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !isOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeDropdown()
+  triggerRef.value?.focus()
 }
 
 function registerOutsideClick() {
@@ -104,10 +106,13 @@ const selectLanguage = async (code: string): Promise<void> => {
 }
 
 onMounted(() => {
-  // nothing to do
+  window.addEventListener('resize', positionDropdown)
+  window.addEventListener('keydown', onDropdownKey)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', positionDropdown)
+  window.removeEventListener('keydown', onDropdownKey)
   clearTooltipTimer()
   unregisterOutsideClick()
 })
@@ -168,7 +173,7 @@ onUnmounted(() => {
         <div
           v-if="isOpen"
           data-bable-fish-dropdown
-          class="fixed z-[9999] w-48 bg-[#0f172a] border border-slate-700 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden animate-tooltip-in"
+          class="fixed z-[9999] w-52 max-h-[calc(100dvh-8rem)] overflow-y-auto bg-[#0f172a] border border-slate-700 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] animate-tooltip-in"
           :style="dropdownStyle"
         >
           <p class="px-3 pt-3 pb-1 text-xs text-slate-400">Game language · saved for this session</p>
@@ -226,4 +231,9 @@ onUnmounted(() => {
   }
 }
 .header-language>button{background:transparent;border-color:rgb(100 116 139 / .25);box-shadow:none;border-radius:9px;color:#94a3b8}.header-language>button:hover{color:#fde68a;border-color:rgb(251 191 36 / .35);background:rgb(251 191 36 / .07)}.header-language>button.bable-fish-active{color:#8ec7d2;border-color:rgb(103 169 184 / .35);animation:none;box-shadow:none}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-enter-active, .dropdown-leave-active, .fade-enter-active, .fade-leave-active { transition-duration: .001ms; }
+  .dropdown-enter-from, .dropdown-leave-to { transform: none; }
+  [data-bable-fish-dropdown], .bable-fish-active { animation: none; }
+}
 </style>

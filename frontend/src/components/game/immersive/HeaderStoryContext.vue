@@ -126,7 +126,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOutside))
   color: #c8ac72;
 }
 .header-location h2 {
-  font-family: Acme, sans-serif;
+  font-family: var(--session-font, 'Alegreya Sans'), sans-serif;
   color: #f1f5f9;
   font-size: 18px;
   letter-spacing: 0.045em;

@@ -117,6 +117,7 @@ onBeforeUnmount(() => {
     0 12px 32px rgb(0 0 0 / 40%),
     inset 0 1px 0 rgb(255 255 255 / 7%);
   font-family:
+    var(--session-font, system-ui),
     system-ui,
     -apple-system,
     BlinkMacSystemFont,

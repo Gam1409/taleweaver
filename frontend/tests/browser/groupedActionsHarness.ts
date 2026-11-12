@@ -14,12 +14,16 @@ import { createSessionSettingsFixture } from './sessionSettingsFixture'
 import SessionNpcModals from '../../src/components/game/SessionNpcModals.vue'
 import { createCharacterPanelFixture } from './characterPanelFixture'
 import type { PortraitTarget } from '../../src/composables/useSessionPortrait'
+import { sampleReply } from './typographySamples'
+import { useSessionTypography } from '../../src/composables/useSessionTypography'
 import type { ChatMessage } from '../../src/types'
 
 // Production components with fictional data; no session or model API is called.
 const events: string[] = []
 const requests: string[] = []
 let replayFailure = false
+let languageFailure = false
+let sampleIndex = 0
 const sessionSettingsFixture = createSessionSettingsFixture()
 const characterPanelFixture = createCharacterPanelFixture()
 const originalFetch = window.fetch.bind(window)
@@ -46,7 +50,7 @@ socket.messages.value = [
   { id: 'notice', role: 'system', content: 'The archive door is open.', timestamp: new Date() },
   { id: 'answer', role: 'assistant', content: 'The old archive smells of paper and rain. Evening light fades beyond the window.\n\nMira: "You found the letter. I was hoping you would come."\n\nOwen: "The lighthouse mark is on the map, too."', timestamp: new Date() },
 ] as ChatMessage[]
-socket.setLanguage = async value => { socket.language.value = value; events.push(`language:${value}`); return true }
+socket.setLanguage = async value => { if (languageFailure) return false; socket.language.value = value; events.push(`language:${value}`); return true }
 socket.sendMessage = async () => { events.push('replay') }
 socket.deleteMessage = async () => { events.push('undo') }
 const mapData = {
@@ -58,6 +62,8 @@ const mapData = {
 createApp({
   setup() {
     const params = new URLSearchParams(window.location.search)
+    socket.language.value = params.get('language') || ''
+    useSessionTypography(socket.language)
     const mapOpen = ref(false), sheetOpen = ref(false), settingsOpen = ref(params.get('panel') === 'settings'), mode = ref<'rpg' | 'vn'>(params.get('mode') === 'vn' ? 'vn' : 'rpg')
     watch(mode, value => { socket.sheet.value = { ...socket.sheet.value!, rule_enforcement_mode: value } }, { immediate: true })
     function modeHref(value: 'rpg' | 'vn') {
@@ -82,6 +88,7 @@ createApp({
     Object.assign(window, { groupedActionsFixture: {
       events, requests,
       settingsWrites: sessionSettingsFixture.writes,
+      failLanguageSave(value: boolean) { languageFailure = value },
       failSettingsSave(endpoint: string) { sessionSettingsFixture.failSave(endpoint) },
       setHeader(value: Record<string, unknown>) { header.value = { ...header.value, ...value } },
       setSpeech(enabled: boolean, playing = false, auto = false) { configState.isTtsEnabled = enabled; audioService.isPlaying.value = playing; audioService.autoSpeechEnabled.value = auto },
@@ -98,6 +105,7 @@ createApp({
         h('nav', { 'aria-label': 'Preview mode', class: 'flex items-center gap-1' }, (['rpg', 'vn'] as const).map(value =>
           h('a', { href: modeHref(value), 'aria-current': mode.value === value ? 'page' : undefined, class: 'rounded border px-2 py-0.5 ' + (mode.value === value ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-transparent hover:text-slate-100') }, value === 'vn' ? 'Visual mode' : 'RPG')
         )),
+        h('button', { type: 'button', class: 'rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:text-white', onClick: () => { socket.messages.value = [...socket.messages.value, { id: `sample-${++sampleIndex}`, role: 'assistant', content: sampleReply(socket.language.value), timestamp: new Date() }] } }, 'Sample reply'),
         h('a', { href: '/layouts.html', class: 'text-amber-300 hover:underline' }, 'Design examples'),
       ]),
       h('div', { class: 'flex-1 min-h-0' }, headerOnly ? h(ImmersiveHeader, {
