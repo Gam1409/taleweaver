@@ -1,4 +1,6 @@
 /** Read-only, server-filtered current observations; hidden inventory is never included. */
+import type { ItemStateValue } from '@/utils/equipmentSlots'
+
 export interface NpcVisibleGarment {
   item_id: string
   name: string
@@ -8,13 +10,14 @@ export interface NpcVisibleGarment {
   visible_regions: string[]
   uncovered_regions: string[]
   slots?: string[]
+  current_state?: ItemStateValue[]
 }
 
 export interface NpcKnownCondition {
   id: string
   target_id: string
   target_name?: string | null
-  kind: 'injury' | 'contamination' | 'fluid' | 'pain' | 'other'
+  kind: 'injury' | 'contamination' | 'fluid' | 'pain' | 'other' | 'item_state'
   part: string
   detail: string
   status: 'active' | 'treated' | 'reduced'

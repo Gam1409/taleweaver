@@ -49,7 +49,10 @@ async def session_is_vn(db: AsyncSession, state: SessionState) -> bool:
 def public_entity(entity: dict[str, Any], state: SessionState) -> dict[str, Any]:
     """Only ordinary player responses use this view; model/save data remain complete."""
     if str(entity.get("entity_type", "")).upper() != "NPC":
-        return dict(item_states([entity], state.entity_states)[0])
+        result = dict(item_states([entity], state.entity_states)[0])
+        if isinstance(result.get("inventory"), list):
+            result["inventory"] = item_states(result["inventory"], state.entity_states)
+        return result
     result = {key: value for key, value in entity.items() if key in PUBLIC_NPC_FIELDS}
     result["narrative_role"] = (
         "major"

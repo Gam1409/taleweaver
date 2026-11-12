@@ -55,7 +55,10 @@ to an item whose ID is only created by that same reply.
 The existing continuity/narrator context receives current properties, explicitly
 prioritized over obsolete state in original descriptions or older prose. Player
 inventory/equipment and visible VN world-item tooltips show a separate Current state
-section above the unchanged original description. Private properties are visible on
+section above the unchanged original description. Public properties also reach visible
+NPC equipment lists/popovers and items in already available container inventories.
+NPC cards display the current property value, including values reported by the player,
+rather than substituting the confirmation sentence. Private properties are visible on
 the player's own possessions; public world projections exclude them. Transfers keep
 properties attached to the item ID, including when its new owner leaves the scene.
 

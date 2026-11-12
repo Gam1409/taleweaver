@@ -10,6 +10,7 @@ from backend.engine.physical_conditions.ledger import apply, read, remap
 from backend.engine.physical_conditions.presentation import narration_block
 from backend.engine.physical_conditions.references import bind_records
 from backend.engine.physical_conditions.schema import KEY
+from backend.engine.visual_novel.presentation import public_entity
 
 
 def record(detail="The flask is half full.", part="fill_level", target="flask", **kw):
@@ -153,3 +154,23 @@ def test_next_prompt_and_reference_binding_keep_current_fact():
     )
     assert "The flask is empty." in block and "half full" not in block
     assert "supersede" in block
+
+
+def test_container_inventory_keeps_current_public_properties_without_private_ones():
+    states, _, errors = update(
+        {}, [record(), record("The flask has a secret label.", "inscription")]
+    )
+    assert not errors
+    ledger = read(states)
+    for row in ledger.conditions.values():
+        if row.part == "inscription":
+            row.visibility = "private"
+    states[KEY] = ledger.model_dump()
+    box = {"id": "box", "entity_type": "OBJECT", "inventory": [{"id": "flask", "name": "Flask"}]}
+    before = deepcopy(box)
+    view = public_entity(box, SimpleNamespace(entity_states=states))
+    facts = view["inventory"][0]["current_state"]
+    assert facts == [
+        {"dimension": "fill_level", "detail": "The flask is half full.", "last_changed_minute": 5}
+    ]
+    assert box == before

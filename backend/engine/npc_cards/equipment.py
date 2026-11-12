@@ -15,6 +15,7 @@ from backend.engine.clothing.profiles import (
 from backend.engine.clothing.visuals import detailed_for_state
 from backend.engine.clothing.wear_provenance import source_matches
 from backend.engine.debug_transcript import not_debug_sql
+from backend.engine.physical_conditions.item_state import project as item_states
 from backend.models.chat import ChatMessage
 
 
@@ -31,6 +32,7 @@ def _item_row(actor: dict, identifier: str, objects: list, states: dict, **field
         "wearable_slots", source.wearable_slots if source else item.get("wearable_slots")
     )
     garment = garment_for_item(item)
+    current_state = item_states([item], states)[0].get("current_state")
     return {
         "item_id": identifier,
         "name": str(item.get("name") or "")[:200],
@@ -42,6 +44,7 @@ def _item_row(actor: dict, identifier: str, objects: list, states: dict, **field
         "slots": display_slots(slots, list(garment.coverage) if garment else []),
         "visible_regions": [],
         "uncovered_regions": [],
+        **({"current_state": current_state} if current_state else {}),
         **fields,
     }
 

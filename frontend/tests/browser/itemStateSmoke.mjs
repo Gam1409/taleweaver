@@ -20,6 +20,18 @@ try {
     assert.ok(box && box.x >= 0 && box.x + box.width <= width)
     await page.screenshot({ path: `/tmp/item-state-${width}.png` })
   }
+  await page.getByRole('button', { name: 'Show NPC equipment' }).click()
+  await page.getByText('Item state · form', { exact: true }).waitFor()
+  for (const width of [1360, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.getByRole('button', { name: 'Chest: Coat', exact: true }).click()
+    const tooltip = page.getByRole('tooltip')
+    await tooltip.getByText('The coat is crumpled.', { exact: true }).waitFor()
+    const bounds = await tooltip.boundingBox()
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width)
+    await page.screenshot({ path: `/tmp/item-state-npc-${width}.png` })
+    await page.keyboard.press('Escape')
+  }
   assert.deepEqual(errors, [])
   console.log('Item state browser checks passed.')
 } finally { await browser.close() }

@@ -225,3 +225,19 @@ const getOriginalImageUrl = path => path;`)
   assert.doesNotMatch(existing, /Generate portrait/)
   assert.match(existing, /Regenerate portrait/)
 })
+
+test('item properties have a label on NPC cards and current values on equipment lists', async () => {
+  const card = await component('NpcCurrentState')
+  const html = await render(card, { state: {
+    availability: 'present', clothing: { items: [] },
+    conditions: { items: [{ id: 'state1', kind: 'item_state', part: 'form', status: 'active', detail: 'The coat is crumpled.' }] },
+  } })
+  assert.match(html, /Item state · form/)
+  assert.match(html, /The coat is crumpled/)
+  const list = await component('EquipmentList')
+  const equipment = await render(list, { items: [{ id: 'coat', name: 'Coat', current_state: [
+    { dimension: 'form', detail: 'Crumpled <script>not executable</script>.' },
+  ] }] })
+  assert.match(equipment, /Crumpled &lt;script&gt;/)
+  assert.doesNotMatch(equipment, /<script>/)
+})

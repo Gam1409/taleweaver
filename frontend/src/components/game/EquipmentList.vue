@@ -14,6 +14,7 @@ defineProps<{ items: EquipmentDisplayItem[] }>()
       <span class="mt-0.5 shrink-0"><EquipmentItemIcon :item="item" /></span>
       <div class="min-w-0">
         <p class="break-words text-sm text-slate-200">{{ item.name }}</p>
+        <p v-for="fact in item.current_state || []" :key="fact.dimension" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ fact.detail }}</p>
         <p v-if="item.uncovered_regions?.length" class="mt-1 text-xs text-amber-200">
           Partially displaced
         </p>
