@@ -1,17 +1,23 @@
 """Read-only narration guidance for rewriting an already committed response."""
 
 import json
+from collections.abc import Sequence
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import prompts
+from backend.core.content_language import default_language
 from backend.engine.memory_manager import MemoryManager
+from backend.engine.narrator.flow import flow_guidance
+from backend.engine.narrator.history import completed_narrations
+from backend.engine.narrator.prompts import narration_style_block
 from backend.engine.npc_presence import presence_context
 from backend.engine.visual_novel.narration import narration_suffix
 from backend.engine.visual_novel.presentation import session_is_vn
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -22,7 +28,9 @@ def _text(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-async def narration_guidance(db: AsyncSession, session: GameSession, user: User) -> str:
+async def narration_guidance(
+    db: AsyncSession, session: GameSession, user: User, history: Sequence[ChatMessage] = ()
+) -> str:
     state = await db.scalar(select(SessionState).where(SessionState.session_id == session.id))
     if state is None:
         raise HTTPException(409, "Session state is unavailable. Reload the session.")
@@ -52,4 +60,12 @@ async def narration_guidance(db: AsyncSession, session: GameSession, user: User)
         "in_game_time": state.in_game_time,
         "source_of_truth": "The original response and committed state; do not replay the action.",
     }
-    return "\n\n".join((frame, suffix, voice, presence_context(entities, state), json.dumps(facts)))
+    guidance = "\n\n".join(
+        (frame, suffix, voice, presence_context(entities, state), json.dumps(facts))
+    )
+    flow = flow_guidance(
+        state,
+        completed_narrations(list(reversed(history)), session.id),
+        language=default_language(session.content_language, user.default_language),
+    )
+    return "\n\n".join(filter(None, (guidance, narration_style_block(state).strip(), flow.strip())))

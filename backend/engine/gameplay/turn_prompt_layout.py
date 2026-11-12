@@ -1,9 +1,8 @@
 """Message layout for the turn passes.
 
-System prompts only carry static content (persona, adventure frame, rules, formatting),
-so providers can serve them from the prompt cache across turns. Everything that changes
-per turn (live state, quests, outcome, violations, reminders) goes into the latest user
-message instead.
+System prompts keep a stable prefix (persona, adventure frame, rules, formatting),
+with an optional bounded presentation suffix. Live state, quests, outcome, violations
+and reminders go into the latest user message.
 """
 
 from __future__ import annotations
@@ -15,6 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.debug_transcript import not_debug_sql, without_debug
+from backend.engine.narrator.flow import flow_guidance
+from backend.engine.narrator.history import completed_narrations
 from backend.models.chat import ChatMessage
 
 RECENT_NARRATION_MAX_CHARS = 400
@@ -190,6 +191,8 @@ async def build_narration_messages(
     narration_prompt: str,
     user_msg: str,
     turn_context: str = "",
+    *,
+    language: str | None = None,
 ) -> tuple[list[dict[str, str]], int]:
     """Builds the multi-turn message list for Pass 2 (narration).
 
@@ -202,6 +205,11 @@ async def build_narration_messages(
     max_turns = _resolve_max_turns(state, adventure)
     window = await _load_memory_window(db, state.session_id, max_turns)
     current_turn_idx = max((i for i, m in enumerate(window) if m.role == "user"), default=-1)
+    guidance = flow_guidance(
+        state, completed_narrations(window, state.session_id), language=language
+    )
+    if guidance:
+        narration_prompt += "\n\n" + guidance.strip()
 
     messages: list[dict[str, str]] = [{"role": "system", "content": narration_prompt}]
     for idx, message in enumerate(window):

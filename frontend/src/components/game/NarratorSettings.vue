@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { BookOpen, Save } from 'lucide-vue-next'
-import { useNarratorSettings, VERBOSITY_OPTIONS } from '@/composables/useNarratorSettings'
+import { useNarratorSettings, VERBOSITY_OPTIONS, FLOW_OPTIONS } from '@/composables/useNarratorSettings'
 
 const props = defineProps<{ endpoint: string; authorDefaults?: boolean }>()
 const { settings, voices, loaded, busy, error, dirty, load, save, selectVoice } = useNarratorSettings(() => props.endpoint)
 const selected = computed(() => settings.value.voice?.id ?? '')
+const flowHelpId = `narration-flow-${useId()}`
 const valid = computed(() => !settings.value.voice || (
   settings.value.voice.name.trim().length > 0 && settings.value.voice.instruction.trim().length > 0
 ))
@@ -55,7 +56,14 @@ defineExpose({ save: () => valid.value ? save() : Promise.resolve(false) })
           <option v-for="[value, label] in VERBOSITY_OPTIONS" :key="value" :value="value">{{ label }}</option>
         </select>
       </label>
-      <p class="text-xs text-slate-500">Scene pacing controls events. This preference controls prose detail and adds no model calls.</p>
+      <p class="text-xs text-slate-500">Prose detail controls how much the narrator describes. Scene pacing controls how quickly events advance.</p>
+      <label class="block space-y-1 text-xs text-slate-300">
+        <span>Narration flow</span>
+        <select v-model="settings.flow" aria-label="Narration flow" :aria-describedby="flowHelpId" class="w-full rounded-xl border border-white/10 bg-slate-900 p-2">
+          <option v-for="[value, label] in FLOW_OPTIONS" :key="value" :value="value">{{ label }}</option>
+        </select>
+      </label>
+      <p :id="flowHelpId" class="text-xs text-slate-400">Encourage varied wording and rhythm while keeping events and character voices unchanged.</p>
     </fieldset>
     <button v-if="authorDefaults" type="button" :disabled="!dirty || busy || !valid" class="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40" @click="save">
       <Save class="h-4 w-4" /> {{ busy ? 'Saving…' : 'Save narrator defaults' }}

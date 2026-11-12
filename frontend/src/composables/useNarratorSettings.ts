@@ -12,6 +12,7 @@ export interface NarratorVoice {
 export interface NarratorSettings {
   voice: NarratorVoice | null
   verbosity: 'default' | 'terse' | 'dialogue' | 'balanced' | 'rich' | 'epic'
+  flow: 'off' | 'gentle' | 'balanced'
 }
 
 export const VERBOSITY_OPTIONS = [
@@ -19,8 +20,13 @@ export const VERBOSITY_OPTIONS = [
   ['balanced', 'Balanced'], ['rich', 'Detailed'], ['epic', 'Expansive'],
 ] as const
 
-const empty = (): NarratorSettings => ({ voice: null, verbosity: 'default' })
-const clone = (value: NarratorSettings): NarratorSettings => JSON.parse(JSON.stringify(value))
+export const FLOW_OPTIONS = [['off', 'Off'], ['gentle', 'Gentle'], ['balanced', 'Balanced']] as const
+
+const empty = (): NarratorSettings => ({ voice: null, verbosity: 'default', flow: 'gentle' })
+const normalize = (value: NarratorSettings): NarratorSettings => ({
+  ...JSON.parse(JSON.stringify(value)),
+  flow: FLOW_OPTIONS.some(([flow]) => flow === value.flow) ? value.flow : 'gentle',
+})
 
 export function useNarratorSettings(endpoint: () => string) {
   const settings = ref<NarratorSettings>(empty())
@@ -47,7 +53,7 @@ export function useNarratorSettings(endpoint: () => string) {
       const body = await response.json()
       if (controller !== current || path !== endpoint()) return false
       if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not save narrator settings.')
-      settings.value = clone(body.settings)
+      settings.value = normalize(body.settings)
       voices.value = body.voices
       saved.value = JSON.stringify(settings.value)
       loaded.value = true

@@ -32,7 +32,7 @@ BRIEF = "/api/adventures/portrait-template/world-brief"
 
 
 def choice():
-    return {"voice": default_narrator_voices()[1], "verbosity": "rich"}
+    return {"voice": default_narrator_voices()[1], "verbosity": "rich", "flow": "gentle"}
 
 
 @pytest.mark.asyncio
