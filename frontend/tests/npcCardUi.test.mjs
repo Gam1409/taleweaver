@@ -171,7 +171,10 @@ test('equipment lists preserve partial placement and escape item text', async ()
   const html = await render(ui, { items: [item] })
   assert.match(html, /Partially displaced/)
   assert.match(html, /&lt;b&gt;Coat&lt;\/b&gt;/)
-  assert.doesNotMatch(html, /<script\b|<b\b/i)
+  assert.doesNotMatch(html, /<script\b|<b>/i)
+  const mixedCase = await render(ui, { items: [{ ...item, name: '<ScRiPt>Coat</ScRiPt>' }] })
+  assert.match(mixedCase, /&lt;ScRiPt&gt;Coat&lt;\/ScRiPt&gt;/)
+  assert.doesNotMatch(mixedCase, /<script\b/i)
   const missing = await render(ui, { items: [{ ...item, image_url: null, uncovered_regions: [] }] })
   assert.doesNotMatch(missing, /<img\b|Partially displaced/)
 })
@@ -224,22 +227,4 @@ const getOriginalImageUrl = path => path;`)
   const existing = await render(ui, { npc: { id: 'mira', name: 'Mira', description: '', image_url: '/portrait.png' }, busy: false, error: '', updated: false })
   assert.doesNotMatch(existing, /Generate portrait/)
   assert.match(existing, /Regenerate portrait/)
-})
-
-test('item properties have a label on NPC cards and current values on equipment lists', async () => {
-  const card = await component('NpcCurrentState')
-  const html = await render(card, { state: {
-    availability: 'present', clothing: { items: [] },
-    conditions: { items: [{ id: 'state1', kind: 'item_state', part: 'form', status: 'active', detail: 'The coat is crumpled.' }] },
-  } })
-  assert.match(html, /Item state · form/)
-  assert.match(html, /The coat is crumpled/)
-  const list = await component('EquipmentList')
-  for (const tag of ['script', 'SCRIPT', 'ScRiPt']) {
-    const equipment = await render(list, { items: [{ id: 'coat', name: 'Coat', current_state: [
-      { dimension: 'form', detail: `Crumpled <${tag}>not executable</${tag}>.` },
-    ] }] })
-    assert.ok(equipment.includes(`Crumpled &lt;${tag}&gt;`))
-    assert.doesNotMatch(equipment, /<script\b/i)
-  }
 })

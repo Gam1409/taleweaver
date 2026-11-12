@@ -1421,6 +1421,11 @@ const {
   tooltipImageFailed,
   contextMenu,
   tooltipStyle,
+  tooltipTarget,
+  retainHover,
+  leaveHover,
+  closeHover,
+  setTooltipElement,
   isConsumableHover,
   handleHover,
   handleChatNpcHover,
@@ -1666,11 +1671,11 @@ usePlayAgentAutoLoop()
       @open-debug="openDebugInspector"
       @open-walkthrough="openWalkthroughPanel"
       @npc-hover="(ent, event) => typeof ent === 'object' && ent !== null ? handleHover(ent, event) : handleChatNpcHover(ent, event)"
-      @npc-leave="hoveredEntity = null"
+      @npc-leave="leaveHover"
       @npc-click="(name) => handleEntityClick({ name, entity_type: 'NPC' })"
-      @npc-portrait="(npc) => { hoveredEntity = null; openPortrait(npc) }"
+      @npc-portrait="(npc) => { closeHover(); openPortrait(npc) }"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
       @item-click="handleEntityClick"
       @take-direct="handleTakeDirect"
       @npc-contextmenu="(entity, event) => openContextMenu(entity, event)"
@@ -1707,7 +1712,7 @@ usePlayAgentAutoLoop()
       @read-item="openTextLogFromEntity"
       @changed="handleSheetChanged"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
       @item-contextmenu="(item, event) => openInventoryContextMenu(item, event)"
     />
     <MapModal :open="showMap" :map-data="mapData" :nodes="nodes" :is-debug="!!sheet?.debug_mode" @close="showMap = false" />
@@ -1729,7 +1734,7 @@ usePlayAgentAutoLoop()
       @close="showWalkthrough = false"
       @reveal="revealWalkthrough"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
     <SessionNoteModal
       v-if="showNoteModal"
@@ -1827,7 +1832,7 @@ usePlayAgentAutoLoop()
       @debug-win="handleCombatDebugWin"
       @debug-loose="handleCombatDebugLoose"
       @entity-hover="(entity, event) => handleHover(entity, event)"
-      @entity-leave="hoveredEntity = null"
+      @entity-leave="leaveHover"
     />
 
     <CombatLootPopup
@@ -1837,7 +1842,7 @@ usePlayAgentAutoLoop()
       @close="closeLootPopup"
       @confirm="handleLootDone"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'Loot recovered from battle.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
 
     <ContainerModal
@@ -1850,7 +1855,7 @@ usePlayAgentAutoLoop()
       @take-item="handleContainerTakeItem"
       @drop-to-scene="handleContainerDropToScene"
       @item-hover="(item, event) => handleHover(item, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
 
     <ContainerUnlockModal
@@ -1935,11 +1940,16 @@ usePlayAgentAutoLoop()
     <GameHoverTooltip
       :hovered-entity="hoveredEntity"
       :tooltip-style="tooltipStyle"
+      :teleport-target="tooltipTarget"
       :tooltip-image-failed="tooltipImageFailed"
       :shows-mechanics="showsMechanics"
       :is-consumable-hover="isConsumableHover"
       :rule-mode="sheet?.rule_enforcement_mode"
       @image-error="onTooltipImageError"
+      @retain="retainHover"
+      @leave="leaveHover"
+      @close="closeHover(true)"
+      @element="setTooltipElement"
     />
 
     <!-- CONTEXT MENU -->

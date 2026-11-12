@@ -5,7 +5,7 @@ import StatBar from '@/components/game/StatBar.vue'
 import { getImageUrl, getItemIcon, hasRenderableImagePath } from '@/utils/game_icons'
 import { hasNonZero } from '@/services/hoverEntityService'
 import { formatObjectIds } from '@/utils/editor_utils'
-import { DoorClosed, DoorClosedLocked } from 'lucide-vue-next'
+import { DoorClosed, DoorClosedLocked, X } from 'lucide-vue-next'
 
 const props = defineProps<{
   hoveredEntity: any
@@ -14,11 +14,23 @@ const props = defineProps<{
   showsMechanics: boolean
   isConsumableHover: boolean
   ruleMode?: string | null
+  teleportTarget?: HTMLElement | string
 }>()
 
 const emit = defineEmits<{
   (e: 'image-error'): void
+  (e: 'retain'): void
+  (e: 'leave'): void
+  (e: 'close'): void
+  (e: 'element', element: HTMLElement | null): void
 }>()
+
+const popupStyle = computed(() => {
+  const maximum = props.tooltipStyle.maxHeight
+  const height = typeof maximum === 'number' ? `${maximum}px` : maximum || 'calc(100dvh - 16px)'
+  const limit = `min(${height}, calc(100dvh - 16px))`
+  return { ...props.tooltipStyle, maxHeight: limit, '--game-hover-height': limit }
+})
 
 const handleImageError = () => {
   emit('image-error')
@@ -105,16 +117,25 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="teleportTarget || 'body'">
     <Transition name="tooltip">
       <div
         v-if="props.hoveredEntity"
-        class="fixed z-[999] pointer-events-none"
-        :style="props.tooltipStyle"
+        :ref="element => emit('element', element as HTMLElement | null)"
+        class="game-hover-tooltip fixed z-[999] pointer-events-auto"
+        :style="popupStyle"
+        @mouseenter="emit('retain')"
+        @mouseleave="emit('leave')"
+        @focusin="emit('retain')"
+        @focusout="emit('leave')"
       >
+        <button type="button" class="absolute right-2 top-2 z-20 rounded-lg border border-slate-600 bg-slate-950/90 p-1.5 text-slate-300 hover:text-white focus-visible:outline-amber-300" aria-label="Close entity details" @click="emit('close')"><X class="h-4 w-4" aria-hidden="true" /></button>
         <div
-          class="w-full max-w-full bg-slate-900/95 border border-slate-700 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col animate-tooltip-in"
-          :class="props.hoveredEntity.entity_type?.toUpperCase() === 'NPC' ? 'min-h-[26rem]' : 'min-h-[20rem]'"
+          role="region"
+          :aria-label="`${entityName} details`"
+          tabindex="0"
+          class="game-hover-scroll w-full max-w-full bg-slate-900/95 border border-slate-700 rounded-2xl shadow-2xl backdrop-blur-xl animate-tooltip-in focus-visible:outline-amber-300"
+          :style="{ minHeight: `min(${isNpc ? '26rem' : '20rem'}, var(--game-hover-height))` }"
         >
 
           <!-- Image (NPC only) -->
@@ -161,7 +182,7 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
 
           <!-- NPC: two-column layout below image -->
           <template v-if="props.hoveredEntity.entity_type?.toUpperCase() === 'NPC'">
-            <div :class="['min-h-0 overflow-y-auto', hasHeroImage ? 'tooltip-content-overlap' : '']">
+            <div :class="hasHeroImage ? 'tooltip-content-overlap' : ''">
               <div class="flex gap-0 min-h-0">
                 <!-- Left: Name + Type + Stats -->
                 <div class="flex flex-col p-3 gap-2 w-[52%] shrink-0">
@@ -197,7 +218,7 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
 
           <!-- Non-NPC: original single-column layout -->
           <template v-else>
-          <div :class="['min-h-0 overflow-y-auto', hasHeroImage ? 'tooltip-content-overlap' : '']">
+          <div :class="hasHeroImage ? 'tooltip-content-overlap' : ''">
             <div :class="['flex items-center justify-between mb-1', headerPaddingClass]">
               <span :class="['font-bold text-white uppercase tracking-wider', headerLabelClass]">{{ entityName }}</span>
               <span
@@ -298,6 +319,8 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
 </template>
 
 <style scoped>
+.game-hover-scroll { max-height: var(--game-hover-height); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+.tooltip-leave-active { pointer-events: none; }
 .tooltip-enter-active,
 .tooltip-leave-active {
   transition: opacity 260ms ease, transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
