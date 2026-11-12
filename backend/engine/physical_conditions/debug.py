@@ -28,16 +28,19 @@ def view(state: Any, npcs: list[dict], items: list[dict], avatar: Any) -> dict:
     return {**ledger.model_dump(), "subjects": list(subjects.values())}
 
 
-async def _targets(db: AsyncSession, state: SessionState, avatar: Any) -> set[str]:
+async def _targets(db: AsyncSession, state: SessionState, avatar: Any) -> tuple[set[str], set[str]]:
     if avatar is None:
         avatar = await db.get(Avatar, state.avatar_id)
     targets = {"__player__"}
+    item_targets = set()
     inventories = [getattr(avatar, "inventory", []) or []]
     entities = await db.scalars(
         select(WorldEntity).where(WorldEntity.session_id == state.session_id)
     )
     for actor in entities:
         targets.add(actor.id)
+        if actor.entity_type == "OBJECT":
+            item_targets.add(actor.id)
         override = (state.entity_states or {}).get(actor.id) or {}
         inventories.append(
             override.get(
@@ -49,7 +52,8 @@ async def _targets(db: AsyncSession, state: SessionState, avatar: Any) -> set[st
             identifier = item.get("id") if isinstance(item, dict) else item
             if isinstance(identifier, str):
                 targets.add(identifier)
-    return targets
+                item_targets.add(identifier)
+    return targets, item_targets
 
 
 async def command(
@@ -71,7 +75,7 @@ async def command(
         if type(expected) is not int or expected != ledger.revision:
             return "DEBUG ERROR: Physical condition state changed. Refresh before editing."
         raw.setdefault("evidence", "Explicit manual debug correction.")
-        targets = await _targets(db, state, avatar)
+        targets, item_targets = await _targets(db, state, avatar)
         existing = ledger.conditions.get(raw.get("condition_id") or "")
         if existing:
             targets.add(
@@ -86,6 +90,7 @@ async def command(
             session_id=state.session_id,
             minute=int(state.in_game_time or 0),
             manual=True,
+            item_targets=item_targets,
         )
     except (ValueError, TypeError, IndexError):
         return "DEBUG ERROR: Invalid condition command; no physical state was changed."

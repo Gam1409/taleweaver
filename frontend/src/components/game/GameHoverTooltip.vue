@@ -209,6 +209,11 @@ const isEntityLocked = computed(() => !!props.hoveredEntity?.is_locked)
             </div>
 
             <div :class="bodyPaddingClass">
+              <section v-if="props.hoveredEntity.current_state?.length" aria-label="Current item state" class="mb-3 space-y-1 text-sm text-cyan-100">
+                <h4 class="font-semibold">Current state</h4>
+                <p v-for="fact in props.hoveredEntity.current_state" :key="fact.dimension" class="whitespace-pre-wrap break-words">{{ fact.detail }}</p>
+                <p class="text-xs text-slate-400">Current state takes precedence over the original description below.</p>
+              </section>
               <p :class="['text-slate-300 leading-relaxed italic whitespace-pre-wrap break-words tooltip-readable-text', bodyTextClass]"
                  v-html="formatObjectIds(entityDescription)"></p>
 

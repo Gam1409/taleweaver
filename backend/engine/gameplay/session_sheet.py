@@ -12,6 +12,7 @@ from backend.core.game_modes import mode_policy
 from backend.engine.clothing.presentation import player_clothing
 from backend.engine.item_logic import get_item_slot, normalize_equipment_keys
 from backend.engine.npc_presentation.settings import effective as portrait_preferences
+from backend.engine.physical_conditions.item_state import project as item_states
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -40,6 +41,14 @@ async def build_sheet_snapshot(avatar: Avatar, state: SessionState, db: AsyncSes
     entity_lookup = await _sheet_inventory_entities(db, avatar, state)
     synced_inventory = _sheet_inventory(avatar.inventory, entity_lookup, img_map)
     synced_equipment = _sheet_equipment(avatar.equipment, entity_lookup, img_map)
+    synced_inventory = item_states(synced_inventory, state.entity_states, private=True)
+    synced_equipment = dict(
+        zip(
+            synced_equipment,
+            item_states(list(synced_equipment.values()), state.entity_states, private=True),
+            strict=True,
+        )
+    )
 
     current_scene = await _sheet_current_scene(db, state)
     from backend.engine.stat_aggregator import calculate_total_stats

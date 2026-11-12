@@ -1,5 +1,6 @@
 """Small operation vocabulary; omission never resolves an existing condition."""
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
@@ -13,7 +14,8 @@ MAX_PROPOSALS = 12
 MAX_ACTIVE = 512
 MAX_RESOLVED = 64
 MAX_EVENTS = 128
-Kind = Literal["injury", "contamination", "fluid", "pain", "other"]
+Kind = Literal["injury", "contamination", "fluid", "pain", "other", "item_state"]
+ITEM_PART_PATTERN = r"^[a-z][a-z0-9_]{0,79}$"
 Status = Literal["active", "treated", "reduced", "resolved"]
 Operation = Literal["record", "change", "treat", "reduce", "clean", "heal", "remove"]
 
@@ -35,9 +37,12 @@ class ConditionProposal(Model, WithEvidenceSpan):
     visual_detail: str = Field(default="", max_length=320)
     visual_region: Region | None = None
     evidence: str = Field(min_length=4, max_length=600)
+    player_evidence: str = Field(default="", max_length=600)
 
     @model_validator(mode="after")
     def coherent(self) -> "ConditionProposal":
+        if self.kind == "item_state" and not re.fullmatch(ITEM_PART_PATTERN, self.part):
+            raise ValueError("Item state requires a stable lowercase property key.")
         if self.operation == "record":
             if (
                 not self.target_id
@@ -59,14 +64,16 @@ class ConditionProposal(Model, WithEvidenceSpan):
 
 
 class Source(Model, WithEvidenceSpan):
-    kind: Literal["narration", "manual", "unavailable"]
+    kind: Literal["narration", "player", "manual", "unavailable"]
     message_id: str | None = Field(default=None, max_length=100)
     content_hash: str = Field(default="", max_length=64)
     quote: str = Field(min_length=1, max_length=600)
 
     @model_validator(mode="after")
     def coherent(self) -> "Source":
-        if self.kind == "narration" and (not self.message_id or len(self.content_hash) != 64):
+        if self.kind in {"narration", "player"} and (
+            not self.message_id or len(self.content_hash) != 64
+        ):
             raise ValueError("Narration sources require a saved message ID and content hash.")
         return self
 
@@ -83,9 +90,18 @@ class Condition(Model):
     visual_region: Region | None = None
     origin: Source
     latest: Source
+    reported_by: Source | None = None
     updated_revision: StrictInt = Field(ge=0)
     first_recorded_minute: StrictInt | None = Field(default=None, ge=0)
     last_changed_minute: StrictInt | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def item_state_dimension(self) -> "Condition":
+        if self.kind == "item_state" and (
+            not re.fullmatch(ITEM_PART_PATTERN, self.part) or self.status != "active"
+        ):
+            raise ValueError("Item state must retain an active property with a stable key.")
+        return self
 
 
 class Event(Model):
@@ -93,6 +109,9 @@ class Event(Model):
     operation: Operation
     revision: StrictInt = Field(ge=1)
     source: Source
+    detail: str = Field(default="", max_length=320)
+    minute: StrictInt | None = Field(default=None, ge=0)
+    reported_by: Source | None = None
 
 
 class Ledger(Model):

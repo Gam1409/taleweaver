@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.game_modes import mode_policy
 from backend.engine.npc_journal.records import journal_of
+from backend.engine.physical_conditions.item_state import project as item_states
 from backend.engine.visual_novel.state import public_profile
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
@@ -48,7 +49,7 @@ async def session_is_vn(db: AsyncSession, state: SessionState) -> bool:
 def public_entity(entity: dict[str, Any], state: SessionState) -> dict[str, Any]:
     """Only ordinary player responses use this view; model/save data remain complete."""
     if str(entity.get("entity_type", "")).upper() != "NPC":
-        return entity
+        return dict(item_states([entity], state.entity_states)[0])
     result = {key: value for key, value in entity.items() if key in PUBLIC_NPC_FIELDS}
     result["narrative_role"] = (
         "major"

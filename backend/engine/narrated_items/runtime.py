@@ -130,6 +130,7 @@ async def reconcile_items(
         _status(manager, message_id, narration, "needs_review", **skipped.details())
         return [skipped.message()]
     rows = await session_objects(manager.db, manager.state.session_id)
+    pending_conditions.player_message = await physical_conditions.player_report(manager, message_id)
     actors = _identified_actors(manager, rows)
     snapshot = possession_snapshot(manager, rows)
     scene_context = await scene_continuity.prepare(manager)
@@ -146,6 +147,9 @@ async def reconcile_items(
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
+            "player_report": pending_conditions.player_message[1]
+            if pending_conditions.player_message
+            else "",
             "actors": actor_context(actors),
             "items": item_context(snapshot.items),
             "owners": snapshot.owners,
@@ -302,7 +306,9 @@ def _finish_extraction(
     if skipped is None or independent_allowed:
         if "condition_updates" in sections.provided:
             pending_conditions.complete(
-                extraction.condition_updates, set(changed) | set(snapshot.items)
+                extraction.condition_updates,
+                set(changed) | set(snapshot.items),
+                item_targets=set(snapshot.items),
             )
         else:
             pending_conditions.error = "The shared response did not confirm condition_updates."

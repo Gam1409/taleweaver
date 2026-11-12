@@ -4,6 +4,9 @@ VN sessions now keep a small physical condition ledger alongside their existing 
 
 This is a state ledger, not a medical simulator or a complete causal world model. It does not infer diagnoses, pregnancy, quantities, elapsed healing, emotions or changes to personality. Clothing ownership and placement continue to use the existing clothing system; item descriptions remain intrinsic descriptions rather than condition summaries.
 
+Mutable item properties also use this ledger; see [Current item state](item-state.md) for
+extensible properties, player reports, quantities and item views.
+
 ## How a completed turn changes state
 
 1. The existing post-narration item reconciliation request also receives relevant active physical facts and a `condition_updates` field. There is no additional model request.

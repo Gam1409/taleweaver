@@ -19,6 +19,12 @@ def operation_rules(schema: dict) -> None:
     change["properties"]["detail"] = {"minLength": 1, "pattern": r"\S"}
     change["required"].append("detail")
     schema["oneOf"] = [record, change, _update(["treat", "reduce", "clean", "heal", "remove"])]
+    schema["allOf"] = [
+        {
+            "if": {"properties": {"kind": {"const": "item_state"}}, "required": ["kind"]},
+            "then": {"properties": {"part": {"pattern": r"^[a-z][a-z0-9_]{0,79}$"}}},
+        }
+    ]
 
 
 def _update(operations: list[str]) -> dict:

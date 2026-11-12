@@ -46,7 +46,7 @@ def crowd(monkeypatch):
         for index in range(20)
     ]
     manager = SimpleNamespace(
-        db=object(),
+        db=SimpleNamespace(get=AsyncMock(return_value=None)),
         game_id="SESSION",
         user=object(),
         _vn_player_message_id="TURN",
