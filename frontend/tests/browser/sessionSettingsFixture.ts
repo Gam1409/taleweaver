@@ -11,7 +11,7 @@ export function createSessionSettingsFixture() {
     'dynamic-locations': { enabled: false, scale: 'auto', generate_images: false },
     'session-visual-presets': { source: 'current', selection: {}, presets: [] },
     'living-world': { living_world_enabled: false, mode: 'PAUSE', deliberation_enabled: false, decision_engine: 'native', max_deliberations: 8 },
-    chpm: { mode: 'off', actor_ids: [], max_active_npcs: 3, model_role: 'complex', max_output_tokens: 1200, max_input_chars: 24000, max_calls_per_turn: 8, memory_limit: 12, agent_steps: 0, failure_policy: 'continue' },
+    chpm: { mode: 'off', actor_ids: [], max_active_npcs: 3, model_role: 'complex', max_output_tokens: 1200, max_input_chars: 24000, max_calls_per_turn: 8, memory_limit: 12, agent_steps: 0, failure_policy: 'continue', npc_concurrency: 1, semantic_memory: false },
   }
   return {
     writes,
@@ -26,7 +26,7 @@ export function createSessionSettingsFixture() {
       if (key === 'vn-settings') return Response.json({ settings: data[key], available: true })
       if (key === 'dynamic-locations') return Response.json({ policy: data[key] })
       if (key === 'living-world') return Response.json({ settings: data[key], revision: 0, status: 'PAUSED', cursor: 0, target: 0, pending_events: 0, last_run_events: 0, llm_calls: 0, recap: [], concordia_available: true })
-      if (key === 'chpm') return Response.json({ module_version: '1.0.0', settings: data[key], revision: 0, available: true, characters: [{ id: 'MIRA', name: 'Mira' }], usage: { status: 'idle', calls: 0 }, trace: [], memory_counts: {}, agenda_counts: { active: 0, closed: 0 }, agenda: [] })
+      if (key === 'chpm') return Response.json({ module_version: '1.0.0', settings: data[key], revision: 0, available: true, characters: [{ id: 'MIRA', name: 'Mira' }, { id: 'OWEN', name: 'Owen' }], usage: { status: 'idle', calls: 0 }, trace: [], memory: {}, memory_counts: {}, agenda_counts: { active: 0, closed: 0 }, agenda: [] })
       return Response.json(data[key])
     },
   }
