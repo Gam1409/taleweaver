@@ -131,6 +131,68 @@ def test_player_report_needs_both_saved_report_and_completed_confirmation():
         assert errors and not accepted and not read(rejected).conditions
 
 
+@pytest.mark.parametrize("player_text", ["very very very", "very very and very very"])
+def test_ambiguous_player_report_occurrences_preserve_the_previous_value(player_text):
+    states, _, errors = update({}, [record()])
+    assert not errors
+    proposal = {
+        **record("very very", player_evidence="very very"),
+        "evidence": "You confirm the reported value.",
+    }
+    result, accepted, errors = update(
+        states, [proposal], "ambiguous", player_message=("user-2", player_text)
+    )
+    assert errors and "one excerpt" in errors[0] and not accepted
+    assert read(result).conditions == read(states).conditions
+    assert read(result).events == read(states).events
+
+
+def test_same_property_value_can_refresh_visual_evidence_without_restarting_its_clock():
+    proposal = record("The flask is dirty.", part="cleanliness")
+    states, identifiers, errors = update(
+        {}, [{**proposal, "visual_detail": "dirty", "visual_region": "hands"}]
+    )
+    assert not errors
+    result, accepted, errors = update(states, [proposal], "confirmation", minute=20)
+    assert not errors and accepted == identifiers
+    row = read(result).conditions[identifiers[0]]
+    assert row.first_recorded_minute == row.last_changed_minute == 5
+    assert row.detail == proposal["detail"]
+    assert row.visual_detail == "" and row.visual_region is None
+    assert row.latest.message_id == "confirmation"
+    assert read(result).events[-1].minute == 20
+    changed, _, errors = update(
+        result, [record("The flask is clean.", part="cleanliness")], "cleaned", minute=30
+    )
+    assert not errors
+    assert read(changed).conditions[identifiers[0]].last_changed_minute == 30
+
+
+def test_physical_condition_clock_still_tracks_visual_annotation_changes():
+    proposal = {**record("The flask is dirty.", part="surface"), "kind": "contamination"}
+    states, identifiers, errors = update(
+        {}, [{**proposal, "visual_detail": "dirty", "visual_region": "hands"}]
+    )
+    assert not errors
+    result, accepted, errors = update(
+        states,
+        [
+            dict(
+                operation="change",
+                condition_id=identifiers[0],
+                detail=proposal["detail"],
+                evidence=proposal["evidence"],
+            )
+        ],
+        "confirmation",
+        minute=20,
+    )
+    assert not errors and accepted == identifiers
+    row = read(result).conditions[identifiers[0]]
+    assert row.detail == proposal["detail"] and row.visual_detail == ""
+    assert row.first_recorded_minute == 5 and row.last_changed_minute == 20
+
+
 def test_invalid_amount_actor_and_removal_leave_known_state():
     states, ids, _ = update({}, [record()])
     for proposal in [

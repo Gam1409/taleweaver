@@ -73,7 +73,8 @@ def player_source(proposal: ConditionProposal, message: tuple[str, str] | None) 
 
     if not proposal.player_evidence:
         return None
-    if not message or message[1].count(proposal.player_evidence) != 1:
+    start = message[1].find(proposal.player_evidence) if message else -1
+    if not message or start < 0 or message[1].find(proposal.player_evidence, start + 1) >= 0:
         raise ValueError(
             "Player evidence must identify one excerpt of the current saved player turn."
         )
