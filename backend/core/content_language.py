@@ -8,6 +8,9 @@ LANGUAGES = {
     "it": "Italian",
     "ja": "Japanese",
     "zh": "Chinese",
+    "zh-hant": "Traditional Chinese",
+    "ar": "Arabic",
+    "ko": "Korean",
     "ru": "Russian",
     "pt": "Portuguese",
 }
@@ -17,14 +20,19 @@ def normalize_language(value: str | None) -> str | None:
     """Accept existing selector names and ISO language codes, including locales."""
     if not value or not value.strip():
         return None
-    token = value.strip().lower()
+    token = value.strip().lower().replace("_", "-")
     if token in LANGUAGES:
         return LANGUAGES[token]
     if token in {name.lower() for name in LANGUAGES.values()}:
         return next(name for name in LANGUAGES.values() if name.lower() == token)
-    base, separator, region = token.replace("_", "-").partition("-")
-    if separator and base in LANGUAGES and region.isalpha() and len(region) in {2, 4}:
-        return LANGUAGES[base]
+    parts = token.split("-")
+    valid_locale = 1 < len(parts) <= 3 and all(
+        part.isalpha() and len(part) in {2, 4} for part in parts[1:]
+    )
+    if valid_locale and parts[0] == "zh" and {"hant", "tw", "hk", "mo"}.intersection(parts):
+        return "Traditional Chinese"
+    if valid_locale and parts[0] in LANGUAGES:
+        return LANGUAGES[parts[0]]
     raise ValueError("Unsupported content language.")
 
 
