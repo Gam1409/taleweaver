@@ -1,4 +1,5 @@
 import { settingsService } from '../../src/services/settingsService'
+import { emptyWorldBrief } from '../../src/services/worldBrief'
 import type { AdventureTemplateSummary, GameSession } from '../../src/types'
 
 const artwork = (name: string) => `${import.meta.env.BASE_URL}assets/background/${name}.jpg`
@@ -77,6 +78,11 @@ export function createPortalFixture() {
       return json({ adventure_id: id, game_id: id, avatar_id: 'Alex' })
     }
     if (path.endsWith('/editor/assets')) return json({ adventure: draft(path.split('/')[2]), protagonist: null, npcs: [], objects: [], entities_all: [], scenes: [{ id: 'archive', name: 'The Old Archive', description: 'Shelves of coastal maps.', exits: [] }] })
+    if (path.endsWith('/world-brief')) {
+      const value = draft(path.split('/')[2])
+      if (method === 'PUT') value.world_brief = body
+      return json(value.world_brief || emptyWorldBrief())
+    }
     if (path.endsWith('/editor/validation/latest')) return json(null)
     if (/^\/adventures\/[^/]+$/.test(path)) {
       const value = draft(path.split('/')[2])
