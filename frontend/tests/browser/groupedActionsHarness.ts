@@ -59,7 +59,7 @@ createApp({
     return () => h('main', { class: 'h-dvh flex flex-col bg-slate-950 text-slate-100' }, [
       h('div', { class: 'h-7 shrink-0 flex items-center justify-between gap-3 border-b border-slate-800 px-4 text-[10px] text-slate-400' }, [
         h('span', 'Current interface · grouped actions · fictional preview'),
-        h('a', { href: '/', class: 'text-amber-300 hover:underline' }, 'Layouts'),
+        h('a', { href: '/layouts.html', class: 'text-amber-300 hover:underline' }, 'Design examples'),
       ]),
       h('div', { class: 'flex-1 min-h-0' }, h(ImmersiveGameView, {
         gameId: 'grouping-preview', messages: socket.messages.value, status: socket.status.value,
