@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.clothing.profiles import owned_items
 from backend.engine.physical_conditions.ledger import apply, read
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -17,7 +18,8 @@ def view(state: Any, npcs: list[dict], items: list[dict], avatar: Any) -> dict:
     subjects = {
         "__player__": {"id": "__player__", "name": getattr(avatar, "name", "Player") or "Player"}
     }
-    for row in [*npcs, *items]:
+    equipped = owned_items([], equipment=getattr(avatar, "equipment", None))
+    for row in [*equipped.values(), *npcs, *items]:
         identifier = row.get("id")
         if isinstance(identifier, str):
             subjects[identifier] = {"id": identifier, "name": row.get("name") or identifier}
@@ -31,8 +33,8 @@ def view(state: Any, npcs: list[dict], items: list[dict], avatar: Any) -> dict:
 async def _targets(db: AsyncSession, state: SessionState, avatar: Any) -> tuple[set[str], set[str]]:
     if avatar is None:
         avatar = await db.get(Avatar, state.avatar_id)
-    targets = {"__player__"}
-    item_targets = set()
+    item_targets = set(owned_items([], equipment=getattr(avatar, "equipment", None)))
+    targets = {"__player__", *item_targets}
     inventories = [getattr(avatar, "inventory", []) or []]
     entities = await db.scalars(
         select(WorldEntity).where(WorldEntity.session_id == state.session_id)
