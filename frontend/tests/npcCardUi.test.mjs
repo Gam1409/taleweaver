@@ -157,7 +157,7 @@ test('current state shows confirmed facts without immersion-breaking diagnostics
   const observed = await render(ui, { state })
   assert.match(observed, /Treated|game minute 480/)
   assert.match(observed, /&lt;script&gt;Bandage&lt;\/script&gt;/)
-  assert.doesNotMatch(observed, /<script\b/)
+  assert.doesNotMatch(observed, /<script\b/i)
   const absent = await render(ui, { state: { ...state, availability: 'not_present' } })
   assert.doesNotMatch(absent, /not currently visible|Bandage|Treated/)
   const unknown = await render(ui, { state: { ...state, clothing: { status: 'unavailable', items: [] }, conditions: { status: 'unavailable', items: [] } } })
@@ -171,7 +171,7 @@ test('equipment lists preserve partial placement and escape item text', async ()
   const html = await render(ui, { items: [item] })
   assert.match(html, /Partially displaced/)
   assert.match(html, /&lt;b&gt;Coat&lt;\/b&gt;/)
-  assert.doesNotMatch(html, /<script\b|<b>/)
+  assert.doesNotMatch(html, /<script\b|<b\b/i)
   const missing = await render(ui, { items: [{ ...item, image_url: null, uncovered_regions: [] }] })
   assert.doesNotMatch(missing, /<img\b|Partially displaced/)
 })
@@ -181,7 +181,7 @@ test('equipment icons use canonical images at 14 px with a missing-image fallbac
   const html = await render(ui, { item: { id: 'coat', name: '<script>Coat</script>', image_url: '/coat.png' } })
   assert.match(html, /src="\/coat.png"/)
   assert.match(html, /h-3\.5 w-3\.5/)
-  assert.doesNotMatch(html, /<script\b/)
+  assert.doesNotMatch(html, /<script\b/i)
   const missing = await render(ui, { item: { id: 'coat', name: 'Coat', image_url: null } })
   assert.doesNotMatch(missing, /<img\b/)
   assert.match(missing, /ra-vest/)
@@ -235,9 +235,11 @@ test('item properties have a label on NPC cards and current values on equipment 
   assert.match(html, /Item state · form/)
   assert.match(html, /The coat is crumpled/)
   const list = await component('EquipmentList')
-  const equipment = await render(list, { items: [{ id: 'coat', name: 'Coat', current_state: [
-    { dimension: 'form', detail: 'Crumpled <script>not executable</script>.' },
-  ] }] })
-  assert.match(equipment, /Crumpled &lt;script&gt;/)
-  assert.doesNotMatch(equipment, /<script>/)
+  for (const tag of ['script', 'SCRIPT', 'ScRiPt']) {
+    const equipment = await render(list, { items: [{ id: 'coat', name: 'Coat', current_state: [
+      { dimension: 'form', detail: `Crumpled <${tag}>not executable</${tag}>.` },
+    ] }] })
+    assert.ok(equipment.includes(`Crumpled &lt;${tag}&gt;`))
+    assert.doesNotMatch(equipment, /<script\b/i)
+  }
 })
