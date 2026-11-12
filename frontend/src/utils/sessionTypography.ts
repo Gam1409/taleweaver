@@ -31,7 +31,8 @@ export function sessionTypography(language: string) {
   const locale = (named && 'locale' in named ? named.locale : token || 'en').toLowerCase()
   const parts = locale.split('-')
   const traditional =
-    parts[0] === 'zh' && parts.some(part => ['hant', 'tw', 'hk', 'mo'].includes(part))
+    parts[0] === 'zh' && (parts[1] === 'hant' ||
+      (parts[1] !== 'hans' && parts.some(part => ['tw', 'hk', 'mo'].includes(part))))
   const key = traditional ? 'zh-hant' : parts[0]!
   const font = FONTS[key as keyof typeof FONTS] || FONTS.latin
   return {

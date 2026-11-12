@@ -22,6 +22,7 @@ test('persisted language names and locale aliases select the approved families',
     ['Arabic', 'Baloo Bhaijaan 2'], ['ar-SA', 'Baloo Bhaijaan 2'], ['Japanese', 'M PLUS Rounded 1c'], ['ja-JP', 'M PLUS Rounded 1c'],
     ['Chinese', 'Noto Sans SC'], ['zh-CN', 'Noto Sans SC'], ['zh-Hans', 'Noto Sans SC'],
     ['Traditional Chinese', 'Noto Sans TC'], ['zh-TW', 'Noto Sans TC'], ['zh_Hant_TW', 'Noto Sans TC'], ['zh-HK', 'Noto Sans TC'],
+    ['zh-Hans-TW', 'Noto Sans SC'], ['zh_Hans_HK', 'Noto Sans SC'], ['zh-Hant-CN', 'Noto Sans TC'],
     ['Korean', 'Noto Sans KR'], ['ko-KR', 'Noto Sans KR']
   ]) assert.equal(sessionTypography(language).family, family, language)
   assert.equal(new Set(CONTENT_LANGUAGES.map(item => item.code)).size, CONTENT_LANGUAGES.length)

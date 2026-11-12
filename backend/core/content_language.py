@@ -29,7 +29,11 @@ def normalize_language(value: str | None) -> str | None:
     valid_locale = 1 < len(parts) <= 3 and all(
         part.isalpha() and len(part) in {2, 4} for part in parts[1:]
     )
-    if valid_locale and parts[0] == "zh" and {"hant", "tw", "hk", "mo"}.intersection(parts):
+    script = parts[1] if valid_locale else None
+    traditional_chinese = parts[0] == "zh" and (
+        script == "hant" or (script != "hans" and {"tw", "hk", "mo"}.intersection(parts))
+    )
+    if valid_locale and traditional_chinese:
         return "Traditional Chinese"
     if valid_locale and parts[0] in LANGUAGES:
         return LANGUAGES[parts[0]]
