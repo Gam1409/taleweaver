@@ -153,6 +153,11 @@ bag. Theft must resolve success against an existing victim possession, keeping
 its canonical ID and removing it from the previous owner, including worn items.
 Failed theft leaves ownership unchanged. Clothing creation never represents theft.
 Never replace an existing item's identity by changing its name or base description.
+Filling, emptying, writing, cleaning, creasing and partial consumption change a state
+dimension, not identity. Resolve the player's factual statements against current state
+and world rules; clearly confirm or reject the result in narrative_description.
+The post-narration condition ledger owns these item states. Do not consume a container
+when only its contents are depleted, or invent a numeric remainder from an unknown amount.
 Use updated_inventory_items.condition_note for actual wear, dirt or damage while
 retaining the original item; a condition note cannot create a new weapon or function.
 Use new_inventory_items/removed_inventory_item_ids for confirmed player transfers,

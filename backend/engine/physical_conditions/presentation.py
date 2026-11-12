@@ -116,6 +116,8 @@ def narration_block(
         + "\nOmission from recent prose does not heal, clean or remove these conditions. "
         "Treatment is not complete healing; partial removal leaves a remaining condition. "
         "Explicit resolved records supersede older descriptions of that condition. "
+        "Item state dimensions supersede obsolete state in intrinsic descriptions and old prose. "
+        "Empty, clean, smoothed and depleted are retained states, not missing items. "
         "These facts do not establish currently exposed skin or another NPC's private knowledge. "
         "Respect current clothing and perspective. Mention conditions when relevant, not as a repeated checklist.\n"
     )
