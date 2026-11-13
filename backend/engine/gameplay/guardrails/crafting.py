@@ -265,6 +265,6 @@ class CraftingGuardMixin(GuardrailBase):
 
         by_id = {e.id.upper(): e for e in constructables}
         for cid, ent in by_id.items():
-            if cid not in cs.constructed:
+            if cid not in cs.constructed and self._is_hidden_now(ent):
                 self._revert_illegal_constructable(event, cid, ent, cs.messages)
         return cs.messages

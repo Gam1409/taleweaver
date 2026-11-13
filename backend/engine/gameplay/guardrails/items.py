@@ -10,8 +10,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from backend.core.prompts import KEY_ITEM_REFERENCE_SYSTEM_PROMPT
-from backend.engine.gameplay.guardrails.base import GuardrailBase
+from backend.core.state_rejection_trace import reject
+from backend.engine.gameplay.guardrails.base import (
+    GuardrailBase,
+    inventory_ids_upper,
+    item_id_upper,
+)
 from backend.engine.rule_engine import GameEvent
+from backend.engine.visual_novel.continuity import PLAYER
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
@@ -100,6 +106,44 @@ class ItemIntegrityMixin(GuardrailBase):
             kept.append(item)
         return kept
 
+    def _player_owned_item_ids(self) -> set[str]:
+        equipment = [
+            {"id": entry} if isinstance(entry, str) else entry
+            for entry in (self.avatar.equipment or {}).values()
+        ]
+        return inventory_ids_upper([*(self.avatar.inventory or []), *equipment])
+
+    def _filter_owned_acquisitions(self, event: GameEvent, reasons: list[str]) -> list[Any]:
+        """Ordinary mechanics may transfer an instance once; trusted grants bypass this guard."""
+        owned = self._player_owned_item_ids()
+        replaced = {
+            str(identifier).strip().upper() for identifier in event.removed_inventory_item_ids or []
+        }
+        accepted: set[str] = set()
+        kept = []
+        for item in event.new_inventory_items or []:
+            identifier = item_id_upper(item)
+            already_owned = identifier in owned and identifier not in replaced
+            if not identifier or (not already_owned and identifier not in accepted):
+                kept.append(item)
+                accepted.add(identifier)
+                continue
+            message = f"You already have {item.name}."
+            reasons.append(message)
+            reject(
+                "inventory",
+                "inventory.acquisition_already_owned",
+                message,
+                proposal=item,
+                canonical_item_id=item.id,
+                source={"owner": PLAYER, "accepted_in_event": identifier in accepted},
+                expected={"source_owner": "another owner", "destination_owner": PLAYER},
+                actual={"source_owner": PLAYER, "already_owned": already_owned},
+                inventory=self.avatar.inventory,
+                equipment=self.avatar.equipment,
+            )
+        return kept
+
     async def _enforce_no_dynamic_item_generation(self, event: GameEvent) -> list[str]:
         """Drops items the GM invented from new inventory items and scene spawns."""
         reasons: list[str] = []
@@ -110,6 +154,7 @@ class ItemIntegrityMixin(GuardrailBase):
             event.new_inventory_items = self._filter_invented(
                 event.new_inventory_items, known, reasons, "inventory item generation"
             )
+            event.new_inventory_items = self._filter_owned_acquisitions(event, reasons)
         if event.spawned_items:
             event.spawned_items = self._filter_invented(
                 event.spawned_items, known, reasons, "scene item spawn"

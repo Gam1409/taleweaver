@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
+from copy import deepcopy
 from typing import Any
 
+from backend.engine.gameplay.inventory_transfers import available_inventory_sources
 from backend.engine.gameplay.turn_context import TurnContext
 from backend.engine.rule_engine import GameEvent, InventoryItem
+from backend.engine.visual_novel.continuity import CanonicalInventoryItem
 from backend.utils.path_security import ensure_within_data_dir as _ensure_within_data_dir
 from backend.utils.path_security import sanitize_path_component as _sanitize_path_component
 
@@ -57,8 +60,23 @@ class TurnEventInventory(TurnContext):
     ) -> None:
         if not (event.new_inventory_items):
             return
+        carried_ids = {
+            item.get("id") for item in self.avatar.inventory or [] if isinstance(item, dict)
+        }
+        sources = await available_inventory_sources(
+            self,
+            {
+                item.id
+                for item in event.new_inventory_items
+                if item.id and item.id not in carried_ids
+            },
+        )
+        transferred: set[str] = set()
         filtered_inventory_items = []
-        for item in event.new_inventory_items:
+        for proposal in event.new_inventory_items:
+            item = proposal
+            if item.id in transferred:
+                continue
             match = (
                 next(
                     (
@@ -72,7 +90,21 @@ class TurnEventInventory(TurnContext):
                 else None
             )
 
-            if item.id and item.id in existing_item_ids and _is_consumable(item) and not vn_mode:
+            source = sources.get(item.id or "")
+            if source is not None:
+                item = CanonicalInventoryItem.model_validate(deepcopy(source))
+                transferred.add(item.id or "")
+
+            if (
+                item.id
+                and item.id in existing_item_ids
+                and match
+                and _is_consumable(item)
+                and not vn_mode
+            ):
+                item = CanonicalInventoryItem.model_validate(
+                    {**item.model_dump(exclude_none=True), **deepcopy(match)}
+                )
                 if not item.image_url and isinstance(match, dict) and match.get("image_url"):
                     item.image_url = match.get("image_url")
                 source_id = item.id
@@ -86,35 +118,39 @@ class TurnEventInventory(TurnContext):
 
             await self._ensure_inventory_item_image(item)
 
-            if item.id and item.id in existing_item_ids:
-                # Check if it's a true duplicate (same name)
-                if match:
-                    if match.get("name") == item.name:
-                        logger.info(
-                            "[Turn %s] Skipping true duplicate inventory item id: %s",
-                            self.game_id,
-                            item.id,
-                        )
-                        continue
-                    else:
-                        logger.info(
-                            "[Turn %s] Permitting implied update for item id %s (Name: %s -> %s)",
-                            self.game_id,
-                            item.id,
-                            match.get("name"),
-                            item.name,
-                        )
-                else:
-                    logger.info(
-                        "[Turn %s] Permitting pickup/implied update for item id %s (exists in session but not in inventory)",
-                        self.game_id,
-                        item.id,
-                    )
+            if self._skip_inventory_duplicate(item, existing_item_ids, match):
+                continue
 
             filtered_inventory_items.append(item)
             if item.id:
                 existing_item_ids.add(item.id)
         event.new_inventory_items = filtered_inventory_items
+
+    def _skip_inventory_duplicate(
+        self, item: InventoryItem, existing_ids: set[str], match: dict | None
+    ) -> bool:
+        if not item.id or item.id not in existing_ids:
+            return False
+        if not match:
+            logger.info(
+                "[Turn %s] Permitting pickup/implied update for item id %s (exists in session but not in inventory)",
+                self.game_id,
+                item.id,
+            )
+            return False
+        if match.get("name") == item.name:
+            logger.info(
+                "[Turn %s] Skipping true duplicate inventory item id: %s", self.game_id, item.id
+            )
+            return True
+        logger.info(
+            "[Turn %s] Permitting implied update for item id %s (Name: %s -> %s)",
+            self.game_id,
+            item.id,
+            match.get("name"),
+            item.name,
+        )
+        return False
 
     async def _prepare_spawned_items(
         self, event: GameEvent, vn_mode: bool, existing_item_ids: set[str]

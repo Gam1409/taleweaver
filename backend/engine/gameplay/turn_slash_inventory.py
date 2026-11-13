@@ -10,6 +10,10 @@ import json
 
 from sqlalchemy import and_, func, or_, select
 
+from backend.engine.gameplay.inventory_transfers import (
+    clear_dropped_references,
+    transfer_possession_to_scene,
+)
 from backend.models.world_entity import WorldEntity
 
 
@@ -31,11 +35,13 @@ async def drop_item(
             command.response = f"You don't have '{item_name}' in your inventory."
         else:
             new_inventory = list(self.avatar.inventory)
-            dropped_item = new_inventory.pop(item_idx)
+            dropped_item = new_inventory[item_idx]
+            if not await transfer_possession_to_scene(self, dropped_item):
+                command.response = f"You cannot drop {dropped_item.get('name')} here."
+                return
+            new_inventory.pop(item_idx)
             self.avatar.inventory = new_inventory
-
-            # Spawn in scene
-            await self._spawn_scene_item(dropped_item)
+            clear_dropped_references(self, dropped_item["id"])
             command.response = f"You dropped {dropped_item.get('name')}."
 
             drop_meta, dropped_id = await _drop_metadata(self, dropped_item)

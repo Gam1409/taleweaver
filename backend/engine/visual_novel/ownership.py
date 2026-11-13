@@ -51,7 +51,9 @@ def _remove_previous_owners(
             states.setdefault(entity.id, {})["inventory"] = deepcopy(kept)
 
 
-def _materialize_drop(db: AsyncSession, state: SessionState, item: InventoryItem) -> WorldEntity:
+def materialize_scene_possession(
+    db: AsyncSession, state: SessionState, item: InventoryItem
+) -> WorldEntity:
     """An existing possession need not already have a scene row; dropping is not generation."""
     canonical = item.model_dump(exclude_none=True)
     columns = WorldEntity.__table__.columns
@@ -61,6 +63,8 @@ def _materialize_drop(db: AsyncSession, state: SessionState, item: InventoryItem
         if key in InventoryItem.model_fields and key in columns and key != "id"
     }
     fields["description"] = fields.get("description") or ""
+    metadata = canonical.get("metadata_json")
+    metadata = deepcopy(metadata) if isinstance(metadata, dict) else {}
     entity = WorldEntity(
         id=item.id,
         session_id=state.session_id,
@@ -68,7 +72,7 @@ def _materialize_drop(db: AsyncSession, state: SessionState, item: InventoryItem
         current_scene_id=state.current_scene_id,
         is_in_inventory=False,
         is_hidden=False,
-        metadata_json=deepcopy(canonical),
+        metadata_json={**metadata, **deepcopy(canonical)},
         **fields,
     )
     db.add(entity)
@@ -94,7 +98,7 @@ async def sync_vn_ownership(
         if not item.id:
             continue
         if item.id not in by_id:
-            by_id[item.id] = _materialize_drop(db, state, item)
+            by_id[item.id] = materialize_scene_possession(db, state, item)
         canonical = item.model_dump(exclude_none=True)
         override = states.setdefault(item.id, {})
         override.update(
