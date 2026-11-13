@@ -9,12 +9,13 @@ from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world import rules
+from backend.engine.living_world.routes import outgoing, permitted
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.npc_movement import allowed_scenes
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
 from backend.models.session_state import SessionState
-from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from backend.models.world_entity import WorldEntity, WorldScene
 
 
 def fingerprint(state: SessionState, context: dict[str, Any]) -> str:
@@ -29,12 +30,7 @@ async def context_for(
     actor = await rules.npc(db, state, event.actor)
     if actor is None:
         raise HTTPException(409, "The decision actor is unavailable.")
-    override = (state.entity_states or {}).get(actor.id, {})
-    if (
-        not physically_present(actor, state)
-        or override.get("is_hidden", actor.is_hidden)
-        or override.get("is_defeated", False)
-    ):
+    if rules.unavailable_reason(state, actor):
         raise HTTPException(409, "The decision actor cannot participate.")
     location = rules.location(state, actor)
     scene = await db.scalar(
@@ -81,36 +77,12 @@ async def destinations(db: AsyncSession, state: SessionState, actor: Any, scene:
     if not movable or scene is None or scene.on_leave_scene_script:
         return []
     allowed = allowed_scenes(actor, state.entity_states or {})
-    rows = await db.execute(
-        select(WorldExit, WorldScene)
-        .join(
-            WorldScene,
-            (WorldScene.id == WorldExit.to_scene_id)
-            & (WorldScene.session_id == WorldExit.session_id),
-        )
-        .where(WorldExit.session_id == state.session_id, WorldExit.from_scene_id == scene.id)
-        .order_by(WorldExit.id)
-    )
-    return [edge.to_scene_id for edge, target in rows if permitted(state, edge, target, allowed)][
-        :16
-    ]
-
-
-def permitted(state: SessionState, edge: WorldExit, target: WorldScene, allowed: list) -> bool:
-    overrides = state.exit_states or {}
-    lock = {
-        **overrides.get(edge.id, {}),
-        **overrides.get(f"{edge.from_scene_id}:{edge.to_scene_id}", {}),
-    }
-    return not (
-        lock.get("is_locked", edge.is_locked)
-        or (allowed and target.id not in allowed)
-        or edge.on_exit_used_script
-        or edge.on_open_exit_script
-        or target.on_enter_scene_script
-        or edge.rule_to_unlock
-        or edge.unlock_expression
-    )
+    rows = await outgoing(db, state, scene.id)
+    return [
+        target.id
+        for edge, target in rows
+        if permitted(state, edge, target, allowed, origin=scene.id)
+    ][:16]
 
 
 async def participants(

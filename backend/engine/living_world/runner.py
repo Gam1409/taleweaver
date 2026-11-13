@@ -110,24 +110,8 @@ async def _run(
         if event.status == "DEFERRED" and event.retry_after > time.time():
             simulation.status = "PARTIAL"
             break
-        if not dependencies_ready(simulation, event):
-            if event.status != "CANCELLED":
-                simulation.status = "PARTIAL"
-                break
-        elif event.kind in {"DECISION", "SOCIAL"}:
-            event.status = "WAITING_FOR_LLM"
-            simulation.status = "WAITING_FOR_LLM"
+        if not await _process_event(db, state, simulation, event):
             break
-        else:
-            await rules.apply(db, state, event)
-            event.status = (
-                event.status if event.status in {"CANCELLED", "DEFERRED"} else "COMMITTED"
-            )
-            if event.status == "DEFERRED":
-                save(state, simulation)
-                await db.commit()
-                simulation.status = "PARTIAL"
-                break
         simulation.cursor = max(simulation.cursor, event.due)
         event.committed_at = simulation.cursor
         simulation.last_run_events += 1
@@ -147,3 +131,43 @@ async def _run(
     state.in_game_time = max(int(state.in_game_time or 0), simulation.cursor)
     save(state, simulation)
     await db.commit()
+
+
+async def _process_event(
+    db: AsyncSession, state: SessionState, simulation: Simulation, event: Event
+) -> bool:
+    if not dependencies_ready(simulation, event):
+        if event.status != "CANCELLED":
+            simulation.status = "PARTIAL"
+            return False
+        return True
+    if event.kind in {"DECISION", "SOCIAL"}:
+        return not await _wait_for_decision(db, state, simulation, event)
+    await _apply_rules(db, state, event)
+    if event.status != "DEFERRED":
+        return True
+    save(state, simulation)
+    await db.commit()
+    simulation.status = "PARTIAL"
+    return False
+
+
+async def _wait_for_decision(
+    db: AsyncSession, state: SessionState, simulation: Simulation, event: Event
+) -> bool:
+    actor = await rules.npc(db, state, event.actor)
+    reason = rules.unavailable_reason(state, actor)
+    if reason:
+        rules.cancel(event, reason, session_id=state.session_id, source_context=state.entity_states)
+        return False
+    event.status = "WAITING_FOR_LLM"
+    simulation.status = "WAITING_FOR_LLM"
+    return True
+
+
+async def _apply_rules(db: AsyncSession, state: SessionState, event: Event) -> None:
+    if event.status == "DEFERRED":
+        event.status = "PLANNED"
+    await rules.apply(db, state, event)
+    if event.status not in {"CANCELLED", "DEFERRED"}:
+        event.status = "COMMITTED"
