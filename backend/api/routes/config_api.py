@@ -12,6 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.comfyui_api import router as comfyui_router
+from backend.api.routes.model_discovery_access import checked_discovery_base
 from backend.api.routes.settings_normalization import (
     DEFAULT_COMPLEX_MAX_TOKENS,
     DEFAULT_GENERATOR_MAX_TOKENS,
@@ -737,6 +738,7 @@ async def get_minimax_models(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return available MiniMax model names for the configured endpoint."""
+    validated_base = checked_discovery_base(current_user, api_base, settings.MINIMAX_API_BASE)
     if not api_key:
         user = await _resolve_global_settings_owner(db, current_user)
         if user and user.encrypted_api_keys and "minimax" in user.encrypted_api_keys:
@@ -745,11 +747,6 @@ async def get_minimax_models(
             api_key = encryption_util.decrypt_key(user.encrypted_api_keys["minimax"])
         elif settings.MINIMAX_API_KEY:
             api_key = settings.MINIMAX_API_KEY
-
-    try:
-        validated_base = validate_provider_url(api_base or settings.MINIMAX_API_BASE)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"models": await _fetch_minimax_models(api_key, validated_base)}
 
@@ -788,19 +785,13 @@ async def get_llm_models(
         key = await _resolve_provider_api_key_for_models(db, current_user, "custom_openai")
         return {"models": await discover_models(base, key)}
     if provider_lower == "minimax":
+        validated_base = checked_discovery_base(current_user, api_base, settings.MINIMAX_API_BASE)
         api_key = await _resolve_provider_api_key_for_models(db, current_user, "minimax")
-        try:
-            validated_base = validate_provider_url(api_base or settings.MINIMAX_API_BASE)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
         models = await _fetch_minimax_models(api_key, validated_base)
     elif provider_lower in _OPENAI_COMPATIBLE_PROVIDERS:
-        api_key = await _resolve_provider_api_key_for_models(db, current_user, provider_lower)
         default_base = _OPENAI_COMPATIBLE_PROVIDERS[provider_lower]["default_base"]
-        try:
-            validated_base = validate_provider_url(api_base or default_base)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        validated_base = checked_discovery_base(current_user, api_base, default_base)
+        api_key = await _resolve_provider_api_key_for_models(db, current_user, provider_lower)
         models = await _fetch_openai_compatible_models(provider_lower, api_key, validated_base)
     else:
         raise HTTPException(
