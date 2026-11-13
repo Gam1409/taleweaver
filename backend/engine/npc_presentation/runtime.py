@@ -35,6 +35,20 @@ def _catalog(manager: Any, entities: list[Any]) -> dict[str, str]:
     return result
 
 
+def _color(entry: dict) -> list[int] | None:
+    try:
+        return Cue.model_validate({"color_rgb": entry.get("color_rgb")}).color_rgb
+    except ValidationError as exc:
+        reject(
+            "emotion",
+            "presentation.invalid_color",
+            "The proposed portrait color must contain three integer RGB channels from 0 to 255.",
+            proposal=entry,
+            validation_errors=exc.errors(include_url=False),
+        )
+        return None
+
+
 class PresentationTurn:
     def __init__(self, preferences: PortraitPreferences, catalog: dict[str, str]) -> None:
         self.preferences = preferences
@@ -278,6 +292,8 @@ class PresentationTurn:
                     preferences=self.preferences,
                 )
             emotion = Cue()
+        else:
+            emotion.color_rgb = _color(entry)
         emotion.thought = thought
         if emotion.emotion is None and thought is None:
             return None, None

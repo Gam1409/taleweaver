@@ -110,6 +110,36 @@ def test_english_metadata_keys_are_explicit_and_reminded_independently_of_story_
     )
 
 
+def test_thought_only_entries_do_not_inflate_the_accepted_emotion_count(monkeypatch):
+    turn = PresentationTurn(
+        PortraitPreferences(emotion_palette=True, character_thoughts=True),
+        {"KEEPER": "Archivist", "VISITOR": "Visitor", "UNKNOWN": "Unassessed"},
+    )
+    entries = [
+        {**ENTRY, "npc_id": "KEEPER", "emotion": 42},
+        {**ENTRY, "npc_id": "VISITOR"},
+        {"npc_id": "UNKNOWN", "emotion": "unknown", "intensity": 0},
+    ]
+    turn.clean(BODY + footer(entries))
+    manager = SimpleNamespace(
+        state=SimpleNamespace(session_id="session"), _portrait_presentation=turn
+    )
+    emit = Mock()
+    monkeypatch.setattr(service, "emit", emit)
+    runtime.diagnose(manager, BODY, completed=True)
+    fields = emit.call_args.kwargs
+    assert fields["presentation_reason"] == "available"
+    assert fields["selected_count"] == 3
+    assert fields["emotion_count"] == 1
+    assert fields["thought_count"] == 2
+    safe = safe_fields(fields)
+    assert safe["emotion_count"] == 1 and safe["thought_count"] == 2
+    assert BODY not in json.dumps(fields) and ENTRY["thought"] not in json.dumps(fields)
+    runtime.diagnose(manager, BODY, completed=False)
+    assert emit.call_args.kwargs["emotion_count"] == 0
+    assert emit.call_args.kwargs["thought_count"] == 0
+
+
 def test_system_log_retains_the_reason_without_story_or_thought_text(tmp_path, monkeypatch):
     log = DiagnosticService(tmp_path / "diagnostics")
     monkeypatch.setattr(diagnostics, "service", log)

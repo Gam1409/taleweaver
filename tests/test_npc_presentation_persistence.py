@@ -1,5 +1,6 @@
 """Session exports, copies and turn checkpoints retain narration-bound cues."""
 
+import pytest
 from sqlalchemy import select
 
 from backend.core.npc_presentation import source_hash
@@ -13,12 +14,20 @@ from tests.test_session_portraits import portrait_world
 __all__ = ["portrait_world"]
 
 
-async def test_session_copy_export_and_import_preserve_cues(portrait_world):
+@pytest.mark.parametrize("color_rgb", [None, [140, 160, 210]])
+async def test_session_copy_export_and_import_preserve_cues(portrait_world, color_rgb):
     text = "The sailor breathes calmly."
     cue = {
         "version": 1,
         "source_hash": source_hash(text),
-        "npcs": {"NPC_NEW": {"emotion": "calm", "intensity": 40, "thought": "We made it."}},
+        "npcs": {
+            "NPC_NEW": {
+                "emotion": "calm" if color_rgb is None else "vulnerability",
+                "intensity": 40,
+                "thought": "We made it.",
+                **({"color_rgb": color_rgb} if color_rgb is not None else {}),
+            }
+        },
     }
     async with TestSessionLocal() as db:
         message = ChatMessage(

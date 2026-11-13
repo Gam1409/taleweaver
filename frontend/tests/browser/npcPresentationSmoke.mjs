@@ -147,6 +147,20 @@ try {
     beforeAnimation,
     'opening an animated thought must not make API requests'
   )
+  for (const width of [1200, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.evaluate(() => window.npcPresentationFixture.setCustomColor('<em>uncertain</em>'))
+    await page.waitForFunction(() => document.querySelector('.emotion-portrait').getAttribute('aria-label').includes('<em>uncertain</em>'))
+    assert.match(await rin.getAttribute('style'), /140,\s*160,\s*210/)
+    assert.equal(await rin.locator('em').count(), 0, 'feeling labels remain escaped text')
+    await page.evaluate(() => window.npcPresentationFixture.clearAssessment())
+    await page.waitForFunction(() => !document.querySelector('.emotion-portrait').getAttribute('aria-label').includes('uncertain'))
+    assert.doesNotMatch((await rin.getAttribute('style')) || '', /140,\s*160,\s*210/)
+    await page.evaluate(() => window.npcPresentationFixture.setCustomColor())
+    await page.getByText('Disable effects', { exact: true }).click()
+    assert.doesNotMatch((await rin.getAttribute('style')) || '', /140,\s*160,\s*210/)
+  }
+  assert.equal(calls.length, beforeAnimation, 'changing local presentation must not call the API')
   assert.equal(errors.length, 0, errors.join('\n'))
   console.log('Portrait presentation browser checks passed.')
 } finally {

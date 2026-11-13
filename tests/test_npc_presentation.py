@@ -83,7 +83,7 @@ def test_opt_ins_are_independent(flags, expected):
     [
         {"npc_id": "PLAYER"},
         {"npc_id": ["RIN"]},
-        {"emotion": "adoration"},
+        {"emotion": "x" * 81},
         {"intensity": True},
         {"intensity": 101},
         {"intensity": "75"},

@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from sqlalchemy import select
 
 from backend.engine.npc_presentation.settings import KEY
@@ -14,8 +15,9 @@ __all__ = ["narration", "portrait_world"]
 PATH = "/api/adventures/portrait-session/chat"
 
 
+@pytest.mark.parametrize("color_rgb", [None, [140, 160, 210]])
 async def test_rewrite_uses_same_call_and_restoring_revision_restores_its_cue(
-    auth_client, narration
+    auth_client, narration, color_rgb
 ):
     message_id, llm = narration
     async with TestSessionLocal() as db:
@@ -26,17 +28,19 @@ async def test_rewrite_uses_same_call_and_restoring_revision_restores_its_cue(
         await db.commit()
     # NPC_NEW is the session-owned actor from the portrait fixture.
     body = "The locked gate refuses to budge."
+    cue = {
+        "emotion": "anger" if color_rgb is None else "vulnerability",
+        "intensity": 60,
+        **({"color_rgb": color_rgb} if color_rgb is not None else {}),
+    }
     llm.aexecute_simple_task.return_value = (
-        body
-        + "<npc-state>"
-        + json.dumps({"npcs": [{"npc_id": "NPC_NEW", "emotion": "anger", "intensity": 60}]})
-        + "</npc-state>"
+        body + "<npc-state>" + json.dumps({"npcs": [{"npc_id": "NPC_NEW", **cue}]}) + "</npc-state>"
     )
     result = await auth_client.post(PATH + "/regenerate", json={"message_id": message_id})
     assert result.status_code == 200, result.text
     rewritten = result.json()
     assert rewritten["content"] == body
-    assert rewritten["portrait_state"]["npcs"]["NPC_NEW"]["emotion"] == "anger"
+    assert rewritten["portrait_state"]["npcs"]["NPC_NEW"] == cue
     llm.aexecute_simple_task.assert_awaited_once()
     versions = (await auth_client.get(f"{PATH}/{message_id}/versions")).json()["versions"]
     original_id = versions[0]["id"]

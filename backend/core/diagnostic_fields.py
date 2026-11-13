@@ -106,6 +106,8 @@ NUMBERS = {
     "documents",
     "candidates",
     "selected_count",
+    "emotion_count",
+    "thought_count",
     "input_chars",
     "output_chars",
     "duration_seconds",

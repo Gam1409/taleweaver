@@ -17,7 +17,10 @@ from tests.llm_fakes import RoleLLMFactory
 from tests.test_game_loop import _seed_game_context
 
 
-async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test_db, monkeypatch):
+@pytest.mark.parametrize("color_rgb", [None, [140, 160, 210]])
+async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(
+    setup_test_db, monkeypatch, color_rgb
+):
     diagnostics = MagicMock()
     monkeypatch.setattr(service, "emit", diagnostics)
     body = "[RIN]: I can manage."
@@ -28,9 +31,10 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
                 "npcs": [
                     {
                         "npc_id": "RIN",
-                        "emotion": "determination",
+                        "emotion": "determination" if color_rgb is None else "vulnerability",
                         "intensity": 65,
                         "thought": "One step at a time.",
+                        **({"color_rgb": color_rgb} if color_rgb is not None else {}),
                     }
                 ]
             }
@@ -85,7 +89,13 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
             )
         )
         assert message.content == body
-        assert message.to_client_dict()["portrait_state"]["npcs"]["RIN"]["intensity"] == 65
+        cue = message.to_client_dict()["portrait_state"]["npcs"]["RIN"]
+        assert cue == {
+            "emotion": "determination" if color_rgb is None else "vulnerability",
+            "intensity": 65,
+            "thought": "One step at a time.",
+            **({"color_rgb": color_rgb} if color_rgb is not None else {}),
+        }
         assert "PORTRAIT PRESENTATION" in llm.stream_simple_task.await_args.args[0]
         llm.stream_simple_task.assert_awaited_once()
         event = next(
@@ -96,6 +106,7 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
 
 
 @pytest.mark.parametrize("mode", ["off", "shadow", "live"])
+@pytest.mark.parametrize("color_rgb", [None, [140, 160, 210]])
 @pytest.mark.parametrize(
     "preferences,expected",
     [
@@ -108,7 +119,7 @@ async def test_streamed_turn_saves_metadata_but_keeps_it_out_of_story(setup_test
     ],
 )
 async def test_vn_presentation_uses_the_same_narrator_call_in_every_personality_mode(
-    setup_test_db, monkeypatch, preferences, expected, mode
+    setup_test_db, monkeypatch, preferences, expected, mode, color_rgb
 ):
     from backend.engine.chpm import inference, rendering
     from backend.engine.chpm.runtime import current
@@ -125,9 +136,10 @@ async def test_vn_presentation_uses_the_same_narrator_call_in_every_personality_
                 "npcs": [
                     {
                         "npc_id": "LINA",
-                        "emotion": "interest",
+                        "emotion": "interest" if color_rgb is None else "vulnerability",
                         "intensity": 70,
                         "thought": "Наконец-то можно поговорить.",
+                        **({"color_rgb": color_rgb} if color_rgb is not None else {}),
                     }
                 ]
             },
@@ -189,7 +201,10 @@ async def test_vn_presentation_uses_the_same_narrator_call_in_every_personality_
             )
         )
         assert message is not None
-        assert message.to_client_dict()["portrait_state"]["npcs"]["LINA"] == expected
+        accepted = dict(expected)
+        if color_rgb is not None and preferences.get("emotion_palette"):
+            accepted.update(emotion="vulnerability", color_rgb=color_rgb)
+        assert message.to_client_dict()["portrait_state"]["npcs"]["LINA"] == accepted
         assert "<npc-state>" not in "".join(events)
         assert len(roles.prompts) == 1
         prompt = roles.prompts[0][0][0]

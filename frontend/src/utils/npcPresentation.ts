@@ -7,6 +7,7 @@ export interface PortraitPreferences {
 export interface PortraitCue {
   emotion?: string
   intensity?: number
+  color_rgb?: number[]
   thought?: string
 }
 export interface PortraitState {
@@ -62,14 +63,27 @@ export function thoughtText(cue: PortraitCue | undefined, prefs: PortraitPrefere
 }
 
 export function emotionLabel(cue: PortraitCue | undefined, prefs: PortraitPreferences): string {
-  if (!prefs.emotion_palette || !cue?.emotion || !Object.prototype.hasOwnProperty.call(EMOTION_PALETTE, cue.emotion) ||
+  if (!prefs.emotion_palette || typeof cue?.emotion !== 'string' || !cue.emotion.trim() ||
+      [...cue.emotion.trim()].length > 80 || cue.emotion.trim() === 'unknown' ||
       !Number.isInteger(cue.intensity) || cue.intensity! < 0 || cue.intensity! > 100) return ''
-  return `${EMOTION_PALETTE[cue.emotion]!.label} · ${cue.intensity}%`
+  const legacy = Object.prototype.hasOwnProperty.call(EMOTION_PALETTE, cue.emotion) ? EMOTION_PALETTE[cue.emotion] : undefined
+  return `${legacy?.label || cue.emotion.trim()} · ${cue.intensity}%`
+}
+
+function portraitColor(cue: PortraitCue): { rgb: string; rim?: string } {
+  const rgb = cue.color_rgb
+  if (Array.isArray(rgb) && rgb.length === 3 && rgb.every(channel => Number.isInteger(channel) && channel >= 0 && channel <= 255)) {
+    return { rgb: rgb.join(',') }
+  }
+  const emotion = cue.emotion!
+  return Object.prototype.hasOwnProperty.call(EMOTION_PALETTE, emotion)
+    ? EMOTION_PALETTE[emotion]!
+    : { rgb: '148,163,184' }
 }
 
 export function portraitStyle(cue: PortraitCue | undefined, prefs: PortraitPreferences): Record<string, string> {
   if (!emotionLabel(cue, prefs) || !prefs.brightness || !cue?.intensity) return {}
-  const color = EMOTION_PALETTE[cue.emotion!]!
+  const color = portraitColor(cue)
   const power = cue.intensity / 100 * prefs.brightness / 100
   const rim = color.rim || color.rgb
   return {

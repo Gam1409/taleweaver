@@ -2,7 +2,7 @@
 
 Session settings provide two independent opt-ins, both off in existing and new sessions:
 
-- **Палитра эмоций**: a subtle glow around NPC portraits. One dominant **overall current emotion** determines its color; the narrator's integer intensity (0–100) determines strength. A separate brightness slider changes the display without changing the assessment.
+- **Палитра эмоций**: a subtle glow around NPC portraits. The narrator supplies one dominant **overall current emotion**, a numeric RGB color and integer intensity (0–100). A separate brightness slider changes the display without changing the assessment.
 - **Мысли персонажей**: a short fictional in-character thought appears on portrait hover or keyboard focus. Escape dismisses it. When this option is enabled, portrait hover replaces the usual NPC tooltip, and clicking the portrait opens the character card without preparing a dialogue action. Unassessed portraits show no thought or fallback hover card. Reduced-motion preferences disable its animation.
 
 These are display features, not relationship meters or psychological diagnoses. They do not rewrite personality, memories, motives, consent, possessions or game outcomes. Thoughts can reveal fictional information the protagonist has not learned; enable them when that style of storytelling suits the session.
@@ -11,7 +11,7 @@ These are display features, not relationship meters or psychological diagnoses. 
 
 The existing narrator request supplies an optional `<npc-state>` JSON footer after the story. No additional model call, hover request, keyword inference or dialogue/voice-tag inference is used. Only enabled fields are requested and accepted. Enabled presentation adds a compact instruction, current cast IDs and a short output entry for each assessed NPC; exact token cost depends on cast size and model.
 
-Story language and machine data have separate contracts: prose and thoughts follow the selected story language, while JSON keys and emotion identifiers keep their specified English spelling. A compact reminder accompanies the current turn so long histories do not leave the footer requirement only in the initial system prompt. NPC Personality's simplified-RP fallback still supports the same display data.
+Story language and machine data have separate contracts: prose, feeling labels and thoughts follow the selected story language, while JSON keys keep their specified English spelling. Feeling labels are not restricted to a predefined category list. A compact reminder accompanies the current turn with the label and numeric color limits so long histories do not leave the footer requirement only in the initial system prompt. NPC Personality's simplified-RP fallback still supports the same display data.
 
 Availability is independent of NPC Personality's off, shadow, live, partial or
 simplified mode. Personality still matters to the content: the narrator uses the
@@ -30,15 +30,19 @@ Recovery also retains bounded messages from trusted host analysis errors, includ
 
 Saved roster selections may remain while an NPC is absent, no longer listed or reserved by adventure defaults. Changing request limits retains these existing IDs; adding a new selection still requires a known NPC from this session. The settings panel exposes unlisted saved IDs for explicit removal without revealing unlearned character names. The retry snapshot receives the changed request settings and cleared pause counters while keeping its own historical psychology and continuity gap.
 
-The server validates actor IDs against the visible session cast, emotion names, integer intensity and thoughts up to 160 Unicode characters. At most 20 NPC entries and 10,000 footer characters are accepted. Bad or missing metadata leaves the story usable with no assessment; **unknown is not calm**. Metadata is removed before story streaming, audio, item extraction, NPC review and canonical prose storage. A repaired/replaced reply only uses metadata supplied for that reply.
+The server validates actor IDs against the visible session cast, nonempty feeling labels up to 80 Unicode characters, integer intensity and thoughts up to 160 Unicode characters. Optional `color_rgb` contains exactly three integer channels from 0 through 255; booleans, floats, strings and CSS values are rejected. A bad color is discarded independently, preserving an otherwise valid feeling, intensity and thought. At most 20 NPC entries and 10,000 footer characters are accepted. Bad or missing metadata leaves the story usable with no assessment; **unknown is not calm**. Metadata is removed before story streaming, audio, item extraction, NPC review and canonical prose storage. A repaired/replaced reply only uses metadata supplied for that reply.
 
 `ChatMessage.portrait_state` stores the validated cues separately, tied to a hash of the final prose. Nullable data keeps legacy messages compatible. Rewrites, revision restoration, checkpoints, session copies and exports preserve this association. Historical pages use their own latest narration, not the newest assessment from another page. A subsequent unassessed reply clears the display instead of borrowing an earlier emotion.
 
-After committing a reply, the backend logs `NPC presentation` with the session, cast size, assessed count and a fixed reason. The optional system diagnostic log records the same result as `npc.presentation` with `presentation_reason`: `available`, `disabled`, `no_visible_cast`, `incomplete_narration`, `missing_footer`, `incomplete_footer`, `footer_too_large`, `invalid_json`, `invalid_entries`, `no_valid_entries` or `source_mismatch`. These records contain no story text, thoughts or raw model output. A missing/invalid footer is still left unassessed; it is not replaced with a guessed emotion or an old reply's thoughts.
+After committing a reply, the backend logs `NPC presentation` with the session, cast size, assessed count and a fixed reason. Separate `emotion_count` and `thought_count` distinguish accepted feelings from thought-only entries; an explicit `unknown` does not count as an assessed feeling. The optional system diagnostic log records the same result as `npc.presentation` with `presentation_reason`: `available`, `disabled`, `no_visible_cast`, `incomplete_narration`, `missing_footer`, `incomplete_footer`, `footer_too_large`, `invalid_json`, `invalid_entries`, `no_valid_entries` or `source_mismatch`. These records contain no story text, thoughts or raw model output. A missing/invalid footer is still left unassessed; it is not replaced with a guessed emotion or an old reply's thoughts.
 
 Settings belong to the session, use optimistic conflict detection and survive last-turn replay. Changing them does not modify adventure defaults. Both options off preserves the existing narrator prompt and stream behavior.
 
 ## Palette
+
+The narrator's validated RGB channels determine the hue for new assessments, including feelings outside the original vocabulary. The browser builds CSS only from these numeric components. Missing or malformed color uses the original palette for a known legacy label, or a fixed blue-gray theme color for another valid label. This fallback does not reinterpret the feeling or carry an assessment over from an earlier reply. Zero intensity or brightness, disabled palette, and `unknown` continue to show no glow. Previously saved cues without `color_rgb` remain valid; corrupted stored cues still fail validation rather than supplying unsafe style data.
+
+The following table describes the legacy fallback palette:
 
 | Emotion | Color |
 | --- | --- |
@@ -69,7 +73,7 @@ Color associations have common patterns and cultural differences; this is an exp
 
 ## Verification
 
-Offline backend tests cover streaming marker splits, malformed metadata, opt-in combinations, scope/ownership, settings conflicts and replay, prose binding, ordinary turn publication and narration revisions. The real-turn mode matrix covers off/shadow/live Personality and localized proposal failures; cached partial preparation and simplified recovery cannot suppress independent cues or turn them into confirmed psychology. Frontend tests cover palette/schema agreement, Unicode limits, defaults, historical selection and settings persistence. The browser fixture checks hover/focus/Escape, escaped thought text, no hover requests, independent effects and narrow-screen placement:
+Offline backend tests cover streaming marker splits, malformed metadata and RGB channels, bounded freeform labels, opt-in combinations, scope/ownership, settings conflicts and replay, prose binding, ordinary turn publication and narration revisions. The real-turn mode matrix covers legacy and custom-color cues with off/shadow/live Personality and localized proposal failures; cached partial preparation and simplified recovery cannot suppress independent cues or turn them into confirmed psychology. Frontend tests cover numeric color validation, legacy and theme fallback, Unicode limits, defaults, historical selection and settings persistence. The browser fixture checks hover/focus/Escape, escaped thought text, no hover requests, independent effects and narrow-screen placement:
 
 ```sh
 cd frontend

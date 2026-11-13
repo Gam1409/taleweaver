@@ -6,12 +6,19 @@ import Stage from '../../src/components/game/immersive/ImmersiveCharacterStage.v
 import DebugPlayerLocation from '../../src/components/game/DebugPlayerLocation.vue'
 import SessionPortraitSettings from '../../src/components/game/SessionPortraitSettings.vue'
 import SessionDiagnosticsId from '../../src/components/game/immersive/SessionDiagnosticsId.vue'
-import type { PortraitPreferences } from '../../src/utils/npcPresentation'
+import type { PortraitCue, PortraitPreferences } from '../../src/utils/npcPresentation'
 
 createApp({
   setup() {
     const preferences = ref<PortraitPreferences>({ emotion_palette: true, character_thoughts: true, brightness: 40 })
-    Object.assign(window, { npcPresentationFixture: { setMaximum() { for (const cue of Object.values(cues)) cue.intensity = 100; preferences.value = { emotion_palette: true, character_thoughts: true, brightness: 100 } } } })
+    Object.assign(window, { npcPresentationFixture: {
+      setMaximum() { for (const cue of Object.values(cues)) cue.intensity = 100; preferences.value = { emotion_palette: true, character_thoughts: true, brightness: 100 } },
+      setCustomColor(label = 'vulnerability') {
+        cues.RIN = { emotion: label, intensity: 65, color_rgb: [140, 160, 210], thought: 'I would appreciate reassurance.' }
+        preferences.value = { emotion_palette: true, character_thoughts: true, brightness: 40 }
+      },
+      clearAssessment() { delete cues.RIN; preferences.value = { ...preferences.value } },
+    } })
     const thoughtsOnly = () => { preferences.value = { ...preferences.value, emotion_palette: false, character_thoughts: true } }
     const off = () => { preferences.value = { ...preferences.value, character_thoughts: false, emotion_palette: false } }
     const settings = ref<InstanceType<typeof SessionPortraitSettings> | null>(null)
@@ -19,7 +26,7 @@ createApp({
     const clicks = ref(0)
     const hovered = ref(0)
     const portrait = ref<PortraitTarget | null>(null)
-    const cues = { RIN: { emotion: 'fear', intensity: 75, thought: '<script>stay calm</script>' }, MIKI: { emotion: 'love', intensity: 90, thought: 'I wish this moment could last.' }, SAKI: { emotion: 'calm', intensity: 60, thought: 'Everything can wait a little.' } }
+    const cues: Record<string, PortraitCue> = { RIN: { emotion: 'fear', intensity: 75, thought: '<script>stay calm</script>' }, MIKI: { emotion: 'love', intensity: 90, thought: 'I wish this moment could last.' }, SAKI: { emotion: 'calm', intensity: 60, thought: 'Everything can wait a little.' } }
     return () => h('main', { class: 'min-h-screen bg-slate-950 text-white p-8' }, [
       h('h1', { class: 'text-xl mb-6' }, 'Portrait presentation'),
       portrait.value ? h(NpcPortraitModal, { npc: portrait.value, sessionId: 'fixture', busy: false, error: '', updated: false, onClose: () => { portrait.value = null } }) : null,

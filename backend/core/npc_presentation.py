@@ -1,11 +1,19 @@
 """Presentation data never changes personality, relationships, or game rules."""
 
 import hashlib
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StringConstraints,
+    ValidationError,
+)
 
-Emotion = Literal[
+EMOTIONS = (
     "calm",
     "joy",
     "affection",
@@ -28,8 +36,14 @@ Emotion = Literal[
     "tiredness",
     "boredom",
     "unknown",
+)
+
+MAX_EMOTION = 80
+Emotion = Annotated[
+    str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=MAX_EMOTION)
 ]
-EMOTIONS = get_args(Emotion)
+ColorChannel = Annotated[StrictInt, Field(ge=0, le=255)]
+ColorRGB = Annotated[list[ColorChannel], Field(strict=True, min_length=3, max_length=3)]
 MAX_THOUGHT = 160
 MAX_NPCS = 20
 
@@ -55,6 +69,7 @@ class Cue(BaseModel):
     model_config = ConfigDict(extra="forbid")
     emotion: Emotion | None = None
     intensity: StrictInt | None = Field(default=None, ge=0, le=100)
+    color_rgb: ColorRGB | None = None
     thought: str | None = Field(default=None, max_length=MAX_THOUGHT)
 
 

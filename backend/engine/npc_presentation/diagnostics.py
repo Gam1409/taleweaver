@@ -34,6 +34,7 @@ def report(manager: Any, turn: "PresentationTurn", text: str, *, completed: bool
             preferences=turn.preferences,
         )
     session_id = getattr(manager.state, "session_id", None)
+    cues = payload["npcs"].values() if payload else ()
     fields = {
         "session_id": session_id,
         "turn_id": getattr(manager, "turn_id", None),
@@ -41,13 +42,20 @@ def report(manager: Any, turn: "PresentationTurn", text: str, *, completed: bool
         "presentation_reason": reason,
         "candidates": len(turn.catalog),
         "selected_count": len(payload["npcs"]) if payload else 0,
+        "emotion_count": sum(
+            cue.get("emotion") not in (None, "unknown") and cue.get("intensity") is not None
+            for cue in cues
+        ),
+        "thought_count": sum(bool(cue.get("thought")) for cue in cues),
     }
     service.emit("npc.presentation", **fields)
     if turn.preferences.enabled:
         logger.info(
-            "NPC presentation: session=%s reason=%s cast=%d assessed=%d",
+            "NPC presentation: session=%s reason=%s cast=%d assessed=%d emotions=%d thoughts=%d",
             session_id,
             reason,
             fields["candidates"],
             fields["selected_count"],
+            fields["emotion_count"],
+            fields["thought_count"],
         )
