@@ -473,6 +473,7 @@ async def _generate_world(db: AsyncSession, user: Optional[User], job: Generatio
         can_damage_npcs=payload.can_damage_npcs,
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         selected_image_styles=job.selected_image_styles,
+        selected_tone=payload.selected_tone,
         language=payload.language,
         cover_source_manifest=job.cover.manifest,
         cover_source_adventure_id=job.cover.adventure_id,
