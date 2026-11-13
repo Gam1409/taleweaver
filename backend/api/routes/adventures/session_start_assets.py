@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.session_asset_access import build_asset_copy_cache
 from backend.engine.gameplay.world import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -23,7 +24,7 @@ async def initialize_session_assets(
 ) -> tuple[dict[str, str], dict[str, str | None], dict[str, Any], Sequence[WorldEntity]]:
     from .sessions import _copy_data_asset_to_session
 
-    asset_copy_cache: dict[str, str] = {}
+    asset_copy_cache = await build_asset_copy_cache(db, new_session.user_id)
     copied_cover_url = _copy_data_asset_to_session(
         new_session.id, "cover", adventure.image_url, asset_copy_cache
     )

@@ -186,10 +186,10 @@ def _seed_visual_files(data_dir, adv_id):
         f"adventures/library/{adv_id}/{name}"
         for name in ("cover.png", "hero.png", "scenes/start.png", "entities/npc.png")
     )
-    for relative, content in zip(paths, (b"cover", b"hero", b"scene", b"entity"), strict=True):
+    for relative, color in zip(paths, ("blue", "green", "red", "gold"), strict=True):
         destination = data_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(content)
+        Image.new("RGB", (8, 8), color).save(destination, format="PNG")
     return paths
 
 

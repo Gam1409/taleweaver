@@ -13,6 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.schemas import CreateAdventureTemplatePayload
+from backend.api.routes.adventures.session_asset_access import build_asset_copy_cache
 from backend.api.routes.adventures.session_materializer import (
     copy_data_asset_to_session,
     materialize_initial_session_from_template,
@@ -265,7 +266,7 @@ async def _create_initial_session_state(
     db: AsyncSession, adv: AdventureTemplate, session: GameSession, avatar: Avatar, user_id: str
 ) -> None:
     """Snapshot the template manifest and asset mapping for the newly created session."""
-    asset_cache: dict[str, str] = {}
+    asset_cache = await build_asset_copy_cache(db, user_id)
     copied_cover = copy_data_asset_to_session(session.id, "cover", adv.image_url, asset_cache)
     copied_protagonist = copy_data_asset_to_session(
         session.id, "protagonist", avatar.profile_image, asset_cache

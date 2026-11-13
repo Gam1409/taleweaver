@@ -29,6 +29,7 @@ from backend.engine.entity_bundle import (
     EntityBundleError,
     pack_entity_bundle,
 )
+from backend.engine.export_asset_policy import read_archive_image
 from backend.engine.gameplay.world import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
@@ -120,7 +121,7 @@ def export_entity_bundle(adv: AdventureTemplate, entity: WorldEntity) -> bytes:
     for name in _ENTITY_IMPORT_COLUMNS:
         if name != "image_url":
             data[name] = deepcopy(getattr(entity, name))
-    image_bytes, image_ext = _read_local_image(entity.image_url)
+    image_bytes, image_ext = _read_local_image(entity.image_url, adv.id)
     return pack_entity_bundle(
         EntityBundle(kind, data, image_bytes, image_ext, source_title=adv.title)
     )
@@ -128,22 +129,25 @@ def export_entity_bundle(adv: AdventureTemplate, entity: WorldEntity) -> bytes:
 
 def export_protagonist_bundle(adv: AdventureTemplate, avatar: Avatar) -> bytes:
     data = {name: deepcopy(getattr(avatar, name)) for name in _AVATAR_FIELDS}
-    image_bytes, image_ext = _read_local_image(avatar.profile_image)
+    image_bytes, image_ext = _read_local_image(avatar.profile_image, adv.id)
     return pack_entity_bundle(
         EntityBundle("protagonist", data, image_bytes, image_ext, source_title=adv.title)
     )
 
 
-def _read_local_image(url: Optional[str]) -> tuple[Optional[bytes], Optional[str]]:
-    local_path = data_url_to_local_path(url)
-    if not local_path or not os.path.isfile(local_path):
+def _read_local_image(
+    url: Optional[str], template_id: str
+) -> tuple[Optional[bytes], Optional[str]]:
+    try:
+        local_path = data_url_to_local_path(url)
+        if local_path is None:
+            return None, None
+        ext = os.path.splitext(local_path)[1].lstrip(".").lower()
+        if ext not in IMAGE_EXTENSIONS:
+            return None, None
+        return read_archive_image(local_path, template_id), ext
+    except ValueError:
         return None, None
-    safe_path = assert_within_data_dir(local_path)
-    ext = os.path.splitext(safe_path)[1].lstrip(".").lower()
-    if ext not in IMAGE_EXTENSIONS:
-        return None, None
-    with open(safe_path, "rb") as handle:
-        return handle.read(), ext
 
 
 # ---------------------------------------------------------------------------

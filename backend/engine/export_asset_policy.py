@@ -33,7 +33,12 @@ def checked_asset_path(path: str, template_id: str) -> str:
 
 def read_archive_image(path: str, template_id: str) -> bytes:
     """Validate the exact bytes subsequently written to ZIP, without reopening them."""
-    canonical = checked_asset_path(path, template_id)
+    return read_bounded_image(checked_asset_path(path, template_id))
+
+
+def read_bounded_image(path: str) -> bytes:
+    """Validate bounded image bytes after the caller has authorized their source scope."""
+    canonical = ensure_within_data_dir(path)
     try:
         if not Path(canonical).is_file():
             raise ValueError(ERROR)
@@ -51,7 +56,14 @@ def read_archive_image(path: str, template_id: str) -> bytes:
                 io.BytesIO(data), formats=["PNG", "JPEG", "WEBP", "GIF", "AVIF", "ICO"]
             ) as image:
                 image.verify()
-    except (OSError, ValueError, SyntaxError, ParseError, DefusedXmlException) as exc:
+    except (
+        OSError,
+        ValueError,
+        SyntaxError,
+        ParseError,
+        DefusedXmlException,
+        Image.DecompressionBombError,
+    ) as exc:
         raise ValueError(ERROR) from exc
     return data
 

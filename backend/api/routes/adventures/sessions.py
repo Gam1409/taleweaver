@@ -1,4 +1,3 @@
-import glob
 import logging
 import os
 import shutil
@@ -14,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures import legacy_session_mutations
 from backend.api.routes.adventures.schemas import GameSessionResponse
+from backend.api.routes.adventures.session_asset_access import build_asset_copy_cache
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -72,8 +72,6 @@ ITEM_INTEGRITY_FIELDS = [
     "mana_change",
 ]
 
-_SAFE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
-
 
 def _is_svg_file(file_path: str, ext: str = "") -> bool:
     """Check if file is an SVG by extension or header sniffing."""
@@ -113,29 +111,6 @@ def _sanitize_path_component(value: Optional[str]) -> Optional[str]:
 
 def _ensure_within_data_dir(path: str) -> str:
     return ensure_within_data_dir_shared(path)
-
-
-def _find_existing_data_asset_path(filename: str) -> Optional[str]:
-    if not filename:
-        return None
-
-    search_roots = [
-        _ensure_within_data_dir(os.path.join(settings.DATA_DIR, "adventures", "library")),
-        _ensure_within_data_dir(os.path.join(settings.DATA_DIR, "adventures", "sessions")),
-    ]
-
-    for root in search_roots:
-        if not os.path.isdir(root):
-            continue
-        pattern = os.path.join(root, "**", filename)
-        for candidate in glob.iglob(pattern, recursive=True):
-            try:
-                resolved = _ensure_within_data_dir(candidate)
-            except ValueError:
-                continue
-            if os.path.isfile(resolved):
-                return resolved
-    return None
 
 
 def _cleanup_stale_empty_session_dirs(active_session_ids: set[str], max_age_days: int) -> int:
@@ -929,8 +904,6 @@ async def copy_session(
     if not original_avatar:
         raise HTTPException(status_code=404, detail="Session avatar not found.")
 
-    asset_copy_cache: dict[str, str] = {}
-
     # 3. Clone Avatar
     cloned_avatar = Avatar(
         user_id=current_user.id,
@@ -985,6 +958,7 @@ async def copy_session(
     )
     db.add(copied_session)
     await db.flush()
+    asset_copy_cache = await build_asset_copy_cache(db, current_user.id)
 
     # Create session-bound folder
     os.makedirs(

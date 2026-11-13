@@ -1,9 +1,10 @@
 import logging
 import os
-import shutil
 import uuid
 
+from backend.api.routes.adventures.session_asset_access import AssetCopyCache
 from backend.core.config import settings
+from backend.engine.export_asset_policy import read_bounded_image
 from backend.utils.path_security import (
     data_url_to_local_path,
     local_path_to_data_url,
@@ -20,9 +21,7 @@ def copy_uncached_session_asset(
     cache: dict[str, str],
 ) -> str | None:
     from .sessions import (
-        _SAFE_IMAGE_EXTENSIONS,
         _ensure_within_data_dir,
-        _find_existing_data_asset_path,
         _sanitize_path_component,
     )
 
@@ -34,23 +33,18 @@ def copy_uncached_session_asset(
         )
         return source_url
 
-    source_path = data_url_to_local_path(normalized_source_url)
-    if not source_path:
-        logger.warning("Skipping asset copy for unsafe source URL: %s", normalized_source_url)
+    policy = cache if isinstance(cache, AssetCopyCache) else AssetCopyCache()
+    try:
+        local_path = data_url_to_local_path(normalized_source_url)
+        source_path = policy.source_path(local_path) if local_path else None
+        data = read_bounded_image(source_path) if source_path else None
+    except (ValueError, OSError):
+        logger.warning("Skipping session asset: source is not an authorized readable image.")
         return source_url
-
-    if not os.path.isfile(source_path):
-        fallback_path = _find_existing_data_asset_path(os.path.basename(source_path))
-        if not fallback_path:
-            logger.warning(
-                "Skipping asset copy because source file does not exist: %s", source_path
-            )
-            return normalized_source_url
-        source_path = fallback_path
+    if source_path is None or data is None:
+        return normalized_source_url
 
     ext = os.path.splitext(source_path)[1].lower()
-    if ext not in _SAFE_IMAGE_EXTENSIONS:
-        ext = ".png"
 
     target_dir = _ensure_within_data_dir(
         os.path.join(
@@ -63,16 +57,17 @@ def copy_uncached_session_asset(
     target_path = _ensure_within_data_dir(os.path.join(target_dir, target_name))
 
     try:
-        shutil.copy2(source_path, target_path)
+        with open(target_path, "wb") as target:
+            target.write(data)
     except OSError:
         logger.exception(
             "Failed copying asset to session folder: %s -> %s", source_path, target_path
         )
         return source_url
 
-    from .session_asset_thumbnails import copy_session_asset_thumbnail
+    from .session_asset_thumbnails import create_session_asset_thumbnail
 
-    copy_session_asset_thumbnail(source_path, target_path, ext)
+    create_session_asset_thumbnail(target_path, ext)
 
     target_url = local_path_to_data_url(target_path)
     cache[normalized_source_url] = target_url

@@ -150,6 +150,7 @@ async def test_session_copy_asset_and_dynamic_thumbnail(client, tmp_path, monkey
     monkeypatch.setattr("backend.utils.media_access.authorize_media", AsyncMock())
     from PIL import Image
 
+    from backend.api.routes.adventures.session_asset_access import AssetCopyCache
     from backend.api.routes.adventures.sessions import _copy_data_asset_to_session
     from backend.core.config import settings
     from backend.utils.path_security import data_url_to_local_path
@@ -163,7 +164,7 @@ async def test_session_copy_asset_and_dynamic_thumbnail(client, tmp_path, monkey
 
     try:
         session_id = "test_thumb_sess_1"
-        cache = {}
+        cache = AssetCopyCache(template_ids={"test_thumb_lib"})
         copied_url = _copy_data_asset_to_session(
             session_id, "entities", "/data/adventures/library/test_thumb_lib/test_badge.png", cache
         )

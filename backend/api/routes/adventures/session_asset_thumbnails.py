@@ -5,24 +5,14 @@ import shutil
 logger = logging.getLogger(__name__)
 
 
-def copy_session_asset_thumbnail(source_path: str, target_path: str, ext: str) -> None:
+def create_session_asset_thumbnail(target_path: str, ext: str) -> None:
+    """Derive thumbnails from the validated copy, never an unchecked sibling file."""
     from .sessions import _is_svg_file
 
     # Ensure thumbnail exists in session visuals
     target_stem, target_ext = os.path.splitext(target_path)
     target_thumb_path = f"{target_stem}_thumb{target_ext}"
-    source_stem, source_ext = os.path.splitext(source_path)
-    source_thumb_path = f"{source_stem}_thumb{source_ext}"
-    if os.path.isfile(source_thumb_path):
-        try:
-            shutil.copy2(source_thumb_path, target_thumb_path)
-        except OSError:
-            logger.warning(
-                "Failed copying asset thumbnail to session folder: %s -> %s",
-                source_thumb_path,
-                target_thumb_path,
-            )
-    elif _is_svg_file(target_path, ext):
+    if _is_svg_file(target_path, ext):
         try:
             shutil.copy2(target_path, target_thumb_path)
         except OSError:
