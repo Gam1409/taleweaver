@@ -6,11 +6,13 @@ import { useWorldInfoEntryNavigation } from '@/composables/useWorldInfoEntryNavi
 import WorldInfoEntryDialog from './world-info/WorldInfoEntryDialog.vue'
 import { useWorldInfoViewport } from '@/composables/useWorldInfoViewport'
 import { indexMessage, infoCount, worldInfoTagLabel } from '@/services/worldInfoDisplay'
-import type { WorldInfoSource, WorldInfoTab } from '@/types/worldInfo'
+import type { WorldInfoSource, WorldInfoSourceDraft, WorldInfoTab } from '@/types/worldInfo'
 import WorldInfoFiles from './world-info/WorldInfoFiles.vue'
 import WorldInfoEntries from './world-info/WorldInfoEntries.vue'
+import WorldInfoTextEntry from './world-info/WorldInfoTextEntry.vue'
 import './world-info/world-info.css'
 import './world-info/world-info-catalog.css'
+import './world-info/world-info-authoring.css'
 const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ close: [] }>()
 const controller = useWorldInfo(toRef(props, 'sessionId'))
@@ -18,9 +20,10 @@ const data = controller.data
 const viewport = useWorldInfoViewport()
 const dialog = ref<HTMLDialogElement>()
 const entries = ref<InstanceType<typeof WorldInfoEntries>>()
+const sourceDraft = ref<WorldInfoSourceDraft>({ title: '', text: '' })
 const { entryOpen, setEntryDialog, openEntry, backToCatalog } = useWorldInfoEntryNavigation(dialog, controller, toRef(props, 'sessionId'))
 const confirmation = ref<{ title: string; text: string; action: () => unknown } | null>(null)
-const tabs: { id: WorldInfoTab; label: string }[] = [{ id: 'files', label: 'Files & processing' }, { id: 'review', label: 'Review' }, { id: 'active', label: 'Active entries' }]
+const tabs: { id: WorldInfoTab; label: string }[] = [{ id: 'files', label: 'Files & processing' }, { id: 'review', label: 'Review' }, { id: 'active', label: 'Active entries' }, { id: 'create', label: 'New entry' }]
 let previous: HTMLElement | null = null
 let confirmationOpener: HTMLElement | null = null
 function confirm(title: string, text: string, action: () => unknown) {
@@ -36,7 +39,13 @@ function navigate(action: () => unknown) {
   if (!controller.dirty.value) { void action(); return }
   confirm('Discard unsaved entry changes?', 'Your saved entry and original source are kept.', action)
 }
-function close() { navigate(() => emit('close')) }
+function close() {
+  if (sourceDraft.value.text || sourceDraft.value.title) {
+    confirm('Discard unsaved source text?', 'Your text has not been submitted for analysis. Previously saved sources and entries are kept.', () => emit('close'))
+    return
+  }
+  navigate(() => emit('close'))
+}
 function escape(event: KeyboardEvent) {
   if (confirmation.value || !entries.value?.dismissTopics()) return
   event.preventDefault()
@@ -68,11 +77,11 @@ function tabKey(event: KeyboardEvent) {
   if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
   const index = tabs.findIndex(tab => tab.id === data.tab)
-  const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : -1) + 3) % 3
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
   const tab = tabs[next]!
   navigate(async () => { await controller.changeTab(tab.id); dialog.value?.querySelector<HTMLButtonElement>(`#world-info-tab-${tab.id}`)?.focus() })
 }
-watch(() => props.sessionId, () => { confirmation.value = null })
+watch(() => props.sessionId, () => { confirmation.value = null; sourceDraft.value = { title: '', text: '' } })
 onMounted(async () => {
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
   const owner = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby')
@@ -104,10 +113,11 @@ onBeforeUnmount(() => {
       </div>
       <main :id="`world-info-panel-${data.tab}`" :inert="!!confirmation" class="world-info-body" role="tabpanel" :aria-labelledby="`world-info-tab-${data.tab}`">
         <WorldInfoFiles v-if="data.tab === 'files'" :key="props.sessionId" :controller="controller" @remove="removeSource" />
+        <WorldInfoTextEntry v-else-if="data.tab === 'create'" :key="props.sessionId" v-model="sourceDraft" :controller="controller" />
         <WorldInfoEntries v-else ref="entries" :key="props.sessionId" :controller="controller" @navigate="navigate" @open-entry="openEntry" @publish="publish" @bulk-apply="bulkConfirm" />
       </main>
       <section v-if="confirmation" class="world-info-confirm" aria-label="Confirm World Info action"><h3 class="font-semibold">{{ confirmation.title }}</h3><p class="mt-1 text-sm">{{ confirmation.text }}</p><div class="mt-3 flex flex-wrap gap-2"><button type="button" class="world-info-button" @click="cancelConfirmation">Keep current state</button><button data-confirm-action type="button" class="world-info-button is-primary" :disabled="!!data.busy" @click="confirmAction">Confirm</button></div></section>
-      <footer class="world-info-footer"><span>{{ controller.dirty.value ? 'Unsaved entry changes' : 'Sources and entries belong only to this session.' }}</span><button type="button" class="world-info-button" @click="close">Close</button></footer>
+      <footer class="world-info-footer"><span>{{ sourceDraft.text || sourceDraft.title ? 'Unsaved source text' : controller.dirty.value ? 'Unsaved entry changes' : 'Sources and entries belong only to this session.' }}</span><button type="button" class="world-info-button" @click="close">Close</button></footer>
     </dialog>
     <WorldInfoEntryDialog v-if="entryOpen" :key="props.sessionId" :ref="setEntryDialog" :controller="controller" @back="backToCatalog" />
   </Teleport>

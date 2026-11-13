@@ -15,8 +15,8 @@ function update(index: number, patch: Partial<WorldInfoRelation>) {
 }
 </script>
 <template>
-  <details class="world-info-card">
-    <summary>Relationships between entries ({{ modelValue.length }} / {{ limit }})</summary>
+  <section class="world-info-card" aria-label="Relationships between entries">
+    <h3 class="font-semibold">Relationships between entries ({{ modelValue.length }} / {{ limit }})</h3>
     <fieldset :disabled="disabled" class="mt-3 space-y-3">
       <div v-for="(relation, index) in modelValue" :key="index" class="space-y-2 border-b border-slate-700 pb-3">
         <p class="break-words text-sm">{{ candidates.find(entry => entry.id === relation.target_id)?.title || relation.target_id }}</p>
@@ -28,5 +28,5 @@ function update(index: number, patch: Partial<WorldInfoRelation>) {
       <label>Related entry<select aria-label="Related entry" v-model="target"><option value="">Choose an entry</option><option v-for="entry in candidates.filter(value => value.id !== entryId)" :key="entry.id" :value="entry.id">{{ entry.title }} · {{ entry.source_filename }}</option></select></label>
       <div class="flex flex-wrap gap-2"><button v-if="previous" type="button" class="world-info-button" @click="emit('search', query, 'previous')">Previous matching entries</button><button v-if="more" type="button" class="world-info-button" @click="emit('search', query, 'next')">Next matching entries</button><button type="button" class="world-info-button" :disabled="!target || modelValue.length >= limit" @click="add">Add relationship</button></div>
     </fieldset>
-  </details>
+  </section>
 </template>

@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { FileText, Upload } from 'lucide-vue-next'
+import { computed } from 'vue'
+import { FileText } from 'lucide-vue-next'
 import type { WorldInfoController } from '@/composables/useWorldInfo'
 import type { WorldInfoSource } from '@/types/worldInfo'
 import { infoCount } from '@/services/worldInfoDisplay'
+import WorldInfoUpload from './WorldInfoUpload.vue'
 const props = defineProps<{ controller: WorldInfoController }>()
 const emit = defineEmits<{ remove: [source: WorldInfoSource] }>()
 const data = props.controller.data
-const file = ref<File | null>(null)
-const title = ref('')
-const replacing = ref('')
-const input = ref<HTMLInputElement>()
 const requestBudget = computed(() => {
   const job = data.job, limit = job?.request_limit ?? null
   return { limit, remaining: limit === null ? null : Math.max(0, limit - (job?.attempts ?? 0)) }
@@ -20,31 +17,12 @@ const budgetExhausted = computed(() => {
   if (!job || ['queued', 'processing'].includes(job.status)) return false
   return job.last_error_code === 'request_limit' || (job.request_limit != null && job.attempts >= job.request_limit && job.cursor < (job.total_batches ?? 0))
 })
-async function upload() {
-  if (!file.value) return
-  const replacement = data.state?.sources.find(source => source.id === replacing.value)
-  if (replacing.value && !replacement) { data.error = 'This source is no longer available. Refresh status and choose an upload destination again.'; return }
-  await props.controller.upload(file.value, title.value, replacement)
-  if (data.error) return
-  file.value = null
-  if (input.value) input.value.value = ''
-}
 </script>
 <template>
+  <div class="world-info-files">
+    <WorldInfoUpload :controller="controller" />
   <div class="world-info-workspace" :class="{ 'show-detail': data.mobileDetail }">
     <section class="world-info-list" aria-label="Files and processing">
-      <form class="world-info-card space-y-3" @submit.prevent="upload">
-        <h3 class="flex items-center gap-2 font-semibold"><Upload aria-hidden="true" class="h-4 w-4" /> Add source material</h3>
-        <p class="text-xs text-slate-400">Upload and analyse proposes source-backed entries using your configured model. Large sources pause for a workload review before analysis starts. Review and publish the entries you accept.</p>
-        <fieldset :disabled="!data.state || !!data.busy" class="space-y-3">
-          <label>Upload destination<select aria-label="Upload destination" v-model="replacing"><option value="">New source</option><option v-for="source in data.state?.sources" :key="source.id" :value="source.id">New version of {{ source.title || source.filename }}</option></select></label>
-          <p v-if="replacing" class="text-xs text-amber-200">Accepted entries stay active until you explicitly publish the replacement version.</p>
-          <label>Source file · Markdown or JSON<input ref="input" type="file" accept=".md,.json,text/markdown,application/json" required @change="file = ($event.target as HTMLInputElement).files?.[0] || null" /></label>
-          <label v-if="!replacing">Source title · optional<input v-model="title" maxlength="200" /></label>
-          <p v-if="data.state" class="text-xs text-slate-400">UTF-8 only · up to {{ infoCount(data.state.limits.max_source_bytes) }} bytes and {{ infoCount(data.state.limits.max_source_characters) }} characters per file · {{ data.state.limits.max_sources }} sources per session · {{ data.state.limits.max_source_revisions }} versions per source.</p>
-          <button type="submit" class="world-info-button is-primary" :disabled="!file || (!replacing && !!data.state && data.state.sources.length >= data.state.limits.max_sources)">Upload & analyse</button>
-        </fieldset>
-      </form>
       <p v-if="data.state" class="world-info-card text-xs text-slate-400" aria-label="Session knowledge limits">Session knowledge is limited to {{ infoCount(data.state.limits.max_entries ?? 10000) }} entries, {{ infoCount(data.state.limits.max_facts ?? 80000) }} facts, or {{ infoCount((data.state.limits.max_session_entry_bytes ?? 33554432) / 1048576) }} MiB of saved entry data, including evidence—whichever limit is reached first. Searchable text sizes shown below do not include all saved entry data.</p>
       <p v-if="!data.state?.sources.length" class="world-info-empty">No source files in this session. Add Markdown or JSON to propose knowledge for review.</p>
       <ul class="space-y-2"><li v-for="source in data.state?.sources" :key="source.id"><button type="button" class="world-info-row" :class="{ 'is-selected': data.source?.source.id === source.id }" @click="controller.openSource(source.id)"><FileText aria-hidden="true" class="h-4 w-4 shrink-0" /><span class="min-w-0 flex-1"><strong class="block break-words">{{ source.title || source.filename }}</strong><small class="block break-words">{{ source.filename }} · version {{ source.job.number }} · {{ source.job.status }}</small><small>{{ source.active_entries }} accepted · {{ source.draft_entries }} drafts</small></span></button></li></ul>
@@ -81,5 +59,6 @@ async function upload() {
       </div>
       <p v-else class="world-info-empty">Choose a source to inspect versions, processing progress and review results.</p>
     </section>
+  </div>
   </div>
 </template>

@@ -11,6 +11,7 @@ const compiled = ts.transpileModule(compileScript(descriptor, { id: 'world-info-
   .replaceAll("from 'vue'", `from '${import.meta.resolve('vue')}'`).replaceAll('from "vue"', `from '${import.meta.resolve('vue')}'`)
   .replace(/import \{[^}]+\} from ['"]lucide-vue-next['"];?/, 'const FileText = { render: () => null }, Upload = { render: () => null };')
   .replace("from '@/services/worldInfoDisplay'", `from '${displayModule}'`)
+  .replace(/import WorldInfoUpload from .*?;/, 'const WorldInfoUpload = { render: () => null };')
 const Files = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 async function render(overrides = {}, limits = {}) {
   const current = { ...job, request_limit: 8, ...overrides }, overview = state()

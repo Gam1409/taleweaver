@@ -28,6 +28,18 @@ have different reference knowledge.
    to recall. **Active entries** shows accepted knowledge and allows later changes,
    unpublication or deletion.
 
+**New entry** accepts written or pasted text and an optional source title. Analysis
+uses the same configured Generator model, source budgets, progress tracking and
+evidence checks as a file import. The exact UTF-8 text is saved as a new source in
+this session; file and written sources share the displayed source quota. The model
+may propose several concise records. They remain drafts until reviewed and published.
+Large text sources wait for workload confirmation before analysis starts.
+
+Unsubmitted text stays available while switching World Info tabs within the open
+window. Closing asks before discarding it; switching sessions clears it. Failed
+submissions retain the text. **Files & processing** places the file, destination,
+optional title and upload action together above the source workspace.
+
 JSON objects and arrays are parsed locally, then their scalar passages are analysed.
 Duplicate keys, invalid numbers, excessive nesting and oversized files are rejected.
 Markdown, HTML and links are displayed as plain source text. Importing a reference
@@ -70,6 +82,19 @@ changes require a fresh preview. An invalid edit rejects the complete action.
 Tag fields preserve each complete label, including spaces and a leading `#`;
 adding or removing one tag must not rewrite the other saved labels. The same
 identities apply to filtered bulk tag actions.
+
+In **Review**, **Select this page** checks the currently displayed records, up to
+50, with an indeterminate checkbox for a partial selection. **Publish selected**
+shows its selected count and requires one source version. **Clear selection**
+does not change saved records. Page and filter changes reset the page selection.
+To publish across every page, select one source version and choose **Publish all
+matching**. The count/sample preview and separate confirmation cover the entire
+filtered result; the browser does not fetch thousands of selected IDs. Stale
+versions and changed selections still require a new preview.
+
+Record facts, original quotations and relationship controls are visible without
+expanding accordions. The footer's **More actions** menu contains infrequent record
+actions; reading evidence and selecting records do not depend on that menu.
 
 Original source previews use bounded character pages. Large uploads show their
 known batch count before analysis starts, with an explicit start action when more

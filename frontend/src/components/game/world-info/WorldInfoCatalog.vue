@@ -3,11 +3,13 @@ import { computed, ref } from 'vue'
 import { FolderOpen, LayoutGrid, Search, Table2 } from 'lucide-vue-next'
 import type { WorldInfoController } from '@/composables/useWorldInfo'
 import WorldInfoBulk from './WorldInfoBulk.vue'
+import WorldInfoSelection from './WorldInfoSelection.vue'
 import { infoCount, worldInfoTagLabel, worldInfoKinds, worldInfoSourceOptions } from '@/services/worldInfoDisplay'
 const props = defineProps<{ controller: WorldInfoController; topicsOpen?: boolean }>()
 const emit = defineEmits<{ navigate: [action: () => unknown]; openEntry: [id: string]; publish: []; bulkApply: []; showTopics: [] }>()
 const data = props.controller.data
 const layout = ref<'cards' | 'table' | null>(null)
+const bulk = ref<InstanceType<typeof WorldInfoBulk>>()
 const table = computed(() => (layout.value ?? (data.total > 50 ? 'table' : 'cards')) === 'table')
 const allRevisions = computed(() => worldInfoSourceOptions(data.state?.sources ?? [], data.source, data.tab === 'active'))
 function select(id: string, checked: boolean) { data.selected = checked ? [...data.selected, id] : data.selected.filter(value => value !== id) }
@@ -35,9 +37,9 @@ function openRow(event: MouseEvent, id: string) {
         <div class="world-info-layout-switch" role="group" aria-label="Entry layout"><button type="button" class="world-info-button" aria-label="Entry cards" :aria-pressed="!table" @click="layout = 'cards'"><LayoutGrid class="h-4 w-4" aria-hidden="true" /></button><button type="button" class="world-info-button" aria-label="Entry table" :aria-pressed="table" @click="layout = 'table'"><Table2 class="h-4 w-4" aria-hidden="true" /></button></div>
       </div>
       <p v-if="data.catalogLoading" role="status" class="text-xs text-slate-400">Loading page…</p>
-      <div v-if="data.tab === 'review' && data.selected.length" class="world-info-selection"><button type="button" class="world-info-button is-primary" :disabled="!!data.busy || controller.dirty.value" @click="emit('publish')">Publish selected ({{ data.selected.length }})</button><p class="text-xs text-slate-400">This page only. Choose one source version.</p></div>
-      <WorldInfoBulk :controller="controller" @apply="emit('bulkApply')" />
+      <WorldInfoBulk ref="bulk" :controller="controller" @apply="emit('bulkApply')" />
     </div>
+    <WorldInfoSelection v-if="data.tab === 'review'" :controller="controller" @publish="emit('publish')" @publish-matching="bulk?.previewPublication()" />
     <div class="world-info-catalog-results">
       <p v-if="!data.entries.length && !data.catalogLoading" class="world-info-empty">No entries match this selection. Change the words, group, tag or source filter.</p>
       <table v-if="table && data.entries.length" class="world-info-entry-table"><thead><tr><th v-if="data.tab === 'review'"><span class="sr-only">Select</span></th><th>Entry</th><th>Facts</th></tr></thead><tbody><tr v-for="entry in data.entries" :key="entry.id" @click="openRow($event, entry.id)" :class="{ 'is-selected': data.draft?.id === entry.id }"><td v-if="data.tab === 'review'"><input type="checkbox" :aria-label="`Select ${entry.title}`" :checked="data.selected.includes(entry.id)" :disabled="!!data.busy || data.catalogLoading" @change="select(entry.id, ($event.target as HTMLInputElement).checked)" /></td><td><button class="world-info-entry-title" type="button" :title="entry.title" :data-world-info-entry="entry.id" :disabled="!!data.busy" @click="emit('openEntry', entry.id)">{{ entry.title }}</button><p v-if="entry.summary" class="world-info-entry-excerpt">{{ entry.summary }}</p><small class="world-info-entry-meta">{{ entry.group_name || 'Ungrouped' }} · {{ worldInfoKinds[entry.kind] }} · {{ entry.is_active ? 'Accepted entry' : entry.status === 'archived' ? 'Archived entry' : 'Draft entry' }} · v{{ entry.source_revision_number }}</small></td><td>{{ infoCount(entry.facts_count) }}</td></tr></tbody></table>

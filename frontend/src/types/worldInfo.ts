@@ -1,6 +1,7 @@
 export type WorldInfoKind = 'background_lore' | 'reported_claim' | 'character_knowledge' | 'authored_event' | 'world_fact' | 'rumor' | 'news'
 export type WorldInfoAudience = 'narrator_only' | 'common_knowledge' | 'restricted'
-export type WorldInfoTab = 'files' | 'review' | 'active'
+export type WorldInfoTab = 'files' | 'review' | 'active' | 'create'
+export interface WorldInfoSourceDraft { title: string; text: string }
 export interface WorldInfoIndex {
   enabled: boolean
   paused: boolean

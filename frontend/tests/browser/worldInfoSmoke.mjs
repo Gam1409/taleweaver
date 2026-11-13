@@ -163,7 +163,7 @@ try {
   await page.setViewportSize({ width: 844, height: 390 }); await page.reload(); await open(); await geometry()
   await tab('Files & processing').focus(); await page.keyboard.press('ArrowRight')
   await page.waitForFunction(() => document.activeElement?.id === 'world-info-tab-review')
-  await page.keyboard.press('End'); await page.waitForFunction(() => document.activeElement?.id === 'world-info-tab-active')
+  await page.keyboard.press('End'); await page.waitForFunction(() => document.activeElement?.id === 'world-info-tab-create')
   await page.keyboard.press('Home'); await page.waitForFunction(() => document.activeElement?.id === 'world-info-tab-files')
   await dialog().getByRole('button', { name: /The coastal archive.*version/ }).click(); await button('Review this version').waitFor()
   const cdp = await page.context().newCDPSession(page)

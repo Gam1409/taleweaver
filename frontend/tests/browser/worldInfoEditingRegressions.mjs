@@ -82,7 +82,7 @@ try {
   await check('relationship Enter searches without saving', async page => {
     await open(page); await edit(page)
     await dialog(page).getByLabel('Entry title', { exact: true }).fill('Pending relationship search')
-    await dialog(page).locator('summary').filter({ hasText: 'Relationships between entries' }).click()
+    await dialog(page).getByRole('heading', { name: /Relationships between entries/ }).waitFor()
     await dialog(page).getByLabel('Find a session entry', { exact: true }).fill('old coastal')
     await dialog(page).getByLabel('Find a session entry', { exact: true }).press('Enter')
     await page.waitForFunction(() => window.worldInfoFixture.requests.some(value => value.path.includes('/entries?') && new URL(value.path, location.origin).searchParams.get('query') === 'old coastal'))

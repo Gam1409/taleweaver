@@ -94,6 +94,34 @@ test('upload starts analysis only when the saved revision explicitly permits a s
   assert.match(c.data.message, /existing processing progress/)
   assert.equal(c.data.job.id, job.id)
 })
+test('upload remains busy until saved source details have refreshed', async t => {
+  let finishState, finishSource, uploaded = false
+  const mutations = []
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (options.method === 'POST') mutations.push(path)
+    if (path.endsWith('/sources') && options.method === 'POST') {
+      uploaded = true
+      return reply({ source, revision: { ...job, can_start: false }, duplicate: false })
+    }
+    if (uploaded && path.endsWith('/world-info')) return new Promise(resolve => { finishState = resolve })
+    if (uploaded && path.endsWith('/sources/source-1')) return new Promise(resolve => { finishSource = resolve })
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick()
+  const pending = c.upload(new File(['# A coastal note'], 'coast.md'), '')
+  await tick()
+  assert.ok(finishState)
+  assert.ok(c.data.busy)
+  assert.equal(await c.upload(new File(['# A second note'], 'other.md'), ''), false)
+  assert.equal(mutations.length, 1)
+  finishState(reply(state())); await tick()
+  assert.ok(finishSource)
+  assert.ok(c.data.busy)
+  finishSource(reply({ source, revisions: [job] }))
+  assert.equal(await pending, true)
+  assert.equal(c.data.busy, '')
+  assert.equal(c.data.source.source.id, source.id)
+})
 test('mixed-revision publication is rejected before mutation and paused index preserves success', async t => {
   const calls = []
   t.mock.method(globalThis, 'fetch', async (path, options) => {

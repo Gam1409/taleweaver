@@ -59,7 +59,7 @@ async function save() {
         <article v-for="(fact, index) in data.draft.facts" :key="fact.id" class="world-info-card space-y-3">
           <label>Fact {{ index + 1 }}<textarea v-model="fact.text" required rows="3" :maxlength="data.state.limits.max_fact_characters ?? 500" /></label>
           <span v-if="fact.text !== fact.original_text" class="text-xs text-amber-200">Author correction · original evidence is kept</span>
-          <details><summary>Original proposal & source evidence</summary><p class="mt-2 whitespace-pre-wrap break-words text-sm">{{ fact.original_text }}</p><blockquote v-for="(evidence, i) in fact.evidence" :key="i" class="mt-3 border-l-2 border-amber-500/30 pl-3"><p class="whitespace-pre-wrap break-words text-sm">{{ evidence.quote }}</p><small class="break-all">{{ evidence.pointer === null ? 'Markdown' : `JSON ${evidence.pointer || '/'}` }} · characters {{ evidence.start }}–{{ evidence.end }}</small></blockquote></details>
+          <section class="world-info-evidence"><h4>Original proposal & source evidence</h4><p class="mt-2 whitespace-pre-wrap break-words text-sm">{{ fact.original_text }}</p><blockquote v-for="(evidence, i) in fact.evidence" :key="i" class="mt-3 border-l-2 border-amber-500/30 pl-3"><p class="whitespace-pre-wrap break-words text-sm">{{ evidence.quote }}</p><small class="break-all">{{ evidence.pointer === null ? 'Markdown' : `JSON ${evidence.pointer || '/'}` }} · characters {{ evidence.start }}–{{ evidence.end }}</small></blockquote></section>
           <button v-if="data.draft.facts.length > 1" type="button" class="world-info-button" @click="data.draft.facts = data.draft.facts.filter(value => value.id !== fact.id)">Remove fact {{ index + 1 }}</button>
         </article>
       </section>

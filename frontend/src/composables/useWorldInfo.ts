@@ -62,7 +62,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
       if (result.token !== epoch || result.sid !== sessionId.value) return false
       const wasWorking = activeJobs()
       applyState(result.state)
-      if (wasWorking && !activeJobs() && data.tab !== 'files') void Promise.all([catalog.loadEntries(data.offset), catalog.loadFacets()])
+      if (wasWorking && !activeJobs() && (data.tab === 'review' || data.tab === 'active')) void Promise.all([catalog.loadEntries(data.offset), catalog.loadFacets()])
       return activeJobs()
     },
     onPaused: () => { data.offline = true },
@@ -94,7 +94,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     data.query = ''
     data.revisionFilter = ''
     Object.assign(data, worldInfoCatalogState())
-    if (tab !== 'files') await catalog.search()
+    if (tab === 'review' || tab === 'active') await catalog.search()
   }
   async function openSource(id: string) {
     requests.get('content')?.abort()
@@ -168,28 +168,33 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     return result !== undefined
   }
   async function upload(file: File, title: string, replacement?: WorldInfoSource) {
-    if (!data.state) return
+    if (!data.state || data.busy) return false
     const limits = copy(data.state.limits)
     const token = epoch
     try { await validateWorldInfoFile(file, limits) } catch {
       if (token === epoch) data.error = 'Choose valid UTF-8 Markdown or JSON within the displayed file and character limits.'
-      return
+      return false
     }
-    if (token !== epoch) return
+    if (token !== epoch) return false
     let result: { source: WorldInfoSource; revision: WorldInfoJob; duplicate: boolean } | undefined
     const ok = await mutate('Uploading and analysing…', async (api, signal) => {
       result = await api.upload(file, title, replacement)
       signal.throwIfAborted()
       if (result.revision.can_start && (result.revision.total_batches ?? 0) <= 16) await api.process(result.revision)
       return result
-    })
-    if (token !== epoch) return
-    if (!ok || !result) { await load(); return }
-    data.message = result.duplicate ? 'This file is already saved. Its existing processing progress is kept.' : 'Source saved. Review the proposed entries before publishing.'
-    if (result.revision.can_start && (result.revision.total_batches ?? 0) > 16) data.message = 'Large source saved without starting analysis. Review the workload below and choose Start analysis when ready.'
-    await load()
-    if (token !== epoch) return
-    await openSource(result.source.id)
+    }, true)
+    if (token !== epoch) return false
+    if (!ok || !result) { await load(); return false }
+    try {
+      data.message = result.duplicate ? 'This file is already saved. Its existing processing progress is kept.' : 'Source saved. Review the proposed entries before publishing.'
+      if (result.revision.can_start && (result.revision.total_batches ?? 0) > 16) data.message = 'Large source saved without starting analysis. Review the workload below and choose Start analysis when ready.'
+      await load()
+      if (token !== epoch) return false
+      await openSource(result.source.id)
+      return token === epoch
+    } finally {
+      if (token === epoch) data.busy = ''
+    }
   }
   async function control(job: WorldInfoJob, action: 'process' | 'cancel') {
     const token = epoch

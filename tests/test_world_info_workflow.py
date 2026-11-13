@@ -179,14 +179,21 @@ async def unpublish_and_verify(client, owner, corrected, original, source):
         assert revision.content == source and revision.attempts == 1
 
 
-@pytest.mark.parametrize("format", ["md", "json"])
+def source_material(format):
+    sources = {
+        "md": ("# Harbour archive\n\n" + QUOTE + "\n", "harbour.md"),
+        "json": (json.dumps({"灯台": "🧭 " + QUOTE}, ensure_ascii=False), "harbour.json"),
+        "text": (QUOTE + "\n\nA written coastal note. 🧭", "written-entry.md"),
+    }
+    return sources[format]
+
+
+@pytest.mark.parametrize("format", ["md", "json", "text"])
 async def test_upload_process_review_publish_recall_and_unpublish(
     auth_client, world_info_owner, monkeypatch, format
 ):
     owner = world_info_owner
-    source = "# Harbour archive\n\n" + QUOTE + "\n"
-    if format == "json":
-        source = json.dumps({"灯台": "🧭 " + QUOTE}, ensure_ascii=False)
+    source, filename = source_material(format)
     dispatches = []
     scheduled = Mock()
     indexed = Mock()
@@ -220,7 +227,7 @@ async def test_upload_process_review_publish_recall_and_unpublish(
 
     uploaded = await auth_client.post(
         URL + "/sources",
-        files={"file": (f"harbour.{format}", source.encode("utf-8"))},
+        files={"file": (filename, source.encode("utf-8"))},
         data={"title": "Harbour reference"},
     )
     assert uploaded.status_code == 201, uploaded.text

@@ -14,6 +14,12 @@ function preview() {
 }
 function clearPreview() { props.controller.catalog.clearBulk() }
 function updateTags(value: string[]) { tags.value = value; clearPreview() }
+async function previewPublication() {
+  action.value = 'publish'
+  open.value = true
+  await props.controller.catalog.previewBulk('publish')
+}
+defineExpose({ previewPublication })
 </script>
 <template>
   <section class="world-info-bulk">
