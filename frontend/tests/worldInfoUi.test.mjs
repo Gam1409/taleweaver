@@ -13,9 +13,14 @@ const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.Scri
   .replace(/import WorldInfoRelations from .*?;/, 'const WorldInfoRelations = { render: () => null };')
   .replace("from '@/services/worldInfoDisplay'", `from '${displayModule}'`)
 const Editor = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
-function render(draft) {
+const readerDescriptor = parse(readFileSync(new URL('../src/components/game/world-info/WorldInfoEntryView.vue', import.meta.url), 'utf8')).descriptor
+const readerCode = ts.transpileModule(compileScript(readerDescriptor, { id: 'world-info-reader-test', inlineTemplate: true }).content, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+  .replaceAll("from 'vue'", `from '${import.meta.resolve('vue')}'`).replaceAll('from "vue"', `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/worldInfoDisplay'", `from '${displayModule}'`)
+const Reader = (await import(`data:text/javascript;base64,${Buffer.from(readerCode).toString('base64')}`)).default
+function render(draft, component = Editor) {
   const controller = { data: { draft, state: state(), candidates: [], candidateNext: null, busy: '' }, dirty: ref(false) }
-  return renderToString(createSSRApp({ render: () => h(Editor, { controller }) }))
+  return renderToString(createSSRApp({ render: () => h(component, { controller }) }))
 }
 test('missing current recipients and persisted dormant recipients are both visible and removable without exposing IDs', async () => {
   const html = await render({ ...entry, audience: 'restricted', known_by: ['MISSING_PRIVATE_ID', 'MIRA'], unresolved_known_by: ['MIRA'] })
@@ -43,4 +48,13 @@ test('narrator-only reference does not imply learned character knowledge', async
   assert.match(html, /Recollection \/ character knowledge/)
   assert.match(html, /Rumors preserve uncertainty/)
   assert.doesNotMatch(html, /Characters who may use this reference|Assign to Mira/)
+})
+test('entry reader shows escaped summaries, facts, provenance, recipients and versions without edit controls', async () => {
+  const text = '<ScRiPt>example()</ScRiPt><img onerror=example()>'
+  const html = await render({ ...entry, summary: text, group_name: 'Coastal history', audience: 'restricted', known_by: ['MIRA', 'REMOVED'], unresolved_known_by: ['REMOVED'], facts: [{ ...entry.facts[0], text, original_text: text, evidence: [{ ...entry.facts[0].evidence[0], quote: text }] }], relations: [{ target_id: 'other-entry', kind: 'supports', note: 'A source-backed connection.' }] }, Reader)
+  assert.match(html, /Coastal history|Mira|Unavailable character/)
+  assert.match(html, /Source version|Saved entry version|UTF-8 bytes/)
+  assert.match(html, /A source-backed connection/)
+  assert.match(html, /&lt;ScRiPt&gt;/)
+  assert.doesNotMatch(html, /<(?:input|select|textarea|script|img)\b/i)
 })

@@ -196,3 +196,80 @@ test('original source pages replace the previous bounded excerpt without concate
   assert.equal(c.data.content.offset, 8000)
   assert.ok(calls.every(path => path.includes('limit=8000')))
 })
+test('saving a detail on page two preserves catalog page, filters and sort', async t => {
+  const offsets = []
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (path.includes('/entries?')) { const offset = Number(new URL(path, 'http://localhost').searchParams.get('offset')); offsets.push(offset); return reply({ entries: [entry], total: 120, next_offset: offset + 50 < 120 ? offset + 50 : null }) }
+    if (options.method === 'PUT') return reply({ ...entry, title: 'Corrected lighthouse', version: 3 })
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick(); await c.changeTab('review')
+  c.data.groupFilter = 'Coast'; c.data.sort = 'title_asc'
+  await c.catalog.search(); await c.catalog.loadEntries(50); await c.openEntry(entry.id)
+  c.data.draft.title = 'Corrected lighthouse'; await c.saveEntry()
+  assert.equal(c.data.offset, 50); assert.equal(offsets.at(-1), 50)
+  assert.equal(c.data.groupFilter, 'Coast'); assert.equal(c.data.sort, 'title_asc')
+})
+test('deleting the final item on the last page clamps to the remaining last page', async t => {
+  let total = 101
+  const offsets = []
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (path.includes('/entries?')) { const offset = Number(new URL(path, 'http://localhost').searchParams.get('offset')); offsets.push(offset); return reply({ entries: offset < total ? [entry] : [], total, next_offset: offset + 50 < total ? offset + 50 : null }) }
+    if (options.method === 'DELETE') { total = 100; return reply({ deleted: true, index: state().index }) }
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick(); await c.changeTab('review'); await c.catalog.loadEntries(100); await c.openEntry(entry.id)
+  await c.removeEntry()
+  assert.equal(c.data.offset, 50)
+  assert.deepEqual(offsets.slice(-2), [100, 50])
+})
+test('returning from a loading detail aborts the read and cannot reopen a late result', async t => {
+  let finish, signal
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (path.endsWith('/entries/entry-1')) return new Promise(resolve => { finish = resolve; signal = options.signal })
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick()
+  const opening = c.openEntry(entry.id)
+  assert.equal(c.data.entryLoading, true)
+  c.closeEntry(); assert.equal(signal.aborted, true)
+  finish(reply(entry)); await opening
+  assert.equal(c.data.draft, null); assert.equal(c.data.entryLoading, false)
+})
+test('background processing completion preserves the catalog page while an entry is open', async t => {
+  let reads = 0, finishPoll
+  const offsets = []
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (path.endsWith('/world-info')) {
+      if (++reads === 1) { const working = state(); working.sources[0].job.status = 'processing'; return reply(working) }
+      return new Promise(resolve => { finishPoll = resolve })
+    }
+    if (path.includes('/entries?')) { const offset = Number(new URL(path, 'http://localhost').searchParams.get('offset')); offsets.push(offset); return reply({ entries: [entry], total: 120, next_offset: offset + 50 < 120 ? offset + 50 : null }) }
+    return defaultReply(path, options)
+  })
+  const { c } = fixture(t); await tick(); await c.changeTab('review'); await c.catalog.loadEntries(50); await c.openEntry(entry.id)
+  assert.equal(typeof finishPoll, 'function')
+  finishPoll(reply(state())); await tick()
+  assert.equal(c.data.offset, 50); assert.equal(offsets.at(-1), 50)
+  assert.equal(c.data.draft.id, entry.id)
+})
+test('saving remains busy through catalog and overview refresh before editing is enabled again', async t => {
+  let refreshing = false, finishEntries, finishState
+  t.mock.method(globalThis, 'fetch', (path, options) => {
+    if (options.method === 'PUT') { refreshing = true; return reply({ ...entry, title: 'Saved correction', version: 3 }) }
+    if (refreshing && path.includes('/entries?')) return new Promise(resolve => { finishEntries = resolve })
+    if (refreshing && path.endsWith('/world-info')) return new Promise(resolve => { finishState = resolve })
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick(); await c.changeTab('review'); await c.openEntry(entry.id)
+  c.data.draft.title = 'Saved correction'
+  const saving = c.saveEntry(); await tick()
+  const duringEntries = c.data.busy
+  const duplicate = await c.saveEntry(), afterDuplicate = c.data.busy
+  finishEntries(reply({ entries: [entry], total: 1, next_offset: null })); await tick()
+  const duringState = c.data.busy
+  finishState(reply(state())); await saving
+  assert.equal(duringEntries, 'Saving entry…'); assert.equal(duringState, 'Saving entry…')
+  assert.equal(duplicate, false); assert.equal(afterDuplicate, 'Saving entry…')
+  assert.equal(c.data.busy, ''); assert.equal(c.dirty.value, false)
+})

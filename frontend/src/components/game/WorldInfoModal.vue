@@ -2,6 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 import { BookOpenText, X } from 'lucide-vue-next'
 import { useWorldInfo } from '@/composables/useWorldInfo'
+import { useWorldInfoEntryNavigation } from '@/composables/useWorldInfoEntryNavigation'
+import WorldInfoEntryDialog from './world-info/WorldInfoEntryDialog.vue'
 import { useWorldInfoViewport } from '@/composables/useWorldInfoViewport'
 import { indexMessage, infoCount } from '@/services/worldInfoDisplay'
 import type { WorldInfoSource, WorldInfoTab } from '@/types/worldInfo'
@@ -14,6 +16,7 @@ const controller = useWorldInfo(toRef(props, 'sessionId'))
 const data = controller.data
 const viewport = useWorldInfoViewport()
 const dialog = ref<HTMLDialogElement>()
+const { entryOpen, setEntryDialog, openEntry, backToCatalog } = useWorldInfoEntryNavigation(dialog, controller, toRef(props, 'sessionId'))
 const confirmation = ref<{ title: string; text: string; action: () => unknown } | null>(null)
 const tabs: { id: WorldInfoTab; label: string }[] = [{ id: 'files', label: 'Files & processing' }, { id: 'review', label: 'Review' }, { id: 'active', label: 'Active entries' }]
 let previous: HTMLElement | null = null
@@ -53,9 +56,6 @@ function bulkConfirm() {
   const action = publishing ? 'Publish matching entries.' : selection.intent.action === 'set_group' ? `Set primary group to ${selection.intent.group_name || 'Ungrouped'}.` : `${selection.intent.action === 'add_tags' ? 'Add' : 'Remove'} tags ${selection.intent.tags?.map(tag => `#${tag}`).join(' ')}.`
   confirm(`Apply to ${infoCount(selection.preview.count)} matching entries?`, `${action} ${infoCount(selection.preview.facts_count)} facts in this session match the current filters. ${publishing ? 'Publishing this source version may replace its previously accepted entries.' : 'Every matching entry is included, across all pages.'} Changes are applied together after the saved selection is checked again.`, () => controller.catalog.applyBulk(selection))
 }
-function confirmEntry(action: 'delete' | 'unpublish') {
-  confirm(action === 'delete' ? 'Delete this entry?' : 'Remove this entry from recall?', action === 'delete' ? 'This entry and links to it will be removed. Original source text and chat history are kept.' : 'This entry stops contributing to recall. Its source and saved text are kept.', () => action === 'delete' ? controller.removeEntry() : controller.unpublish())
-}
 function confirmAction() { const action = confirmation.value?.action; confirmation.value = null; void action?.() }
 function tabKey(event: KeyboardEvent) {
   if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return
@@ -66,8 +66,19 @@ function tabKey(event: KeyboardEvent) {
   navigate(async () => { await controller.changeTab(tab.id); dialog.value?.querySelector<HTMLButtonElement>(`#world-info-tab-${tab.id}`)?.focus() })
 }
 watch(() => props.sessionId, () => { confirmation.value = null })
-onMounted(async () => { previous = document.activeElement instanceof HTMLElement ? document.activeElement : null; await nextTick(); dialog.value?.showModal() })
-onBeforeUnmount(() => { dialog.value?.close(); if (previous?.isConnected) previous.focus() })
+onMounted(async () => {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const owner = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby')
+  previous = owner ? document.getElementById(owner) : active
+  if (!previous?.isConnected || previous === document.body) previous = document.querySelector<HTMLElement>('.header-session-menu [aria-haspopup="menu"]')
+  await nextTick()
+  dialog.value?.showModal()
+})
+onBeforeUnmount(() => {
+  dialog.value?.close()
+  const opener = previous
+  requestAnimationFrame(() => { if (opener?.isConnected && !document.querySelector('dialog[open]')) opener.focus() })
+})
 </script>
 <template>
   <Teleport to="body">
@@ -81,15 +92,16 @@ onBeforeUnmount(() => { dialog.value?.close(); if (previous?.isConnected) previo
         <p v-if="data.message" role="status" class="text-emerald-200">{{ data.message }}</p>
         <p v-if="data.error" role="alert" class="text-rose-200">{{ data.error }}</p>
         <p v-if="data.offline" role="status" class="text-amber-200">Status checks are paused. Processing may still be running. <button class="underline" @click="controller.load()">Reconnect</button></p>
-        <div v-if="data.state" class="world-info-index"><p>{{ indexMessage(data.state.index) }}</p><div class="flex flex-wrap gap-2"><button type="button" class="world-info-button" :disabled="data.loading || !!data.busy" @click="controller.load()">Refresh status</button><button type="button" class="world-info-button" :disabled="!!data.busy || !data.state.index.enabled" @click="controller.rebuild()">Rebuild this session’s index</button></div></div>
+        <details v-if="data.state" class="world-info-index-details" :open="data.tab === 'files'"><summary>Memory & indexing</summary><div class="world-info-index"><p>{{ indexMessage(data.state.index) }}</p><div class="flex flex-wrap gap-2"><button type="button" class="world-info-button" :disabled="data.loading || !!data.busy" @click="controller.load()">Refresh status</button><button type="button" class="world-info-button" :disabled="!!data.busy || !data.state.index.enabled" @click="controller.rebuild()">Rebuild this session’s index</button></div></div></details>
         <button v-if="!data.state && !data.loading" class="world-info-button" @click="controller.load()">Retry loading</button>
       </div>
       <main :id="`world-info-panel-${data.tab}`" :inert="!!confirmation" class="world-info-body" role="tabpanel" :aria-labelledby="`world-info-tab-${data.tab}`">
         <WorldInfoFiles v-if="data.tab === 'files'" :key="props.sessionId" :controller="controller" @remove="removeSource" />
-        <WorldInfoEntries v-else :key="props.sessionId" :controller="controller" @navigate="navigate" @publish="publish" @remove="confirmEntry('delete')" @unpublish="confirmEntry('unpublish')" @bulk-apply="bulkConfirm" />
+        <WorldInfoEntries v-else :key="props.sessionId" :controller="controller" @navigate="navigate" @open-entry="openEntry" @publish="publish" @bulk-apply="bulkConfirm" />
       </main>
       <section v-if="confirmation" class="world-info-confirm" aria-label="Confirm World Info action"><h3 class="font-semibold">{{ confirmation.title }}</h3><p class="mt-1 text-sm">{{ confirmation.text }}</p><div class="mt-3 flex flex-wrap gap-2"><button type="button" class="world-info-button" @click="cancelConfirmation">Keep current state</button><button data-confirm-action type="button" class="world-info-button is-primary" :disabled="!!data.busy" @click="confirmAction">Confirm</button></div></section>
       <footer class="world-info-footer"><span>{{ controller.dirty.value ? 'Unsaved entry changes' : 'Sources and entries belong only to this session.' }}</span><button type="button" class="world-info-button" @click="close">Close</button></footer>
     </dialog>
+    <WorldInfoEntryDialog v-if="entryOpen" :key="props.sessionId" :ref="setEntryDialog" :controller="controller" @back="backToCatalog" />
   </Teleport>
 </template>

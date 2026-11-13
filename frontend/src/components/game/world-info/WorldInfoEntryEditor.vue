@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import WorldInfoRelations from './WorldInfoRelations.vue'
 import { infoCount, worldInfoAudiences, worldInfoKinds } from '@/services/worldInfoDisplay'
 import type { WorldInfoController } from '@/composables/useWorldInfo'
-const props = defineProps<{ controller: WorldInfoController }>()
+const props = withDefaults(defineProps<{ controller: WorldInfoController; formId?: string; actions?: boolean }>(), { actions: true })
+const emit = defineEmits<{ saved: [] }>()
 const data = props.controller.data
 const unavailableRecipients = computed(() => data.draft?.known_by.filter(id =>
   data.draft?.unresolved_known_by?.includes(id) || !data.state?.characters.some(npc => npc.id === id)
@@ -26,9 +27,13 @@ function removeUnavailable(id: string) {
   data.draft.known_by = data.draft.known_by.filter(value => value !== id)
   data.draft.resolve_known_by = (data.draft.resolve_known_by ?? []).filter(value => value !== id)
 }
+async function save() {
+  const id = data.draft?.id
+  if (await props.controller.saveEntry() && id === data.draft?.id && !props.controller.dirty.value) emit('saved')
+}
 </script>
 <template>
-  <form v-if="data.draft && data.state" class="space-y-4" @submit.prevent="controller.saveEntry()">
+  <form v-if="data.draft && data.state" :id="formId" class="space-y-4" @submit.prevent="save">
     <div class="world-info-card text-xs text-slate-400"><p class="break-words">{{ data.draft.source_filename }} · source version {{ data.draft.source_revision_number }}</p><p>{{ infoCount(data.draft.facts_count) }} facts · {{ infoCount(data.draft.byte_count) }} UTF-8 bytes · {{ infoCount(data.draft.character_count) }} characters in saved entry</p><p>{{ data.draft.is_active ? 'Accepted entry' : data.draft.status === 'archived' ? 'Archived entry' : 'Draft entry' }}{{ data.draft.edited ? ' · Edited by author' : '' }}</p></div>
     <fieldset :disabled="!!data.busy" class="space-y-4">
       <label>Entry title<input v-model="data.draft.title" required :maxlength="data.state.limits.max_entry_title_characters ?? 160" /></label>
@@ -62,7 +67,7 @@ function removeUnavailable(id: string) {
         </article>
       </section>
       <WorldInfoRelations v-model="data.draft.relations" :candidates="data.candidates" :entry-id="data.draft.id" :limit="data.state.limits.max_relations" :note-limit="data.state.limits.max_relation_note_characters ?? 160" :more="data.candidateNext !== null" :previous="data.candidateOffset > 0" :disabled="!!data.busy" @search="controller.loadCandidates" />
-      <div class="flex flex-wrap gap-2"><button class="world-info-button is-primary" type="submit" :disabled="!controller.dirty.value || (data.draft.audience === 'restricted' && !data.draft.known_by.length)">Save entry</button><button type="button" class="world-info-button" :disabled="!controller.dirty.value" @click="data.draft = JSON.parse(data.baseline)">Discard changes</button></div>
+      <div v-if="actions" class="flex flex-wrap gap-2"><button class="world-info-button is-primary" type="submit" :disabled="!controller.dirty.value || (data.draft.audience === 'restricted' && !data.draft.known_by.length)">Save entry</button><button type="button" class="world-info-button" :disabled="!controller.dirty.value" @click="controller.discardEntry()">Discard changes</button></div>
     </fieldset>
   </form>
   <p v-else class="world-info-empty">Choose an entry to review its facts, source evidence and visibility.</p>

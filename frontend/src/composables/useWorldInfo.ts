@@ -11,7 +11,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     state: null as WorldInfoState | null, source: null as WorldInfoSourceDetails | null,
     job: null as WorldInfoJob | null, content: null as WorldInfoContent | null,
     tab: 'files' as WorldInfoTab, mobileDetail: false, error: '', message: '', busy: '',
-    loading: false, offline: false, query: '', revisionFilter: '',
+    loading: false, entryLoading: false, offline: false, query: '', revisionFilter: '',
     entries: [] as WorldInfoEntrySummary[], total: 0, next: null as number | null,
     selected: [] as string[], draft: null as WorldInfoEntry | null, baseline: '',
     candidates: [] as WorldInfoEntrySummary[], candidateNext: null as number | null,
@@ -19,6 +19,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     ...worldInfoCatalogState(),
   })
   let epoch = 0
+  let entryRevision = 0
   const requests = new Map<string, AbortController>()
   const dirty = computed(() => !!data.draft && JSON.stringify(data.draft) !== data.baseline)
   const selectedEntries = computed(() => data.entries.filter(entry => data.selected.includes(entry.id)))
@@ -61,7 +62,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
       if (result.token !== epoch || result.sid !== sessionId.value) return false
       const wasWorking = activeJobs()
       applyState(result.state)
-      if (wasWorking && !activeJobs() && data.tab !== 'files') void loadEntries()
+      if (wasWorking && !activeJobs() && data.tab !== 'files') void catalog.loadEntries(data.offset)
       return activeJobs()
     },
     onPaused: () => { data.offline = true },
@@ -126,16 +127,27 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     await catalog.search()
   }
   async function openEntry(id: string) {
+    const revision = ++entryRevision
     data.error = ''
-    data.mobileDetail = true
+    data.message = ''
+    data.entryLoading = true
     data.draft = null
     data.baseline = ''
     const result = await request('entry', api => api.entry(id))
+    if (revision !== entryRevision) return
+    data.entryLoading = false
     if (!result) return
     data.draft = copy(result)
     data.baseline = JSON.stringify(result)
     await loadCandidates()
   }
+  function closeEntry() {
+    entryRevision++
+    requests.get('entry')?.abort()
+    requests.get('candidates')?.abort()
+    data.draft = null; data.baseline = ''; data.entryLoading = false
+  }
+  function discardEntry() { if (data.baseline) data.draft = copy(JSON.parse(data.baseline)) }
   async function loadCandidates(query = '', direction?: 'next' | 'previous') {
     const offset = direction === 'next' ? data.candidateNext ?? data.candidateOffset : direction === 'previous' ? Math.max(0, data.candidateOffset - 50) : 0
     const result = await request('candidates', api => api.entries('all', query, '', offset))
@@ -144,7 +156,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     data.candidateNext = result.next_offset
     data.candidateOffset = offset
   }
-  async function mutate(label: string, action: (api: ReturnType<typeof worldInfoService>, signal: AbortSignal) => Promise<unknown>) {
+  async function mutate(label: string, action: (api: ReturnType<typeof worldInfoService>, signal: AbortSignal) => Promise<unknown>, retainBusy = false) {
     if (data.busy) return false
     data.busy = label
     data.error = ''
@@ -152,7 +164,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     const token = epoch
     const result = await request('mutation', action)
     if (token !== epoch) return false
-    data.busy = ''
+    if (!retainBusy || result === undefined) data.busy = ''
     return result !== undefined
   }
   async function upload(file: File, title: string, replacement?: WorldInfoSource) {
@@ -189,21 +201,26 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     if (data.source) await openSource(data.source.source.id)
   }
   async function saveEntry() {
-    if (!data.draft) return
+    if (!data.draft || data.busy) return false
     const draft = copy(data.draft)
     const token = epoch
     let saved: WorldInfoEntry | undefined
     const ok = await mutate('Saving entry…', async api => {
       saved = await api.save(draft)
       return saved
-    })
-    if (!ok || !saved) return
-    data.draft = copy(saved)
-    data.baseline = JSON.stringify(saved)
-    data.message = 'Entry saved. Indexing is updated separately.'
-    await loadEntries()
-    if (token !== epoch) return
-    await load()
+    }, true)
+    try {
+      if (!ok || !saved) return false
+      data.draft = copy(saved)
+      data.baseline = JSON.stringify(saved)
+      data.message = 'Entry saved. Indexing is updated separately.'
+      await catalog.loadEntries(data.offset)
+      if (token !== epoch) return false
+      await load()
+      return token === epoch
+    } finally {
+      if (token === epoch) data.busy = ''
+    }
   }
   async function publish(selection?: { source: WorldInfoSource; entries: WorldInfoEntrySummary[] }) {
     const source = selection?.source ?? selectedSource.value
@@ -218,7 +235,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     data.message = 'Selected entries are accepted for this session. Indexing is updated separately.'
     data.selected = []
     data.draft = null
-    await loadEntries()
+    await catalog.loadEntries(data.offset)
     if (token !== epoch) return
     await load()
   }
@@ -229,19 +246,23 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     await load()
   }
   async function removeEntry() {
-    if (!data.draft) return
+    if (!data.draft) return false
+    const token = epoch
     const entry = copy(data.draft)
-    if (!await mutate('Deleting entry…', api => api.removeEntry(entry))) return
-    data.draft = null; data.baseline = ''; data.mobileDetail = false
+    if (!await mutate('Deleting entry…', api => api.removeEntry(entry))) return false
+    closeEntry()
     data.message = 'Entry removed. Its derived memory is invalidated.'
     await refreshEntries()
+    return token === epoch
   }
   async function unpublish() {
-    if (!data.draft) return
+    if (!data.draft) return false
+    const token = epoch
     const entry = copy(data.draft)
-    if (!await mutate('Removing entry from recall…', api => api.unpublish(entry))) return
-    data.draft = null; data.baseline = ''; data.mobileDetail = false
+    if (!await mutate('Removing entry from recall…', api => api.unpublish(entry))) return false
+    closeEntry()
     await refreshEntries()
+    return token === epoch
   }
   async function rebuild() {
     if (!await mutate('Queuing session index…', api => api.rebuild())) return
@@ -250,19 +271,20 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
   }
   async function refreshEntries() {
     const token = epoch
-    await loadEntries()
+    await catalog.loadEntries(data.offset)
     if (token === epoch) await load()
   }
   function reset() {
     epoch++
+    entryRevision++
     catalog.reset()
     poller.stop()
     requests.forEach(controller => controller.abort())
     requests.clear()
-    Object.assign(data, { state: null, source: null, job: null, content: null, draft: null, baseline: '', entries: [], candidates: [], selected: [], tab: 'files', mobileDetail: false, query: '', revisionFilter: '', busy: '', error: '', message: '', loading: false, offline: false, total: 0, next: null, candidateNext: null, candidateOffset: 0 })
+    Object.assign(data, { state: null, source: null, job: null, content: null, draft: null, baseline: '', entries: [], candidates: [], selected: [], tab: 'files', mobileDetail: false, query: '', revisionFilter: '', busy: '', error: '', message: '', loading: false, entryLoading: false, offline: false, total: 0, next: null, candidateNext: null, candidateOffset: 0 })
   }
   watch(sessionId, () => { reset(); if (sessionId.value) void load() }, { immediate: true, flush: 'sync' })
   onScopeDispose(reset)
-  return { data, catalog, dirty, selectedEntries, selectedSource, load, loadEntries, changeTab, openSource, chooseRevision, previewSource, reviewRevision, openEntry, loadCandidates, upload, control, saveEntry, publish, removeSource, removeEntry, unpublish, rebuild }
+  return { data, catalog, dirty, selectedEntries, selectedSource, load, loadEntries, changeTab, openSource, chooseRevision, previewSource, reviewRevision, openEntry, closeEntry, discardEntry, loadCandidates, upload, control, saveEntry, publish, removeSource, removeEntry, unpublish, rebuild }
 }
 export type WorldInfoController = ReturnType<typeof useWorldInfo>
