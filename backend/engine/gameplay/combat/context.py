@@ -31,6 +31,14 @@ class CombatContextMixin(TurnContext):
 
     manager: GameTurnManager
 
+    if TYPE_CHECKING:
+
+        def _resolve_casualties(
+            self, combat: dict[str, Any], target_id: str | None
+        ) -> AsyncGenerator[str, None]:
+            """The concrete combat facade supplies shared casualty resolution."""
+            raise NotImplementedError
+
     @property
     def _turn_services(self) -> ModuleType:
         # Preserve legacy dependency overrides without importing the orchestrator

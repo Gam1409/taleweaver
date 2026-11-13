@@ -217,13 +217,31 @@ class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarra
             async for chunk in self._special_script_events(combat, data):
                 yield chunk
 
+        async for chunk in self._after_enemy_action(combat, data, bool(special)):
+            yield chunk
+
+    async def _after_enemy_action(
+        self, combat: dict[str, Any], data: dict[str, Any], special: bool
+    ) -> AsyncGenerator[str, None]:
         if self.avatar.hp <= 0:
             await self._handle_player_defeat(combat, "The protagonist falls. Game Over.")
             return
-        if special or data.get("kind") != "attack":
+        if not special and data.get("kind") != "attack":
             return
-        async for chunk in self._run_special_event(combat):
+        follow_up = (
+            self._finish_enemy_special(combat) if special else self._run_special_event(combat)
+        )
+        async for chunk in follow_up:
             yield chunk
+
+    async def _finish_enemy_special(self, combat: dict[str, Any]) -> AsyncGenerator[str, None]:
+        """Apply the shared casualty contract after special effects and scripts."""
+        async for chunk in self._resolve_casualties(combat, None):
+            yield chunk
+        if self.avatar.hp <= 0:
+            await self._handle_player_defeat(combat, "The protagonist falls. Game Over.")
+            return
+        self._check_victory(combat)
 
     async def _run_special_event(self, combat: dict[str, Any]) -> AsyncGenerator[str, None]:
         try:

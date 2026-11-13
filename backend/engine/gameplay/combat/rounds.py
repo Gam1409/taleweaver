@@ -84,7 +84,8 @@ class CombatRoundMixin(CombatEnemyMixin):
                     yield chunk
             combat["turn_index"] = int(combat.get("turn_index") or 0) + 1
 
-        self._set_turn_marker(combat)
+        if combat.get("active"):
+            self._set_turn_marker(combat)
         self._set_combat_state(combat)
 
     def _announce_player_turn(self, combat: dict[str, Any]) -> None:
