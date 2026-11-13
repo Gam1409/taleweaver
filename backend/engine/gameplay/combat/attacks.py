@@ -7,10 +7,11 @@ from typing import Any
 
 def apply_strength_bonus(roll: dict[str, Any], strength_mod: int) -> dict[str, Any]:
     """Applies combat strength modifiers (buffs/debuffs) to the damage of a hit."""
-    if not roll.get("is_hit") or not strength_mod:
+    if not roll.get("is_hit"):
         return roll
     adjusted = dict(roll)
-    adjusted["damage_total"] = max(0, int(roll.get("damage_total") or 0) + strength_mod)
+    raw_damage = roll.get("raw_damage_total", roll.get("damage_total"))
+    adjusted["damage_total"] = max(0, int(raw_damage or 0) + strength_mod)
     adjusted["damage_bonus"] = int(roll.get("damage_bonus") or 0) + strength_mod
     return adjusted
 

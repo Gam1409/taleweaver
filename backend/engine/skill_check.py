@@ -80,6 +80,7 @@ def roll_attack(avatar: Avatar, hit_stat: str, target_ac: int, damage_dice: str)
     Also handles DEX-based critical hits:
     - critical threshold is 20 - max(0, (dexterity - 10) // 4), clamped to >= 15.
     - if d20 roll >= crit_threshold, it's a critical hit (auto-hit, double damage total).
+    The signed total remains available so combat modifiers precede the final damage floor.
     """
     total_stats = calculate_total_stats(avatar)
     hit_modifier = total_stats.get(hit_stat, 0)
@@ -116,7 +117,8 @@ def roll_attack(avatar: Avatar, hit_stat: str, target_ac: int, damage_dice: str)
         "target_ac": target_ac,
         "is_hit": is_hit,
         "is_crit": is_crit,
-        "damage_total": damage_total,
+        "damage_total": max(0, damage_total),
+        "raw_damage_total": damage_total,
         "damage_dice_total": damage_info["dice_total"],
         "damage_rolls": damage_info["rolls"],
         "damage_bonus": damage_info["bonus"],
