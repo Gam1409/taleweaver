@@ -100,34 +100,6 @@ export interface UsePortalDataResult {
   toneCatalog: Ref<CatalogTile[]>
 }
 
-function formatToneLabel(value?: unknown): string {
-  if (!value) return ''
-  let text = ''
-
-  if (typeof value === 'object' && value !== null) {
-    const objectValue = value as Record<string, unknown>
-    text = String(objectValue.name || objectValue.id || '')
-  } else {
-    text = String(value)
-    if (text.startsWith('{')) {
-      try {
-        const objectValue = JSON.parse(text) as Record<string, unknown>
-        text = String(objectValue.name || objectValue.id || text)
-      } catch {
-        // Value is not parseable JSON, keep raw string.
-      }
-    }
-  }
-
-  const normalized = text
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  if (!normalized) return ''
-  return normalized.replace(/\b\w/g, (ch: string) => ch.toUpperCase())
-}
-
 function makeSafeFilename(title: string, ext: string) {
   const safe = (title || 'adventure').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '_')
   return `${safe || 'adventure'}.${ext}`
@@ -245,18 +217,8 @@ export function usePortalData(): UsePortalDataResult {
         ])
       }
 
-      templates.value = Array.isArray(fetchedTemplates)
-        ? fetchedTemplates.map((entry) => ({
-            ...entry,
-            selected_tone: formatToneLabel(entry.selected_tone),
-          }))
-        : []
-      sessions.value = Array.isArray(fetchedSessions)
-        ? fetchedSessions.map((entry) => ({
-            ...entry,
-            selected_tone: formatToneLabel(entry.selected_tone),
-          }))
-        : []
+      templates.value = Array.isArray(fetchedTemplates) ? fetchedTemplates : []
+      sessions.value = Array.isArray(fetchedSessions) ? fetchedSessions : []
 
       try {
         const settings = await api.getSettings()
@@ -830,25 +792,31 @@ export function usePortalData(): UsePortalDataResult {
   const editNoteSessionId = ref<string | null>(null)
   const editNoteValue = ref('')
   const isSavingNote = ref(false)
+  let noteEditorVersion = 0
 
   function openEditNote(gameId: string, currentNote: string) {
+    noteEditorVersion += 1
     editNoteSessionId.value = gameId
     editNoteValue.value = currentNote
   }
 
   async function saveSessionNote(note: string) {
-    if (!editNoteSessionId.value) return
+    if (!editNoteSessionId.value || isSavingNote.value) return
+    const gameId = editNoteSessionId.value
+    const editorVersion = noteEditorVersion
     isSavingNote.value = true
     try {
-      const updated = await api.updateSession(editNoteSessionId.value, { status_note: note })
+      const updated = await api.updateSession(gameId, { status_note: note })
       sessions.value = sessions.value.map((s) => {
-        if (s.game_id === editNoteSessionId.value) {
+        if (s.game_id === gameId) {
           return { ...s, status_note: updated.status_note }
         }
         return s
       })
-      editNoteSessionId.value = null
-      editNoteValue.value = ''
+      if (editNoteSessionId.value === gameId && noteEditorVersion === editorVersion) {
+        editNoteSessionId.value = null
+        editNoteValue.value = ''
+      }
     } catch (error: any) {
       errorMsg.value = error?.message || 'Failed to save note'
     } finally {
