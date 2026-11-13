@@ -43,7 +43,7 @@ async def _update_world_entity(
         return
     ent = rows[0]
     if given(payload, "new_id"):
-        await rename_entity(db, template_id, ent, payload.new_id or "")
+        await rename_entity(db, template_id, adv, ent, payload.new_id or "")
     apply_common_fields(ent, payload)
     if ent.entity_type == "NPC":
         await update_npc(db, template_id, ent, payload)

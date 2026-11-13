@@ -15,6 +15,9 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     template_rows,
     validated_new_id,
 )
+from backend.api.routes.adventures.editing.entity_update.rename_refs import (
+    cascade_template_references,
+)
 from backend.api.routes.adventures.editing.exit_fields import (
     EXIT_SCRIPT_FIELDS as _EXIT_SCRIPT_FIELDS,
 )
@@ -69,10 +72,7 @@ async def _rename_scene(
         if ent.current_scene_id == old_id:
             ent.current_scene_id = new_id
 
-    manifest = deepcopy(adv.original_manifest or {})
-    if manifest.get("start_scene_id") == old_id:
-        manifest["start_scene_id"] = new_id
-        adv.original_manifest = manifest
+    await cascade_template_references(db, adv, old_id, new_id, "scene")
 
 
 def _decorative_objects(values: list[str]) -> list[str] | None:
