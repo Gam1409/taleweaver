@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import {
+  BookOpenText,
   History,
   LogOut,
   Map as MapIcon,
@@ -18,6 +19,7 @@ const props = defineProps<{ debugMode?: boolean; sessionId?: string }>()
 const emit = defineEmits<{
   openChronicles: []
   openSettings: []
+  openWorldInfo: []
   openDebug: []
   toggleMobileInteract: []
   exitSession: []
@@ -46,6 +48,9 @@ watch(
     <BableFishSelector subtle />
     <div class="header-session-menu">
       <ActionGroupMenu v-model="open" label="Session" :icon="SlidersHorizontal">
+        <button type="button" role="menuitem" class="action-menu-item" @click="emit('openWorldInfo')">
+          <BookOpenText class="text-amber-300" aria-hidden="true" /><span class="action-menu-copy"><span class="action-menu-title">World Info</span><span class="action-menu-description">Knowledge for this session</span></span>
+        </button>
         <button
           type="button"
           role="menuitem"

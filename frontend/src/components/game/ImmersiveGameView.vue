@@ -88,6 +88,7 @@ const emit = defineEmits<{
   openMemories: []
   openCharacters: []
   openSettings: []
+  openWorldInfo: []
   openDebug: []
   openWalkthrough: []
   npcHover: [entityOrName: any, event: MouseEvent]
@@ -252,6 +253,7 @@ defineExpose({
       @open-memories="emit('openMemories')"
         @open-characters="emit('openCharacters')"
       @open-settings="emit('openSettings')"
+      @open-world-info="emit('openWorldInfo')"
       @open-debug="emit('openDebug')"
       @toggle-mobile-interact="showMobileInteract = !showMobileInteract"
       @exit-session="emit('exitSession')"

@@ -23,6 +23,7 @@ const emit = defineEmits<{
   openChronicles: []
   openQuests: []
   openSettings: []
+  openWorldInfo: []
   openDebug: []
   toggleMobileInteract: []
   exitSession: []
@@ -66,6 +67,7 @@ const emit = defineEmits<{
       :session-id="sessionId"
       @open-chronicles="emit('openChronicles')"
       @open-settings="emit('openSettings')"
+      @open-world-info="emit('openWorldInfo')"
       @open-debug="emit('openDebug')"
       @toggle-mobile-interact="emit('toggleMobileInteract')"
       @exit-session="emit('exitSession')"
