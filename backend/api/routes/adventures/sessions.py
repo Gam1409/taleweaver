@@ -923,6 +923,7 @@ async def copy_session(
         max_stamina=original_avatar.max_stamina,
         mana=original_avatar.mana,
         max_mana=original_avatar.max_mana,
+        exp=original_avatar.exp,
         strength=original_avatar.strength,
         dexterity=original_avatar.dexterity,
         intelligence=original_avatar.intelligence,

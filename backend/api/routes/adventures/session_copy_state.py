@@ -46,6 +46,8 @@ async def clone_saved_session_state(
             template_id=original_state.template_id,
             avatar_id=cloned_avatar.id,
             current_scene_id=original_state.current_scene_id,
+            active_sequence_id=original_state.active_sequence_id,
+            active_sequence_order=original_state.active_sequence_order,
             in_game_time=original_state.in_game_time,
             max_memory_turns=getattr(original_state, "max_memory_turns", 10) or 10,
             time_system=original_state.time_system,

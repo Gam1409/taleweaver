@@ -74,6 +74,7 @@ class AdventureLogic:
             "selected_image_styles": deepcopy(adventure.selected_image_styles or []),
             "selected_tone": deepcopy(adventure.selected_tone or {}),
             "quests": deepcopy(adventure.quests or []),
+            "sequences": deepcopy(adventure.sequences),
             "awards": deepcopy(adventure.awards or []),
             "plot": adventure.plot,
             "rules": adventure.rules,

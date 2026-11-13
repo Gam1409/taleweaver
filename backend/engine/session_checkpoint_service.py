@@ -20,11 +20,13 @@ from backend.engine.clothing.lifecycle import (
 )
 from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
 from backend.engine.dynamic_locations.schema import registry
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
 from backend.engine.memory_rag.lifecycle import invalidate_memory, memory_snapshot, restore_memory
 from backend.engine.npc_journal.lifecycle import rewind_journals
 from backend.engine.visual_plan_lifecycle import reset, without_cache
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -68,15 +70,51 @@ def _debug_details(snapshot: dict[str, Any]) -> dict:
     }
 
 
-def _restore_session_context(
-    game_session: GameSession, state: SessionState, snapshot: dict[str, Any]
+async def _restore_session_context(
+    db: AsyncSession, game_session: GameSession, state: SessionState, snapshot: dict[str, Any]
 ) -> None:
     state_snapshot = snapshot.get("session_state") or {}
     if "active_sequence_id" in state_snapshot:
         state.active_sequence_id = state_snapshot["active_sequence_id"]
+    if "active_sequence_order" in state_snapshot:
+        state.active_sequence_order = state_snapshot["active_sequence_order"]
+    elif "active_sequence_id" in state_snapshot:
+        state.active_sequence_order = await _legacy_sequence_order(db, state)
     game_session.status = snapshot.get("session_status") or (
         "completed" if state.is_completed else "active"
     )
+
+
+def _sequence_order(sequences: Any, sequence_id: str) -> int | None:
+    if not isinstance(sequences, list):
+        return None
+    return next(
+        (
+            sequence.get("order", 1)
+            for sequence in sequences
+            if isinstance(sequence, dict) and sequence.get("id") == sequence_id
+        ),
+        None,
+    )
+
+
+async def _legacy_sequence_order(db: AsyncSession, state: SessionState) -> int:
+    """Older checkpoints saved only the ID; never retain another chapter's future order."""
+    if not state.active_sequence_id:
+        return 1
+    snapshot = AdventureLogic.extract_manifest_snapshot(state)
+    adventure = snapshot.get("adventure")
+    captured = adventure.get("sequences") if isinstance(adventure, dict) else None
+    if isinstance(captured, list):
+        order = _sequence_order(captured, state.active_sequence_id)
+        return 1 if order is None else order
+    manifest = AdventureLogic.resolve_manifest_for_state(state)
+    order = _sequence_order(manifest.get("sequences"), state.active_sequence_id)
+    if order is not None:
+        return order
+    template = await db.get(AdventureTemplate, state.template_id) if state.template_id else None
+    order = _sequence_order(template.sequences if template else None, state.active_sequence_id)
+    return 1 if order is None else order
 
 
 class SessionCheckpointService:
@@ -143,6 +181,7 @@ class SessionCheckpointService:
                 **memory_snapshot(state),
                 "current_scene_id": state.current_scene_id,
                 "active_sequence_id": state.active_sequence_id,
+                "active_sequence_order": state.active_sequence_order,
                 "in_game_time": state.in_game_time,
                 "time_system": state.time_system,
                 "time_config": deepcopy(state.time_config or {}),
@@ -281,7 +320,7 @@ class SessionCheckpointService:
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])
         state.quests = deepcopy(state_snapshot.get("quests") or [])
         state.is_completed = bool(state_snapshot.get("is_completed", state.is_completed))
-        _restore_session_context(game_session, state, snapshot)
+        await _restore_session_context(db, game_session, state, snapshot)
         await restore_world(db, state, snapshot)
         restore_memory(state, state_snapshot)
         await invalidate_memory(db, session_id)

@@ -1,5 +1,6 @@
 """Detached adventure data retained by sessions after a template is deleted."""
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,3 +38,14 @@ class AdventureSnapshot:
     is_adventure_generator: bool
     original_manifest: dict[str, Any]
     sequences: list[dict[str, Any]] | None = None
+
+    def __post_init__(self) -> None:
+        """Prefer captured chapter definitions, including an explicitly cleared list."""
+        source = self.sequences
+        if not isinstance(source, list):
+            source = self.original_manifest.get("sequences")
+        self.sequences = (
+            [deepcopy(sequence) for sequence in source if isinstance(sequence, dict)]
+            if isinstance(source, list)
+            else []
+        )

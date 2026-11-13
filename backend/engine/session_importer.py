@@ -216,6 +216,8 @@ class SessionImporter:
                     template_id=resolved_template_id,
                     avatar_id=new_avatar_id,
                     current_scene_id=session_state_data.get("current_scene_id", "START"),
+                    active_sequence_id=session_state_data.get("active_sequence_id"),
+                    active_sequence_order=session_state_data.get("active_sequence_order", 1),
                     in_game_time=session_state_data.get("in_game_time", 0),
                     max_memory_turns=session_state_data.get("max_memory_turns", 10),
                     time_system=session_state_data.get("time_system", "calendar"),

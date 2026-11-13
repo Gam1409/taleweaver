@@ -811,6 +811,7 @@ class GameTurnManager:
                         snapshot_adventure.get("is_adventure_generator", False)
                     ),
                     original_manifest=snapshot_manifest,
+                    sequences=snapshot_adventure.get("sequences"),
                 )
 
         if not (self.adventure and self.avatar):
