@@ -481,7 +481,13 @@ class GameTurnManager:
         See turn_prompt_layout.build_narration_messages. Returns (messages, max_turns_configured).
         """
         return await build_narration_messages(
-            self.db, self.state, self.adventure, narration_prompt, user_msg, turn_context
+            self.db,
+            self.state,
+            self.adventure,
+            narration_prompt,
+            user_msg,
+            turn_context,
+            language=self.turn_language,
         )
 
     @staticmethod
@@ -1982,6 +1988,7 @@ class GameTurnManager:
         narration_messages, memory_turns = await self._build_narration_messages(
             narration_prompt, user_msg, turn_context=turn_context
         )
+        narration_prompt = narration_messages[0]["content"]
         logger.debug(
             f"[Turn {self.game_id}] [Pass 2] Calling complex model: {complex_model} via {complex_model_provider} "
             f"(memory_turns={memory_turns}, messages={len(narration_messages)})"

@@ -8,6 +8,7 @@ MANIFEST_KEY = "narrator_settings"
 SETTINGS_KEY = "__narrator_settings__"
 
 Verbosity = Literal["default", "terse", "dialogue", "balanced", "rich", "epic"]
+NarrationFlow = Literal["off", "gentle", "balanced"]
 
 
 class NarratorVoice(BaseModel):
@@ -25,6 +26,16 @@ class NarratorSettings(BaseModel):
 
     voice: NarratorVoice | None = None
     verbosity: Verbosity = "default"
+    flow: NarrationFlow = "gentle"
+
+
+def preserve_missing_flow(
+    payload: NarratorSettings, previous: NarratorSettings
+) -> NarratorSettings:
+    """An older client cannot choose the newly added flow preference."""
+    if "flow" in payload.model_fields_set:
+        return payload
+    return payload.model_copy(update={"flow": previous.flow})
 
 
 def _read(raw: Any) -> NarratorSettings:

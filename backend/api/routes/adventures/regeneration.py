@@ -128,7 +128,7 @@ async def regenerate_latest_message(
         or history[0].id != payload.message_id
     ):
         raise HTTPException(409, "The latest response changed. Refresh the chat and try again.")
-    guidance = await narration_guidance(db, session, current_user)
+    guidance = await narration_guidance(db, session, current_user, history)
     presentation = await prepare_rewrite(db, game_id)
     guidance = "\n\n".join(filter(None, (guidance, presentation.prompt)))
     previous_portrait = history[0].portrait_state

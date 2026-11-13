@@ -17,6 +17,7 @@ from backend.engine.narrator.settings import (
     SETTINGS_KEY,
     NarratorSettings,
     manifest_settings,
+    preserve_missing_flow,
     read_settings,
 )
 from backend.engine.visual_novel.concurrency import (
@@ -94,6 +95,7 @@ async def save_defaults(
     adventure, before = await _template(db, template_id, user)
     _ensure_editable(adventure)
     manifest = adventure.original_manifest if isinstance(adventure.original_manifest, dict) else {}
+    payload = preserve_missing_flow(payload, manifest_settings(manifest))
     await _commit(
         db,
         update(AdventureTemplate)
@@ -132,6 +134,7 @@ async def save_session(
         with session_write_lease(game_id):
             state, before = await _state(db, game_id, user)
             states = state.entity_states if isinstance(state.entity_states, dict) else {}
+            payload = preserve_missing_flow(payload, read_settings(state))
             await _commit(
                 db,
                 update(SessionState)

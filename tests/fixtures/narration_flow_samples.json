@@ -1,0 +1,108 @@
+{
+  "format_version": 1,
+  "purpose": "Synthetic detector examples authored for this repository; these are not model outputs or a live quality benchmark.",
+  "review_notes": [
+    "Each candidate retains the number 72, the map, the lantern, and the same speaker-tagged dialogue turns.",
+    "Sana asks about the gate and proposes the next need; Rowan confirms the map notation. The dialogue lines retain that distinction.",
+    "Candidates remove repeated ornamental beats and vary reply lengths. This is a deliberate editorial comparison, not evidence of automatic semantic equivalence.",
+    "Intentional repetition of a clue in dialogue remains. Review meaning, voice, readability and continuity alongside metrics; lower counts alone do not establish quality."
+  ],
+  "cases": [
+    {
+      "id": "en-map",
+      "language": "English",
+      "baseline": [
+        "She studied the map. She made a pause. She read the number 72. The lantern rested on the table.",
+        "She studied the map. She made a pause. **Sana:** [curious] \"Does 72 mark the north gate?\" The lantern rested on the table.",
+        "She studied the map. She made a pause. **Rowan:** [serious] \"Yes. The north gate is marked 72.\" The lantern rested on the table.",
+        "She studied the map. She made a pause. **Sana:** [curious] \"Then we need the gate key.\" The lantern rested on the table."
+      ],
+      "candidate": [
+        "Rowan checked the map's number: 72. A lantern stood on the table.",
+        "**Sana:** [curious] \"Does 72 mark the north gate?\"",
+        "**Rowan:** [serious] \"Yes. The north gate is marked 72.\"",
+        "**Sana:** [curious] \"Then we need the gate key.\""
+      ]
+    },
+    {
+      "id": "ru-map",
+      "language": "Russian",
+      "baseline": [
+        "Она изучила карту. Она сделала паузу. Она прочла число 72. Фонарь стоял на столе.",
+        "Она изучила карту. Она сделала паузу. **Sana:** [curious] «72 обозначает северные ворота?» Фонарь стоял на столе.",
+        "Она изучила карту. Она сделала паузу. **Rowan:** [serious] «Да. Северные ворота обозначены числом 72». Фонарь стоял на столе.",
+        "Она изучила карту. Она сделала паузу. **Sana:** [curious] «Значит, нужен ключ от ворот». Фонарь стоял на столе."
+      ],
+      "candidate": [
+        "Rowan сверилась с числом на карте: 72. На столе стоял фонарь.",
+        "**Sana:** [curious] «72 обозначает северные ворота?»",
+        "**Rowan:** [serious] «Да. Северные ворота обозначены числом 72».",
+        "**Sana:** [curious] «Значит, нужен ключ от ворот»."
+      ]
+    },
+    {
+      "id": "ar-map",
+      "language": "Arabic",
+      "baseline": [
+        "تأملت الخريطة. توقفت لحظة. قرأت العدد 72. بقي الفانوس على الطاولة.",
+        "تأملت الخريطة. توقفت لحظة. **Sana:** [curious] «هل يشير 72 إلى البوابة الشمالية؟» بقي الفانوس على الطاولة.",
+        "تأملت الخريطة. توقفت لحظة. **Rowan:** [serious] «نعم. البوابة الشمالية تحمل العدد 72.» بقي الفانوس على الطاولة.",
+        "تأملت الخريطة. توقفت لحظة. **Sana:** [curious] «إذن نحتاج إلى مفتاح البوابة.» بقي الفانوس على الطاولة."
+      ],
+      "candidate": [
+        "راجعت Rowan العدد على الخريطة: 72. كان الفانوس على الطاولة.",
+        "**Sana:** [curious] «هل يشير 72 إلى البوابة الشمالية؟»",
+        "**Rowan:** [serious] «نعم. البوابة الشمالية تحمل العدد 72.»",
+        "**Sana:** [curious] «إذن نحتاج إلى مفتاح البوابة.»"
+      ]
+    },
+    {
+      "id": "ja-map",
+      "language": "Japanese",
+      "baseline": [
+        "地図を確かめた。少し間を置いた。数字の72を読んだ。ランタンは机の上に置かれていた。",
+        "地図を確かめた。少し間を置いた。**Sana:** [curious]「72は北の門のこと？」ランタンは机の上に置かれていた。",
+        "地図を確かめた。少し間を置いた。**Rowan:** [serious]「そう。北の門には72と記されている。」ランタンは机の上に置かれていた。",
+        "地図を確かめた。少し間を置いた。**Sana:** [curious]「じゃあ、門の鍵が必要だね。」ランタンは机の上に置かれていた。"
+      ],
+      "candidate": [
+        "Rowanは地図の数字を確かめた。72。机の上にはランタンがあった。",
+        "**Sana:** [curious]「72は北の門のこと？」",
+        "**Rowan:** [serious]「そう。北の門には72と記されている。」",
+        "**Sana:** [curious]「じゃあ、門の鍵が必要だね。」"
+      ]
+    },
+    {
+      "id": "zh-map",
+      "language": "Chinese",
+      "baseline": [
+        "她查看地图。她停顿片刻。她读出了数字72。灯笼一直放在桌上。",
+        "她查看地图。她停顿片刻。**Sana:** [curious]“72指的是北门吗？”灯笼一直放在桌上。",
+        "她查看地图。她停顿片刻。**Rowan:** [serious]“是的，北门标着72。”灯笼一直放在桌上。",
+        "她查看地图。她停顿片刻。**Sana:** [curious]“那我们需要北门的钥匙。”灯笼一直放在桌上。"
+      ],
+      "candidate": [
+        "Rowan核对了地图上的数字：72。桌上放着一盏灯笼。",
+        "**Sana:** [curious]“72指的是北门吗？”",
+        "**Rowan:** [serious]“是的，北门标着72。”",
+        "**Sana:** [curious]“那我们需要北门的钥匙。”"
+      ]
+    },
+    {
+      "id": "ko-map",
+      "language": "Korean",
+      "baseline": [
+        "그녀는 지도를 살폈다. 그녀는 잠시 멈췄다. 그녀는 숫자 72를 읽었다. 등불은 탁자 위에 놓여 있었다.",
+        "그녀는 지도를 살폈다. 그녀는 잠시 멈췄다. **Sana:** [curious] \"72가 북문을 뜻해?\" 등불은 탁자 위에 놓여 있었다.",
+        "그녀는 지도를 살폈다. 그녀는 잠시 멈췄다. **Rowan:** [serious] \"맞아. 북문에는 72라고 적혀 있어.\" 등불은 탁자 위에 놓여 있었다.",
+        "그녀는 지도를 살폈다. 그녀는 잠시 멈췄다. **Sana:** [curious] \"그럼 문 열쇠가 필요하겠네.\" 등불은 탁자 위에 놓여 있었다."
+      ],
+      "candidate": [
+        "Rowan은 지도에 적힌 숫자를 확인했다. 72였다. 탁자 위에는 등불이 있었다.",
+        "**Sana:** [curious] \"72가 북문을 뜻해?\"",
+        "**Rowan:** [serious] \"맞아. 북문에는 72라고 적혀 있어.\"",
+        "**Sana:** [curious] \"그럼 문 열쇠가 필요하겠네.\""
+      ]
+    }
+  ]
+}
