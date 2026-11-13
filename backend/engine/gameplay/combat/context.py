@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
-from sqlalchemy.orm.attributes import flag_modified
 
+from backend.engine.gameplay.entity_state_updates import replace_entity_states
 from backend.engine.gameplay.turn_context import TurnContext
 from backend.engine.gameplay.turn_helpers import TurnCombatStateHelper
 from backend.engine.gameplay.world import AdventureLogic
@@ -92,8 +92,7 @@ class CombatContextMixin(TurnContext):
         entry = dict(states.get(entity_id) or {})
         entry.update(values)
         states[entity_id] = entry
-        self.state.entity_states = states
-        flag_modified(self.state, "entity_states")
+        replace_entity_states(self.state, states)
 
     def _persist_enemy_resources(self, enemy: dict[str, Any]) -> None:
         self._update_entity_state(enemy["id"], **{k: enemy.get(k, 0) for k in ENEMY_STATE_KEYS})

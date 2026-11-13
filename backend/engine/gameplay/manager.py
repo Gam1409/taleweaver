@@ -83,6 +83,7 @@ from backend.engine.command_parser import CommandParser
 from backend.engine.debug_transcript import debug_message_scope, is_debug_message, without_debug
 from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
+from backend.engine.gameplay.entity_state_updates import replace_entity_states
 from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.narrated_movement.runtime import finish as finish_narrated_movement
 from backend.engine.visual_novel.item_rejections import rejected_targets, rejection_reason
@@ -3305,8 +3306,7 @@ class GameTurnManager:
             story_flags.update(changeset.story_flag_updates)
             entity_states["__switch_story_flags__"] = story_flags
 
-        self.state.entity_states = entity_states
-        flag_modified(self.state, "entity_states")
+        replace_entity_states(self.state, entity_states)
 
         # Sync modified fields to WorldEntity DB records if present
         if changeset.entity_movements or changeset.entity_updates:

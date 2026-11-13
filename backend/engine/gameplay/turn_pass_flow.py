@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from backend.core.game_modes import is_vn
+from backend.engine.mutation_targets import validate_mutation_targets
 from backend.engine.rule_engine import GameEvent, GameOverException, RuleEngine
 from backend.engine.visual_novel.time import boundary_elapsed_time
 
@@ -52,6 +53,7 @@ async def run_guardrail_chain(
 
     Violations are appended to `rule_violations` so Pass 2 narrates the failure.
     """
+    await validate_mutation_targets(manager, game_event)
     for method_name, takes_user_msg in _GUARDRAIL_STEPS:
         enforce = getattr(manager, method_name)
         args = (game_event, user_msg) if takes_user_msg else (game_event,)

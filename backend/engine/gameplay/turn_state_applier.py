@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm.attributes import flag_modified
@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
 from backend.engine.clothing.runtime import apply_wardrobe
+from backend.engine.gameplay.entity_state_updates import entity_state_updates
 from backend.engine.gameplay.turn_event_awards import TurnEventAwards
 from backend.engine.gameplay.turn_event_entities import TurnEventEntities
 from backend.engine.gameplay.turn_event_inventory import TurnEventInventory
@@ -53,13 +54,13 @@ class TurnStateApplier(
         """Apply already-validated travel without advancing another turn or its clock."""
         await validate_mutation_targets(self.manager, event)
         messages: list[str] = []
-        states = dict(self.state.entity_states or {})
-        await self._apply_entity_movements(event, states, messages)
-        await self._apply_entity_updates(event, states, messages, is_vn(self.adventure))
-        self.state.entity_states = states
-        flag_modified(self.state, "entity_states")
-        await self._apply_scene_transition(event, states, messages)
-        await self.db.flush()
+        with entity_state_updates(self.state) as states:
+            await self._apply_entity_movements(event, states, messages)
+            await self._apply_entity_updates(event, states, messages, is_vn(self.adventure))
+            self.state.entity_states = states
+            flag_modified(self.state, "entity_states")
+            await self._apply_scene_transition(event, states, messages)
+            await self.db.flush()
         return messages
 
     def __init__(self, manager: GameTurnManager) -> None:
@@ -124,18 +125,19 @@ class TurnStateApplier(
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         enforce_vn_event_policy(event, self.adventure)
         await validate_mutation_targets(self.manager, event)
+        with entity_state_updates(self.state) as states:
+            return await self._apply_event_outcomes(event, states)
+
+    async def _apply_event_outcomes(self, event: GameEvent, states: dict[str, Any]) -> list[str]:
+        """Apply validated outcomes against the event's canonical working state."""
         vn_mode = is_vn(self.adventure)
         system_messages: list[str] = []
-        states = dict(self.state.entity_states or {})
         await self._prepare_inventory_items(event, vn_mode)
 
         await self._apply_avatar_outcomes(event, system_messages)
 
         state_dirty = False
         state_dirty |= await self._apply_scene_transition(event, states, system_messages)
-
-        # Entity State Overrides (Movement, Stats, Visibility)
-        states = dict(self.state.entity_states or {})
 
         state_dirty |= await self._apply_entity_movements(event, states, system_messages)
 
