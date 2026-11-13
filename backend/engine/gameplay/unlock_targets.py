@@ -14,11 +14,13 @@ async def _resolve_session_exit(
     """Returns the exit used for the current session, preferring the session-scoped row."""
     clean_id = (exit_id or "").strip()
     res = await db.execute(
-        select(WorldExit).where(
+        select(WorldExit)
+        .where(
             or_(
                 WorldExit.session_id == state.session_id,
                 and_(
                     WorldExit.template_id == state.template_id,
+                    WorldExit.template_id.is_not(None),
                     WorldExit.session_id.is_(None),
                 ),
             ),
@@ -27,25 +29,39 @@ async def _resolve_session_exit(
                 func.lower(WorldExit.id) == clean_id.lower(),
             ),
         )
+        .order_by(WorldExit.id != clean_id, WorldExit.session_id.is_(None))
     )
     resolved = res.scalars().first()
     if not resolved:
         return None
+    if resolved.session_id is not None:
+        return resolved
 
-    # If it is template-scoped, try to find the corresponding session-scoped exit
-    if resolved.session_id is None:
-        session_res = await db.execute(
-            select(WorldExit).where(
-                WorldExit.session_id == state.session_id,
-                WorldExit.from_scene_id == resolved.from_scene_id,
-                WorldExit.to_scene_id == resolved.to_scene_id,
-            )
+    # Preserve ordered counterparts before considering the reverse side of a passage.
+    session_res = await db.execute(
+        select(WorldExit).where(
+            WorldExit.session_id == state.session_id,
+            WorldExit.from_scene_id == resolved.from_scene_id,
+            WorldExit.to_scene_id == resolved.to_scene_id,
         )
-        session_exit = session_res.scalars().first()
-        if session_exit:
-            return session_exit
+    )
+    session_exit = session_res.scalars().first()
+    if session_exit:
+        return session_exit
 
-    return resolved
+    reverse = and_(
+        WorldExit.from_scene_id == resolved.to_scene_id,
+        WorldExit.to_scene_id == resolved.from_scene_id,
+    )
+    if str(resolved.exit_type or "").lower() != "bidirectional":
+        reverse = and_(reverse, func.lower(WorldExit.exit_type) == "bidirectional")
+    reverse_res = await db.execute(
+        select(WorldExit).where(WorldExit.session_id == state.session_id, reverse).limit(2)
+    )
+    reverse_rows = reverse_res.scalars().all()
+    if len(reverse_rows) > 1:
+        return None
+    return reverse_rows[0] if reverse_rows else resolved
 
 
 async def _require_session_exit(db: AsyncSession, state: SessionState, exit_id: str) -> WorldExit:

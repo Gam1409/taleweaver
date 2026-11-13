@@ -5,11 +5,13 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import and_, func, or_, select
 
+from backend.engine.exit_adjacency import traversal_destination
 from backend.engine.gameplay.manager import (
     _friendly_llm_error_message,
     _friendly_llm_unexpected_error_message,
 )
 from backend.engine.gameplay.turn_context import TurnContext
+from backend.engine.gameplay.unlock_targets import _resolve_session_exit
 from backend.engine.trigger_service import TriggerService
 from backend.models.world_entity import WorldExit, WorldScene
 
@@ -22,11 +24,13 @@ class TraversalInteractions(TurnContext):
             parts = exit_ref.split("::", 1)
             from_id, to_id = parts[0].strip(), parts[1].strip()
             exit_res = await self.db.execute(
-                select(WorldExit).where(
+                select(WorldExit)
+                .where(
                     or_(
                         WorldExit.session_id == self.state.session_id,
                         and_(
                             WorldExit.template_id == self.state.template_id,
+                            WorldExit.template_id.is_not(None),
                             WorldExit.session_id.is_(None),
                         ),
                     ),
@@ -42,26 +46,14 @@ class TraversalInteractions(TurnContext):
                         ),
                     ),
                 )
+                .order_by(WorldExit.session_id.is_(None))
             )
-            return exit_res.scalars().first()
+            candidate = exit_res.scalars().first()
+            if candidate is None or candidate.session_id == self.state.session_id:
+                return candidate
+            return await _resolve_session_exit(self.db, self.state, candidate.id)
 
-        clean_ref = exit_ref.strip()
-        exit_res = await self.db.execute(
-            select(WorldExit).where(
-                or_(
-                    WorldExit.session_id == self.state.session_id,
-                    and_(
-                        WorldExit.template_id == self.state.template_id,
-                        WorldExit.session_id.is_(None),
-                    ),
-                ),
-                or_(
-                    WorldExit.id == clean_ref,
-                    func.lower(WorldExit.id) == clean_ref.lower(),
-                ),
-            )
-        )
-        return exit_res.scalars().first()
+        return await _resolve_session_exit(self.db, self.state, exit_ref)
 
     async def _fire_traversal_triggers(
         self,
@@ -72,16 +64,19 @@ class TraversalInteractions(TurnContext):
 
         messages: list[str] = []
         old_sc_res = await self.db.execute(
-            select(WorldScene).where(
+            select(WorldScene)
+            .where(
                 or_(
                     WorldScene.session_id == self.state.session_id,
                     and_(
                         WorldScene.template_id == self.state.template_id,
+                        WorldScene.template_id.is_not(None),
                         WorldScene.session_id.is_(None),
                     ),
                 ),
                 WorldScene.id == current_scene_id,
             )
+            .order_by(WorldScene.session_id.is_(None))
         )
         old_scene = old_sc_res.scalars().first()
         if old_scene and (old_scene.on_leave_scene_script or old_scene.on_leave_scene_text):
@@ -147,11 +142,13 @@ class TraversalInteractions(TurnContext):
             return
 
         scene_res = await self.db.execute(
-            select(WorldScene).where(
+            select(WorldScene)
+            .where(
                 or_(
                     WorldScene.session_id == self.state.session_id,
                     and_(
                         WorldScene.template_id == self.state.template_id,
+                        WorldScene.template_id.is_not(None),
                         WorldScene.session_id.is_(None),
                     ),
                 ),
@@ -160,6 +157,7 @@ class TraversalInteractions(TurnContext):
                     func.lower(WorldScene.id) == str(target_scene_id).lower(),
                 ),
             )
+            .order_by(WorldScene.session_id.is_(None))
         )
         scene = scene_res.scalars().first()
         if not scene:
@@ -211,11 +209,4 @@ class TraversalInteractions(TurnContext):
 
     @staticmethod
     def _traversal_destination(world_exit: WorldExit, current_scene_id: str) -> str | None:
-        if world_exit.from_scene_id.lower() == current_scene_id.lower():
-            return world_exit.to_scene_id
-        if (
-            str(world_exit.exit_type or "").lower() == "bidirectional"
-            and world_exit.to_scene_id.lower() == current_scene_id.lower()
-        ):
-            return world_exit.from_scene_id
-        return None
+        return traversal_destination(world_exit, current_scene_id)
