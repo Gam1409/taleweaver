@@ -30,6 +30,10 @@ class CounterLimitError(ValueError):
     """The diagnostic counter cannot represent another logical request."""
 
 
+class RequestBudgetError(ValueError):
+    """The source revision has no remaining lifetime logical requests."""
+
+
 @dataclass(frozen=True)
 class Claim:
     revision_id: str
@@ -44,6 +48,7 @@ class Claim:
     lease_token: str
     lease_seconds: float
     attempts: int
+    total_batches: int
 
 
 def current_source() -> Exists:
@@ -80,6 +85,7 @@ def fence(claim: Claim) -> tuple:
         WorldInfoRevision.number == claim.number,
         WorldInfoRevision.content_hash == claim.content_hash,
         WorldInfoRevision.cursor == claim.cursor,
+        WorldInfoRevision.total_batches == claim.total_batches,
         WorldInfoRevision.control_version == claim.control_version,
         WorldInfoRevision.run_token == claim.run_token,
         WorldInfoRevision.lease_token == claim.lease_token,
@@ -126,6 +132,7 @@ async def claim_next(session_id: str, user_id: str) -> Claim | None:
                 WorldInfoRevision.control_version == revision.control_version,
                 WorldInfoRevision.run_token == revision.run_token,
                 WorldInfoRevision.cursor == revision.cursor,
+                WorldInfoRevision.total_batches == revision.total_batches,
                 eligible(now),
                 current_source(),
             )
@@ -147,6 +154,7 @@ async def claim_next(session_id: str, user_id: str) -> Claim | None:
             token,
             seconds,
             revision.attempts,
+            revision.total_batches,
         )
         await db.commit()
         return claim
@@ -160,6 +168,8 @@ async def reserve_request(
     target = claim.attempts + ordinal + 1
     if type(ordinal) is not int or ordinal < 0 or not 1 <= target <= limits.MAX_COUNTER:
         raise CounterLimitError("Source processing request counter is exhausted.")
+    if target > limits.request_limit(claim.total_batches):
+        raise RequestBudgetError("Source processing request budget is exhausted.")
     async with database.AsyncSessionLocal() as db:
         changed = await db.execute(
             update(WorldInfoRevision)

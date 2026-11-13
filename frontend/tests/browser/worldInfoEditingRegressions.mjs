@@ -42,6 +42,43 @@ async function addTags(page, label, tags) {
   }
 }
 try {
+  await check('storage quotas and source request budgets stay distinct and explain exhausted work', async page => {
+    await page.evaluate(() => window.worldInfoFixture.setFirstJobState('world-info-demo', { total_batches: 24, cursor: 4, attempts: 9, request_limit: 96, status: 'cancelled', can_start: false, can_resume: true, can_cancel: false }))
+    await page.getByRole('button', { name: 'Session', exact: true }).click()
+    await page.getByRole('menuitem', { name: /World Info/ }).click()
+    const limits = dialog(page).getByLabel('Session knowledge limits', { exact: true })
+    assert.match(await limits.innerText(), /10,000 entries.*80,000 facts.*32 MiB.*including evidence.*whichever limit is reached first/)
+    assert.match(await limits.innerText(), /Searchable text sizes.*do not include all saved entry data/)
+    await dialog(page).getByRole('button', { name: /The coastal archive.*version/ }).click()
+    assert.match(await dialog(page).getByRole('status').filter({ hasText: 'logical model requests used' }).innerText(), /9 \/ 96 logical model requests used.*87 remaining/)
+    assert.match(await dialog(page).getByRole('region', { name: 'Large source workload' }).innerText(), /Normal remaining workload: up to 40 logical model requests/)
+    assert.equal(await button(page, 'Resume processing').isEnabled(), true)
+    await page.evaluate(() => window.worldInfoFixture.setFirstJobState('world-info-demo', { attempts: 96, status: 'processing', can_start: false, can_resume: false, can_cancel: true }))
+    await button(page, 'Refresh source').click()
+    await dialog(page).getByText('processing · version 2', { exact: true }).waitFor()
+    assert.equal(await dialog(page).getByRole('alert').count(), 0)
+    assert.equal(await button(page, 'Cancel processing').isEnabled(), true)
+    for (const last_error_code of ['request_limit', 'invalid_output']) {
+      await page.evaluate(code => window.worldInfoFixture.setFirstJobState('world-info-demo', { total_batches: 24, cursor: 4, attempts: 96, request_limit: 96, status: 'failed', last_error_code: code, can_start: false, can_resume: false }), last_error_code)
+      await button(page, 'Refresh source').click()
+      await dialog(page).getByRole('alert').filter({ hasText: /Analysis stopped.*lifetime request limit/ }).waitFor()
+      assert.match(await dialog(page).getByRole('alert').innerText(), /Saved source text, entries and processing progress are kept.*unchanged content.*does not reset/s)
+      assert.equal(await button(page, 'Resume processing').count(), 0)
+      assert.equal(await button(page, 'Start analysis').count(), 0)
+    }
+    await page.evaluate(() => window.worldInfoFixture.setFirstJobState('world-info-demo', { total_batches: 24, cursor: 24, attempts: 96, request_limit: 96, status: 'review', last_error_code: null }))
+    await button(page, 'Refresh source').click()
+    await dialog(page).getByText('review · version 2', { exact: true }).waitFor()
+    assert.equal(await dialog(page).getByRole('alert').count(), 0)
+    await page.evaluate(() => window.worldInfoFixture.setFirstJobState('world-info-demo', { total_batches: 0, cursor: 0, attempts: 3, request_limit: null, status: 'uploaded', can_start: true }))
+    await button(page, 'Refresh source').click()
+    await dialog(page).getByText(/Lifetime request limit will be determined when analysis starts/).waitFor()
+    assert.equal(await button(page, 'Analyse source').isEnabled(), true)
+    assert.equal(await page.evaluate(() => window.worldInfoFixture.writes.length), 0)
+    await button(page, 'Review this version').click()
+    await dialog(page).locator('[data-world-info-entry="entry-beacon"]').click()
+    await dialog(page).getByText('Searchable text size', { exact: true }).waitFor()
+  })
   await check('relationship Enter searches without saving', async page => {
     await open(page); await edit(page)
     await dialog(page).getByLabel('Entry title', { exact: true }).fill('Pending relationship search')

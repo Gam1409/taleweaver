@@ -89,6 +89,7 @@ async def test_upload_is_session_only_immutable_and_does_not_start_model(
         await db.commit()
     other = await auth_client.get("/api/adventures/parallel-session/world-info")
     assert other.json()["sources"] == []
+    assert other.json()["limits"]["max_session_entry_bytes"] == limits.MAX_SESSION_ENTRY_BYTES
 
 
 @pytest.mark.parametrize(

@@ -69,7 +69,7 @@ def _passages(content: str, format: SourceFormat) -> Iterator[SourcePassage]:
     for pointer, text in sources:
         start = 0
         while start < len(text):
-            size = min(limits.MAX_PASSAGE_CHARACTERS, limits.MAX_BATCH_CHARACTERS // 2 - 128)
+            size = limits.PACKED_PASSAGE_CHARACTERS
             end = min(start + max(1, size), len(text))
             passage = _fit_passage(f"p{number}", text, start, end, pointer)
             yield passage

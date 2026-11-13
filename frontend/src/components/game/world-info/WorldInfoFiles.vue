@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { FileText, Upload } from 'lucide-vue-next'
 import type { WorldInfoController } from '@/composables/useWorldInfo'
 import type { WorldInfoSource } from '@/types/worldInfo'
@@ -11,6 +11,15 @@ const file = ref<File | null>(null)
 const title = ref('')
 const replacing = ref('')
 const input = ref<HTMLInputElement>()
+const requestBudget = computed(() => {
+  const job = data.job, limit = job?.request_limit ?? null
+  return { limit, remaining: limit === null ? null : Math.max(0, limit - (job?.attempts ?? 0)) }
+})
+const budgetExhausted = computed(() => {
+  const job = data.job
+  if (!job || ['queued', 'processing'].includes(job.status)) return false
+  return job.last_error_code === 'request_limit' || (job.request_limit != null && job.attempts >= job.request_limit && job.cursor < (job.total_batches ?? 0))
+})
 async function upload() {
   if (!file.value) return
   const replacement = data.state?.sources.find(source => source.id === replacing.value)
@@ -36,6 +45,7 @@ async function upload() {
           <button type="submit" class="world-info-button is-primary" :disabled="!file || (!replacing && !!data.state && data.state.sources.length >= data.state.limits.max_sources)">Upload & analyse</button>
         </fieldset>
       </form>
+      <p v-if="data.state" class="world-info-card text-xs text-slate-400" aria-label="Session knowledge limits">Session knowledge is limited to {{ infoCount(data.state.limits.max_entries ?? 10000) }} entries, {{ infoCount(data.state.limits.max_facts ?? 80000) }} facts, or {{ infoCount((data.state.limits.max_session_entry_bytes ?? 33554432) / 1048576) }} MiB of saved entry data, including evidence—whichever limit is reached first. Searchable text sizes shown below do not include all saved entry data.</p>
       <p v-if="!data.state?.sources.length" class="world-info-empty">No source files in this session. Add Markdown or JSON to propose knowledge for review.</p>
       <ul class="space-y-2"><li v-for="source in data.state?.sources" :key="source.id"><button type="button" class="world-info-row" :class="{ 'is-selected': data.source?.source.id === source.id }" @click="controller.openSource(source.id)"><FileText aria-hidden="true" class="h-4 w-4 shrink-0" /><span class="min-w-0 flex-1"><strong class="block break-words">{{ source.title || source.filename }}</strong><small class="block break-words">{{ source.filename }} · version {{ source.job.number }} · {{ source.job.status }}</small><small>{{ source.active_entries }} accepted · {{ source.draft_entries }} drafts</small></span></button></li></ul>
     </section>
@@ -50,11 +60,15 @@ async function upload() {
           <p>{{ infoCount(data.job.processed_characters) }} characters processed</p>
           <p>Original: {{ infoCount(data.job.input_bytes) }} UTF-8 bytes · {{ infoCount(data.job.input_characters) }} characters</p>
           <p>{{ infoCount(data.job.facts_count) }} facts · {{ infoCount(data.job.entries_count) }} entries</p>
-          <p>Entries: {{ infoCount(data.job.entries_bytes) }} UTF-8 bytes · {{ infoCount(data.job.entries_characters) }} characters</p>
-          <p v-if="data.job.last_error_code" class="text-amber-200">{{ data.job.last_error_code === 'storage_limit' ? 'Session knowledge storage limit reached. Remove unused entries or sources, then resume.' : 'Processing could not finish. Saved work is kept; resume when available.' }}</p>
+          <p>Searchable entry text: {{ infoCount(data.job.entries_bytes) }} UTF-8 bytes · {{ infoCount(data.job.entries_characters) }} characters</p>
+          <p v-if="requestBudget.limit !== null">{{ infoCount(data.job.attempts) }} / {{ infoCount(requestBudget.limit) }} logical model requests used · {{ infoCount(requestBudget.remaining) }} remaining in this source version’s lifetime budget.</p>
+          <p v-else>{{ infoCount(data.job.attempts) }} logical model requests used. Lifetime request limit will be determined when analysis starts.</p>
+          <p class="text-xs text-slate-400">This budget is shared across starts, resumes and corrections. Provider SDK retries are excluded from these counts and may add upstream requests.</p>
+          <p v-if="budgetExhausted" role="alert" class="text-amber-200">Analysis stopped at this source version’s lifetime request limit. Saved source text, entries and processing progress are kept. Review saved entries, then use corrected source material as a changed version if further analysis is needed. Uploading unchanged content keeps its existing progress and budget; it does not reset the limit.</p>
+          <p v-else-if="data.job.last_error_code" class="text-amber-200">{{ data.job.last_error_code === 'storage_limit' ? 'Session knowledge storage limit reached. Remove unused entries or sources, then resume.' : 'Processing could not finish. Saved work is kept; resume when available.' }}</p>
           <p class="text-xs text-slate-400">You may close this window and keep playing. Closing stops status checks; it does not cancel processing.</p>
         </div>
-        <section v-if="(data.job.total_batches ?? 0) > 16 && (data.job.can_start || data.job.can_resume)" class="world-info-card border-amber-500/30 text-sm text-amber-100" aria-label="Large source workload"><h4 class="font-semibold">Review the workload before starting</h4><p class="mt-2">{{ infoCount(data.job.total_batches) }} batches in this source · {{ infoCount((data.job.total_batches ?? 0) - data.job.cursor) }} remaining. Up to {{ infoCount(2 * ((data.job.total_batches ?? 0) - data.job.cursor)) }} remaining model calls for analysis and corrections; provider retries can add requests.</p><p class="mt-2">A detailed book may take hours. The source stays saved if you close this window without starting.</p></section>
+        <section v-if="(data.job.total_batches ?? 0) > 16 && (data.job.can_start || data.job.can_resume)" class="world-info-card border-amber-500/30 text-sm text-amber-100" aria-label="Large source workload"><h4 class="font-semibold">Review the workload before starting</h4><p class="mt-2">{{ infoCount(data.job.total_batches) }} batches in this source · {{ infoCount((data.job.total_batches ?? 0) - data.job.cursor) }} remaining. Normal remaining workload: up to {{ infoCount(2 * ((data.job.total_batches ?? 0) - data.job.cursor)) }} logical model requests for analysis and corrections. This estimate is separate from the lifetime budget shown above; processing stops if that budget is exhausted.</p><p class="mt-2">A detailed book may take hours. The source stays saved if you close this window without starting.</p></section>
         <div class="flex flex-wrap gap-2">
           <button v-if="data.job.can_start || data.job.can_resume" type="button" class="world-info-button is-primary" :disabled="!!data.busy" @click="controller.control(data.job, 'process')">{{ data.job.can_resume ? 'Resume processing' : (data.job.total_batches ?? 0) > 16 ? 'Start analysis' : 'Analyse source' }}</button>
           <button v-if="data.job.can_cancel" type="button" class="world-info-button" :disabled="!!data.busy" @click="controller.control(data.job, 'cancel')">Cancel processing</button>

@@ -24,6 +24,7 @@ export interface WorldInfoJob {
   entries_bytes: number
   entries_characters: number
   attempts: number
+  request_limit?: number | null
   processing_language: string | null
   last_error_code: string | null
   can_start: boolean
@@ -97,6 +98,7 @@ export interface WorldInfoLimits {
   max_sources: number
   max_source_revisions: number
   max_session_source_bytes: number
+  max_session_entry_bytes?: number
   max_entry_characters: number
   max_tags: number
   max_tag_characters: number

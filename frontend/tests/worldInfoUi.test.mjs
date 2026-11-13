@@ -56,6 +56,8 @@ test('entry reader shows escaped summaries, facts, provenance, recipients and ve
   const html = await render({ ...entry, summary: text, group_name: 'Coastal history', audience: 'restricted', known_by: ['MIRA', 'REMOVED'], unresolved_known_by: ['REMOVED'], facts: [{ ...entry.facts[0], text, original_text: text, evidence: [{ ...entry.facts[0].evidence[0], quote: text }] }], relations: [{ target_id: 'other-entry', kind: 'supports', note: 'A source-backed connection.' }] }, Reader)
   assert.match(html, /Coastal history|Mira|Unavailable character/)
   assert.match(html, /Source version|Saved entry version|UTF-8 bytes/)
+  assert.match(html, /Searchable text size/)
+  assert.doesNotMatch(html, /Saved size/)
   assert.match(html, /A source-backed connection/)
   assert.match(html, /&lt;ScRiPt&gt;/)
   assert.doesNotMatch(html, /<(?:input|select|textarea|script|img)\b/i)

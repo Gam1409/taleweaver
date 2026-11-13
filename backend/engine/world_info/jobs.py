@@ -164,6 +164,10 @@ async def start_processing(
     plan = validate_plan(revision)
     if revision.cursor == len(plan.batches):
         raise JobConflictError("Source processing is complete. Review its saved entries.")
+    if revision.attempts >= limits.request_limit(len(plan.batches)):
+        raise JobConflictError(
+            "Source processing request budget is exhausted. Upload a corrected source revision."
+        )
     session = await db.get(GameSession, session_id)
     user = await db.get(User, user_id)
     if session is None or user is None:

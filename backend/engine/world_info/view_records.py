@@ -24,7 +24,12 @@ def job_record(revision: WorldInfoRevision, source: WorldInfoSource, sizes: tupl
         and revision.extraction_version == limits.EXTRACTION_VERSION
     )
     can_process = (
-        revision.control_version < limits.MAX_COUNTER - 1 and revision.attempts < limits.MAX_COUNTER
+        revision.control_version < limits.MAX_COUNTER - 1
+        and revision.attempts < limits.MAX_COUNTER
+        and (
+            not revision.total_batches
+            or revision.attempts < limits.request_limit(revision.total_batches)
+        )
     )
     fields = (
         "id",
@@ -50,6 +55,7 @@ def job_record(revision: WorldInfoRevision, source: WorldInfoSource, sizes: tupl
         "invalid_output",
         "processing_failed",
         "storage_limit",
+        "request_limit",
     }:
         code = "processing_failed"
     try:
@@ -58,6 +64,9 @@ def job_record(revision: WorldInfoRevision, source: WorldInfoSource, sizes: tupl
             entries_characters=sizes[0],
             entries_bytes=sizes[1],
             last_error_code=code,
+            request_limit=limits.request_limit(revision.total_batches)
+            if revision.total_batches
+            else None,
             can_start=current
             and compatible
             and can_process

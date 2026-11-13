@@ -133,6 +133,9 @@ class Job(Contract):
     entries_bytes: StrictInt = Field(ge=0, le=limits.MAX_COUNTER)
     entries_characters: StrictInt = Field(ge=0, le=limits.MAX_COUNTER)
     attempts: StrictInt = Field(ge=0, le=limits.MAX_COUNTER)
+    request_limit: StrictInt | None = Field(
+        default=None, ge=1, le=limits.MAX_BATCHES * limits.MAX_LOGICAL_REQUESTS_PER_BATCH
+    )
     processing_language: str | None
     last_error_code: str | None
     can_start: StrictBool
@@ -250,6 +253,7 @@ class WorldInfoLimits(Contract):
     max_sources: int = limits.MAX_SOURCES
     max_source_revisions: int = limits.MAX_SOURCE_REVISIONS
     max_session_source_bytes: int = limits.MAX_SESSION_SOURCE_BYTES
+    max_session_entry_bytes: int = limits.MAX_SESSION_ENTRY_BYTES
     max_entry_characters: int = limits.MAX_ENTRY_CHARACTERS
     max_entries: int = limits.MAX_SESSION_ENTRIES
     max_facts: int = limits.MAX_SESSION_FACTS

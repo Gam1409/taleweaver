@@ -273,3 +273,19 @@ test('saving remains busy through catalog and overview refresh before editing is
   assert.equal(duplicate, false); assert.equal(afterDuplicate, 'Saving entry…')
   assert.equal(c.data.busy, ''); assert.equal(c.dirty.value, false)
 })
+test('processing refresh retains authoritative server budgets and controls without predicting a resume', async t => {
+  let started = false
+  const exhausted = { ...job, attempts: 8, request_limit: 8, cursor: 1, total_batches: 2, status: 'failed', last_error_code: 'invalid_output', can_start: false, can_resume: false, can_cancel: false }
+  const methods = []
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path.endsWith('/process')) { started = true; methods.push(JSON.parse(options.body)); return reply({ source: { ...source, job: exhausted }, revision: exhausted }) }
+    if (started && path.endsWith('/world-info')) { const latest = state(); latest.sources[0].job = exhausted; return reply(latest) }
+    if (started && path.endsWith('/sources/source-1')) return reply({ source: { ...source, job: exhausted }, revisions: [exhausted] })
+    return defaultReply(path)
+  })
+  const { c } = fixture(t); await tick(); await c.openSource(source.id)
+  await c.control({ ...job, request_limit: null, total_batches: 0, cursor: 0, can_start: true }, 'process')
+  assert.deepEqual(methods, [{ control_version: job.control_version }])
+  assert.equal(c.data.job.attempts, 8); assert.equal(c.data.job.request_limit, 8)
+  assert.equal(c.data.job.can_resume, false); assert.equal(c.data.job.last_error_code, 'invalid_output')
+})

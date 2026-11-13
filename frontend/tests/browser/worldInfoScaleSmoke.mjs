@@ -156,7 +156,7 @@ try {
   await dialog().getByLabel('Source file · Markdown or JSON').setInputFiles({ name: 'fictional-atlas.md', mimeType: 'text/markdown', buffer: Buffer.from('# Atlas\n' + 'A'.repeat(128001)) })
   await button('Upload & analyse').click()
   await dialog().getByRole('region', { name: 'Large source workload' }).waitFor()
-  assert.match(await dialog().getByRole('region', { name: 'Large source workload' }).innerText(), /17 batches.*34 remaining model calls/s)
+  assert.match(await dialog().getByRole('region', { name: 'Large source workload' }).innerText(), /17 batches.*Normal remaining workload: up to 34 logical model requests/s)
   assert.equal(await page.evaluate(() => window.worldInfoFixture.writes.filter(value => value.path.endsWith('/process')).length), before)
   await page.screenshot({ path: '/tmp/world-info-book-preflight-desktop.png' })
   await page.keyboard.press('Escape')

@@ -93,6 +93,8 @@ async def _prepare(claim: queue.Claim) -> Prepared | None:
 
 
 def _error_code(error: Exception) -> str:
+    if isinstance(error, queue.RequestBudgetError):
+        return "request_limit"
     if isinstance(error, CapacityError):
         return "storage_limit"
     if isinstance(error, (InferenceQueueError, InferenceUncertainError)):
@@ -239,6 +241,8 @@ def schedule(session_id: str, user_id: str) -> None:
     if timer is not None:
         timer.cancel()
     if session_id in _tasks:
+        # _finish consumes wakeups received during queue/lease awaits. Its
+        # schedule call cancels any timer installed before this task exits.
         _wakeups[session_id] = user_id
         return
     task = asyncio.create_task(_run(session_id, user_id))
