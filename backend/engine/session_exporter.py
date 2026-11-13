@@ -51,25 +51,44 @@ def localize_session_paths(data: Any, session_id: str) -> Any:
 class SessionExporter:
     @staticmethod
     async def build_session_manifest(db: AsyncSession, session_id: str) -> dict[str, Any]:
-        """
-        Gathers all database entities for a game session and builds a single JSON manifest.
-        """
+        """Detach one consistent SQL snapshot before localizing or packing assets."""
+        async with db.begin_nested():
+            manifest = await SessionExporter._snapshot(db, session_id)
+        world_info = manifest.pop("world_info")
+        manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
+        # Exact source text and evidence bypass generic asset URL rewriting.
+        manifest["world_info"] = world_info
+        return manifest
+
+    @staticmethod
+    async def _snapshot(db: AsyncSession, session_id: str) -> dict[str, Any]:
+        """Refresh identities loaded before this transaction's first actual read."""
         # 1. Fetch core session
-        session_res = await db.execute(select(GameSession).where(GameSession.id == session_id))
+        session_res = await db.execute(
+            select(GameSession)
+            .where(GameSession.id == session_id)
+            .execution_options(populate_existing=True)
+        )
         game_session = session_res.scalars().first()
         if not game_session:
             raise ValueError(f"GameSession {session_id} not found")
 
         # 2. Fetch associated state
         state_res = await db.execute(
-            select(SessionState).where(SessionState.session_id == session_id)
+            select(SessionState)
+            .where(SessionState.session_id == session_id)
+            .execution_options(populate_existing=True)
         )
         session_state = state_res.scalars().first()
 
         # 3. Fetch avatar
         avatar = None
         if game_session.avatar_id:
-            avatar_res = await db.execute(select(Avatar).where(Avatar.id == game_session.avatar_id))
+            avatar_res = await db.execute(
+                select(Avatar)
+                .where(Avatar.id == game_session.avatar_id)
+                .execution_options(populate_existing=True)
+            )
             avatar = avatar_res.scalars().first()
 
         # 4. Fetch chat messages
@@ -77,22 +96,37 @@ class SessionExporter:
             select(ChatMessage)
             .where(ChatMessage.session_id == session_id)
             .order_by(ChatMessage.created_at.asc())
+            .execution_options(populate_existing=True)
         )
         chat_messages = chat_res.scalars().all()
 
         # 5. Fetch world scenes, exits, entities, and map
-        scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == session_id))
+        scenes_res = await db.execute(
+            select(WorldScene)
+            .where(WorldScene.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_scenes = scenes_res.scalars().all()
 
-        exits_res = await db.execute(select(WorldExit).where(WorldExit.session_id == session_id))
+        exits_res = await db.execute(
+            select(WorldExit)
+            .where(WorldExit.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_exits = exits_res.scalars().all()
 
         entities_res = await db.execute(
-            select(WorldEntity).where(WorldEntity.session_id == session_id)
+            select(WorldEntity)
+            .where(WorldEntity.session_id == session_id)
+            .execution_options(populate_existing=True)
         )
         world_entities = entities_res.scalars().all()
 
-        map_res = await db.execute(select(WorldMap).where(WorldMap.session_id == session_id))
+        map_res = await db.execute(
+            select(WorldMap)
+            .where(WorldMap.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_map = map_res.scalars().first()
 
         # Helper to convert SQL Alchemy model to dictionary
@@ -118,11 +152,7 @@ class SessionExporter:
             "memory_summaries": await export_summaries(db, session_id),
         }
 
-        # Localize any session URL paths inside the database JSON
-        manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
-        # Source text and exact evidence must bypass generic asset URL rewriting.
         manifest["world_info"] = await export_world_info(db, session_id, game_session.user_id)
-
         return manifest
 
     @staticmethod

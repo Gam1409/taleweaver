@@ -171,8 +171,10 @@ async def import_world_info(db: AsyncSession, payload: Any, session_id: str, use
         WorldInfoEntry(**_entry_values(row, ids, session_id, user_id)) for row in parsed.entries
     ]
     validate_entry_capacity(entries)
-    db.add_all([*sources, *revisions, *entries])
-    await db.flush()
+    # These independent mappers have no ORM relationship to order their inserts.
+    for rows in (sources, revisions, entries):
+        db.add_all(rows)
+        await db.flush()
 
 
 async def copy_world_info(

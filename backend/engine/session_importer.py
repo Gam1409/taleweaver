@@ -105,6 +105,12 @@ def _read_session_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any]:
     return data
 
 
+async def _add_session_parent(db: AsyncSession, session: GameSession) -> None:
+    """Flush the new parents before restored conversation rows, without committing."""
+    db.add(session)
+    await db.flush()
+
+
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
@@ -199,7 +205,7 @@ class SessionImporter:
                     content_language=game_session_data.get("content_language"),
                     playtime_seconds=max(0, int(game_session_data.get("playtime_seconds") or 0)),
                 )
-                db.add(game_session)
+                await _add_session_parent(db, game_session)
 
                 # 5. Create SessionState
                 session_state = SessionState(
