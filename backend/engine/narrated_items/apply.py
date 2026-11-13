@@ -7,12 +7,14 @@ from uuid import NAMESPACE_URL, uuid5
 
 from backend.core.text_evidence import require_span
 from backend.engine.clothing.classification import classify_action
+from backend.engine.clothing.equipment_view import display_slots
 from backend.engine.clothing.profiles import (
     load_profile,
     owned_items,
     validate_profile,
 )
 from backend.engine.clothing.schema import VisualProfile, WornItem
+from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.narrated_items import transitions
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.narrated_items.participants import resolve_participants
@@ -79,8 +81,29 @@ def _remove(actor: dict, item_id: str) -> None:
         ]
 
 
+def _equip_worn(actor: dict, item: dict, preferred_slot: str | None) -> None:
+    supplied = item.get("wearable_slots") or []
+    supplied = [supplied] if isinstance(supplied, str) else supplied
+    slots = [slot for raw in supplied for slot in display_slots([raw], [])]
+    preferred = display_slots(preferred_slot, [])
+    if preferred and preferred[0] in slots:
+        slots.insert(0, preferred[0])
+    equipment = normalize_equipment_keys(actor["equipment"])
+    slot = next((slot for slot in slots if not equipment.get(slot)), None)
+    if slot is None:
+        return
+    actor["equipment"][slot] = deepcopy(item)
+    # Player equipment owns its item, matching slash equip/unequip semantics.
+    actor["inventory"] = [row for row in actor["inventory"] if _id(row) != item["id"]]
+
+
 def _receive(
-    actor: dict, item: dict, disposition: str, detailed: bool, worn: WornItem | None = None
+    actor: dict,
+    item: dict,
+    disposition: str,
+    detailed: bool,
+    worn: WornItem | None = None,
+    preferred_slot: str | None = None,
 ) -> None:
     identifier = item["id"]
     owned = owned_items(actor["inventory"], equipment=actor["equipment"])
@@ -107,9 +130,8 @@ def _receive(
         profile.model_dump(), actor["resolved_inventory"], equipment=actor["equipment"]
     ).model_dump()
     # Clothing layers coexist in worn; receiving an item never equips it as a weapon.
-    for slot in (item.get("wearable_slots") or []) if worn.attachment_slot is None else []:
-        if actor["id"] == PLAYER and not actor["equipment"].get(slot):
-            actor["equipment"][slot] = deepcopy(item)
+    if actor["id"] == PLAYER and worn.attachment_slot is None:
+        _equip_worn(actor, item, preferred_slot)
 
 
 def _resolve(
@@ -201,9 +223,24 @@ def _apply_batch(
                 request_id=message_id,
             )
             candidate = deepcopy(actors)
+            preferred_slot = next(
+                (
+                    slot
+                    for slot, value in candidate[action.destination_owner]["equipment"].items()
+                    if _id(value) == identifier
+                ),
+                None,
+            )
             if actual_owner in candidate:
                 _remove(candidate[actual_owner], identifier)
-            _receive(candidate[action.destination_owner], item, action.disposition, detailed, worn)
+            _receive(
+                candidate[action.destination_owner],
+                item,
+                action.disposition,
+                detailed,
+                worn,
+                preferred_slot,
+            )
             actors = candidate
             snapshot.items[identifier] = item
             snapshot.owners[identifier] = action.destination_owner
