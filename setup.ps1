@@ -63,38 +63,8 @@ if (-not (Test-Path "data")) {
     New-Item -ItemType Directory -Path "data" | Out-Null
 }
 
-# Helper: set or append a key=value pair in .env
-# If the key line already exists it is replaced, otherwise appended.
-function Set-EnvKey {
-    param([string]$Key, [string]$Value)
-    $content = Get-Content ".env" -Raw
-    if ($content -match "(?m)^${Key}=") {
-        $content = $content -replace "(?m)^${Key}=.*", "${Key}=${Value}"
-    } else {
-        $content = $content.TrimEnd() + "`r`n${Key}=${Value}`r`n"
-    }
-    Set-Content ".env" $content -NoNewline
-}
-
-$envFile = Get-Content ".env" -Raw
-
-# ENCRYPTION_KEY
-if ($envFile -notmatch "(?m)^ENCRYPTION_KEY=[a-zA-Z0-9+/=_-]{20,}") {
-    Write-Host "[*] Generating ENCRYPTION_KEY..." -ForegroundColor Yellow
-    $key = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-    Set-EnvKey "ENCRYPTION_KEY" $key
-    Write-Host "[+] ENCRYPTION_KEY written to .env" -ForegroundColor Green
-}
-
-# SECRET_KEY
-$envFile = Get-Content ".env" -Raw
-if ($envFile -notmatch "(?m)^SECRET_KEY=[a-fA-F0-9]{64}") {
-    Write-Host "[*] Generating SECRET_KEY..." -ForegroundColor Yellow
-    $skey = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "import secrets; print(secrets.token_hex(32))")
-    Set-EnvKey "SECRET_KEY" $skey
-    Write-Host "[+] SECRET_KEY written to .env" -ForegroundColor Green
-}
-
+# Share dotenv parsing and safe existing-database behavior with Bash setup.
+Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-m", "scripts.setup_keys")
 
 # 5. Database Setup (Migrations)
 Write-Host "[*] Running database migrations..." -ForegroundColor Yellow
