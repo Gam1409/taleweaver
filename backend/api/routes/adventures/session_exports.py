@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.export_archives import SessionArchiveLimitError
 from backend.engine.session_exporter import SessionExporter
 from backend.models.game_session import GameSession
 from backend.models.user import User
@@ -36,6 +37,8 @@ async def export_session_ads(
 
     try:
         zip_data = await SessionExporter.export_ads(db, game_id)
+    except SessionArchiveLimitError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

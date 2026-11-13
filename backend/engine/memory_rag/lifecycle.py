@@ -99,7 +99,11 @@ async def invalidate_memory(db: Any, session_id: str) -> None:
 
 
 async def export_summaries(db: Any, session_id: str) -> list[dict]:
-    rows = await db.scalars(select(MemorySummary).where(MemorySummary.session_id == session_id))
+    rows = await db.scalars(
+        select(MemorySummary)
+        .where(MemorySummary.session_id == session_id)
+        .execution_options(populate_existing=True)
+    )
     return [
         {
             "layer": row.layer,

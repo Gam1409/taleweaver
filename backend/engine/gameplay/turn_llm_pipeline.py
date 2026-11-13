@@ -331,12 +331,15 @@ class TurnLlmContextBuilder:
         )
         if recall_enabled(self.manager):
             session_memory_block = recall_block(self.manager, "narrator")
+            mechanics_memory_block = recall_block(self.manager, "mechanics")
         else:
             session_memory_block = (
                 self.manager._build_gm_notes_prompt_block()
                 + self.manager._build_compressed_history_prompt_block()
                 + self.manager._build_world_memories_prompt_block()
             )
+            mechanics_memory_block = session_memory_block
+            session_memory_block += recall_block(self.manager, "narrator")
         availability = presence_context(world.all_entities, state)
         mechanics_state_block += availability
         narration_state_block += availability
@@ -349,7 +352,7 @@ class TurnLlmContextBuilder:
             narration_state_block += narration_block(state, world.all_entities, self.manager.avatar)
             narration_state_block += NARRATION_INITIATIVE
         return (
-            mechanics_state_block + session_memory_block + global_unlock_rules_prompt_block,
+            mechanics_state_block + mechanics_memory_block + global_unlock_rules_prompt_block,
             narration_state_block
             + session_memory_block
             + clothing_block

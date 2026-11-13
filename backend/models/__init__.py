@@ -16,6 +16,7 @@ from .turn_replay import TurnReplay
 from .user import User
 from .validation_run import ValidationRun
 from .world_entity import WorldEntity, WorldExit, WorldScene
+from .world_info import WorldInfoEntry, WorldInfoRevision, WorldInfoSource
 from .world_map import WorldMap
 
 __all__ = [
@@ -38,4 +39,7 @@ __all__ = [
     "WorldExit",
     "WorldScene",
     "WorldMap",
+    "WorldInfoEntry",
+    "WorldInfoRevision",
+    "WorldInfoSource",
 ]

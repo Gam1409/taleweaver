@@ -154,6 +154,11 @@ async def collect_documents(
         documents.extend(_journal_documents(current, user_id, npc, messages))
     documents.extend(_world_documents(current, user_id))
     documents.extend(_session_documents(current, user_id))
+    from backend.engine.world_info.projection import collect_documents as world_info_documents
+
+    documents.extend(
+        await world_info_documents(db, current, user_id, query=query, candidates=candidates)
+    )
     documents = [chunk for doc in documents for chunk in _bounded_document(doc)]
     raw = list(documents)
     for summary in accepted_summaries:

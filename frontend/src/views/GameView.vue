@@ -37,6 +37,7 @@ import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
 import SessionNoteModal from '@/components/portal/SessionNoteModal.vue'
 import DynamicLocationImage from '@/components/game/DynamicLocationImage.vue'
 import SessionSettingsModal from '@/components/game/SessionSettingsModal.vue'
+import WorldInfoModal from '@/components/game/WorldInfoModal.vue'
 import WorldMemoriesModal from '@/components/game/WorldMemoriesModal.vue'
 import DebugModal from '@/components/game/DebugModal.vue'
 import { api } from '@/composables/useApi'
@@ -147,6 +148,7 @@ const saveSessionNote = async (note: string) => {
 }
 
 const showSettingsModal = ref(false)
+const showWorldInfo = ref(false)
 const showMemoriesModal = ref(false)
 const showCharactersModal = ref(false)
 const isSavingSettings = ref(false)
@@ -1670,6 +1672,7 @@ usePlayAgentAutoLoop()
       @open-memories="showMemoriesModal = true"
       @open-characters="showCharactersModal = true"
       @open-settings="showSettingsModal = true"
+      @open-world-info="showWorldInfo = true"
       @open-debug="openDebugInspector"
       @open-walkthrough="openWalkthroughPanel"
       @npc-hover="(ent, event) => typeof ent === 'object' && ent !== null ? handleHover(ent, event) : handleChatNpcHover(ent, event)"
@@ -1921,6 +1924,8 @@ usePlayAgentAutoLoop()
       @take="handleTextLogTake"
       @close="closeTextLogModal"
     />
+
+    <WorldInfoModal v-if="showWorldInfo" :session-id="props.id" @close="showWorldInfo = false" />
 
     <AdventureGeneratorModal
       :open="showGeneratorModal"
