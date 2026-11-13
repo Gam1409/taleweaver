@@ -23,6 +23,10 @@ from backend.engine.gameplay.agent_commands import (
 )
 from backend.engine.gameplay.world import AdventureLogic
 from backend.core.game_modes import is_vn, mode_policy
+from backend.engine.gameplay.terminal_progress import (
+    execute_sequence_end_script,
+    sequence_end_in_progress,
+)
 from backend.engine.narration_completion import INTERRUPTED_WARNING, finish_warning
 from backend.engine.npc_presentation import runtime as portrait_presentation
 from backend.engine.narration_correction import append_correction, correction_applied
@@ -3184,6 +3188,7 @@ class GameTurnManager:
         """Applies mutations from ScriptChangeset to models and returns narrative messages."""
         if self.state is None or self.avatar is None or self.adventure is None:
             raise RuntimeError("Game turn context has not been initialized.")
+        sequence_was_completed = self.state.is_completed is True
         system_messages: list[str] = []
 
         if changeset.player_hp_change:
@@ -3407,6 +3412,8 @@ class GameTurnManager:
 
         if (
             changeset.sequence_completed
+            and not sequence_was_completed
+            and not sequence_end_in_progress(self)
             and hasattr(self.adventure, "sequences")
             and self.adventure.sequences
         ):
@@ -3429,9 +3436,9 @@ class GameTurnManager:
                 )
 
                 if completed_seq.get("on_end_sequence_script"):
-                    end_msgs = await self._execute_inline_script(
+                    end_msgs = await execute_sequence_end_script(
+                        self,
                         completed_seq["on_end_sequence_script"],
-                        "on_end_sequence",
                         completed_seq.get("id", f"seq_{current_seq_idx}"),
                     )
                     system_messages.extend(end_msgs)

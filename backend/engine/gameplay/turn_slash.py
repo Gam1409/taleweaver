@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 from fastapi.encoders import jsonable_encoder
 
+from backend.engine.gameplay.terminal_progress import (
+    finalize_completed_sequence,
+    session_is_terminal,
+)
 from backend.engine.gameplay.turn_containers import ContainerInteractions
 from backend.engine.gameplay.turn_slash_containers import (
     drop_contents,
@@ -109,17 +113,22 @@ class SlashInteractions(SwitchInteractions, ContainerInteractions):
                 script_context = await self.manager._build_script_context()
             except Exception as exc:
                 logger.warning("Could not build script context for sequence evaluation: %s", exc)
-        seq_messages = AdventureLogic.evaluate_sequence_progress(
-            adventure=adv,
-            state=self.state,
-            avatar=self.avatar,
-            script_context=script_context,
+        seq_messages = (
+            []
+            if session_is_terminal(self.state)
+            else AdventureLogic.evaluate_sequence_progress(
+                adventure=adv,
+                state=self.state,
+                avatar=self.avatar,
+                script_context=script_context,
+            )
         )
         if seq_messages:
             for seq_msg in seq_messages:
                 await self._save_chat_message("system", seq_msg)
                 yield f"event: system\ndata: {json.dumps({'role': 'system', 'content': seq_msg})}\n\n"
 
+        await finalize_completed_sequence(self.manager)
         await self.db.commit()
         if self.pending_pickup_trigger:
             # Caller chains an LLM pass, which emits the final event itself.

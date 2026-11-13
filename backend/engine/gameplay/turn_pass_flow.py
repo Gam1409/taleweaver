@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from typing import Any
 
 from backend.core.game_modes import is_vn
@@ -119,6 +119,13 @@ async def _run_turn_script(
         yield sse_role_message(system_message)
 
 
+def _status_tick_messages(manager: Any) -> Iterator[str]:
+    yield from RuleEngine.apply_ticks(manager.avatar)
+    if manager.avatar.hp <= 0:
+        manager.avatar.hp = 0
+        raise GameOverException(f"{manager.avatar.name} has fallen! Game Over.")
+
+
 async def advance_in_game_turn(
     manager: Any, script_runner: Any, game_event: Any = None
 ) -> AsyncGenerator[str, None]:
@@ -137,7 +144,7 @@ async def advance_in_game_turn(
             time_per_turn = manager.adventure.time_per_turn
             manager.state.in_game_time += int(time_per_turn if time_per_turn is not None else 5)
         if not is_vn(manager.adventure):
-            for tick_message in RuleEngine.apply_ticks(manager.avatar):
+            for tick_message in _status_tick_messages(manager):
                 yield sse_system(tick_message)
 
         if script_runner.scripts:

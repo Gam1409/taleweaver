@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.core.game_modes import is_vn
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 
@@ -24,7 +25,12 @@ def evaluate_sequence_progress(
     If conditions are met, awards XP to the avatar, advances state.active_sequence_id,
     and returns descriptive system messages.
     """
-    if not adventure or not getattr(adventure, "sequences", None):
+    if (
+        getattr(state, "is_completed", False) is True
+        or is_vn(adventure)
+        or not adventure
+        or not getattr(adventure, "sequences", None)
+    ):
         return []
     raw_sequences = adventure.sequences
     if not isinstance(raw_sequences, list) or len(raw_sequences) == 0:
