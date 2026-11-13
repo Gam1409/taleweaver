@@ -9,16 +9,18 @@ have different reference knowledge.
 
 1. Choose a UTF-8 `.md` or `.json` file and select **Upload & analyse**.
 2. The server stores an immutable source revision, then explicitly starts analysis
-   with the configured Generator model. Processing uses the session content
-   language, falling back to the profile language; original quotations are retained.
+   with the configured Generator model. Sources needing more than 16 batches wait
+   for **Start analysis** after showing their workload. Processing uses the session
+   content language, falling back to the profile language; original quotations are retained.
 3. Follow saved batch progress, fact and entry counts, UTF-8 byte sizes and character
    counts in **Files & processing**. Closing the window stops polling and leaves
    authorized background work running. Cancel retains completed batches; resume
    continues the same revision from its saved cursor.
-4. Open **Review** to inspect statements alongside their original proposal and exact
-   source evidence. Edit text, remove facts, adjust tags, connect related records,
-   and choose the audience. A record must retain at least one fact. A correction
-   keeps the original quotation and is marked as an author edit.
+4. Open **Review** to browse the catalog. Select a record to open its separate
+   read view with statements, metadata and exact source evidence. Choose **Edit**
+   to correct text, remove facts, adjust tags, connect related records and choose
+   the audience. A record must retain at least one fact. A correction keeps the
+   original quotation and is marked as an author edit.
 5. Select entries and publish them, or preview a filtered collection and confirm its
    publication in one action. Collection publication requires stopped or completed
    processing; individually selected ready entries can be accepted while other
@@ -43,12 +45,22 @@ matches all entered terms; combine a source revision, group, tag and record kind
 Sort by title, source or update order. Group and tag navigation shows SQL aggregate
 counts rather than downloading all records into the browser.
 
+The main window reserves its width for group navigation, search and record
+summaries. Reading and editing use a separate dialog, with only one dialog active
+at a time. **Back** restores the catalog's filters, page and scroll, then focuses
+the original record when it is still visible, or another available catalog control.
+Closing an edited record asks before discarding unsaved changes. The same flow
+works on narrow screens without squeezing an editor beside the catalog.
+
 The extraction model proposes a primary named group and overlapping tags from the
 source context in its existing response. A group organizes records; it does not
 establish truth, visibility or priority. Rename/reassign groups and adjust tags for
 one entry or an entire filtered collection. Bulk actions first show the exact count
 and a bounded sample. Confirmation is bound to that selection's versions; concurrent
 changes require a fresh preview. An invalid edit rejects the complete action.
+Tag fields preserve each complete label, including spaces and a leading `#`;
+adding or removing one tag must not rewrite the other saved labels. The same
+identities apply to filtered bulk tag actions.
 
 Original source previews use bounded character pages. Large uploads show their
 known batch count before analysis starts, with an explicit start action when more
@@ -75,6 +87,9 @@ checksummed archive parts under the existing per-entry and total ZIP safety limi
 small exports retain the inline representation. Copies/imports assign new
 source, revision, entry and fact identities and remap links. Processing does not
 restart automatically in the destination. Adventure `.adv` templates are unchanged.
+Export reads session entities, conversation, summaries and World Info in one SQL
+snapshot. Import inserts parent rows before their children inside the caller's
+transaction, including when SQLite foreign-key enforcement is enabled.
 
 ## Audience and recall
 
@@ -98,10 +113,42 @@ retrieval order or upload dates as proof. Host ranking already filters candidate
 without lexical, semantic or entity relevance. These contracts and prompt-boundary
 tests do not establish perfect live-model interpretation.
 
+Foreground reference retrieval keeps at most 16 recent, 32 lexical and 32 semantic
+candidates before deduplication. Lexical selection reserves space per query term
+before filling the shared budget, so broad context terms do not consume every
+lexical slot ahead of an older, more specific match.
+
 Known-by metadata constrains narrative references. Publishing does not create an
 NPC observation, memory episode or belief; NPC Personality keeps its existing
 evidence rules. Imported references never enter the mechanics request or grant
 items, access, actions or state transitions.
+
+### Living World, Concordia and character memory
+
+World Info currently supplies narrative references; it does not feed autonomous
+Living World decisions. Living World already supplies an actor's own recent
+committed events to its decision context. The optional Concordia adapter invokes
+the same decision callback and has no separate retrieval store. NPC Personality
+already retrieves observed episodes and beliefs through its character memory
+mechanisms. These are distinct from author-provided reference knowledge.
+
+A future autonomous reference lookup ([#28](https://github.com/Gam1409/taleweaver/issues/28))
+should reuse World Info with an actor scope:
+common knowledge or explicitly resolved recipients, filtered before candidate
+limits. It must keep reference material separate from witnessed memories and
+preserve current-state authority. Passing the narrator's entire recall block to
+an actor would be unsafe: other historical layers do not establish actor access.
+
+Committed Living World events are not automatically public. A future event-to-RAG
+projection needs an explicit audience and observation policy, stable event
+identities and timeline provenance before indexing. Private goals, beliefs and
+plans must remain private. No such projection is added by this feature.
+
+A possible sliding recall window ([#27](https://github.com/Gam1409/taleweaver/issues/27))
+should bound the active prompt, not delete older knowledge: retain recent events,
+retrieve relevant older evidence, and expire
+derived candidates when state or source versions change. This is a design option,
+not an additional retrieval mode implemented here.
 
 A recipient removed by a timeline change can remain attached to a retained entry.
 Copy/export marks unavailable recipients as unresolved. They stay dormant in the
@@ -122,6 +169,10 @@ Processing runs in bounded background units behind foreground game requests.
 Each batch uses one structured extraction and at most one validation correction;
 provider/router retries retain their configured behavior. Request counters represent
 logical extraction requests, including corrections, rather than billing totals.
+Only malformed completed output qualifies for a correction request. Queue pressure,
+uncertain inference, transport failures and timeouts retain their operational
+meaning instead of triggering another extraction. Invalid model configuration
+becomes a visible, resumable processing failure rather than stranding queued work.
 Cancellation revokes the result's write capability; an already dispatched remote
 request may still finish at the provider.
 
@@ -143,7 +194,8 @@ Limits are shared by upload, processing, editing and import:
 
 Quota failures preserve existing accepted records and completed work. Free space
 before explicitly retrying. World Info status and API errors use fixed host-authored
-messages. Existing optional model telemetry and provider retry logging retain their
+messages. Transient router retry warnings retain provider, role and exception class
+without copying raw exception text. Existing optional model telemetry retains its
 application-wide configuration; raw debugging can include model inputs and outputs.
 
 ## Implementation boundaries
@@ -153,6 +205,8 @@ session-owned SQL data. A revision is also the durable processing job: its curso
 run token, control version and expiring lease fence every result write. SQLite save
 retries reuse the validated response and deterministic identities without repeating
 the model request. No database transaction spans model inference.
+Exhausted SQLite contention while claiming work or looking up its next lease
+schedules a cancellable wakeup. This deferral does not wrap or replay model work.
 
 `backend/engine/world_info/` owns parsing, extraction, persistence, review and
 projection. `/api/adventures/{game_id}/world-info` exposes owner-only operations.
