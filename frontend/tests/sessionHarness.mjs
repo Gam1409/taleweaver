@@ -5,6 +5,11 @@ import { correctionModuleUrl, corrections } from './correctionModule.mjs'
 import { httpModule, sessionSnapshotModule } from './sessionSnapshotModule.mjs'
 import { serverEventsModule } from './serverEventsModule.mjs'
 
+const agentSettingsSource = readFileSync(new URL('../src/composables/useAgentSettings.ts', import.meta.url), 'utf8')
+const agentSettingsModule = `data:text/javascript;base64,${Buffer.from(ts.transpileModule(agentSettingsSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+}).outputText.replace("from '@/services/http'", `from '${httpModule}'`)).toString('base64')}`
+
 const draftSource = readFileSync(new URL('../src/services/failedTurnDrafts.ts', import.meta.url), 'utf8')
 const draftModule = ts.transpileModule(draftSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
@@ -20,6 +25,7 @@ const npcStatusUrl = `data:text/javascript;base64,${Buffer.from(npcStatusCompile
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/composables/useAgentSettings'", `from '${agentSettingsModule}'`)
   .replace("from '@/composables/useNpcBehaviorStatus'", `from '${npcStatusUrl}'`)
   .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
   .replace("from '@/services/snapshotPoller'", `from '${pollerUrl}'`)

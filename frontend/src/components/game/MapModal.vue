@@ -9,7 +9,8 @@
  *
  * Emits: close
  */
-import { watch, ref, nextTick, onMounted, computed } from 'vue'
+import { watch, ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useMapViewport } from '@/composables/useMapViewport'
 import dagre from 'dagre'
 import mapSvg from '@/assets/svg/fantasy-rpg-map.svg'
 import type { WorldMapData } from '@/types'
@@ -25,6 +26,9 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const mapContainer = ref<HTMLDivElement | null>(null)
+const mapDialog = ref<HTMLDialogElement | null>(null)
+const mapViewport = ref<HTMLDivElement | null>(null)
+const mapContent = ref<HTMLDivElement | null>(null)
 
 // Tooltip State
 const hoveredNodeId = ref<string | null>(null)
@@ -43,8 +47,7 @@ const hoveredExitPos = ref({ x: 0, y: 0 })
 // Zoom & Pan State
 const zoom = ref(1)
 const offset = ref({ x: 0, y: 0 })
-const isPanning = ref(false)
-const lastMousePos = ref({ x: 0, y: 0 })
+const { handlePointerDown, handlePointerMove, handlePointerUp, handleWheel, resetPointers } = useMapViewport(mapViewport, mapContent, zoom, offset)
 const lastFocusedSceneId = ref<string | null>(null)
 
 const margin = 100
@@ -76,6 +79,7 @@ const mysteriousSaying = computed(() => {
 })
 
 function resetView() {
+  resetPointers()
   zoom.value = 1
   offset.value = { x: 0, y: 0 }
   if (props.mapData?.current_scene_id) {
@@ -317,113 +321,6 @@ function getEdgePath(points: Array<{ x: number, y: number }>) {
          points.slice(1).map(p => `L ${p.x + margin} ${p.y + margin}`).join(' ')
 }
 
-// Mouse / touch controls for viewport panning and zooming
-const activePointers = new Map<number, { x: number; y: number }>()
-let pinchStartDistance = 0
-let pinchStartZoom = 1
-let pinchStartOffset = { x: 0, y: 0 }
-let pinchCenter = { x: 0, y: 0 }
-
-function getPointerPos(e: PointerEvent | MouseEvent) {
-  return { x: e.clientX, y: e.clientY }
-}
-
-function handlePointerDown(e: PointerEvent) {
-  if (!mapContainer.value) return
-  // Capture pointer so we keep receiving move/up events even if finger leaves the element
-  try {
-    (e.target as Element).setPointerCapture?.(e.pointerId)
-  } catch {
-    // ignore — older browsers without setPointerCapture
-  }
-  activePointers.set(e.pointerId, getPointerPos(e))
-
-  if (activePointers.size === 1) {
-    // Single pointer → start panning
-    isPanning.value = true
-    lastMousePos.value = getPointerPos(e)
-  } else if (activePointers.size === 2) {
-    // Two pointers → start pinch zoom
-    isPanning.value = false
-    const [p1, p2] = Array.from(activePointers.values())
-    pinchStartDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y)
-    pinchStartZoom = zoom.value
-    pinchStartOffset = { ...offset.value }
-    pinchCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
-  }
-}
-
-function handlePointerMove(e: PointerEvent) {
-  if (!activePointers.has(e.pointerId)) return
-  activePointers.set(e.pointerId, getPointerPos(e))
-
-  if (activePointers.size === 1 && isPanning.value) {
-    // Pan
-    const pos = getPointerPos(e)
-    offset.value.x += pos.x - lastMousePos.value.x
-    offset.value.y += pos.y - lastMousePos.value.y
-    lastMousePos.value = pos
-  } else if (activePointers.size === 2) {
-    // Pinch zoom — keep the midpoint between the two fingers stationary in screen space
-    const [p1, p2] = Array.from(activePointers.values())
-    const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y)
-    if (pinchStartDistance <= 0) return
-
-    const rect = mapContainer.value?.getBoundingClientRect()
-    if (!rect) return
-
-    const newCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
-    const factor = distance / pinchStartDistance
-    const newZoom = Math.max(0.2, Math.min(3, pinchStartZoom * factor))
-    zoom.value = newZoom
-
-    // Recompute offset so the pinch center stays anchored on screen.
-    // Map content point under pinch center: (newCenter - rect.topLeft - newOffset) / newZoom
-    // We want: (newCenter - rect.topLeft - newOffset) / newZoom === (oldCenter - rect.topLeft - oldOffset) / oldZoom
-    // Solving for newOffset:
-    const relX = (newCenter.x - rect.left) / newZoom
-    const relY = (newCenter.y - rect.top) / newZoom
-    const oldRelX = (pinchCenter.x - rect.left) / pinchStartZoom
-    const oldRelY = (pinchCenter.y - rect.top) / pinchStartZoom
-    offset.value = {
-      x: pinchStartOffset.x + (oldRelX - relX) * newZoom,
-      y: pinchStartOffset.y + (oldRelY - relY) * newZoom
-    }
-    // Suppress unused-var warning for newCenter (we use rect-relative coordinates above)
-    void newCenter
-  }
-}
-
-function handlePointerUp(e: PointerEvent) {
-  activePointers.delete(e.pointerId)
-  try {
-    (e.target as Element).releasePointerCapture?.(e.pointerId)
-  } catch {
-    // ignore
-  }
-  if (activePointers.size < 2) {
-    pinchStartDistance = 0
-  }
-  if (activePointers.size === 0) {
-    isPanning.value = false
-  } else if (activePointers.size === 1) {
-    // Drop back to pan mode using the remaining pointer
-    const [pos] = Array.from(activePointers.values())
-    lastMousePos.value = pos
-    isPanning.value = true
-  }
-}
-
-function handlePointerCancel(e: PointerEvent) {
-  handlePointerUp(e)
-}
-
-function handleWheel(e: WheelEvent) {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? 0.9 : 1.1
-  zoom.value = Math.max(0.2, Math.min(3, zoom.value * delta))
-}
-
 // Handlers for node tooltips
 function handleNodeMouseEnter(node: any, event: MouseEvent) {
   hoveredNodeId.value = node.id
@@ -459,14 +356,21 @@ function handleExitMouseMove(event: MouseEvent) {
   hoveredExitPos.value = { x: event.clientX, y: event.clientY }
 }
 
-watch(() => props.open, (isOpen) => {
+watch(() => props.open, async (isOpen) => {
   if (isOpen) {
+    await nextTick()
+    if (!props.open) return
+    if (mapDialog.value && !mapDialog.value.open) mapDialog.value.showModal()
     updateLayout()
     nextTick(() => {
       focusOnCurrentNode()
       lastFocusedSceneId.value = props.mapData?.current_scene_id || null
     })
   } else {
+    resetPointers()
+    mapDialog.value?.close()
+    hoveredNode.value = null
+    hoveredExit.value = null
     lastFocusedSceneId.value = null
   }
 })
@@ -475,6 +379,7 @@ watch(() => props.mapData, (newMapData) => {
   if (props.open) {
     updateLayout()
     if (newMapData && newMapData.current_scene_id !== lastFocusedSceneId.value) {
+      resetPointers()
       nextTick(() => {
         focusOnCurrentNode()
         lastFocusedSceneId.value = newMapData.current_scene_id || null
@@ -485,6 +390,7 @@ watch(() => props.mapData, (newMapData) => {
 
 onMounted(() => {
   if (props.open) {
+    mapDialog.value?.showModal()
     updateLayout()
     nextTick(() => {
       focusOnCurrentNode()
@@ -492,13 +398,14 @@ onMounted(() => {
     })
   }
 })
+onBeforeUnmount(() => mapDialog.value?.close())
 </script>
 
 <template>
   <!-- Backdrop -->
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <dialog v-if="open" ref="mapDialog" aria-labelledby="world-map-title" class="fixed inset-0 z-50 m-0 h-full w-full max-h-none max-w-none border-0 bg-transparent p-4 text-inherit open:flex items-center justify-center" @cancel.prevent="emit('close')">
         <!-- Overlay -->
         <div
           class="absolute inset-0 bg-black/75 backdrop-blur-sm"
@@ -512,7 +419,7 @@ onMounted(() => {
             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
               <i class="ra ra-map text-xl sm:text-2xl text-emerald-500 shrink-0"></i>
               <div class="min-w-0">
-                <h2 class="text-base sm:text-xl font-bold text-white leading-tight">World Map</h2>
+                <h2 id="world-map-title" class="text-base sm:text-xl font-bold text-white leading-tight">World Map</h2>
                 <p class="hidden sm:block text-xs text-slate-400 mt-0.5">Tactical Sketch of your journey</p>
               </div>
             </div>
@@ -604,17 +511,19 @@ onMounted(() => {
             <!-- Redesigned view layer -->
             <div
               v-else
+              ref="mapViewport"
               class="w-full h-full flex items-center justify-center relative z-10 select-none overflow-hidden touch-none"
               @wheel="handleWheel"
               @pointerdown="handlePointerDown"
               @pointermove="handlePointerMove"
               @pointerup="handlePointerUp"
-              @pointercancel="handlePointerCancel"
-              @pointerleave="handlePointerUp"
+              @pointercancel="handlePointerUp"
+              @lostpointercapture="handlePointerUp"
             >
               <!-- Viewport container that gets translated/zoomed -->
               <div 
-                class="relative origin-center will-change-transform cursor-grab active:cursor-grabbing"
+                ref="mapContent"
+                class="relative shrink-0 origin-center will-change-transform cursor-grab active:cursor-grabbing"
                 :style="{ 
                   width: (layoutData?.width || 800) + margin * 2 + 'px',
                   height: (layoutData?.height || 600) + margin * 2 + 'px',
@@ -802,7 +711,7 @@ onMounted(() => {
             <div class="absolute inset-0 bg-gradient-to-tr from-emerald-500/5 via-transparent to-amber-500/5 pointer-events-none z-0"></div>
 
             <!-- HOVER TOOLTIP -->
-            <Teleport to="body">
+            <Teleport :to="mapDialog" :disabled="!mapDialog">
               <Transition name="tooltip">
                 <div 
                   v-if="hoveredNode" 
@@ -850,7 +759,7 @@ onMounted(() => {
             </Teleport>
 
             <!-- EXIT HOVER TOOLTIP -->
-            <Teleport to="body">
+            <Teleport :to="mapDialog" :disabled="!mapDialog">
               <Transition name="tooltip">
                 <div 
                   v-if="hoveredExit" 
@@ -894,12 +803,16 @@ onMounted(() => {
             <span class="hidden sm:inline truncate">Tip: hover over rooms and exit circles for details • rendered dynamically</span>
           </div>
         </div>
-      </div>
+      </dialog>
     </Transition>
   </Teleport>
 </template>
 
 <style scoped>
+dialog::backdrop {
+  background: transparent;
+}
+
 .bg-radial-gradient {
   background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
 }

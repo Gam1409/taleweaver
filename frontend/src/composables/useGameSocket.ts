@@ -1,3 +1,5 @@
+import { createAgentSettings, type AgentSettingsPatch } from '@/composables/useAgentSettings'
+export type { AgentSettingsPatch } from '@/composables/useAgentSettings'
 import { apiFetch } from '@/services/http'
 /**
  * useGameSocket — Reactive REST-based composable for the TaleWeaver game loop.
@@ -56,15 +58,6 @@ interface StoryEventPayload {
 const AGENT_LOG_LIMIT = 50
 const AGENT_IDLE_TIMEOUT_MS = 180_000
 const CHAT_IDLE_TIMEOUT_MS = 180_000
-
-export interface AgentSettingsPatch {
-  active?: boolean
-  step_by_step?: boolean
-  personality?: string
-  custom_personality?: string
-  allow_walkthrough?: boolean
-  monkey_mode?: boolean
-}
 
 export interface UseGameSocket {
   messages: Ref<ChatMessage[]>
@@ -172,6 +165,7 @@ export function useGameSocket(): UseGameSocket {
   const questGlow = ref(false)
   let sessionLoadController: AbortController | null = null
   let currentGameId = ''
+  const { updateAgentSettings, resetAgentSettings } = createAgentSettings(() => currentGameId, sheet, addNotification)
   let snapshotRevision = 0
   const { language, languageSaving, setLanguage } = useSessionContentLanguage(
     () => currentGameId,
@@ -388,6 +382,7 @@ export function useGameSocket(): UseGameSocket {
    * If history is empty, triggers the initial world description.
    */
   async function connect(gameId: string): Promise<void> {
+    resetAgentSettings()
     sessionLoadController?.abort()
     const controller = new AbortController()
     sessionLoadController = controller
@@ -435,6 +430,7 @@ export function useGameSocket(): UseGameSocket {
   }
 
   function disconnect(): void {
+    resetAgentSettings()
     sessionLoadController?.abort()
     sessionLoadController = null
     sessionLoadError.value = null
@@ -829,32 +825,6 @@ export function useGameSocket(): UseGameSocket {
     if (!activeChatController && (status.value === 'connecting' || status.value === 'loading')) {
       status.value = 'connected'
       statusText.value = ''
-    }
-  }
-
-  /**
-   * Updates play-agent settings for the current session and merges the result into the sheet.
-   */
-  async function updateAgentSettings(patch: AgentSettingsPatch): Promise<boolean> {
-    if (!currentGameId) return false
-    try {
-      const res = await apiFetch(`/adventures/${currentGameId}/agent/settings`, { timeoutMs: 60_000,
-        method: 'PATCH',
-        headers: authHeaders(true),
-        body: JSON.stringify(patch)
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        addNotification(errData.detail || 'Failed to update Play-Agent settings.', 'error')
-        return false
-      }
-      const agentState = await res.json()
-      if (sheet.value) sheet.value = { ...sheet.value, ...agentState }
-      return true
-    } catch (err) {
-      console.error('[Session] Agent settings error:', err)
-      addNotification('Failed to update Play-Agent settings.', 'error')
-      return false
     }
   }
 

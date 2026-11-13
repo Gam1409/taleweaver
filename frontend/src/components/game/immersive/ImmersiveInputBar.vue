@@ -130,7 +130,7 @@ function selectCommand(cmdId: string) {
 const {
   isRecording,
   isTranscribing,
-  handleMicButtonMousedown,
+  handleMicButtonPointerDown,
 } = useVoiceInput({
   sessionId: toRef(props, 'sessionId'),
   canSendInput: toRef(props, 'canSendInput'),
@@ -277,7 +277,7 @@ defineExpose({
         <span>{{ isRecording ? 'PTT Active: Recording Voice...' : 'Transcribing Speech...' }}</span>
       </div>
       <span class="text-[10px] uppercase font-mono text-slate-400">
-        {{ isRecording ? "Release key or mouse to finish" : "Please wait..." }}
+        {{ isRecording ? "Release to finish" : "Please wait..." }}
       </span>
     </div>
 
@@ -297,8 +297,8 @@ defineExpose({
       <button
         type="button"
         :disabled="!props.canSendInput"
-        @mousedown="handleMicButtonMousedown"
-        class="flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+        @pointerdown="handleMicButtonPointerDown"
+        class="touch-none select-none flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
         title="Push-To-Talk (Hold to speak)"
       >
         <Mic class="w-5 h-5" :class="{ 'text-red-400 animate-pulse': isRecording }" />

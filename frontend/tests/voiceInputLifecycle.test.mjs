@@ -31,7 +31,7 @@ async function fixture(t, transcribe = async () => ({ text: 'spoken action' })) 
   t.after(() => { app.unmount(); module.dispose(); if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator); else delete globalThis.navigator; if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete globalThis.window })
   function grant(index = permissions.length - 1) { const track = { stopped: 0, stop() { this.stopped++ } }, stream = { track, getTracks: () => [track] }; streams.push(stream); permissions[index].resolve(stream); return stream }
   async function record(prefix = false) {
-    voice.handleMicButtonMousedown({ preventDefault() {}, shiftKey: prefix })
+    voice.handleMicButtonPointerDown({ button: 0, isPrimary: true, pointerId: 1, currentTarget: {}, preventDefault() {}, shiftKey: prefix })
     const stream = grant(); await flush()
     contexts.at(-1).processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array([0.25, -0.5]) } })
     now += 600
@@ -58,8 +58,8 @@ test('returning to the same session does not revive its old transcription', asyn
 })
 test('permission granted after release never activates a late recording', async t => {
   const f = await fixture(t)
-  f.voice.handleMicButtonMousedown({ preventDefault() {}, shiftKey: false })
-  f.window.dispatchEvent(new Event('mouseup'))
+  f.voice.handleMicButtonPointerDown({ button: 0, isPrimary: true, pointerId: 1, currentTarget: {}, preventDefault() {}, shiftKey: false })
+  f.window.dispatchEvent(Object.assign(new Event('pointerup'), { pointerId: 1 }))
   const stream = f.grant(); await flush()
   assert.equal(stream.track.stopped, 1); assert.equal(f.contexts.length, 0)
   assert.equal(f.voice.isRecording.value, false); assert.equal(f.calls.length, 0)
@@ -67,7 +67,7 @@ test('permission granted after release never activates a late recording', async 
 for (const phase of ['permission', 'recording', 'transcription']) for (const reason of ['session', 'unmount']) test(`${reason} cancels voice ${phase} without submitting its content`, async t => {
   const result = deferred(), f = await fixture(t, () => result.promise)
   let stream, stopping
-  if (phase === 'permission') f.voice.handleMicButtonMousedown({ preventDefault() {}, shiftKey: false })
+  if (phase === 'permission') f.voice.handleMicButtonPointerDown({ button: 0, isPrimary: true, pointerId: 1, currentTarget: {}, preventDefault() {}, shiftKey: false })
   else stream = await f.record()
   if (phase === 'transcription') { stopping = f.voice.stopVoiceRecording(); await flush() }
   if (reason === 'session') f.sessionId.value = 'B'

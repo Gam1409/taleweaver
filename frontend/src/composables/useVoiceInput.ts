@@ -63,7 +63,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   let current: VoiceCapture | null = null
   let disposed = false
   let draftRevision = 0
-  let globalMouseUpListener: (() => void) | null = null
+  let activePointer: { id: number; target: HTMLElement } | null = null
 
   function owns(capture: VoiceCapture) {
     return !disposed && current === capture && capture.sessionId === sessionId.value && canSendInput.value
@@ -86,11 +86,13 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     }
   }
 
-  function clearMouseUpListener() {
-    if (!globalMouseUpListener) return
-    window.removeEventListener('mouseup', globalMouseUpListener)
-    window.removeEventListener('touchend', globalMouseUpListener)
-    globalMouseUpListener = null
+  function clearPointer() {
+    const pointer = activePointer
+    activePointer = null
+    window.removeEventListener('pointerup', handleMicButtonPointerUp)
+    window.removeEventListener('pointercancel', handleMicButtonPointerCancel)
+    window.removeEventListener('lostpointercapture', handleMicButtonPointerCancel)
+    if (pointer?.target.hasPointerCapture?.(pointer.id)) pointer.target.releasePointerCapture(pointer.id)
   }
 
   function finish(capture: VoiceCapture) {
@@ -100,7 +102,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     current = null
     isRecording.value = false
     isTranscribing.value = false
-    clearMouseUpListener()
+    clearPointer()
   }
 
   function cancelVoiceRecording() {
@@ -111,7 +113,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     }
     pttKeyPressed.value = false
     pttKeyActiveCode.value = ''
-    clearMouseUpListener()
+    clearPointer()
   }
 
   async function startVoiceRecording() {
@@ -154,7 +156,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     if (!isRecording.value) { cancelVoiceRecording(); return }
     isRecording.value = false
     releaseMedia(capture)
-    clearMouseUpListener()
+    clearPointer()
     if (!owns(capture) || Date.now() - capture.startedAt < 500) { finish(capture); return }
 
     const totalLength = capture.chunks.reduce((acc, chunk) => acc + chunk.length, 0)
@@ -187,24 +189,34 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     }
   }
 
-  function handleMicButtonMousedown(e: MouseEvent | TouchEvent) {
+  function handleMicButtonPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || !e.isPrimary) return
     e.preventDefault()
     if (disposed || current || !canSendInput.value) return
-    pttPrefixSay.value = (e as MouseEvent).shiftKey || false
+    pttPrefixSay.value = e.shiftKey
     pttKeyActiveCode.value = ''
+    const target = e.currentTarget as HTMLElement
+    activePointer = { id: e.pointerId, target }
+    window.addEventListener('pointerup', handleMicButtonPointerUp)
+    window.addEventListener('pointercancel', handleMicButtonPointerCancel)
+    window.addEventListener('lostpointercapture', handleMicButtonPointerCancel)
+    try { target.setPointerCapture?.(e.pointerId) }
+    catch { /* Window pointer listeners also handle browsers without capture. */ }
     void startVoiceRecording()
+  }
 
-    globalMouseUpListener = () => {
-      void stopVoiceRecording()
-      clearMouseUpListener()
-    }
-    window.addEventListener('mouseup', globalMouseUpListener)
-    window.addEventListener('touchend', globalMouseUpListener)
+  function handleMicButtonPointerUp(e: PointerEvent) {
+    if (activePointer?.id === e.pointerId) void stopVoiceRecording()
+  }
+
+  function handleMicButtonPointerCancel(e: PointerEvent) {
+    if (activePointer?.id === e.pointerId) cancelVoiceRecording()
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
     const target = e.target as HTMLElement
+    if (target.closest?.('dialog[open], [aria-modal="true"]')) return
     const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
 
     const isV = e.code === 'KeyV'
@@ -253,6 +265,6 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     isTranscribing,
     startVoiceRecording,
     stopVoiceRecording,
-    handleMicButtonMousedown,
+    handleMicButtonPointerDown,
   }
 }
