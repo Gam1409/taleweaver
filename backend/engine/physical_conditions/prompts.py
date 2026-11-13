@@ -43,6 +43,14 @@ each change. The final accepted state supersedes earlier states; do not restate 
 
 PHYSICAL CONDITIONS: condition_updates is a small list of changes proved by completed_narration.
 Use only current subject IDs in actors/items and exact condition IDs in physical_conditions.
+Resolve synonyms, colloquial wording and literary references through the full context and
+known subject IDs. An established current result need not use a formal status word or an
+action verb. Figurative emotional language alone does not establish a physical change.
+Keep the original evidence; item-state detail still copies an exact contiguous excerpt.
+For a NEW explicitly established anatomical condition, prefer stable part IDs such as
+clitoris, labia, vagina, anus, sphincter, uterus, penis or testicles when applicable.
+Existing same-fact records keep their condition_id and part across wording changes.
+These identifiers classify an established fact; they never establish anatomy by themselves.
 To record a NEW injury, contamination, fluid trace, pain or other explicit bodily condition,
 use operation=record with target_id, kind, part and short neutral intrinsic detail.
 Use kind=other for physical signs such as trembling or flushed skin, not emotions or intentions.

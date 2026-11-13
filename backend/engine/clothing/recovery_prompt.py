@@ -67,7 +67,7 @@ Body-placement branches:
 Apply these only when the history establishes a supported body placement;
 do not invent one to make an unrelated inventory object fit this recovery schema.
 - Existing ordinary object/accessory: exact item_id from existing_body_items;
-  new_item=null, disposition=worn and attachment_slot=vaginal or anal as stated.
+  new_item=null, disposition=worn and attachment_slot=vaginal, anal, uterine or penile as stated.
 - Missing ordinary object: item_id=null; new_item.kind=ordinary with its established
   name and intrinsic description, no clothing metadata and no wearable_slots;
   disposition=worn and the explicitly stated attachment_slot are required.

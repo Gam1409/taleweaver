@@ -230,14 +230,20 @@ Follow each section's own rules for changes versus final-state observations.
 Use supplied actor IDs and __player__ for the player. __scene__ is only an acquisition
 source for accessible loose objects, never a destination. Do not take items from locked
 containers, absent actors, hidden inventories or an unestablished source.
-Prefer existing item IDs; retain their identity, descriptions and properties. Reuse an
-existing garment rather than making another because its description or language differs.
+Prefer existing item IDs; retain their identity, descriptions and properties. Resolve
+slang, synonyms, pronouns and literary or component references from the supplied context;
+matching the catalogue's exact wording is unnecessary. A strap, cuff or hem still
+attached to a known garment refers to that garment. Alternate wording or a character's
+quoted denial does not establish a replacement garment. A new garment must be
+independently established as distinct; leave unresolved identity uncertain.
 source_owner is the owner before this described action; destination_owner is its owner
 afterwards. Removing clothing retains its owner unless an actual transfer also occurred.
 Prefer one action per item with its final destination and disposition. If separate
 completed steps must be reported for one existing ID, keep their original narrative
 order and continuous ownership; each step needs its own non-overlapping exact evidence.
 Clothing pulled down, lifted or only partly put on remains disposition=worn.
+Moving an attached strap, cuff or hem is partial displacement of that garment.
+It remains worn with the same ID and owner unless a separate completed transfer occurs.
 Set uncovered_regions to the garment regions it no longer covers, not all bare body
 regions. [] explicitly restores normal coverage; null leaves known placement unchanged.
 Removing it COMPLETELY uses carried/held, with uncovered_regions=null. Partial movement
