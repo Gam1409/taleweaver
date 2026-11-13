@@ -264,6 +264,21 @@ async def test_weapon_cost_consumption_mana_vs_stamina(setup_test_db, monkeypatc
             RoleLLMFactory(lambda *args, **kwargs: mock_llm),
         )
 
+        # Resource costs must not depend on combat ending from random damage.
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.roll_attack",
+            lambda *args, **kwargs: {
+                "is_hit": False,
+                "hit_roll": 1,
+                "hit_modifier": 0,
+                "hit_total": 1,
+                "damage_total": 0,
+            },
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random", lambda: 0.9
+        )
+
         # Equip Magic Wand (Mana-based, cost = 10)
         avatar.equipment["MainHand"] = {
             "id": "WAND",
