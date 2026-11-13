@@ -5,13 +5,22 @@ from hashlib import sha256
 from backend.engine.clothing.body_schema import WearSource
 from backend.engine.clothing.profiles import attachment_item_allowed, garment_for_item, load_profile
 from backend.engine.clothing.schema import VisualProfile, WornItem
+from backend.engine.clothing.wear_provenance import source_matches
 from backend.engine.narrated_items.errors import ItemPolicyError
 from backend.engine.narrated_items.schema import ItemAction
 
 
-def unchanged_observation(action: ItemAction, actor: dict, identifier: str) -> bool:
+def unchanged_observation(
+    action: ItemAction,
+    actor: dict,
+    identifier: str,
+    *,
+    narration: str = "",
+    request_id: str = "",
+    verified_sources: set[tuple[str, str]] | None = None,
+) -> bool:
     profile = load_profile(actor.get("visual_profile"))
-    if action.basis != "observed_wear" or profile is None:
+    if action.basis not in {"observed_wear", "observed_placement"} or profile is None:
         return False
     for row in profile.worn:
         same = (
@@ -25,8 +34,17 @@ def unchanged_observation(action: ItemAction, actor: dict, identifier: str) -> b
         needs_source = row.source is None and bool(
             action.uncovered_regions or action.attachment_slot
         )
-        if same and not needs_source:
+        if same and not needs_source and action.basis == "observed_wear":
             return True
+        if same and row.source is not None and action.basis == "observed_placement":
+            source = row.source
+            current = (
+                source.source_message_id is None
+                and source.source_role == "assistant"
+                and source.request_id == request_id
+                and source_matches(source.model_dump(), narration)
+            )
+            return current or (actor["id"], identifier) in (verified_sources or set())
     return False
 
 

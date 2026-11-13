@@ -31,6 +31,10 @@ from backend.engine.scene_continuity.schema import candidates as scene_candidate
 from backend.engine.scene_staging.schema import SceneExtraction
 from backend.schemas.authoring_completion import EquipmentSlot
 
+LegacyItemBasis = Literal[
+    "completed", "observed_wear", "attempt", "claim", "hypothetical", "uncertain"
+]
+
 
 class NewItem(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -64,7 +68,15 @@ class ItemAction(WithEvidenceSpan):
         max_length=7,
         description="For worn clothing only: the final regions this garment no longer covers. Null preserves its known placement; [] explicitly restores normal coverage. Partial removal remains worn.",
     )
-    basis: Literal["completed", "observed_wear", "attempt", "claim", "hypothetical", "uncertain"]
+    basis: Literal[
+        "completed",
+        "observed_wear",
+        "observed_placement",
+        "attempt",
+        "claim",
+        "hypothetical",
+        "uncertain",
+    ]
     attachment_slot: BodySlot | None = Field(
         default=None,
         description="Explicit completed body placement of this owned item. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
@@ -74,6 +86,15 @@ class ItemAction(WithEvidenceSpan):
     def one_identity(self) -> "ItemAction":
         if bool(self.item_id) == bool(self.new_item):
             raise ValueError("Use an existing ID or a new item, never both.")
+        if self.basis == "observed_placement" and (
+            not self.item_id
+            or self.disposition != "worn"
+            or self.attachment_slot is None
+            or self.uncovered_regions is not None
+        ):
+            raise ValueError(
+                "Current placement requires an existing item and an explicit body binding."
+            )
         if self.attachment_slot and (
             self.disposition != "worn" or self.uncovered_regions is not None
         ):
@@ -113,6 +134,7 @@ class ExistingItemAction(ItemAction):
 
 
 class NewItemAction(ItemAction):
+    basis: LegacyItemBasis
     item_id: None = None
     new_item: Annotated[NewOrdinaryItem | NewClothingItem, Field(discriminator="kind")] = Field(
         description="Required intrinsic metadata. Clothing requires garment metadata and at least one wearable slot; never an ID."

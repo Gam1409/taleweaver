@@ -6,11 +6,22 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, 
 
 from backend.engine.clothing.body_schema import BodySlot
 from backend.engine.clothing.schema import Garment, Region
-from backend.engine.narrated_items.schema import ItemAction, NewItem, NewOrdinaryItem
+from backend.engine.narrated_items.schema import (
+    ItemAction,
+    LegacyItemBasis,
+    NewItem,
+    NewOrdinaryItem,
+)
 from backend.schemas.authoring_completion import EquipmentSlot
 
 
-class ExistingRecoveryAction(ItemAction):
+class RecoveryAction(ItemAction):
+    """Historical recovery retains its reviewed, same-owner action contract."""
+
+    basis: LegacyItemBasis
+
+
+class ExistingRecoveryAction(RecoveryAction):
     attachment_slot: None = None
     uncovered_regions: None = None  # Recovery placement belongs to the outer entry.
     item_id: str = Field(
@@ -27,7 +38,7 @@ class RecoveryGarment(NewItem):
     wearable_slots: list[EquipmentSlot] = Field(min_length=1, max_length=4)
 
 
-class NewRecoveryAction(ItemAction):
+class NewRecoveryAction(RecoveryAction):
     attachment_slot: None = None
     uncovered_regions: None = None
     item_id: None = Field(default=None, description="Must be null. The engine assigns new IDs.")
@@ -36,7 +47,7 @@ class NewRecoveryAction(ItemAction):
     )
 
 
-class RecoveryBodyAction(ItemAction):
+class RecoveryBodyAction(RecoveryAction):
     disposition: Literal["worn"] = "worn"
     attachment_slot: BodySlot
     uncovered_regions: None = None

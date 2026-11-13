@@ -25,6 +25,7 @@ from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.errors import ItemFailure
+from backend.engine.narrated_items.observation_sources import verified_sources
 from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction, SharedItemExtraction
 from backend.engine.narrated_movement import runtime as narrated_movement
@@ -262,6 +263,7 @@ async def reconcile_items(
                 message_id=message_id,
                 failures=failures,
                 source_indices=source_indices,
+                verified_sources=await verified_sources(manager, extraction, actors),
             )
         )
         errors = [failure.message() for failure in schema_failures] + errors

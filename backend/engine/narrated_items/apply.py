@@ -17,6 +17,7 @@ from backend.engine.clothing.schema import VisualProfile, WornItem
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.narrated_items import transitions
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
+from backend.engine.narrated_items.observations import validate_observation
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.narrated_items.wear import placement, unchanged_observation, validate_wear
@@ -137,9 +138,9 @@ def _receive(
 def _resolve(
     action: ItemAction, actors: dict, snapshot: Possessions, narration: str, **creation_options: Any
 ) -> dict:
-    if action.basis not in {"completed", "observed_wear"}:
+    if action.basis not in {"completed", "observed_wear", "observed_placement"}:
         raise ValueError(
-            f"Action basis '{action.basis}' is not a completed action or current wear observation."
+            f"Action basis '{action.basis}' is not a completed action or current observation."
         )
     require_span(narration, action.evidence, action.evidence_span)
     if action.evidence not in narration:
@@ -161,6 +162,7 @@ def _resolve(
             action.destination_owner,
         }:
             raise ValueError("Item ownership does not match the described action.")
+        validate_observation(action, item, snapshot.owners[action.item_id])
         return deepcopy(item)
     if action.new_item and any(
         str(item.get("name", "")).casefold() == action.new_item.name.casefold()
@@ -181,6 +183,7 @@ def _apply_batch(
     message_id: str,
     failures: list[ItemFailure] | None = None,
     source_indices: Sequence[int] | None = None,
+    verified_sources: set[tuple[str, str]] | None = None,
 ) -> tuple[dict, Possessions, list[dict], list[str]]:
     """Propose one item chain on copies; the caller commits only a complete chain."""
     actors = deepcopy(actors)
@@ -210,9 +213,20 @@ def _apply_batch(
             )
             identifier = item["id"]
             actual_owner = snapshot.owners.get(identifier, action.source_owner)
-            if actual_owner == action.destination_owner and action.source_owner != actual_owner:
+            if (
+                actual_owner == action.destination_owner
+                and action.source_owner != actual_owner
+                and action.basis != "observed_placement"
+            ):
                 continue  # Already applied by the mechanics pass; never duplicate or unequip it.
-            if unchanged_observation(action, actors[action.destination_owner], identifier):
+            if actual_owner == action.destination_owner and unchanged_observation(
+                action,
+                actors[action.destination_owner],
+                identifier,
+                narration=narration,
+                request_id=message_id,
+                verified_sources=verified_sources,
+            ):
                 continue
             worn = placement(
                 action,
@@ -286,10 +300,11 @@ def _prepare_actions(
     for entries in batches:
         try:
             actions = transitions.prepare(entries, actors, narration)
-            if not transitions.already_applied(actions, snapshot):
-                eligible.extend(
-                    (index, action) for (index, _), action in zip(entries, actions, strict=True)
-                )
+            start = transitions.unresolved_start(actions, snapshot)
+            eligible.extend(
+                (index, action)
+                for (index, _), action in zip(entries[start:], actions[start:], strict=True)
+            )
         except ValueError as exc:
             index, action = entries[0]
             failures.append(
@@ -313,6 +328,7 @@ def _commit_chains(
     detailed: bool,
     session_id: str,
     message_id: str,
+    verified_sources: set[tuple[str, str]] | None = None,
 ) -> tuple[dict, list[dict], list[ItemFailure]]:
     failures: list[ItemFailure] = []
     # At most six local passes: each rejected pass excludes at least one item chain.
@@ -331,6 +347,7 @@ def _commit_chains(
             message_id=message_id,
             failures=rejected,
             source_indices=[index for index, _ in eligible],
+            verified_sources=verified_sources,
         )
         if not rejected:
             return changed, accepted, failures
@@ -360,6 +377,7 @@ def apply_actions(
     message_id: str,
     failures: list[ItemFailure] | None = None,
     source_indices: Sequence[int] | None = None,
+    verified_sources: set[tuple[str, str]] | None = None,
 ) -> tuple[dict, list[dict], list[str]]:
     """Commit item chains atomically without reordering interleaved independent actions."""
     batches = transitions.batches(extraction.actions, source_indices)
@@ -372,6 +390,7 @@ def apply_actions(
         detailed=detailed,
         session_id=session_id,
         message_id=message_id,
+        verified_sources=verified_sources,
     )
     rejected.extend(failed)
     if failures is not None:

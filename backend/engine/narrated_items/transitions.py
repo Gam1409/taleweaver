@@ -41,13 +41,13 @@ def prepare(
             else narration.count(action.evidence) == 1
         )
         if (
-            action.basis != "completed"
+            action.basis not in {"completed", "observed_placement"}
             or action.source_owner != owner
             or start < end
             or not verified
         ):
             raise ValueError(
-                "Item chain needs completed actions, continuous ownership and unambiguous narrative order."
+                "Item chain needs confirmed actions or current placements, continuous ownership and unambiguous narrative order."
             )
         end = start + len(action.evidence)
         owner = action.destination_owner
@@ -62,3 +62,21 @@ def already_applied(actions: list[ItemAction], snapshot: Possessions) -> bool:
         and snapshot.owners.get(actions[0].item_id or "") == actions[-1].destination_owner
         and actions[0].source_owner != actions[-1].destination_owner
     )
+
+
+def unresolved_start(actions: list[ItemAction], snapshot: Possessions) -> int:
+    """Retain observations after an already-resolved transfer without replaying its carriers."""
+    if not already_applied(actions, snapshot):
+        return 0
+    if all(action.basis == "completed" for action in actions):
+        return len(actions)
+    owner = snapshot.owners.get(actions[0].item_id or "")
+    for index in range(len(actions) - 1, -1, -1):
+        action = actions[index]
+        if (
+            action.basis == "completed"
+            and action.destination_owner == owner
+            and action.source_owner != owner
+        ):
+            return index + 1
+    return 0

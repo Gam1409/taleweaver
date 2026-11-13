@@ -120,7 +120,30 @@ Skipped checks distinguish an earlier rules/ownership rejection from narration e
 
 Dynamic-location confirmation includes currently present NPCs and evidence for co-arrival from the current action. Confirmed companions are bound to the server-created destination ID before normal movement validation. Stationary NPC and access restrictions still apply; recorded results distinguish moved, not moved and rejected companions. This does not retroactively relocate NPCs based on unsupported assertions.
 
-Explicit current worn-garment descriptions now use `observed_wear`. They must cite the completed response and identify the wearer as both source and destination; observations cannot transfer or remove possessions. A missing appearance profile can be initialized without inventing appearance details. Malformed existing profiles still require review. Repeated observations preserve existing worn coverage. Later changes in the response take precedence; recognizing their semantics remains a model responsibility.
+Explicit current worn-garment descriptions now use `observed_wear`. They must cite the completed response and identify the wearer as both source and destination; these garment observations cannot transfer or remove possessions. A missing appearance profile can be initialized without inventing appearance details. Malformed existing profiles still require review. Repeated observations preserve existing worn coverage. Later changes in the response take precedence; recognizing their semantics remains a model responsibility.
+
+An existing object's directly established current body placement uses
+`observed_placement`. Literary narration can establish this fact without a new
+placement verb, such as a sealed sensor remaining secured in a character's assigned
+body slot. This basis requires an existing canonical ID, `worn`, an explicit
+`attachment_slot`, and no garment displacement. It cannot create items or turn
+generic holding, requests, claims, recollections or hypotheticals into placement.
+
+Same-owner observations retain the existing attachment eligibility and body checks.
+Repairing stale custody between present participants is narrower: the canonical
+object must have `DEFAULT` or legacy empty type, no garment or wearable slots, and
+no nonzero known inventory stat/resource effects. This preserves the item's ID,
+intrinsic metadata and original acquisition provenance. It does not invent a
+handover, execute gameplay callbacks, or classify arbitrary script dependencies
+from item prose. Existing rule rejections and unavailable sources remain decisive.
+
+Mixed completed-action and current-placement chains retain exact source order and
+continuous custody. Later completed removal or transfer wins. An already resolved
+transfer prefix is not replayed merely to recover its final missing binding.
+Valid earlier placement evidence remains unchanged; missing, edited or foreign
+source evidence can be replaced by the current exact observation. Verification is
+bounded to the candidate placements and adds no model request. Existing reviewed
+history recovery keeps its same-owner action contract.
 
 Debug's **Restore clothing from history…** analyzes at most 80 recent user/assistant messages (48,000 characters), in chronological order. It proposes only missing garments still owned by the selected NPC, with exact assistant-message citations. The preview displays worn/carried status, descriptions, source quotes, rejected entries and any history limit. It never applies automatically. **Apply reviewed clothing** checks the preview token, evidence and state/history fingerprint again. Any intervening story/state change requires a new preview. It preserves unrelated inventory and does not replace an entire outfit. This is model-assisted recovery, so the owner must review later removals and transfers before applying. It does not infer unmentioned clothing or restore items from excluded older history.
 
