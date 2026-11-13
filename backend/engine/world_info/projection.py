@@ -94,6 +94,36 @@ def _candidate_ids(candidates: list[dict]) -> list[str]:
     return list(dict.fromkeys(identifiers))
 
 
+async def _lexical_rows(db: Any, ordered: Any, terms: list[str]) -> list[Any]:
+    """Reserve each term a share before broad context can fill the lexical bound."""
+    selected: dict[str, Any] = {}
+    per_term = LEXICAL_ENTRIES // len(terms)
+    for term in terms:
+        rows = await db.execute(
+            ordered.where(
+                WorldInfoEntry.id.not_in(list(selected)),
+                func.tw_contains_any(
+                    WorldInfoEntry.search_text, json.dumps([term], ensure_ascii=False)
+                )
+                == 1,
+            ).limit(per_term)
+        )
+        selected.update({row[0].id: row for row in rows.all()})
+    remaining = LEXICAL_ENTRIES - len(selected)
+    if remaining:
+        rows = await db.execute(
+            ordered.where(
+                WorldInfoEntry.id.not_in(list(selected)),
+                func.tw_contains_any(
+                    WorldInfoEntry.search_text, json.dumps(terms, ensure_ascii=False)
+                )
+                == 1,
+            ).limit(remaining)
+        )
+        selected.update({row[0].id: row for row in rows.all()})
+    return list(selected.values())
+
+
 async def collect_documents(
     db: Any,
     state: Any,
@@ -111,18 +141,7 @@ async def collect_documents(
         rows = list((await db.execute(ordered.limit(RECENT_ENTRIES))).all())
         terms = ordered_terms(query, 8, minimum=3)
         if terms:
-            rows.extend(
-                (
-                    await db.execute(
-                        ordered.where(
-                            func.tw_contains_any(
-                                WorldInfoEntry.search_text, json.dumps(terms, ensure_ascii=False)
-                            )
-                            == 1
-                        ).limit(LEXICAL_ENTRIES)
-                    )
-                ).all()
-            )
+            rows.extend(await _lexical_rows(db, ordered, terms))
         identifiers = _candidate_ids(candidates or [])
         if identifiers:
             rows.extend((await db.execute(base.where(WorldInfoEntry.id.in_(identifiers)))).all())
