@@ -22,6 +22,7 @@ from backend.core.llm_json_repair import (
     repair_json,
 )
 from backend.core.llm_logger import log_llm_interaction, log_structured_event
+from backend.core.llm_output_errors import StructuredOutputError
 from backend.core.llm_parallel import resolve as resolve_parallel
 from backend.core.llm_provider_config import (
     apply_provider_endpoint,
@@ -194,13 +195,14 @@ class GameMasterLLM:
                     backoff_delay = 0.75 * (attempt + 1)
                     retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
-                        "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
+                        "Transient LLM connection/timeout error provider=%s role=%s on attempt %d/%d (retry %d/%d) (%s). Retrying with fresh connection in %.2fs...",
+                        self.provider,
+                        self.model_category,
                         attempt + 1,
                         max_transient_retries,
                         attempt + 1,
                         max_transient_retries - 1,
                         type(exc).__name__,
-                        exc,
                         backoff_delay,
                     )
                     time.sleep(backoff_delay)
@@ -276,13 +278,14 @@ class GameMasterLLM:
                     backoff_delay = 0.75 * (attempt + 1)
                     retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
-                        "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
+                        "Transient LLM connection/timeout error provider=%s role=%s on attempt %d/%d (retry %d/%d) (%s). Retrying with fresh connection in %.2fs...",
+                        self.provider,
+                        self.model_category,
                         attempt + 1,
                         max_transient_retries,
                         attempt + 1,
                         max_transient_retries - 1,
                         type(exc).__name__,
-                        exc,
                         backoff_delay,
                     )
                     await asyncio.sleep(backoff_delay)
@@ -1207,12 +1210,12 @@ class GameMasterLLM:
         return content is None or not str(content).strip()
 
     @staticmethod
-    def _empty_content_error(finish_reason: Any) -> ValueError:
+    def _empty_content_error(finish_reason: Any) -> StructuredOutputError:
         if finish_reason == "length":
-            return ValueError(
+            return StructuredOutputError(
                 "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
             )
-        return ValueError("No content returned from LLM for complex task.")
+        return StructuredOutputError("No content returned from LLM for complex task.")
 
     @staticmethod
     def _content_preview(content: str) -> str:
@@ -1229,7 +1232,7 @@ class GameMasterLLM:
                     len(content),
                     finish_reason,
                 )
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+                raise StructuredOutputError(_TRUNCATED_RESPONSE_MESSAGE) from exc
             repaired = self._attempt_repair_truncated_json(content)
             data = None
             if repaired != content:
@@ -1247,7 +1250,7 @@ class GameMasterLLM:
                     len(content),
                     finish_reason,
                 )
-                raise ValueError("Failed to parse LLM response as JSON.") from exc
+                raise StructuredOutputError("Failed to parse LLM response as JSON.") from exc
             return data
 
     @staticmethod
@@ -1258,7 +1261,7 @@ class GameMasterLLM:
             )
             data = data[0]
         if not isinstance(data, dict):
-            raise ValueError(
+            raise StructuredOutputError(
                 f"LLM returned {type(data).__name__} but a mapping was expected for {response_model.__name__}."
             )
         return data
@@ -1283,10 +1286,10 @@ class GameMasterLLM:
             return response_model(**self._as_mapping(data, response_model))
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
-            raise ValueError("Failed to parse LLM response as JSON.") from exc
+                raise StructuredOutputError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+            raise StructuredOutputError("Failed to parse LLM response as JSON.") from exc
         except ValidationError as exc:
-            raise ValueError(
+            raise StructuredOutputError(
                 f"LLM returned JSON that does not match expected schema {response_model.__name__}. "
                 f"Validation errors: {exc.error_count()}."
             ) from exc

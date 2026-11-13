@@ -6,7 +6,9 @@ from collections.abc import Awaitable, Callable, Sequence
 from uuid import NAMESPACE_URL, uuid5
 
 from backend.core.content_language import prose_language_instruction
+from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
+from backend.core.llm_output_errors import StructuredOutputError
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.world_info.extraction_contracts import (
     ExtractionProposal,
@@ -63,8 +65,12 @@ _CORRECTION = (
 )
 
 
-class ExtractionError(ValueError):
+class ExtractionError(RuntimeError):
     """Content-free error safe for processing status and operational logs."""
+
+
+class ExtractionValidationError(ExtractionError, ValueError):
+    """A completed proposal failed schema, evidence or grouping validation."""
 
 
 def _identifier(sid: str, revision_id: str, batch: int, kind: str, local_id: str) -> str:
@@ -194,7 +200,11 @@ async def extract_batch(
         },
         ensure_ascii=False,
     )
-    router = GameMasterLLM.for_role(user, "generator")
+    try:
+        router = GameMasterLLM.for_role(user, "generator")
+        timeout = role_timeout(user, "generator")
+    except ValueError:
+        raise ExtractionError("Source processing model configuration is invalid.") from None
     router.max_tokens = min(router.max_tokens, MAX_OUTPUT_TOKENS)
     system = _SYSTEM + prose_language_instruction(
         language or getattr(user, "default_language", None) or "English",
@@ -203,26 +213,64 @@ async def extract_batch(
     for attempt in range(2):
         if before_request is not None:
             await before_request()
-        try:
-            response = await asyncio.wait_for(
-                router.aexecute_complex_task(
-                    system_prompt=system,
-                    user_prompt=payload + (_CORRECTION if attempt else ""),
-                    response_model=ExtractionProposal,
-                    model=router.model,
-                    adventure_id=None,
-                    game_id=sid,
-                    operation="world_info_extract",
-                    phase="source_batch",
-                    metadata={"batch": batch.index, "attempt": attempt + 1},
-                ),
-                timeout=role_timeout(user, "generator"),
-            )
-            proposal = ExtractionProposal.model_validate(response)
-            return _entries(proposal, sid, revision_id, source_hash, batch, existing)
-        except ValueError:
-            if attempt:
-                raise ExtractionError("Source batch failed extraction validation twice.") from None
-        except Exception:
-            raise ExtractionError("Source batch model request failed.") from None
+        response = await _request(router, system, payload, sid, batch.index, attempt, timeout)
+        entries = _validated_entries(response, sid, revision_id, source_hash, batch, existing)
+        if entries is not None:
+            return entries
+        if attempt:
+            raise ExtractionValidationError(
+                "Source batch failed extraction validation twice."
+            ) from None
     raise AssertionError("Unreachable extraction state")
+
+
+async def _request(
+    router: GameMasterLLM,
+    system: str,
+    payload: str,
+    sid: str,
+    batch: int,
+    attempt: int,
+    timeout: float,
+) -> object:
+    """Only completed invalid output qualifies for an explicit correction request."""
+    try:
+        return await asyncio.wait_for(
+            router.aexecute_complex_task(
+                system_prompt=system,
+                user_prompt=payload + (_CORRECTION if attempt else ""),
+                response_model=ExtractionProposal,
+                model=router.model,
+                adventure_id=None,
+                game_id=sid,
+                operation="world_info_extract",
+                phase="source_batch",
+                metadata={"batch": batch, "attempt": attempt + 1},
+            ),
+            timeout=timeout,
+        )
+    except StructuredOutputError:
+        return None
+    except InferenceUncertainError:
+        raise InferenceUncertainError("Source processing awaits inference recovery.") from None
+    except InferenceQueueError:
+        raise InferenceQueueError("Source processing awaits inference availability.") from None
+    except TimeoutError:
+        raise TimeoutError("Source batch model request timed out.") from None
+    except Exception:
+        raise ExtractionError("Source batch model request failed.") from None
+
+
+def _validated_entries(
+    response: object,
+    sid: str,
+    revision_id: str,
+    source_hash: str,
+    batch: SourceBatch,
+    existing: Sequence[EntryReference],
+) -> list[EntryDraft] | None:
+    try:
+        proposal = ExtractionProposal.model_validate(response)
+        return _entries(proposal, sid, revision_id, source_hash, batch, existing)
+    except ValueError:
+        return None

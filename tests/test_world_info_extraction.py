@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.core.llm_output_errors import StructuredOutputError
 from backend.engine.world_info.extraction import ExtractionError, extract_batch
 from backend.engine.world_info.extraction_contracts import ExtractionProposal
 from backend.engine.world_info.parsing import parse_source, validate_evidence
@@ -186,7 +187,10 @@ async def test_overlapping_quote_occurrences_are_ambiguous(setup_extraction):
 @pytest.mark.asyncio
 async def test_correction_can_recover_and_is_reserved_before_each_request(setup_extraction):
     router, _, _ = setup_extraction
-    router.aexecute_complex_task.side_effect = [ValueError("raw provider sentinel"), proposal()]
+    router.aexecute_complex_task.side_effect = [
+        StructuredOutputError("raw provider sentinel"),
+        proposal(),
+    ]
     reserve = AsyncMock()
     _, entries = await run(setup_extraction, before_request=reserve)
     assert entries and reserve.await_count == 2

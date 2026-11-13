@@ -8,6 +8,7 @@ from uuid import NAMESPACE_URL, uuid5
 import pytest
 from sqlalchemy import func, select, update
 
+from backend.core.llm_output_errors import StructuredOutputError
 from backend.engine.world_info import jobs, queue, worker
 from backend.engine.world_info.types import (
     EntryDraft,
@@ -245,7 +246,9 @@ async def test_actual_extractor_counts_correction_and_keeps_safe_call_context(
     router = SimpleNamespace(
         model="fictional-test-model",
         max_tokens=10000,
-        aexecute_complex_task=AsyncMock(side_effect=[ValueError("invalid schema"), proposal()]),
+        aexecute_complex_task=AsyncMock(
+            side_effect=[StructuredOutputError("invalid schema"), proposal()]
+        ),
     )
     monkeypatch.setattr(
         "backend.engine.world_info.extraction.GameMasterLLM.for_role", lambda *_: router
@@ -271,7 +274,7 @@ async def test_cancellation_before_correction_prevents_another_model_request(
         async with TestSessionLocal() as db:
             await jobs.cancel_processing(db, owner, "portrait-session", revision_id, 1)
             await db.commit()
-        raise ValueError("invalid schema")
+        raise StructuredOutputError("invalid schema")
 
     router = SimpleNamespace(
         model="fictional-test-model",

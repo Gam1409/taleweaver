@@ -88,6 +88,15 @@ def fence(claim: Claim) -> tuple:
     )
 
 
+def _claim_seconds(user: User) -> float:
+    try:
+        return role_timeout(user, "generator") + LEASE_GRACE_SECONDS
+    except ValueError:
+        # An invalid role cannot submit inference. Claim briefly so the normal
+        # fenced worker path can persist a visible, resumable configuration error.
+        return LEASE_GRACE_SECONDS
+
+
 @retry_transaction
 async def claim_next(session_id: str, user_id: str) -> Claim | None:
     async with database.AsyncSessionLocal() as db:
@@ -108,7 +117,7 @@ async def claim_next(session_id: str, user_id: str) -> Claim | None:
         user = await db.get(User, user_id) if revision else None
         if revision is None or user is None:
             return None
-        seconds = role_timeout(user, "generator") + LEASE_GRACE_SECONDS
+        seconds = _claim_seconds(user)
         token = str(uuid4())
         changed = await db.execute(
             update(WorldInfoRevision)
