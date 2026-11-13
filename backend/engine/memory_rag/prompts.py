@@ -36,7 +36,8 @@ _REFERENCE_PREFIX = (
     "Its scope never grants other characters knowledge or changes current state. "
     "Record status describes its source, not verified truth. "
     "Relation labels are authored assertions, not proof or access to targets. "
-    "Never infer content of targets absent from recall.\n"
+    "Never infer content of targets absent from recall. "
+    "Omitted recipients confer no knowledge; unresolved recipients remain dormant.\n"
 )
 _REFERENCE_STATUS = {
     "background_lore": "background reference; not a witnessed event",
@@ -50,7 +51,55 @@ _REFERENCE_STATUS = {
 _RELATION_PRIORITY = {"contradicts": 0, "supports": 1, "related": 2, "part_of": 3}
 
 
-def _reference_fields(document: MemoryDocument) -> dict[str, Any]:
+def _source_fields(document: MemoryDocument, label_limit: int) -> dict[str, Any]:
+    source = document.source_attribution or {}
+    fields: dict[str, Any] = {key: source[key] for key in ("id", "revision") if key in source}
+    for key in ("title", "filename"):
+        if key not in source:
+            continue
+        text = str(source[key])
+        if label_limit:
+            fields[key] = text[:label_limit]
+        if len(text) > label_limit:
+            fields[key + "_omitted"] = len(text) - label_limit
+    return fields
+
+
+def _recipient_preview(identifiers: tuple[str, ...], budget: int) -> tuple[list[str], int]:
+    preview = []
+    for identifier in identifiers[:4]:
+        size = len(json.dumps(identifier, ensure_ascii=False))
+        if size > budget:
+            break
+        preview.append(identifier)
+        budget -= size
+    return preview, budget
+
+
+def _recipient_fields(document: MemoryDocument, identifier_budget: int) -> dict[str, Any]:
+    unresolved = set(document.unresolved_known_by)
+    groups = {
+        "known_by": tuple(
+            identifier for identifier in document.known_by if identifier not in unresolved
+        ),
+        "unresolved_known_by": document.unresolved_known_by,
+    }
+    fields: dict[str, Any] = {}
+    for key, identifiers in groups.items():
+        if not identifiers:
+            continue
+        preview, identifier_budget = _recipient_preview(identifiers, identifier_budget)
+        if preview:
+            fields[key] = preview
+        fields[key + "_count"] = len(identifiers)
+        if len(identifiers) > len(preview):
+            fields[key + "_omitted"] = len(identifiers) - len(preview)
+    return fields
+
+
+def _reference_fields(
+    document: MemoryDocument, label_limit: int, identifier_budget: int, relation_limit: int
+) -> dict[str, Any]:
     if document.layer != WORLD_INFO_LAYER:
         return {}
     fields: dict[str, Any] = {
@@ -58,27 +107,55 @@ def _reference_fields(document: MemoryDocument) -> dict[str, Any]:
         "kind": document.reference_kind,
         "epistemic_status": _REFERENCE_STATUS.get(document.reference_kind or ""),
         "audience": document.audience,
-        "source": document.source_attribution,
+        "source": _source_fields(document, label_limit),
         "edited": document.reference_edited,
     }
     if document.reference_relations:
         relations = sorted(
             document.reference_relations, key=lambda item: _RELATION_PRIORITY[item[0]]
         )
-        fields["relations"] = [
-            {"kind": kind, "target_source_id": target} for kind, target in relations[:2]
-        ]
-        if len(relations) > 2:
-            fields["relations_omitted"] = len(relations) - 2
-    if document.known_by:
-        fields["known_by"] = document.known_by[:4]
-        if len(document.known_by) > 4:
-            fields["known_by_omitted"] = len(document.known_by) - 4
-    if document.unresolved_known_by:
-        fields["unresolved_known_by"] = document.unresolved_known_by[:4]
-        if len(document.unresolved_known_by) > 4:
-            fields["unresolved_known_by_omitted"] = len(document.unresolved_known_by) - 4
-    return fields
+        if relation_limit:
+            fields["relations"] = [
+                {"kind": kind, "target_source_id": target}
+                for kind, target in relations[:relation_limit]
+            ]
+        if len(relations) > relation_limit:
+            fields["relations_omitted"] = len(relations) - relation_limit
+    return fields | _recipient_fields(document, identifier_budget)
+
+
+def _record_fields(
+    document: MemoryDocument, fields: dict[str, Any], available: int, text: str
+) -> dict[str, Any]:
+    """Spend optional reference metadata after reserving a useful evidence excerpt."""
+    if document.layer != WORLD_INFO_LAYER:
+        return fields
+    for label_limit, identifier_budget, relation_limit in ((80, 256, 2), (24, 100, 1), (0, 0, 0)):
+        candidate = fields | _reference_fields(
+            document, label_limit, identifier_budget, relation_limit
+        )
+        overhead = len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))) + 1
+        # Validated reference text can double in size when quotes/newlines are escaped.
+        if overhead + 2 * min(160, len(text)) + 50 <= available:
+            return candidate
+    return candidate
+
+
+def _fit_record(fields: dict[str, Any], evidence: str, available: int, start: int) -> str:
+    """Fit JSON-escaped evidence without losing its exact contiguous source span."""
+    low, high = 0, len(evidence)
+    while low < high:
+        middle = (low + high + 1) // 2
+        fields.update(evidence=evidence[:middle], document_span=[start, start + middle])
+        record = json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n"
+        if len(record) <= available:
+            low = middle
+        else:
+            high = middle - 1
+    if low < min(40, len(evidence)):
+        return ""
+    fields.update(evidence=evidence[:low], document_span=[start, start + low])
+    return json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n" if low else ""
 
 
 def _record(
@@ -102,7 +179,7 @@ def _record(
         fields["source_message_ids"] = document.source_message_ids
     if core:
         fields.pop("layer")
-    fields.update(_reference_fields(document))
+    fields = _record_fields(document, fields, available, text)
     overhead = len(json.dumps(fields, ensure_ascii=False, separators=(",", ":"))) + 1
     # Reserve span metadata only when the selected document will be excerpted.
     span_overhead = 50 if len(text) > min(650, available - overhead) else 0
@@ -117,11 +194,7 @@ def _record(
     record = json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n"
     # JSON escaping consumes space too; never exceed the shared budget.
     if len(record) > available:
-        evidence = evidence[: max(0, room - (len(record) - available))]
-        fields["evidence"] = evidence
-        if "document_span" in fields:
-            fields["document_span"] = [offset + start, offset + start + len(evidence)]
-        record = json.dumps(fields, ensure_ascii=False, separators=(",", ":")) + "\n"
+        return _fit_record(fields, evidence, available, offset + start)
     return record if evidence and len(record) <= available else ""
 
 
