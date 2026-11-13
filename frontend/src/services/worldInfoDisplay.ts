@@ -3,6 +3,7 @@ import type { WorldInfoIndex, WorldInfoLimits, WorldInfoSource, WorldInfoSourceD
 export const worldInfoKinds = { background_lore: 'Background lore', world_fact: 'World fact', reported_claim: 'Reported claim', rumor: 'Rumor', news: 'News', character_knowledge: 'Recollection / character knowledge', authored_event: 'Authored event' }
 export const worldInfoAudiences = { narrator_only: 'Narrator only', common_knowledge: 'Common knowledge', restricted: 'Selected characters' }
 export const infoCount = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString()
+export const worldInfoTagLabel = (tag: string) => tag.startsWith('#') ? tag : `#${tag}`
 export function worldInfoSourceOptions(sources: WorldInfoSource[], detail: WorldInfoSourceDetails | null, active: boolean) {
   const options: { id: string; title: string }[] = []
   for (const source of sources) {

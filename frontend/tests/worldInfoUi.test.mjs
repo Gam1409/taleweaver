@@ -6,11 +6,13 @@ import { renderToString } from '@vue/server-renderer'
 import { compileScript, parse } from '@vue/compiler-sfc'
 import ts from 'typescript'
 import { displayModule, entry, state } from './worldInfoModule.mjs'
+import { tagFieldModule } from './worldInfoTagFieldModule.mjs'
 const { descriptor } = parse(readFileSync(new URL('../src/components/game/world-info/WorldInfoEntryEditor.vue', import.meta.url), 'utf8'))
 const source = compileScript(descriptor, { id: 'world-info-entry-test', inlineTemplate: true }).content
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   .replaceAll("from 'vue'", `from '${import.meta.resolve('vue')}'`).replaceAll('from "vue"', `from '${import.meta.resolve('vue')}'`)
   .replace(/import WorldInfoRelations from .*?;/, 'const WorldInfoRelations = { render: () => null };')
+  .replace("from './WorldInfoTagField.vue'", `from '${tagFieldModule}'`)
   .replace("from '@/services/worldInfoDisplay'", `from '${displayModule}'`)
 const Editor = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 const readerDescriptor = parse(readFileSync(new URL('../src/components/game/world-info/WorldInfoEntryView.vue', import.meta.url), 'utf8')).descriptor

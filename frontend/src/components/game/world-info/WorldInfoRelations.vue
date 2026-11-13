@@ -24,7 +24,7 @@ function update(index: number, patch: Partial<WorldInfoRelation>) {
         <label>Relationship note<input :value="relation.note" :maxlength="noteLimit" @input="update(index, { note: ($event.target as HTMLInputElement).value })" /></label>
         <button type="button" class="world-info-button" @click="emit('update:modelValue', modelValue.filter((_, i) => i !== index))">Remove relationship {{ index + 1 }}</button>
       </div>
-      <label>Find a session entry<input v-model="query" type="search" @change="emit('search', query)" /></label>
+      <label>Find a session entry<input v-model="query" type="search" @change="emit('search', query)" @keydown.enter.prevent="emit('search', query)" /></label>
       <label>Related entry<select aria-label="Related entry" v-model="target"><option value="">Choose an entry</option><option v-for="entry in candidates.filter(value => value.id !== entryId)" :key="entry.id" :value="entry.id">{{ entry.title }} · {{ entry.source_filename }}</option></select></label>
       <div class="flex flex-wrap gap-2"><button v-if="previous" type="button" class="world-info-button" @click="emit('search', query, 'previous')">Previous matching entries</button><button v-if="more" type="button" class="world-info-button" @click="emit('search', query, 'next')">Next matching entries</button><button type="button" class="world-info-button" :disabled="!target || modelValue.length >= limit" @click="add">Add relationship</button></div>
     </fieldset>

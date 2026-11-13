@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import WorldInfoRelations from './WorldInfoRelations.vue'
+import WorldInfoTagField from './WorldInfoTagField.vue'
 import { infoCount, worldInfoAudiences, worldInfoKinds } from '@/services/worldInfoDisplay'
 import type { WorldInfoController } from '@/composables/useWorldInfo'
 const props = withDefaults(defineProps<{ controller: WorldInfoController; formId?: string; actions?: boolean }>(), { actions: true })
@@ -9,10 +10,6 @@ const data = props.controller.data
 const unavailableRecipients = computed(() => data.draft?.known_by.filter(id =>
   data.draft?.unresolved_known_by?.includes(id) || !data.state?.characters.some(npc => npc.id === id)
 ) ?? [])
-const tags = computed({
-  get: () => data.draft?.tags.map(tag => `#${tag}`).join(' ') || '',
-  set: (value: string) => { if (data.draft) data.draft.tags = [...new Set(value.split(/[\s,#]+/u).filter(Boolean))] },
-})
 function knownBy(id: string, checked: boolean) {
   if (!data.draft) return
   data.draft.known_by = checked ? [...data.draft.known_by, id] : data.draft.known_by.filter(value => value !== id)
@@ -56,7 +53,7 @@ async function save() {
         </div>
         <p v-if="!data.state.characters.length" class="text-xs text-amber-200">No characters are available in this session. Choose another audience.</p>
       </fieldset>
-      <label>Tags / hashtags<input v-model.lazy="tags" :maxlength="data.state.limits.max_tags * (data.state.limits.max_tag_characters + 2)" placeholder="#history #coast" /><small>Up to {{ data.state.limits.max_tags }} tags, {{ data.state.limits.max_tag_characters }} characters each. Separate with spaces or commas.</small></label>
+      <WorldInfoTagField v-model="data.draft.tags" label="Tags / hashtags" :limit="data.state.limits.max_tags" :character-limit="data.state.limits.max_tag_characters" :disabled="!!data.busy" :suggestions="data.facets?.tags.items.map(tag => tag.name)" />
       <section aria-label="Entry facts" class="space-y-3">
         <h3 class="font-semibold">Facts proposed from this source</h3>
         <article v-for="(fact, index) in data.draft.facts" :key="fact.id" class="world-info-card space-y-3">

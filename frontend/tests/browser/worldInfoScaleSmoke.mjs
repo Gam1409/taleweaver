@@ -37,7 +37,12 @@ async function preview(action, value) {
   await section.evaluate(node => { node.open = true })
   await dialog().getByLabel('Bulk action', { exact: true }).selectOption(action)
   if (action === 'set_group') await dialog().getByLabel('Group name', { exact: true }).fill(value)
-  if (action === 'add_tags' || action === 'remove_tags') await dialog().getByLabel('Tags for matching entries', { exact: true }).fill(value)
+  if (action === 'add_tags' || action === 'remove_tags') {
+    const tags = dialog().getByRole('group', { name: 'Tags for matching entries', exact: true })
+    while (await tags.getByRole('textbox').count()) await tags.getByRole('button', { name: 'Remove tag 1', exact: true }).click()
+    await tags.getByRole('button', { name: 'Add tag', exact: true }).click()
+    await tags.getByRole('textbox').last().fill(value)
+  }
   await button('Preview matching entries').click()
   await dialog().getByRole('region', { name: 'Bulk action preview' }).waitFor()
 }
@@ -124,7 +129,7 @@ try {
   await preview('set_group', 'Imported atlas'); await apply()
   await dialog().getByText(/Confirmed changes saved/).waitFor(); await settled()
   await dialog().locator('.world-info-topics').getByRole('button', { name: /Imported atlas/ }).waitFor()
-  await preview('add_tags', '#reviewed'); await apply()
+  await preview('add_tags', 'reviewed'); await apply()
   await dialog().getByText(/Confirmed changes saved/).waitFor(); await settled()
   const bulkWrites = await page.evaluate(() => window.worldInfoFixture.writes.filter(value => value.path === '/entries/bulk/apply'))
   assert.equal(bulkWrites.length, 3)

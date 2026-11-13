@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { serviceModule, displayModule, source, job, entry, limits } from './worldInfoModule.mjs'
 const { worldInfoService, worldInfoEntryPayload } = await import(serviceModule)
-const { validateWorldInfoFile, infoCount, indexMessage, worldInfoSourceOptions } = await import(displayModule)
+const { validateWorldInfoFile, infoCount, indexMessage, worldInfoSourceOptions, worldInfoTagLabel } = await import(displayModule)
 
 test('World Info serialization targets only the captured session and retains CAS versions', async t => {
   const calls = []
@@ -32,6 +32,11 @@ test('entry writes include editable facts only, keeping original evidence server
   assert.equal('group_name' in worldInfoEntryPayload(entry), false)
   assert.equal(worldInfoEntryPayload({ ...entry, group_name: '' }).group_name, '')
   assert.equal(worldInfoEntryPayload({ ...entry, group_name: 'Archives' }).group_name, 'Archives')
+})
+test('tag labels and entry writes preserve exact saved hashtag and delimiter identities', () => {
+  const tags = ['#harbour', 'harbour', 'harbour history', 'trade,craft', 'line\r\nbreak\tlabel']
+  assert.deepEqual(tags.map(worldInfoTagLabel), ['#harbour', '#harbour', '#harbour history', '#trade,craft', '#line\r\nbreak\tlabel'])
+  assert.deepEqual(worldInfoEntryPayload({ ...entry, tags }).tags, tags)
 })
 test('multipart uploads and replacement versions do not set JSON content type', async t => {
   const calls = []

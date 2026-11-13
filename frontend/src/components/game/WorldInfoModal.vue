@@ -5,7 +5,7 @@ import { useWorldInfo } from '@/composables/useWorldInfo'
 import { useWorldInfoEntryNavigation } from '@/composables/useWorldInfoEntryNavigation'
 import WorldInfoEntryDialog from './world-info/WorldInfoEntryDialog.vue'
 import { useWorldInfoViewport } from '@/composables/useWorldInfoViewport'
-import { indexMessage, infoCount } from '@/services/worldInfoDisplay'
+import { indexMessage, infoCount, worldInfoTagLabel } from '@/services/worldInfoDisplay'
 import type { WorldInfoSource, WorldInfoTab } from '@/types/worldInfo'
 import WorldInfoFiles from './world-info/WorldInfoFiles.vue'
 import WorldInfoEntries from './world-info/WorldInfoEntries.vue'
@@ -53,7 +53,7 @@ function bulkConfirm() {
   const selection = controller.catalog.bulkSelection()
   if (!selection) return
   const publishing = selection.intent.action === 'publish'
-  const action = publishing ? 'Publish matching entries.' : selection.intent.action === 'set_group' ? `Set primary group to ${selection.intent.group_name || 'Ungrouped'}.` : `${selection.intent.action === 'add_tags' ? 'Add' : 'Remove'} tags ${selection.intent.tags?.map(tag => `#${tag}`).join(' ')}.`
+  const action = publishing ? 'Publish matching entries.' : selection.intent.action === 'set_group' ? `Set primary group to ${selection.intent.group_name || 'Ungrouped'}.` : `${selection.intent.action === 'add_tags' ? 'Add' : 'Remove'} tags ${selection.intent.tags?.map(worldInfoTagLabel).join(' ')}.`
   confirm(`Apply to ${infoCount(selection.preview.count)} matching entries?`, `${action} ${infoCount(selection.preview.facts_count)} facts in this session match the current filters. ${publishing ? 'Publishing this source version may replace its previously accepted entries.' : 'Every matching entry is included, across all pages.'} Changes are applied together after the saved selection is checked again.`, () => controller.catalog.applyBulk(selection))
 }
 function confirmAction() { const action = confirmation.value?.action; confirmation.value = null; void action?.() }

@@ -15,7 +15,7 @@ export function useWorldInfoEntryNavigation(dialog: Ref<HTMLDialogElement | unde
   }
   function restore() { for (const position of positions) { position.element.scrollTop = position.top; position.element.scrollLeft = position.left } }
   async function openEntry(id: string) {
-    if (entryOpen.value) return
+    if (entryOpen.value || controller.data.busy) return
     entryId = id
     remember()
     dialog.value?.close()

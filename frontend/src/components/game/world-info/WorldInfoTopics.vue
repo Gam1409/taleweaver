@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorldInfoController } from '@/composables/useWorldInfo'
-import { infoCount } from '@/services/worldInfoDisplay'
+import { infoCount, worldInfoTagLabel } from '@/services/worldInfoDisplay'
 const props = defineProps<{ controller: WorldInfoController }>()
 const data = props.controller.data
 </script>
@@ -11,7 +11,7 @@ const data = props.controller.data
     <button type="button" class="world-info-topic" :aria-pressed="data.groupFilter === null" :disabled="!!data.busy" @click="controller.catalog.selectGroup(null)"><span>All groups</span></button>
     <button v-for="group in data.facets?.groups.items" :key="group.name" type="button" class="world-info-topic" :aria-pressed="data.groupFilter === group.name" :disabled="!!data.busy" @click="controller.catalog.selectGroup(group.name)"><span class="break-words">{{ group.name || 'Ungrouped' }}</span><small>{{ infoCount(group.count) }}</small></button>
     <p v-if="data.facets" class="mt-2 text-xs text-slate-500">{{ data.facets.groups.items.length }} of {{ infoCount(data.facets.groups.total) }} groups. Find a topic to narrow the names.</p>
-    <label class="mt-5">Tag filter<select v-model="data.tagFilter" aria-label="Tag filter" :disabled="!!data.busy" @change="controller.catalog.search()"><option value="">All tags</option><option v-if="data.tagFilter && !data.facets?.tags.items.some(tag => tag.name === data.tagFilter)" :value="data.tagFilter">#{{ data.tagFilter }}</option><option v-for="tag in data.facets?.tags.items" :key="tag.name" :value="tag.name">#{{ tag.name }} ({{ infoCount(tag.count) }})</option></select></label>
+    <label class="mt-5">Tag filter<select v-model="data.tagFilter" aria-label="Tag filter" :disabled="!!data.busy" @change="controller.catalog.search()"><option value="">All tags</option><option v-if="data.tagFilter && !data.facets?.tags.items.some(tag => tag.name === data.tagFilter)" :value="data.tagFilter">{{ worldInfoTagLabel(data.tagFilter) }}</option><option v-for="tag in data.facets?.tags.items" :key="tag.name" :value="tag.name">{{ worldInfoTagLabel(tag.name) }} ({{ infoCount(tag.count) }})</option></select></label>
     <p v-if="data.facets" class="mt-2 text-xs text-slate-500">{{ data.facets.tags.items.length }} of {{ infoCount(data.facets.tags.total) }} tags. Topic search also finds tags outside this list.</p>
   </section>
 </template>

@@ -63,7 +63,12 @@ try {
   await dialog().getByLabel('Fact 1', { exact: true }).fill('The beacon was restored by the harbour keepers.')
   await dialog().getByText('Original proposal & source evidence', { exact: true }).first().click()
   await dialog().getByText('The harbour beacon was rebuilt after the winter storm.', { exact: true }).first().waitFor()
-  await dialog().getByLabel('Tags / hashtags').fill('#coast #history #lighthouse')
+  const tagFields = dialog().getByRole('group', { name: 'Tags / hashtags', exact: true })
+  while (await tagFields.getByRole('textbox').count()) await tagFields.getByRole('button', { name: 'Remove tag 1', exact: true }).click()
+  for (const tag of ['coast', 'history', 'lighthouse']) {
+    await tagFields.getByRole('button', { name: 'Add tag', exact: true }).click()
+    await tagFields.getByRole('textbox').last().fill(tag)
+  }
   await dialog().getByLabel('Available to', { exact: true }).selectOption('restricted')
   await dialog().getByRole('checkbox', { name: 'Mira · Archivist', exact: true }).check()
   await dialog().getByText('Relationships between entries (0 / 12)', { exact: true }).click()
