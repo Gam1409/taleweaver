@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from backend.core.engine_detailed_trace import sync_step
 from backend.core.npc_presentation import (
-    EMOTIONS,
+    MAX_EMOTION,
     MAX_NPCS,
     MAX_THOUGHT,
     Cue,
@@ -64,8 +64,14 @@ class PresentationTurn:
         if not self.preferences.enabled or not self.catalog:
             return ""
         keys = ["npc_id"]
+        color_contract = ""
         if self.preferences.emotion_palette:
-            keys.extend(("emotion", "intensity"))
+            keys.extend(("emotion", "intensity", "color_rgb"))
+            color_contract = (
+                f" Emotion is a concise feeling label, at most {MAX_EMOTION} characters. "
+                "Supply color_rgb as [red,green,blue], exactly three integers 0-255, "
+                "chosen for that feeling; intensity is an integer 0-100. Never output CSS."
+            )
         if self.preferences.character_thoughts:
             keys.append("thought")
         return (
@@ -75,10 +81,11 @@ class PresentationTurn:
             + CLOSE
             + ". Use JSON keys "
             + ", ".join(keys)
-            + " and schema-defined enum identifiers in English exactly as specified. "
+            + " in English exactly as specified. "
             "Natural-language values follow the story language. Use exact IDs from the supplied "
             "cast. Prose-only formatting applies to the visible story, not this private footer. "
             "Enabled portrait output is independent of NPC Personality mode or analysis availability."
+            + color_contract
         )
 
     @property
@@ -88,9 +95,11 @@ class PresentationTurn:
         fields = ["npc_id: exact NPC ID from the supplied cast"]
         if self.preferences.emotion_palette:
             fields.append(
-                "emotion: ONE dominant current overall feeling from "
-                + ", ".join(EMOTIONS)
-                + "; intensity: integer 0-100, supplied by you, not a relationship score"
+                f"emotion: ONE dominant current overall feeling as a concise label, at most "
+                f"{MAX_EMOTION} characters, in the story language; intensity: integer 0-100, "
+                "supplied by you, not a relationship score; color_rgb: [red,green,blue], exactly "
+                "three integers 0-255 chosen to express that feeling visually, never CSS or "
+                "a color name. Emotion labels are not limited to a predefined category list"
             )
         if self.preferences.character_thoughts:
             fields.append(
@@ -104,7 +113,7 @@ class PresentationTurn:
             + '{"npcs":[...]}'
             + CLOSE
             + ". The footer is private UI data, not spoken dialogue. "
-            "JSON keys and schema-defined enum identifiers remain in English, regardless of "
+            "JSON keys remain in English, regardless of "
             "the requested story language. Prose-only formatting and private-guidance rules "
             "apply to the visible story, not these explicitly enabled UI fields. "
             "Each entry contains " + "; ".join(fields) + ". "

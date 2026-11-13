@@ -72,6 +72,19 @@ def test_disabled_palette_does_not_restore_emotion_from_supported_metadata():
     assert turn.payload(BODY)["npcs"] == {"KEEPER": {"thought": THOUGHT}}
 
 
+def test_current_turn_reminder_carries_the_numeric_color_contract():
+    turn = PresentationTurn(PortraitPreferences(emotion_palette=True), {"KEEPER": "Archivist"})
+    assert "color_rgb" in turn.prompt and "color_rgb" in turn.reminder
+    assert "0-255" in turn.prompt and "0-255" in turn.reminder
+    assert "80 characters" in turn.prompt and "80 characters" in turn.reminder
+    assert (
+        "color_rgb"
+        not in PresentationTurn(
+            PortraitPreferences(character_thoughts=True), {"KEEPER": "Archivist"}
+        ).reminder
+    )
+
+
 @pytest.mark.parametrize(
     "invalid",
     [

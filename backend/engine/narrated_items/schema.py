@@ -79,7 +79,7 @@ class ItemAction(WithEvidenceSpan):
     ]
     attachment_slot: BodySlot | None = Field(
         default=None,
-        description="Explicit completed body placement of this owned item. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
+        description="Explicit confirmed current body placement of this owned item, from a completed action or observed_placement. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
     )
 
     @model_validator(mode="after")
@@ -252,6 +252,24 @@ explicit body.attachment_slots; null means unassessed, [] means unavailable. Nev
 derive anatomy from gender. Null/omitted attachment_slot preserves the same wearer's
 known placement; detaching uses carried/held. Transfer retains the same existing ID
 and clears the previous wearer's binding; receiving alone does not attach the item.
+[CURRENT ITEM PLACEMENT OBSERVATIONS]
+Also report a directly established CURRENT body placement of an EXISTING canonical
+object using basis=observed_placement, disposition=worn, its explicit attachment_slot
+and uncovered_regions=null. Literary narration can establish a current physical fact
+without describing a new placement action: an object may remain secured in a known
+body slot while the prose focuses on another activity. Identify the concrete object,
+the person currently bearing it and the supported region; never guess from metaphor.
+Use the supplied owners map for source_owner and the currently described person for
+destination_owner. This can repair stale carried custody or a missing binding; it
+does not invent a handover. Cross-owner repair is limited to plain ordinary objects,
+never garments or gameplay items. Same-owner placement keeps existing item eligibility.
+Use items coverage when the observed custody or binding differs from canonical state,
+including a missing binding. Unchanged means BOTH already agree; lack of an action verb
+does not mean unchanged. Do not use this basis for newly invented items, generic holding
+or pocket contents. Dialogue claims, requests, hypotheticals and history do not establish
+current placement. Read the whole response: a later completed removal or transfer wins.
+Preserve source order and continuous custody when separate steps are needed for one ID.
+[/CURRENT ITEM PLACEMENT OBSERVATIONS]
 For a clearly described ordinary object or garment with no canonical ID, new_item may
 register it. Describe only established intrinsic appearance and material; unknown details
 remain unspecified. Use the narration's language for item names and descriptions.

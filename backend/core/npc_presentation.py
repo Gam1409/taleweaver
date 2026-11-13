@@ -13,31 +13,6 @@ from pydantic import (
     ValidationError,
 )
 
-EMOTIONS = (
-    "calm",
-    "joy",
-    "affection",
-    "love",
-    "sexual_arousal",
-    "ecstasy",
-    "anger",
-    "fear",
-    "sadness",
-    "embarrassment",
-    "shame",
-    "surprise",
-    "interest",
-    "trust",
-    "hope",
-    "anxiety",
-    "disgust",
-    "confusion",
-    "determination",
-    "tiredness",
-    "boredom",
-    "unknown",
-)
-
 MAX_EMOTION = 80
 Emotion = Annotated[
     str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=MAX_EMOTION)
