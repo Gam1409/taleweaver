@@ -23,6 +23,7 @@ from backend.engine.physical_conditions.schema import (
     Source,
     Status,
 )
+from backend.engine.physical_conditions.source_order import require_order
 from backend.engine.physical_conditions.validation import rejection
 
 _TRANSITIONS: dict[str, tuple[set[str], Status]] = {
@@ -183,8 +184,13 @@ def apply(
     for index, raw in enumerate(entries):
         try:
             proposal = ConditionProposal.model_validate(raw)
-            proposal = validate_item_state(
-                proposal, ledger, item_targets or set(), narration, message_id, manual=manual
+            proposal = validate_item_state(proposal, ledger, item_targets or set(), manual=manual)
+            require_order(
+                ledger.conditions.get(proposal.condition_id or ""),
+                proposal,
+                narration,
+                message_id,
+                manual=manual,
             )
             reported_by = player_source(proposal, player_message)
             source = _source(proposal, narration, message_id, manual)

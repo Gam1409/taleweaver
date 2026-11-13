@@ -9,8 +9,6 @@ def validate(
     proposal: ConditionProposal,
     ledger: Ledger,
     item_targets: set[str],
-    narration: str,
-    message_id: str,
     *,
     manual: bool,
 ) -> ConditionProposal:
@@ -51,20 +49,6 @@ def validate(
                     "part": "",
                 }
             )
-    if not manual and current and current.latest.message_id == message_id:
-        previous = current.latest.evidence_span
-        span = proposal.evidence_span
-        before = (
-            previous.end
-            if previous
-            else narration.find(current.latest.quote) + len(current.latest.quote)
-        )
-        start = span.start if span else narration.find(proposal.evidence)
-        ambiguous = (not span and narration.count(proposal.evidence) != 1) or (
-            not previous and narration.count(current.latest.quote) != 1
-        )
-        if ambiguous or start < before:
-            raise ValueError("Item state changes require unambiguous narrative order.")
     return proposal
 
 
