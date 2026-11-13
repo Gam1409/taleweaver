@@ -11,9 +11,10 @@ from sqlalchemy.orm import defer
 from backend.core import database
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
-from backend.engine.memory_rag import scheduling
+from backend.engine.memory_rag import persistence, scheduling
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.persistence import retry_transaction
+from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
 from backend.engine.world_info import plan_cache, queue
 from backend.engine.world_info.capacity import CapacityError
 from backend.engine.world_info.extraction import MAX_REFERENCE_ENTRIES, extract_batch
@@ -186,15 +187,41 @@ async def _next_retry(session_id: str, user_id: str) -> float | None:
         )
 
 
+def _defer_busy(session_id: str, user_id: str, error: Exception) -> None:
+    if not is_sqlite_busy(error):
+        raise error
+    if not _stopping.is_set():
+        _timers[session_id] = asyncio.get_running_loop().call_later(
+            persistence.RETRY_DELAYS[-1], schedule, session_id, user_id
+        )
+    logger.debug("World Info queue deferred while SQLite is busy")
+
+
+async def _idle_step(session_id: str, user_id: str) -> bool | None:
+    """Return True after a claim, False for no claim, or None for deferred acquisition."""
+    async with scheduling.scheduler.background():
+        try:
+            claim = await queue.claim_next(session_id, user_id)
+        except Exception as error:
+            _defer_busy(session_id, user_id, error)
+            return None
+        if claim is not None:
+            await process_claim(claim)
+    return claim is not None
+
+
 async def _run(session_id: str, user_id: str) -> None:
     while not _stopping.is_set():
-        async with scheduling.scheduler.background():
-            claim = await queue.claim_next(session_id, user_id)
-            if claim is not None:
-                await process_claim(claim)
-        if claim is not None:
+        worked = await _idle_step(session_id, user_id)
+        if worked is None:
+            return
+        if worked:
             continue
-        when = await _next_retry(session_id, user_id)
+        try:
+            when = await _next_retry(session_id, user_id)
+        except Exception as error:
+            _defer_busy(session_id, user_id, error)
+            return
         if when is not None and not _stopping.is_set():
             _timers[session_id] = asyncio.get_running_loop().call_later(
                 max(1, when - time.time()), schedule, session_id, user_id
