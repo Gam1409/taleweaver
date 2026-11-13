@@ -22,7 +22,7 @@ async function fixture(t, initial = defaults) {
     stored = { ...stored, ...body }
     return Response.json(stored)
   }
-  const http = uri(`export const apiFetch = (...args) => globalThis[${JSON.stringify(key)}](...args)`)
+  const http = `${uri('export const apiFetch = (...args) => globalThis[new URL(import.meta.url).hash.slice(1)](...args)')}#${key}`
   const service = uri(compile(readFileSync(new URL('../src/services/systemDiagnosticsService.ts', import.meta.url), 'utf8')).replace("from '@/services/http'", `from '${http}'`))
   const { descriptor } = parse(readFileSync(new URL('../src/components/admin/SystemDiagnosticsSection.vue', import.meta.url), 'utf8'))
   const source = compile(compileScript(descriptor, { id: key, inlineTemplate: true }).content)
