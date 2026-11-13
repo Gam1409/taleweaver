@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.export_archives import pack_export_ads
 from backend.engine.memory_rag.lifecycle import export_summaries
+from backend.engine.world_info.portability import export_world_info
 from backend.models.avatar import Avatar
 from backend.models.base import Base
 from backend.models.chat import ChatMessage
@@ -119,6 +120,8 @@ class SessionExporter:
 
         # Localize any session URL paths inside the database JSON
         manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
+        # Source text and exact evidence must bypass generic asset URL rewriting.
+        manifest["world_info"] = await export_world_info(db, session_id, game_session.user_id)
 
         return manifest
 

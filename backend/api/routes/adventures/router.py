@@ -48,6 +48,7 @@ from backend.api.routes.adventures.templates import router as templates_router
 from backend.api.routes.adventures.turn_replay import router as replay_router
 from backend.api.routes.adventures.visual_presets import router as visual_presets_router
 from backend.api.routes.adventures.vn_settings import router as vn_settings_router
+from backend.api.routes.adventures.world_info import router as world_info_router
 
 router = APIRouter(prefix="/adventures")
 
@@ -72,6 +73,7 @@ router.include_router(portrait_settings_router)
 router.include_router(authoring_router)
 router.include_router(scene_debug_router)
 router.include_router(item_repair_router)
+router.include_router(world_info_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)

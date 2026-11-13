@@ -44,6 +44,13 @@ class MemoryDocument:
     significance: str | None = None
     category: str | None = None
     game_minute: int | None = None
+    reference_kind: str | None = None
+    audience: str | None = None
+    known_by: tuple[str, ...] = ()
+    unresolved_known_by: tuple[str, ...] = ()
+    source_attribution: dict[str, Any] | None = None
+    reference_edited: bool = False
+    reference_relations: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -291,6 +298,9 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
         documents.extend(_journal_documents(current, user_id, npc, messages))
     documents.extend(_world_documents(current, user_id))
     documents.extend(_session_documents(current, user_id))
+    from backend.engine.world_info.projection import collect_documents as world_info_documents
+
+    documents.extend(await world_info_documents(db, current, user_id))
     documents = [chunk for document in documents for chunk in _bounded_document(document)]
     summaries = await db.scalars(
         select(MemorySummary).where(

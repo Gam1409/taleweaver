@@ -7,8 +7,10 @@ import zipfile
 
 from fastapi.encoders import jsonable_encoder
 
+from backend.engine import archive_safety
 from backend.engine.adventure_export_assets import localize_archive_asset
 from backend.engine.export_asset_policy import read_archive_image
+from backend.engine.world_info.archive_parts import prepare_world_info
 from backend.utils.path_security import ensure_within_data_dir as _ensure_within_data_dir
 from backend.utils.path_security import safe_data_path as _safe_data_path
 
@@ -54,13 +56,43 @@ def pack_export_adz(manifest: dict, template_id: str) -> bytes:
     return zip_buffer.getvalue()
 
 
+class SessionArchiveLimitError(ValueError):
+    """An export cannot be read under the existing portable archive budgets."""
+
+
+def _session_manifest_bytes(manifest: dict) -> bytes:
+    payload = json.dumps(jsonable_encoder(manifest), indent=2).encode("utf-8")
+    if len(payload) > archive_safety.MAX_ENTRY_BYTES:
+        raise SessionArchiveLimitError("Session manifest exceeds the portable archive size budget.")
+    return payload
+
+
+def _validated_session_archive(payload: bytes) -> bytes:
+    if len(payload) > archive_safety.MAX_UPLOAD_BYTES:
+        raise SessionArchiveLimitError("Session archive exceeds the portable upload size budget.")
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            archive_safety.validate_archive(archive)
+    except ValueError:
+        raise SessionArchiveLimitError(
+            "Session assets exceed the portable archive safety budget."
+        ) from None
+    return payload
+
+
 def pack_export_ads(manifest: dict, session_id: str) -> bytes:
+    manifest, world_info_parts = prepare_world_info(manifest)
     # Create the ZIP
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         # 1. Add Manifest
-        encoded_manifest = jsonable_encoder(manifest)
-        zip_file.writestr("session.json", json.dumps(encoded_manifest, indent=2))
+        # Repetitive source text is valid; storing the manifest keeps it inside
+        # the same compression-ratio bound enforced on imported archives.
+        zip_file.writestr(
+            "session.json", _session_manifest_bytes(manifest), compress_type=zipfile.ZIP_STORED
+        )
+        for path, payload in world_info_parts:
+            zip_file.writestr(path, payload, compress_type=zipfile.ZIP_STORED)
 
         # 2. Add local assets directory
         session_dir = _safe_data_path("adventures", "sessions", session_id)
@@ -74,4 +106,4 @@ def pack_export_ads(manifest: dict, session_id: str) -> bytes:
                     zip_rel = f"assets/{rel_path.replace(os.sep, '/')}"
                     zip_file.write(safe_local_full, zip_rel)
 
-    return zip_buffer.getvalue()
+    return _validated_session_archive(zip_buffer.getvalue())

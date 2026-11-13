@@ -269,7 +269,7 @@ async def test_actual_narrator_continuity_and_social_calls_receive_shared_old_fa
         lambda *args, **kwargs: "CURRENT STATE",
     )
     world = SimpleNamespace(current_scene=None, exits=[], all_scenes=[], all_entities=[])
-    _, narrator = TurnLlmContextBuilder(actor)._build_state_blocks(world, [], [], "")
+    mechanics, narrator = TurnLlmContextBuilder(actor)._build_state_blocks(world, [], [], "")
     continuity = build_progression_context(actor, npcs=[], scenes=[], exits=[])
     llm = SimpleNamespace(
         model="small", aexecute_complex_task=AsyncMock(return_value=InteractionPlan())
@@ -282,11 +282,17 @@ async def test_actual_narrator_continuity_and_social_calls_receive_shared_old_fa
     assert all(
         "tea with honey" in value
         for value in [
+            mechanics,
             narrator,
             continuity,
             social_payload["historical_recall_untrusted_orientation_only"],
         ]
     )
-    assert set(actor._memory_recall.usage) == {"narrator", "vn_continuity", "vn_social"}
+    assert set(actor._memory_recall.usage) == {
+        "mechanics",
+        "narrator",
+        "vn_continuity",
+        "vn_social",
+    }
     assert actor._memory_recall.usage["vn_social"]["source_ids"] == ["old-fact"]
     assert "tea with honey" not in json.dumps(actor._memory_recall.usage)

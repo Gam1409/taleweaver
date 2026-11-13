@@ -36,6 +36,7 @@ from backend.engine.session_importer import SessionImporter
 from backend.engine.turn_replay.service import ReplayUnavailableError
 from backend.engine.turn_replay.undo import undo_latest
 from backend.engine.visual_novel.lifecycle import copy_vn_state
+from backend.engine.world_info.portability import copy_world_info
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -1033,6 +1034,7 @@ async def copy_session(
     from .session_copy_world import clone_saved_world
 
     await clone_saved_world(db, original_session, copied_session, asset_copy_cache, message_ids)
+    await copy_world_info(db, original_session.id, copied_session.id, current_user.id)
 
     await copy_session_summaries(
         db,

@@ -102,9 +102,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if removed_dirs:
             logger.info("Startup cleanup removed %s stale empty session directories.", removed_dirs)
 
+    from backend.engine.world_info.worker import recover_pending as recover_world_info
+
+    await recover_world_info()
+
     try:
         yield
     finally:
+        from backend.engine.world_info.worker import shutdown as stop_world_info
+
+        await stop_world_info()
         from backend.engine.living_world.live import shutdown as stop_living_world
 
         await stop_living_world()

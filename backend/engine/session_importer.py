@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 import zipfile
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import uuid6
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,8 @@ from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
 from backend.engine.session_archive_access import accessible_template
 from backend.engine.session_restore_sources import restore_sources
+from backend.engine.world_info.archive_parts import read_world_info
+from backend.engine.world_info.portability import import_world_info
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -69,6 +71,15 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     return data
 
 
+def _restore_manifest_paths(manifest: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """Keep canonical source text outside the asset URL conversion boundary."""
+    ordinary = dict(manifest)
+    world_info = ordinary.pop("world_info", None)
+    restored = cast(dict[str, Any], restore_session_paths(ordinary, session_id))
+    restored["world_info"] = world_info
+    return restored
+
+
 def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
     validate_archive(zip_file)
     new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
@@ -90,6 +101,7 @@ def _read_session_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any]:
     data: object = json.loads(zip_file.read("session.json").decode("utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Session manifest must be an object.")
+    data["world_info"] = read_world_info(zip_file, data.get("world_info"))
     return data
 
 
@@ -121,7 +133,7 @@ class SessionImporter:
                 new_avatar_id = str(uuid6.uuid7())
 
                 # Restore the relative assets paths to the new session id
-                manifest = restore_session_paths(manifest, new_session_id)
+                manifest = _restore_manifest_paths(manifest, new_session_id)
 
                 game_session_data = manifest.get("game_session")
                 session_state_data = manifest.get("session_state")
@@ -332,6 +344,7 @@ class SessionImporter:
             await import_summaries(
                 db, session_state, owner_id, manifest.get("memory_summaries") or [], message_ids
             )
+            await import_world_info(db, manifest.get("world_info"), new_session_id, owner_id)
             await db.commit()
             return new_session_id
 
