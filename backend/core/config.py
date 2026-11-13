@@ -174,7 +174,11 @@ class Settings(BaseSettings):
     def assemble_db_url(self) -> "Settings":
         if not self.DATABASE_URL:
             # Construct default path in data dir
-            self.DATABASE_URL = f"sqlite+aiosqlite:///./{self.DATA_DIR}/taleweaver.db"
+            database = Path(self.DATA_DIR) / "taleweaver.db"
+            path = database.as_posix()
+            if not database.is_absolute():
+                path = f"./{path}"
+            self.DATABASE_URL = f"sqlite+aiosqlite:///{path}"
         return self
 
     # ENCRYPTION_KEY MUST be set; we no longer silently fall back to an
