@@ -136,3 +136,10 @@ index; deleting a template preserves surviving sessions and their history.
 For diagnostics, `gm.turn.memory_recall` records retrieval method, selected source
 IDs/layers, elapsed time and context length without logging embedding credentials
 or raw memory text.
+
+## Session World Info
+
+[World Info](session-world-info.md) adds reviewed, source-attributed reference knowledge
+to an individual session. Uploads and edits remain separate from adventure templates,
+canonical gameplay state and NPC observations. Its guide describes processing, audience
+scopes, publication, replacement, copying and checkpoint behavior.

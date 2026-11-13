@@ -1,0 +1,162 @@
+# Session World Info
+
+Open **Session → World Info** to add reference knowledge to the current playthrough.
+Each session owns its sources, reviewed entries and recall index. An adventure
+template never receives these uploads. Two sessions from the same adventure can
+have different reference knowledge.
+
+## Import and review
+
+1. Choose a UTF-8 `.md` or `.json` file and select **Upload & analyse**.
+2. The server stores an immutable source revision, then explicitly starts analysis
+   with the configured Generator model. Processing uses the session content
+   language, falling back to the profile language; original quotations are retained.
+3. Follow saved batch progress, fact and entry counts, UTF-8 byte sizes and character
+   counts in **Files & processing**. Closing the window stops polling and leaves
+   authorized background work running. Cancel retains completed batches; resume
+   continues the same revision from its saved cursor.
+4. Open **Review** to inspect statements alongside their original proposal and exact
+   source evidence. Edit text, remove facts, adjust tags, connect related records,
+   and choose the audience. A record must retain at least one fact. A correction
+   keeps the original quotation and is marked as an author edit.
+5. Select entries and publish them, or preview a filtered collection and confirm its
+   publication in one action. Collection publication requires stopped or completed
+   processing; individually selected ready entries can be accepted while other
+   batches continue. Extraction alone never makes a draft available
+   to recall. **Active entries** shows accepted knowledge and allows later changes,
+   unpublication or deletion.
+
+JSON objects and arrays are parsed locally, then their scalar passages are analysed.
+Duplicate keys, invalid numbers, excessive nesting and oversized files are rejected.
+Markdown, HTML and links are displayed as plain source text. Importing a reference
+does not fetch its links, execute instructions or change canonical game objects.
+
+The model proposes facts, concise record groups, tags and related-record links.
+The host verifies schemas, size budgets, source quotations, exact spans and session
+ownership. These checks establish provenance and structure; the review step remains
+necessary to assess interpretation and factual quality.
+
+## Find and organize a large collection
+
+The catalog supports **10 to 10,000 records** with bounded server-side pages. Search
+matches all entered terms; combine a source revision, group, tag and record kind.
+Sort by title, source or update order. Group and tag navigation shows SQL aggregate
+counts rather than downloading all records into the browser.
+
+The extraction model proposes a primary named group and overlapping tags from the
+source context in its existing response. A group organizes records; it does not
+establish truth, visibility or priority. Rename/reassign groups and adjust tags for
+one entry or an entire filtered collection. Bulk actions first show the exact count
+and a bounded sample. Confirmation is bound to that selection's versions; concurrent
+changes require a fresh preview. An invalid edit rejects the complete action.
+
+Original source previews use bounded character pages. Large uploads show their
+known batch count before analysis starts, with an explicit start action when more
+than 16 batches are needed. A book can require many model requests and hours of
+processing. Record capacity is a ceiling, not a promise that every possible fact in
+a book will be extracted.
+
+## Replacement and retention
+
+Uploading a replacement creates another immutable revision. Accepted knowledge
+from the previous version remains active during processing and review. Publishing
+the new selection atomically archives the previous accepted version; unselected
+new drafts remain drafts. Returning to an older revision activates only the entries
+explicitly selected again. No source evidence is rebound to a different file.
+
+World Info belongs to session editing rather than the gameplay timeline. Undo,
+checkpoints and narration rewrites retain uploaded sources and author corrections.
+Deleting a source removes its entries and incoming reference links, without deleting
+chat messages or NPC memories. Concurrent edits use version checks; a stale update
+is rejected and the browser retains the unsaved draft.
+
+Session copies and `.ads` exports include World Info. Large collections use
+checksummed archive parts under the existing per-entry and total ZIP safety limits;
+small exports retain the inline representation. Copies/imports assign new
+source, revision, entry and fact identities and remap links. Processing does not
+restart automatically in the destination. Adventure `.adv` templates are unchanged.
+
+## Audience and recall
+
+- **Narrator only** is the extraction default.
+- **Common knowledge** can also be used by the existing shared narrative context.
+- **Selected characters** records an explicit scope for named session NPCs.
+
+Record kinds separately distinguish background lore, world facts, reported claims,
+recollections/character knowledge, rumors, news and authored events. The model receives
+explicit epistemic labels: a rumor is unverified, news is an attributed report rather
+than automatically current truth, and a recollection remains subjective. Imported
+event descriptions do not become committed gameplay events.
+
+Support and contradiction links remain author-provided labels. A bounded link
+summary can reach the model, but it does not expose linked record contents, prove
+a statement or grant another character knowledge.
+
+Retrieved records are optional candidates. The model is instructed to omit irrelevant,
+redundant or superseded material, preserve uncertainty and conflicts, and avoid treating
+retrieval order or upload dates as proof. Host ranking already filters candidates
+without lexical, semantic or entity relevance. These contracts and prompt-boundary
+tests do not establish perfect live-model interpretation.
+
+Known-by metadata constrains narrative references. Publishing does not create an
+NPC observation, memory episode or belief; NPC Personality keeps its existing
+evidence rules. Imported references never enter the mechanics request or grant
+items, access, actions or state transitions.
+
+A recipient removed by a timeline change can remain attached to a retained entry.
+Copy/export marks unavailable recipients as unresolved. They stay dormant in the
+destination even if an NPC later has the same identifier. An explicit reassignment
+to a current session character is required; ordinary text saves do not reactivate
+them. The narrator can still inspect the scoped reference.
+
+Publication saves canonical SQL knowledge independently of vector maintenance.
+If memory recall is enabled, a paused or unavailable embedding service retains
+lexical recall. If recall is globally disabled, saved entries are not retrieved;
+enable it in **Administration → Memory & recall**, or ask an administrator.
+**Rebuild this session's index** affects
+only the current session and explicitly resumes its index maintenance.
+
+## Processing and limits
+
+Processing runs in bounded background units behind foreground game requests.
+Each batch uses one structured extraction and at most one validation correction;
+provider/router retries retain their configured behavior. Request counters represent
+logical extraction requests, including corrections, rather than billing totals.
+Cancellation revokes the result's write capability; an already dispatched remote
+request may still finish at the provider.
+
+Limits are shared by upload, processing, editing and import:
+
+| Resource | Limit |
+| --- | --- |
+| Source file | 8 MiB UTF-8 and 4,194,304 characters |
+| Sources per session | 32 |
+| Immutable revisions per source | 8 |
+| Stored source bytes per session | 16 MiB |
+| Entries / facts per session | 10,000 / 80,000 |
+| Escaped canonical entry data per session | 32 MiB |
+| Searchable text per entry | 2,400 characters |
+| Facts per entry / fact text | 8 / 500 characters |
+| Primary group name | 80 characters |
+| Tags per entry / tag text | 12 / 48 characters |
+| Related entries / recipients | 12 / 32 |
+
+Quota failures preserve existing accepted records and completed work. Free space
+before explicitly retrying. World Info status and API errors use fixed host-authored
+messages. Existing optional model telemetry and provider retry logging retain their
+application-wide configuration; raw debugging can include model inputs and outputs.
+
+## Implementation boundaries
+
+`world_info_sources`, `world_info_revisions` and `world_info_entries` are canonical
+session-owned SQL data. A revision is also the durable processing job: its cursor,
+run token, control version and expiring lease fence every result write. SQLite save
+retries reuse the validated response and deterministic identities without repeating
+the model request. No database transaction spans model inference.
+
+`backend/engine/world_info/` owns parsing, extraction, persistence, review and
+projection. `/api/adventures/{game_id}/world-info` exposes owner-only operations.
+Publication joins the existing session mutation lease and invalidates the current
+session's derived recall epoch in the same transaction. Draft upload and processing
+controls remain usable during gameplay. Index retrieval reloads current SQL content
+and scope after embedding awaits, rejecting stale or deleted references.
