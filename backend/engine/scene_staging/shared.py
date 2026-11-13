@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from backend.core.reliability_metrics import record_staging
+from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.context import actor_records
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import PLAYER
@@ -120,6 +121,9 @@ def approve_items(manager: Any, accepted: list[dict]) -> None:
 
 
 def invalidate(state: Any, narration: str, reason: str) -> None:
+    reject(
+        "scene_staging", "unconfirmed", reason, narration=narration, scene_id=state.current_scene_id
+    )
     props.invalidate(state)
     state.entity_states = {
         **(state.entity_states or {}),
@@ -143,6 +147,7 @@ def apply_extraction(
     *,
     unconfirmed_sections: frozenset[str] = frozenset(),
 ) -> None:
+    proposals = extraction
     validated = validate(extraction)
     extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
     result = reconcile(
@@ -182,6 +187,27 @@ def apply_extraction(
         props.invalidate(manager.state)
     if unconfirmed_sections:
         result["unconfirmed_sections"] = sorted(unconfirmed_sections)
+    if any(
+        result.get(key)
+        for key in (
+            "rejected",
+            "explicit_rejected",
+            "rejected_prop_references",
+            "rejected_props",
+            "unconfirmed_sections",
+        )
+    ):
+        reject(
+            "scene_staging",
+            "rejected_or_unconfirmed",
+            "Staging candidates were rejected or sections were missing.",
+            proposals=proposals,
+            resolved=extraction,
+            accepted_items=accepted,
+            cast=cast,
+            audit=result,
+            narration=narration,
+        )
     manager.state.entity_states = {**(manager.state.entity_states or {}), KEY: result}
 
 
@@ -192,6 +218,13 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         return False
     states = manager.state.entity_states or {}
     if states.get(KEY) != pending.before or states.get(props.KEY) != pending.before_props:
+        reject(
+            "scene_staging",
+            "stale_state",
+            "Saved staging changed during extraction.",
+            proposals=pending.extraction,
+            scene_id=manager.state.current_scene_id,
+        )
         logger.warning(
             "Ignoring stale shared staging result for session %s", manager.state.session_id
         )

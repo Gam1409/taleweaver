@@ -9,6 +9,7 @@ from typing import Any
 from backend.core.engine_detailed_trace import step
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
 from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
@@ -54,6 +55,22 @@ def _status(
     handled: bool = False,
     **details: Any,
 ) -> None:
+    if (
+        status in {"failed", "needs_review"}
+        or details.get("rejected")
+        or details.get("state_updates_rejected")
+    ):
+        reject(
+            "items_and_shared_state",
+            str(details.get("reason_code") or status),
+            str(
+                details.get("reason")
+                or "State extraction contains rejected or unconfirmed changes."
+            ),
+            message_id=message_id,
+            narration=narration,
+            audit=details,
+        )
     previous = (manager.state.entity_states or {}).get(KEY) or {}
     processed = previous.get("processed_message_ids", [])
     if status == "complete" or handled:

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from backend.core.engine_detailed_trace import step
+from backend.core.state_rejection_trace import reject
 from backend.core.text_evidence import require_span
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.turn_state_applier import TurnStateApplier
@@ -53,6 +54,17 @@ def complete(
     manager: Any, proposals: list[Any], *, denied: set[str] | None = None, confirmed: bool = True
 ) -> None:
     pending = getattr(manager, "_pending_narrated_movement", None)
+    if isinstance(pending, Pending) and not confirmed and proposals:
+        reject(
+            "movement",
+            "narrated_movement.unconfirmed",
+            "Movement extraction did not confirm the proposed changes.",
+            proposals=proposals,
+            source_context=pending.before,
+            narration=pending.narration,
+            player_message=pending.player_message,
+            denied=denied,
+        )
     if isinstance(pending, Pending) and confirmed:
         pending.proposals = deepcopy(proposals)
         pending.denied = frozenset(denied or ())
@@ -67,7 +79,21 @@ async def finish(manager: Any, message: Any) -> list[str]:
     if not pending.proposals:
         return await _review(manager, message, [], [])
     rows = await session_objects(manager.db, manager.state.session_id)
-    if pending.narration != message.content or pending.before != await context(manager, rows):
+    current_context = await context(manager, rows) if pending.narration == message.content else None
+    if pending.narration != message.content or pending.before != current_context:
+        reject(
+            "movement",
+            "narrated_movement.stale_source",
+            "The movement source state changed during extraction.",
+            proposals=pending.proposals,
+            source_context=pending.before,
+            current_scene_id=manager.state.current_scene_id,
+            narration=pending.narration,
+            committed_narration=message.content,
+            player_message=pending.player_message,
+            denied=pending.denied,
+            current_context=current_context,
+        )
         return await _review(
             manager, message, [], ["The movement source state changed during extraction."]
         )
@@ -83,6 +109,14 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
     event, accepted, errors = GameEvent(), [], []
     entries = pending.proposals or []
     if len(entries) > MAX_MOVEMENTS:
+        reject(
+            "movement",
+            "narrated_movement.batch_limit",
+            "Too many movement proposals; no movement in this batch was applied.",
+            proposals=entries,
+            source_context=pending.before,
+            limit=MAX_MOVEMENTS,
+        )
         return event, [], ["Too many movement proposals; no movement in this batch was applied."]
     counts = Counter(
         row.get("actor_id")
@@ -97,11 +131,34 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
             _validate(proposal, pending)
             _append(event, proposal, pending.before["scene_id"])
             accepted.append(proposal.model_dump())
-        except ValidationError:
+        except ValidationError as exc:
+            reject(
+                "movement",
+                "narrated_movement.invalid_proposal",
+                str(exc),
+                proposal=raw,
+                index=index,
+                source_context=pending.before,
+                narration=pending.narration,
+                player_message=pending.player_message,
+                denied=pending.denied,
+                validation_errors=exc.errors(include_url=False),
+            )
             errors.append(
                 f"Movement proposal {index + 1}: Invalid movement fields or source reference."
             )
         except ValueError as exc:
+            reject(
+                "movement",
+                "narrated_movement.invalid_proposal",
+                str(exc),
+                proposal=raw,
+                index=index,
+                source_context=pending.before,
+                narration=pending.narration,
+                player_message=pending.player_message,
+                denied=pending.denied,
+            )
             errors.append(f"Movement proposal {index + 1}: {exc}")
     return event, accepted, errors
 

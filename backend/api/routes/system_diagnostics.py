@@ -21,6 +21,7 @@ class DiagnosticSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: StrictBool
     detailed_logging: StrictBool = False
+    state_failure_traces: StrictBool = False
 
 
 @router.get("")
@@ -53,7 +54,10 @@ async def update_diagnostics(
     try:
         return {
             **await asyncio.to_thread(
-                service.set_enabled, payload.enabled, detailed_logging=payload.detailed_logging
+                service.set_enabled,
+                payload.enabled,
+                detailed_logging=payload.detailed_logging,
+                state_failure_traces=payload.state_failure_traces,
             ),
             "reliability": snapshot(),
         }

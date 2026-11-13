@@ -6,8 +6,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
+from backend.core.state_rejection_trace import reject
 from backend.engine.chpm import (
     agenda,
     agent_context,
@@ -219,6 +221,20 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
 
 
 def _preparation_failed(manager: Any, turn: Turn, exc: Exception) -> None:
+    reject(
+        "emotion",
+        "chpm.preparation_failed",
+        failure_reason(exc, "CHPM preparation failed before an update could be confirmed."),
+        session_id=manager.game_id,
+        input_id=turn.input_id,
+        decisions=turn.decisions,
+        minds=turn.minds,
+        perceptions=turn.perceptions,
+        usage=turn.usage,
+        confirmed_state=turn.initial,
+        error_type=type(exc).__name__,
+        **failure_details(exc),
+    )
     turn.usage.status = "failed"
     turn.usage.detail = (
         str(exc) if isinstance(exc, (ChpmError, TransitionError)) else type(exc).__name__
@@ -299,8 +315,27 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         manager._chpm_turn = None
         return
     if not completed:
+        if turn.decisions or turn.minds:
+            reject(
+                "emotion",
+                "chpm.commit_unconfirmed",
+                "The narrator reply is incomplete.",
+                session_id=manager.game_id,
+                decisions=turn.decisions,
+                minds=turn.minds,
+                verdict=turn.verdict,
+                confirmed_state=turn.initial,
+            )
         return
     if turn.minds and reply.session_id != manager.game_id:
+        reject(
+            "emotion",
+            "chpm.reply_scope_mismatch",
+            "CHPM completed reply belongs to another session.",
+            decisions=turn.decisions,
+            expected_session_id=manager.game_id,
+            reply_session_id=reply.session_id,
+        )
         raise ChpmError("CHPM completed reply belongs to another session.")
     result = turn.initial.model_copy(deep=True)
     result.usage = turn.usage
@@ -331,6 +366,14 @@ def _finish_decision(turn: Turn, decision: Decision, reply: Any) -> None:
         decision.status = "shadow"
         return
     if turn.verdict is None or not turn.verdict.matches:
+        reject(
+            "emotion",
+            "chpm.commit_unconfirmed",
+            "CHPM cannot commit a reply without successful validation.",
+            decisions=turn.decisions,
+            verdict=turn.verdict,
+            confirmed_state=turn.initial,
+        )
         raise ChpmError("CHPM cannot commit a reply without successful validation.")
     decision.status = "delivered"
     decision.reply_id = reply.id

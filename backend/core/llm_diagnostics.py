@@ -130,7 +130,7 @@ def retry(router: Any, attempt: int, delay: float = 0, error: BaseException | No
     from backend.core.llm_detailed_trace import failure_payload
     from backend.core.system_diagnostics import service
 
-    if error is not None and service.detail_token() is not None:
+    if error is not None and service.capture_token() is not None:
         service.detail(
             "detail.llm.retry", attempt=attempt, delay_ms=delay * 1000, **failure_payload(error)
         )

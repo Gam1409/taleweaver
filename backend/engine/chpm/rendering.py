@@ -6,6 +6,7 @@ from typing import Any
 
 from backend.core.engine_detailed_trace import step
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
 from backend.engine.chpm import (
     agenda,
     continuation,
@@ -42,6 +43,15 @@ async def validate(
     if turn is None or not turn.decisions or turn.initial.settings.mode != "live":
         return text
     if not completed or not text.strip():
+        reject(
+            "emotion",
+            "chpm.narration_incomplete",
+            "CHPM received an incomplete narration.",
+            narration=text,
+            completed=completed,
+            decisions=turn.decisions,
+            host_resolution=resolution,
+        )
         if text.strip() and continuation.enabled(turn):
             continuation.activate(turn, "narration_incomplete")
             turn.simplified_text = text
@@ -52,6 +62,14 @@ async def validate(
             manager, turn, text, resolution, system_prompt, narration_messages, ordinary_context
         )
     except RecoverableChpmError as exc:
+        reject(
+            "emotion",
+            "chpm.review_unconfirmed",
+            str(exc),
+            narration=text,
+            decisions=turn.decisions,
+            host_resolution=resolution,
+        )
         if turn.simplified or not continuation.enabled(turn):
             raise
         continuation.activate(turn, "review_unavailable", error=exc)
@@ -140,6 +158,16 @@ async def _rejected(
     *,
     rejected_texts: tuple[str, ...],
 ) -> str:
+    reject(
+        "emotion",
+        "chpm.narration_discarded",
+        "; ".join(issues),
+        narrations=rejected_texts,
+        decisions=turn.decisions,
+        host_resolution=resolution,
+        issues=issues,
+        confirmed_state=turn.initial,
+    )
     if not continuation.enabled(turn):
         raise ChpmError("CHPM dialogue validation failed after one repair: " + "; ".join(issues))
     continuation.activate(turn, "review_rejected", issues)
@@ -180,6 +208,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         identifiers=identifiers,
     )
     if not raw.matches:
+        _reject_review(turn, text, resolution, raw.issues, raw, payload)
         return Verdict(
             matches=False,
             issues=raw.issues or ["The dialogue validator rejected this candidate."],
@@ -187,24 +216,52 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     try:
         verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
     except ChpmError as exc:
+        _reject_review(turn, text, resolution, [str(exc)], raw, payload)
         raise RecoverableChpmError(str(exc)) from exc
     ids = [entry.actor_id for entry in verdict.evidence]
     if set(ids) != set(turn.decisions) or len(ids) != len(set(ids)):
+        _reject_review(
+            turn, text, resolution, ["Invalid controlled NPC coverage."], verdict, payload
+        )
         raise RecoverableChpmError(
             "CHPM validator did not identify every controlled NPC exactly once."
         )
     for entry in verdict.evidence:
         silent = turn.decisions[entry.actor_id].selected.kind == "DEFER" and not entry.quote
         if not silent and (not entry.quote or entry.quote not in text):
+            _reject_review(turn, text, resolution, ["No exact speech evidence."], verdict, payload)
             raise RecoverableChpmError("CHPM validator supplied no exact speech evidence.")
     if verdict.matches and verdict.issues:
+        _reject_review(
+            turn, text, resolution, ["Contradictory validation verdict."], verdict, payload
+        )
         raise RecoverableChpmError("CHPM validator returned a contradictory verdict.")
-    _validate_hearing(turn, verdict, text)
+    try:
+        _validate_hearing(turn, verdict, text)
+    except ChpmError as exc:
+        _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
+        raise
     try:
         agenda.validate_evidence(turn.decisions, verdict)
     except ChpmError as exc:
+        _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
         raise RecoverableChpmError(str(exc)) from exc
     return verdict
+
+
+def _reject_review(
+    turn: Turn, text: str, resolution: str, issues: list[str], verdict: Any, context: dict
+) -> None:
+    reject(
+        "emotion",
+        "chpm.narration_rejected",
+        "; ".join(issues) or "The validator rejected this candidate.",
+        narration=text,
+        host_resolution=resolution,
+        verdict=verdict,
+        decisions=turn.decisions,
+        context=context,
+    )
 
 
 def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> dict:

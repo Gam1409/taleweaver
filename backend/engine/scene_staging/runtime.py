@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import evidence, reference_schema, response_sections
 from backend.engine.scene_staging import props
@@ -35,6 +36,15 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         "actors": {},
     }
     if not completed or not narration.strip() or len(narration) > MAX_NARRATION:
+        reject(
+            "scene_staging",
+            "source_unavailable",
+            "Completed narration was unavailable or exceeded the staging limit.",
+            completed=completed,
+            narration=narration,
+            narration_characters=len(narration),
+            limit=MAX_NARRATION,
+        )
         state.entity_states = {**(state.entity_states or {}), KEY: result}
         props.invalidate(state)
         return
@@ -72,6 +82,15 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         ensure_ascii=False,
     )
     if len(payload) > MAX_CONTEXT:
+        reject(
+            "scene_staging",
+            "context_limit",
+            "Staging context exceeds the text budget.",
+            context_characters=len(payload),
+            context=payload,
+            limit=MAX_CONTEXT,
+            cast=cast,
+        )
         result.update(reason="Staging context exceeds the text budget.", cast_size=len(cast))
         state.entity_states = {**(state.entity_states or {}), KEY: result}
         props.invalidate(state)
@@ -105,7 +124,14 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         applied = True
     except asyncio.CancelledError:
         raise
-    except Exception:
+    except Exception as error:
+        reject(
+            "scene_staging",
+            "extraction_failed",
+            "Scene staging extraction could not complete.",
+            error_type=type(error).__name__,
+            narration=narration,
+        )
         logger.exception("Scene staging reconciliation failed for session %s", manager.game_id)
     finally:
         if not applied:

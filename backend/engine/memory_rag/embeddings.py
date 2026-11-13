@@ -149,7 +149,7 @@ async def embed_with_settings(
 async def _embed(
     settings: MemoryRagSettings, texts: list[str], duration: float, api_key: str
 ) -> list[list[float]]:
-    token = service.detail_token()
+    token = service.capture_token()
     if token is not None:
         service.detail(
             "detail.embedding.prepared",

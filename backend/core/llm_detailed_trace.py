@@ -51,7 +51,7 @@ class StreamBatch:
         self.characters = 0
 
     def add(self, chunk: Any) -> None:
-        if service.detail_token() != self.token:
+        if service.capture_token() != self.token:
             self.chunks.clear()
             return
         payload = response_payload(chunk)
@@ -184,7 +184,7 @@ class TracedStream(AsyncIterator[Any]):
 def trace_async(method: Callable) -> Callable:
     @wraps(method)
     async def observed(router: Any, kwargs: dict) -> Any:
-        token = service.detail_token()
+        token = service.capture_token()
         if token is None:
             return await method(router, kwargs)
         request_payload(router, kwargs, token)
@@ -204,7 +204,7 @@ def trace_async(method: Callable) -> Callable:
 def trace_sync(method: Callable) -> Callable:
     @wraps(method)
     def observed(router: Any, kwargs: dict) -> Any:
-        token = service.detail_token()
+        token = service.capture_token()
         if token is None:
             return method(router, kwargs)
         request_payload(router, kwargs, token)

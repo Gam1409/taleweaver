@@ -8,12 +8,14 @@ import {
 const settings = ref<SystemDiagnosticsSettings | null>(null)
 const enabled = ref(false)
 const detailedLogging = ref(false)
+const stateFailureTraces = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const feedback = ref('')
 const failed = ref(false)
 const changed = computed(() => settings.value !== null && (
-  enabled.value !== settings.value.enabled || detailedLogging.value !== !!settings.value.detailed_logging
+  enabled.value !== settings.value.enabled || detailedLogging.value !== !!settings.value.detailed_logging ||
+  stateFailureTraces.value !== !!settings.value.state_failure_traces
 ))
 
 async function load(): Promise<void> {
@@ -24,6 +26,7 @@ async function load(): Promise<void> {
     settings.value = await systemDiagnosticsService.getSettings()
     enabled.value = settings.value.enabled
     detailedLogging.value = !!settings.value.detailed_logging
+    stateFailureTraces.value = !!settings.value.state_failure_traces
   } catch {
     failed.value = true
     feedback.value = 'Could not load system diagnostics. Retry to change this setting.'
@@ -38,9 +41,12 @@ async function save(): Promise<void> {
   feedback.value = ''
   failed.value = false
   try {
-    settings.value = await systemDiagnosticsService.saveSettings(enabled.value, enabled.value && detailedLogging.value)
+    settings.value = await systemDiagnosticsService.saveSettings(
+      enabled.value, enabled.value && detailedLogging.value, enabled.value && stateFailureTraces.value
+    )
     enabled.value = settings.value.enabled
     detailedLogging.value = !!settings.value.detailed_logging
+    stateFailureTraces.value = !!settings.value.state_failure_traces
     feedback.value = settings.value.write_error
       ? ''
       : enabled.value
@@ -103,21 +109,33 @@ onMounted(load)
           <p id="diagnostics-privacy" class="text-sm leading-relaxed text-slate-300">
             Standard diagnostics record metadata. Gameplay Debug is a separate setting.
           </p>
-          <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-500/20 bg-slate-950/40 p-5">
-            <input v-model="detailedLogging" :disabled="!enabled" type="checkbox" class="mt-1 accent-sky-500" aria-describedby="diagnostics-detail-description" />
-            <span>
-              <span class="block font-bold text-white">Detailed logging</span>
-              <span id="diagnostics-detail-description" class="mt-1 block text-sm text-slate-300">
-                Include complete LLM prompts and responses, JSON, engine steps, validation results and state changes.
-                Logs contain private story and NPC information. Connection credentials are excluded.
-                Requires System Debug. Save to apply.
+          <div class="grid gap-5 md:grid-cols-2">
+            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-500/20 bg-slate-950/40 p-5">
+              <input v-model="detailedLogging" :disabled="!enabled" type="checkbox" class="mt-1 accent-sky-500" aria-describedby="diagnostics-detail-description" />
+              <span>
+                <span class="block font-bold text-white">Detailed logging</span>
+                <span id="diagnostics-detail-description" class="mt-1 block text-sm text-slate-300">
+                  Include complete LLM prompts and responses, JSON, engine steps, validation results and state changes.
+                  Logs contain private story and NPC information. Connection credentials are excluded.
+                  Requires System Debug. Save to apply.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-500/20 bg-slate-950/40 p-5">
+              <input v-model="stateFailureTraces" :disabled="!enabled" type="checkbox" class="mt-1 accent-sky-500" aria-describedby="diagnostics-state-traces-description" />
+              <span>
+                <span class="block font-bold text-white">State rejection traces</span>
+                <span id="diagnostics-state-traces-description" class="mt-1 block text-sm text-slate-300">
+                  Write private state and LLM trace files only when a state check is rejected or remains unconfirmed.
+                  Independent of Detailed logging. Requires System Debug. Save to apply.
+                </span>
+              </span>
+            </label>
+          </div>
           <div class="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
             <p>Log folder: <code class="text-sky-300">{{ settings.log_directory }}/</code> in the project directory.</p>
             <p class="mt-1">Rotated files kept: {{ settings.retention_files }}.</p>
-            <p v-if="settings.max_file_bytes" class="mt-1">Maximum size per file: {{ Math.round(settings.max_file_bytes / 1024 / 1024) }} MB.</p>
+            <p v-if="settings.max_file_bytes" class="mt-1">Maximum size per main log file: {{ Math.round(settings.max_file_bytes / 1024 / 1024) }} MB.</p>
             <p class="mt-1">Currently {{ settings.enabled ? (settings.write_error ? 'enabled, but unable to record' : 'recording') : 'disabled' }}. Save to apply changes.</p>
           </div>
           <p v-if="settings.write_error" role="alert" class="text-sm text-red-300">

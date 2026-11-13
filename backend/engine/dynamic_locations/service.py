@@ -18,7 +18,9 @@ from uuid import uuid4
 
 from sqlalchemy import or_, select
 
+from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
 from backend.engine.dynamic_locations.companions import (
     bind_companions,
     finish_arrival,
@@ -268,9 +270,21 @@ async def resolve_proposal(
     raw = getattr(intent, "new_local_place", None)
     if not raw or not policy(manager.state).enabled or getattr(intent, "new_scene_id", None):
         return
+    context: dict[str, Any] = {}
+    decision: Any = None
     try:
         proposal = PlaceProposal.model_validate(raw)
         if proposal.action_quote not in user_msg:
+            reject(
+                "movement",
+                "dynamic_location.source_mismatch",
+                "The proposed arrival lacks exact evidence in the current player message.",
+                proposal=raw,
+                player_message=user_msg,
+                history=history,
+                source_context=manager.state.entity_states,
+                session_id=manager.game_id,
+            )
             return
         scenes, exits, context, recent = await _context(
             manager, proposal, user_msg, history, language
@@ -288,10 +302,45 @@ async def resolve_proposal(
             timeout=90,
         )
         decision = PlaceDecision.model_validate(decision)
-    except (ValueError, TimeoutError):
+    except (ValueError, TimeoutError) as exc:
+        reject(
+            "movement",
+            "dynamic_location.confirmation_timeout"
+            if isinstance(exc, TimeoutError)
+            else "dynamic_location.invalid_proposal",
+            failure_reason(
+                exc,
+                "Local place confirmation timed out."
+                if isinstance(exc, TimeoutError)
+                else "Local place proposal failed validation.",
+            ),
+            proposal=raw,
+            decision=decision,
+            context=context,
+            player_message=user_msg,
+            history=history,
+            source_context=manager.state.entity_states,
+            session_id=manager.game_id,
+            error_type=type(exc).__name__,
+            **failure_details(exc),
+        )
         logger.warning("Local place proposal rejected or timed out for session %s", manager.game_id)
         return
-    except Exception:
+    except Exception as exc:
+        reject(
+            "movement",
+            "dynamic_location.confirmation_failed",
+            failure_reason(exc, "Local place generation failed."),
+            proposal=raw,
+            decision=decision,
+            context=context,
+            player_message=user_msg,
+            history=history,
+            source_context=manager.state.entity_states,
+            session_id=manager.game_id,
+            error_type=type(exc).__name__,
+            **failure_details(exc),
+        )
         logger.exception("Local place generation failed for session %s", manager.game_id)
         return
     async with manager.db.begin_nested():

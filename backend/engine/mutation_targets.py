@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.state_rejection_trace import reject
 from backend.models.world_entity import WorldEntity, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,16 @@ def _filter_targets(
         raw = getattr(target, attribute) if attribute else target
         canonical = index.resolve(raw)
         if canonical is None:
+            reject(
+                "mutation_targets",
+                "unknown_target",
+                "The proposed target does not resolve to a unique canonical entity or required inventory item.",
+                proposal=target,
+                target_id=raw,
+                field=field,
+                allowed_target_ids=index.ids,
+                known_target_names=index.names,
+            )
             rejected.append(f"{field}: {raw}")
             continue
         if attribute:
@@ -157,6 +168,19 @@ async def validate_mutation_targets(manager: GameTurnManager, event: GameEvent) 
     if not rejected:
         return []
 
+    if any((event.new_world_memories, event.remember_notes, event.forget_notes, event.clear_notes)):
+        reject(
+            "mutation_targets",
+            "unsupported_target_side_effects",
+            "Proposed memories and note changes cannot be attributed reliably after a mutation target was rejected.",
+            proposal={
+                "new_world_memories": event.new_world_memories,
+                "remember_notes": event.remember_notes,
+                "forget_notes": event.forget_notes,
+                "clear_notes": event.clear_notes,
+            },
+            rejected_targets=rejected,
+        )
     event.new_world_memories = None
     event.remember_notes = None
     event.forget_notes = None

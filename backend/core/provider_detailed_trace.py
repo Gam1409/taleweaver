@@ -24,7 +24,7 @@ FIELDS = {
 
 
 def start(kind: str, context: dict, arguments: dict) -> int | None:
-    token = service.detail_token()
+    token = service.capture_token()
     if token is not None:
         service.detail(
             f"detail.{kind}.request",

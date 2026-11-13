@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.gameplay.guardrails.base import GuardrailBase
 from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 from backend.engine.rule_engine import GameEvent
@@ -128,11 +129,44 @@ class ProgressGuardMixin(GuardrailBase):
                 continue
             unmet = self._hard_rules_unmet(owner, event)
             if unmet:
+                reject(
+                    "progression",
+                    "unmet_hard_rule",
+                    unmet,
+                    proposal=key,
+                    target_id=key,
+                    reward_type=label,
+                    rule_owner=owner,
+                    event=event,
+                    current_scene_id=self.state.current_scene_id,
+                    current_inventory=self.avatar.inventory,
+                    current_equipment=self.avatar.equipment,
+                )
                 logger.info(
                     "[%s Guardrail] Blocked '%s' due to unmet hard rule: %s", label, key, unmet
                 )
                 continue
             if self._depends_on_unreachable([owner.get(f) for f in text_fields], entities, acc):
+                reject(
+                    "progression",
+                    "inaccessible_dependency",
+                    "The proposed quest completion or award depends on an entity the protagonist cannot currently reach.",
+                    proposal=key,
+                    target_id=key,
+                    reward_type=label,
+                    rule_owner=owner,
+                    event=event,
+                    current_scene_id=self.state.current_scene_id,
+                    accessible_entity_ids=acc.ids,
+                    entities=[
+                        {
+                            "id": entity.id,
+                            "name": entity.name,
+                            "current_scene_id": entity.current_scene_id,
+                        }
+                        for entity in entities
+                    ],
+                )
                 logger.info(
                     "[%s Guardrail] Blocked '%s' due to inaccessible entity dependency.", label, key
                 )
@@ -190,6 +224,15 @@ class ProgressGuardMixin(GuardrailBase):
                 event.status_note = f"Defeat condition met: {condition}"
             return
         if event.game_over and (getattr(self.avatar, "hp", 100) or 100) > 0:
+            reject(
+                "progression",
+                "loss_guard_unmet",
+                reason or "The loss guard expression was not satisfied.",
+                proposal={"game_over": event.game_over, "status_note": event.status_note},
+                guard_expression=guard,
+                current_hp=getattr(self.avatar, "hp", 100),
+                current_scene_id=self.state.current_scene_id,
+            )
             logger.info(
                 "[Loss Guardrail] Blocked game_over: guard expression '%s' not satisfied (%s)",
                 guard,
@@ -215,6 +258,15 @@ class ProgressGuardMixin(GuardrailBase):
                 event.status_note = f"Victory condition met: {condition}"
             return
         if event.game_completed:
+            reject(
+                "progression",
+                "win_guard_unmet",
+                reason or "The completion guard expression was not satisfied.",
+                proposal={"game_completed": event.game_completed, "status_note": event.status_note},
+                guard_expression=guard,
+                current_hp=getattr(self.avatar, "hp", 100),
+                current_scene_id=self.state.current_scene_id,
+            )
             logger.info(
                 "[Win Guardrail] Blocked game_completed: guard expression '%s' not satisfied (%s)",
                 guard,

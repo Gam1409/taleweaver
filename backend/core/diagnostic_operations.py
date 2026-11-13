@@ -9,6 +9,7 @@ from functools import wraps
 from typing import Any, ParamSpec, TypeVar
 from uuid import uuid4
 
+from backend.core.state_rejection_trace import scope
 from backend.core.system_diagnostics import DiagnosticService
 
 P = ParamSpec("P")
@@ -38,7 +39,13 @@ def diagnostic_job(
             session_id = args[0] if args else kwargs.get("session_id")
             fields = {"operation": operation, "call_id": uuid4().hex}
             started = time.perf_counter()
-            with service.context(session_id=session_id):
+            with (
+                service.context(session_id=session_id),
+                scope(
+                    session_id=session_id if isinstance(session_id, str) else None,
+                    operation=operation,
+                ),
+            ):
                 service.emit("job.started", **fields)
                 try:
                     result = await function(*args, **kwargs)

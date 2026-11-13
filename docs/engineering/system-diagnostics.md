@@ -58,4 +58,52 @@ and recognizable credential assignments in operational engine messages are redac
 
 The game displays a small session UUID while System Debug is enabled. The flag is refreshed with the session snapshot; an active turn may delay that refresh. Technical identifiers are not appended to ordinary player error messages.
 
+## State rejection traces
+
+Enable **System Debug**, select **State rejection traces** beside **Detailed
+logging**, and save. The switches are independent: rejection traces work with
+detailed logging off. The `state_failure_traces` setting is a strict boolean,
+defaults to false for existing configurations and clients, and persists across
+restarts. Disabling System Debug disables both content-capture switches.
+
+An instrumented turn or background operation buffers the existing diagnostic
+events. A dedicated `log/state-rejection-<generated UUID>.jsonl` file is published
+only when a canonical validator rejects a proposed change, a required response
+section is unconfirmed, or the operation fails or is interrupted. Confirmed empty
+updates, successful no-ops, disabled features and repeated idempotent updates do
+not produce rejection files merely because state stayed unchanged. This observer
+does not classify refusal wording, bypass validation, or send additional model
+requests.
+
+Packets include the application/Python versions, session and turn identifiers
+where available, full captured model requests and schemas, raw responses and
+retries, engine boundaries and before/after state, explicit domain reason codes,
+and available database/query/transaction metadata. Coverage includes item
+placement and properties, physical conditions, scene facts and staging, movement,
+emotion and cognition, progression/rules, scripts, clothing, Debug recovery and
+failed NPC-journal/RAG maintenance. Deferred background work remains a normal
+queue outcome rather than a rejected state change.
+Partial acceptance retains both the accepted state and rejected proposals.
+Foreground Debug commands stay within their caller's turn packet; explicitly
+scheduled background jobs have independent packets. A trace end marker means
+observation ended, not that a transaction committed. Database COMMIT events record
+commit attempts; use the operation result and persisted state to confirm success.
+
+Large evidence uses the same multipart representation as detailed logging. Each
+operation has a 50 MiB evidence budget. Whole events exceeding the remaining
+budget are omitted with explicit byte counts and hashes; compact rejection
+summaries have a separate bounded allowance so the cause remains visible. The
+footer reports omitted evidence and summaries. Retention keeps at most five
+packets and 250 MiB in total; older packets are removed as new ones are written.
+
+Files use generated names, private temporary writes, atomic publication and 0600
+permissions; generated paths are validated with `ensure_within_base_dir`.
+Credentials and bound SQL parameters are excluded using the existing diagnostic
+filters. Full local story content is intentionally retained in rejection packets;
+review it before sharing. The directory remains ignored by Git and has no public
+download endpoint. With detailed logging off, buffered full content is not copied
+to `system-debug.jsonl`. Turning capture off immediately invalidates active
+buffers, and re-enabling it does not revive them. Storage failures are reported in
+the diagnostics panel without changing gameplay results.
+
 If storage becomes unavailable, gameplay continues and the diagnostics settings report a storage error. Check disk space and directory permissions. This logging mechanism is intended for the application's single backend process; sharing one rotating log directory across multiple backend processes is unsupported.

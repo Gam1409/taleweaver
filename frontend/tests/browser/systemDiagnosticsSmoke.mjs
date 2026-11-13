@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict'
+import process from 'node:process'
+import { mkdir } from 'node:fs/promises'
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const artifacts = process.env.DIAGNOSTICS_ARTIFACT_DIR || 'reports/system-diagnostics'
+await mkdir(artifacts, { recursive: true })
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] })
+const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, reducedMotion: 'reduce' })
+page.setDefaultTimeout(10000)
+const errors = []
+page.on('pageerror', error => errors.push(error.message))
+const master = () => page.getByRole('switch')
+const detail = () => page.getByRole('checkbox', { name: /^Detailed logging/ })
+const traces = () => page.getByRole('checkbox', { name: /^State rejection traces/ })
+const save = () => page.locator('button[type="submit"]')
+async function saved() { await page.waitForFunction(() => document.querySelector('button[type="submit"]')?.disabled && !document.querySelector('button[type="submit"]')?.textContent.includes('Saving')) }
+const writes = () => page.evaluate(() => window.diagnosticsFixture.writes)
+async function geometry(stacked) {
+  const detailed = await detail().locator('xpath=ancestor::label').boundingBox(), state = await traces().locator('xpath=ancestor::label').boundingBox()
+  assert.equal(await detail().locator('xpath=ancestor::label').evaluate(label => label.parentElement === [...document.querySelectorAll('label')].find(node => node.textContent.includes('State rejection traces'))?.parentElement), true)
+  if (stacked) { assert.ok(state.y >= detailed.y + detailed.height); assert.ok(Math.abs(state.x - detailed.x) < 2) }
+  else { assert.ok(state.x >= detailed.x + detailed.width); assert.ok(Math.abs(state.y - detailed.y) < 2) }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+}
+try {
+  await page.goto((process.env.FRONTEND_URL || 'http://127.0.0.1:5218') + '/tests/browser/systemDiagnostics.html')
+  await page.getByRole('heading', { name: 'System Diagnostics', exact: true }).waitFor()
+  await detail().waitFor()
+  assert.equal(await traces().count(), 1)
+  assert.equal(await traces().isChecked(), false); assert.equal(await detail().isChecked(), false)
+  assert.equal(await save().isDisabled(), true); assert.deepEqual(await writes(), [])
+  await geometry(false)
+  await traces().check()
+  assert.equal(await detail().isChecked(), false); assert.equal(await save().isEnabled(), true)
+  assert.deepEqual(await writes(), [])
+  await save().click(); await saved()
+  assert.deepEqual((await writes()).at(-1), { enabled: true, detailed_logging: false, state_failure_traces: true })
+  await page.evaluate(() => window.diagnosticsFixture.remount()); await traces().waitFor()
+  assert.equal(await traces().isChecked(), true); assert.equal(await detail().isChecked(), false)
+  assert.equal(await save().isDisabled(), true)
+  await page.screenshot({ path: `${artifacts}/frontend-desktop.png`, fullPage: true })
+  await detail().check(); await traces().uncheck()
+  await save().click(); await saved()
+  assert.deepEqual((await writes()).at(-1), { enabled: true, detailed_logging: true, state_failure_traces: false })
+  await master().locator('xpath=ancestor::label').click()
+  assert.equal(await master().isChecked(), false)
+  assert.equal(await detail().isDisabled(), true); assert.equal(await traces().isDisabled(), true)
+  await save().click(); await saved()
+  assert.deepEqual((await writes()).at(-1), { enabled: false, detailed_logging: false, state_failure_traces: false })
+  assert.equal(await detail().isChecked(), false); assert.equal(await traces().isChecked(), false)
+  await master().locator('xpath=ancestor::label').click()
+  assert.equal(await master().isChecked(), true)
+  await traces().check()
+  await save().click(); await saved()
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await geometry(true)
+    await page.screenshot({ path: `${artifacts}/frontend-mobile-${width}.png`, fullPage: true })
+  }
+  await traces().uncheck()
+  await page.evaluate(() => window.diagnosticsFixture.setSaveFailure(true))
+  await save().click()
+  await page.getByRole('alert').filter({ hasText: 'The setting could not be saved' }).waitFor()
+  assert.equal(await traces().isChecked(), false); assert.equal(await save().isEnabled(), true)
+  await page.evaluate(() => { window.diagnosticsFixture.setSaveFailure(false); window.diagnosticsFixture.holdSave() })
+  await save().click()
+  await page.getByRole('button', { name: 'Saving…', exact: true }).waitFor()
+  assert.equal(await master().isDisabled(), true); assert.equal(await detail().isDisabled(), true); assert.equal(await traces().isDisabled(), true)
+  await page.evaluate(() => window.diagnosticsFixture.releaseSave()); await saved()
+  await page.evaluate(() => { window.diagnosticsFixture.setLoadFailure(true); return window.diagnosticsFixture.remount() })
+  await page.getByRole('button', { name: 'Retry', exact: true }).waitFor()
+  assert.equal(await traces().count(), 0)
+  await page.evaluate(() => window.diagnosticsFixture.setLoadFailure(false))
+  await page.getByRole('button', { name: 'Retry', exact: true }).click(); await traces().waitFor()
+  assert.equal(await traces().isChecked(), false); assert.equal(await detail().isChecked(), false)
+  assert.equal(await save().isDisabled(), true)
+  assert.deepEqual(errors, [])
+  console.log('PASS System Diagnostics: sibling desktop cards, mobile stack320/390, legacy default, independent flags, explicit Save, reload, master gating, save/load failures and saving lock.')
+} catch (error) { await page.screenshot({ path: `${artifacts}/frontend-failure.png`, fullPage: true }); throw error }
+finally { await browser.close() }

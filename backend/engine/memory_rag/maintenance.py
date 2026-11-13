@@ -6,8 +6,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from backend.core.diagnostic_failures import failure_details
 from backend.core.diagnostic_fields import safe_error
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+from backend.core.state_rejection_trace import reject
 from backend.core.system_diagnostics import service
 from backend.engine.memory_rag.cancellation import find_cancellation
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError
@@ -15,6 +17,18 @@ from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
 
 KINDS = ("index", "chronicle", "summary", "observer")
 Job = Callable[[], Awaitable[bool]]
+
+
+def trace_failure(kind: str, exc: Exception, **details: object) -> None:
+    """Observe canonical maintenance failures after deferral/cancellation checks."""
+    reject(
+        "memory_rag",
+        "canonical_maintenance_failed",
+        "The canonical memory maintenance update failed to complete.",
+        proposal={"maintenance_step": kind},
+        **failure_details(exc),
+        **details,
+    )
 
 
 @dataclass
@@ -52,6 +66,7 @@ class Cycle:
 
     def _failed(self, kind: str, exc: Exception) -> None:
         service.detail("detail.engine.failed", step=f"memory.{kind}", error=safe_error(exc))
+        trace_failure(kind, exc)
         attempt = self.failures.get(kind, (0, 0))[0] + 1
         delay = min(60 * 2 ** min(attempt - 1, 4), 900)
         self.failures[kind] = (attempt, time.monotonic() + delay)

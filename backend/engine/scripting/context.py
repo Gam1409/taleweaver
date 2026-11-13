@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Generic, Optional, TypeVar
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.scripting.switch_proxy import SwitchesProxy, SwitchProxy
 
 logger = logging.getLogger(__name__)
@@ -936,6 +937,13 @@ class StoryProxy:
 
     def reject_action(self, reason: str) -> None:
         self._changeset.rejected_actions.append(str(reason).strip())
+        reject(
+            "scripting",
+            "scripted_rejection",
+            self._changeset.rejected_actions[-1] or "The script rejected this action.",
+            proposal={"rejected_action": self._changeset.rejected_actions[-1]},
+            pending_changes=self._changeset,
+        )
 
 
 class LogProxy:

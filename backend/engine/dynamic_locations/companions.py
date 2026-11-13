@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.dynamic_locations.schema import registry, save_registry
 from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import EntityMovement
@@ -79,6 +80,20 @@ def record_arrival(
         }
         for row in decision.companions
     ]
+    for proposal, check in zip(decision.companions, checks, strict=True):
+        if check["status"] == "rejected":
+            reject(
+                "movement",
+                "dynamic_location.companion_rejected",
+                "The proposed companion is unavailable or lacks exact player evidence.",
+                proposal=proposal,
+                result=check,
+                destination=destination,
+                context=context,
+                player_message=user_msg,
+                source_context=manager.state.entity_states,
+                message_id=getattr(manager, "_vn_player_message_id", ""),
+            )
     save_registry(
         manager.state,
         {

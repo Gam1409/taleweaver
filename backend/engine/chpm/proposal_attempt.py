@@ -5,6 +5,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.chpm import choice_grounds, inference, parallel_budget, proposal_repair
 from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import ProposalRejectedError
@@ -40,18 +41,49 @@ async def request(
                 identifiers=identifiers,
             )
         except inference.InvalidResponseError as exc:
+            reject(
+                "emotion",
+                "chpm.proposal_invalid",
+                str(exc),
+                proposal=exc.candidate,
+                context=payload,
+                phase=phase,
+                identifiers=identifiers,
+                schema=schema.__name__,
+            )
             feedback = str(exc)
             candidate = exc.candidate
             hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
             if hint:
                 feedback = f"{feedback}; {hint}"[:600]
         except inference.OutputBudgetError as exc:
+            reject(
+                "emotion",
+                "chpm.proposal_output_budget",
+                str(exc),
+                context=payload,
+                phase=phase,
+                identifiers=identifiers,
+                usage=usage,
+            )
             raise ProposalRejectedError(str(exc)) from exc
         else:
             candidate = raw.model_dump(mode="json")
             try:
                 return accept(raw)
             except (ChpmError, TransitionError, ValidationError) as exc:
+                reject(
+                    "emotion",
+                    "chpm.proposal_invalid",
+                    str(exc),
+                    proposal=candidate,
+                    context=payload,
+                    phase=phase,
+                    identifiers=identifiers,
+                    validation_errors=exc.errors(include_url=False)
+                    if isinstance(exc, ValidationError)
+                    else None,
+                )
                 feedback = inference.validation_feedback(exc)
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]

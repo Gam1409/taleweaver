@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.context import detail_settings
 from backend.engine.clothing.recovery_context import KEY, recovery_context
 from backend.engine.clothing.recovery_contract import (
@@ -103,6 +104,25 @@ async def debug_wardrobe_preview(
             "context_messages": len(context["messages"]),
             "model_step_started": True,
         }
+        if preview["errors"] or preview["rejected_entries"] or preview["skipped"]:
+            reject(
+                "debug_item_recovery",
+                "proposal_rejected",
+                "Recovery proposals were rejected or skipped.",
+                npc_id=npc_id,
+                preview=preview,
+                proposal=proposal,
+            )
+        elif focus and not proposal.entries:
+            reject(
+                "debug_item_recovery",
+                "focused_recovery_unconfirmed",
+                "The focused recovery request returned no candidate.",
+                npc_id=npc_id,
+                focus=focus,
+                notes=proposal.notes,
+                preview=preview,
+            )
         await db.refresh(state)
         state.entity_states = {**(state.entity_states or {}), KEY: preview}
         return f"DEBUG: Wardrobe preview ready: {len(preview['accepted'])} proposed changes. Review and apply in Debug > NPCs > Clothing. Nothing has been added yet."
@@ -125,6 +145,14 @@ async def debug_wardrobe_preview(
     except Exception as exc:
         logger.exception("Wardrobe recovery preview failed for %s", state.session_id)
         message = f"Wardrobe preview failed ({type(exc).__name__}). No clothing was changed. Check the model server and logs."
+    reject(
+        "debug_item_recovery",
+        "preview_failed",
+        message,
+        npc_id=npc_id,
+        model_role=role,
+        model_step_started=model_step_started,
+    )
     state.entity_states = {
         **(state.entity_states or {}),
         KEY: {
@@ -168,6 +196,17 @@ async def debug_wardrobe_apply(
     )
     expected = [row for row in preview["accepted"] if row.get("proposal_index") in selected]
     if errors or skipped or not accepted or accepted != expected:
+        reject(
+            "debug_item_recovery",
+            "apply_revalidation_failed",
+            "Selected changes failed revalidation.",
+            proposal=preview.get("proposal"),
+            selected=selected,
+            accepted=accepted,
+            expected=expected,
+            errors=errors,
+            skipped=skipped,
+        )
         return "DEBUG ERROR: Selected changes failed revalidation; nothing was applied."
     states = dict(state.entity_states or {})
     _store_actor(SimpleNamespace(state=state, avatar=avatar), states, actors[preview["npc_id"]])

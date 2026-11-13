@@ -376,6 +376,14 @@ async def _process_claim(claim: Claim) -> bool:
             )
             await _release(claim)
             return True
+        maintenance.trace_failure(
+            "worker_claim",
+            exc,
+            session_id=claim.session_id,
+            epoch=claim.epoch,
+            revision=claim.revision,
+            paused=claim.paused,
+        )
         logger.exception("Memory maintenance failed for session %s", claim.session_id)
         await _failed(
             claim,

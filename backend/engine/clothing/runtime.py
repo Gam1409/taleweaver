@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.actions import WardrobeAction
 from backend.engine.clothing.context import actor_records, detail_settings, resolved_inventory
 from backend.engine.clothing.profiles import (
@@ -197,6 +198,16 @@ async def apply_wardrobe(manager: Any, event: Any, states: dict) -> bool:
         return changed
     actors = actor_records(manager, entities, states)
     errors = list(plan.errors)
+    for error in plan.errors:
+        reject(
+            "clothing",
+            "clothing_plan_error",
+            error,
+            proposal=plan,
+            current_scene_id=manager.state.current_scene_id,
+            plan_scene_id=plan.scene_id,
+            source_message_id=plan.message_id,
+        )
     accepted = []
     same_scene = plan.scene_id == manager.state.current_scene_id
     for index, creation in enumerate(plan.creations):
@@ -207,11 +218,35 @@ async def apply_wardrobe(manager: Any, event: Any, states: dict) -> bool:
             changed = True
             accepted.append(completed)
         except ValueError as error:
+            reject(
+                "clothing",
+                "clothing_creation_rejected",
+                str(error),
+                proposal=creation,
+                target_id=creation.actor_id,
+                source_id=getattr(creation, "source_id", None),
+                current_scene_id=manager.state.current_scene_id,
+                plan_scene_id=plan.scene_id,
+                actor=actors.get(creation.actor_id),
+                present_actor_ids=tuple(actors),
+                consumed_material_ids=getattr(event, "deleted_entities", None),
+            )
             errors.append(str(error))
     for action in plan.actions:
         actor = actors.get(action.actor_id)
         if not same_scene or actor is None:
             errors.append("The character is no longer in the current location.")
+            reject(
+                "clothing",
+                "clothing_action_rejected",
+                errors[-1],
+                proposal=action,
+                target_id=action.actor_id,
+                item_id=action.item_id,
+                current_scene_id=manager.state.current_scene_id,
+                plan_scene_id=plan.scene_id,
+                present_actor_ids=tuple(actors),
+            )
             continue
         candidate = deepcopy(actor)
         try:
@@ -242,6 +277,17 @@ async def apply_wardrobe(manager: Any, event: Any, states: dict) -> bool:
                 }
             )
         except ValueError as error:
+            reject(
+                "clothing",
+                "clothing_action_rejected",
+                str(error),
+                proposal=action,
+                target_id=action.actor_id,
+                item_id=action.item_id,
+                current_scene_id=manager.state.current_scene_id,
+                plan_scene_id=plan.scene_id,
+                actor=actor,
+            )
             errors.append(str(error))
     states[LEDGER_KEY] = {
         "version": 1,

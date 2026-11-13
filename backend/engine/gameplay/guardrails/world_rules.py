@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.state_rejection_trace import reject
 from backend.engine.gameplay.guardrails.base import inventory_ids_upper
 from backend.engine.gameplay.guardrails.items import ItemIntegrityMixin
 from backend.engine.gameplay.guardrails.movement_messages import movement_message
@@ -110,6 +111,20 @@ class WorldRulesMixin(ItemIntegrityMixin):
         runner = self.manager._get_script_runner()
         failure = await self._transition_failure(transition, switch, lowered, script_context)
         if failure is not None:
+            reject(
+                "movement",
+                "switch.transition_denied",
+                failure or "The switch cannot be flipped.",
+                proposal=update,
+                current_state=current_state,
+                target_state=target_state,
+                transition=transition,
+                metadata=metadata,
+                entity_id=switch.id,
+                entity_states=self.state.entity_states,
+                player_message=lowered,
+                inventory=self.avatar.inventory,
+            )
             # Revoke first so rewards granted by the failure scripts below survive.
             update.switch_state = current_state
             self._revoke_turn_rewards(event)
@@ -155,6 +170,18 @@ class WorldRulesMixin(ItemIntegrityMixin):
         if move.to_scene_id == current_scene:
             return None  # Changing only the spatial position is always fine.
         if not self._npc_is_moveable(ent, override):
+            reject(
+                "movement",
+                "npc_movement.stationary",
+                "The NPC cannot change scenes.",
+                proposal=move,
+                actor_id=ent.id,
+                current_scene_id=current_scene,
+                moveable=ent.moveable,
+                movement_type=ent.movement_type,
+                override=override,
+                session_id=self.game_id,
+            )
             logger.info(
                 "NPC movement blocked: npc=%s destination=%s reason=stationary",
                 ent.id,
@@ -167,6 +194,17 @@ class WorldRulesMixin(ItemIntegrityMixin):
             and allowed
             and move.to_scene_id.upper() not in {str(s).upper() for s in allowed if s}
         ):
+            reject(
+                "movement",
+                "npc_movement.restricted",
+                "The destination is outside the NPC's allowed scenes.",
+                proposal=move,
+                actor_id=ent.id,
+                current_scene_id=current_scene,
+                allowed_scenes=allowed,
+                override=override,
+                session_id=self.game_id,
+            )
             logger.info(
                 "NPC movement blocked: npc=%s destination=%s reason=restricted allowed=%s",
                 ent.id,
@@ -186,7 +224,8 @@ class WorldRulesMixin(ItemIntegrityMixin):
         scenes = await self.db.scalars(
             select(WorldScene).where(WorldScene.session_id == self.game_id)
         )
-        destinations = TargetIndex([{"id": scene.id, "name": scene.label} for scene in scenes])
+        scene_catalog = [{"id": scene.id, "name": scene.label} for scene in scenes]
+        destinations = TargetIndex(scene_catalog)
         messages: list[str] = []
         valid_moves = []
         for move in event.moved_entities:
@@ -196,6 +235,15 @@ class WorldRulesMixin(ItemIntegrityMixin):
             if ent and ent.entity_type == "NPC" and move.to_scene_id:
                 destination = destinations.resolve(move.to_scene_id)
                 if destination is None:
+                    reject(
+                        "movement",
+                        "npc_movement.unknown_destination",
+                        "The proposed destination does not identify a session scene.",
+                        proposal=move,
+                        actor_id=ent.id,
+                        session_id=self.game_id,
+                        scene_catalog=scene_catalog,
+                    )
                     messages.append(movement_message(ent.name, True, self.turn_language))
                     continue
                 move.entity_id = ent.id

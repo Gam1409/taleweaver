@@ -1,7 +1,11 @@
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.engine_detailed_trace import state_of
+from backend.core.state_rejection_trace import reject, scope
+from backend.core.system_diagnostics import service
 from backend.engine import (
     debug_inspection,
     debug_movement,
@@ -81,6 +85,41 @@ class DebugEngine:
         avatar: Optional[Any] = None,
     ) -> str:
         """Dispatch each debug command to its dedicated implementation."""
+        with scope(
+            session_id=getattr(state, "session_id", None),
+            operation="debug_state",
+            reuse_parent=True,
+        ):
+            token = service.capture_token()
+            if token is not None:
+                service.detail(
+                    "detail.debug.started",
+                    token=token,
+                    command=args,
+                    state=state_of(SimpleNamespace(state=state, avatar=avatar)),
+                )
+            result = await DebugEngine._dispatch(db, state, args, user, adventure, avatar)
+            if result.startswith("DEBUG ERROR:"):
+                reject("debug", "command_rejected", result, command=args)
+            if token is not None:
+                service.detail(
+                    "detail.debug.completed",
+                    token=token,
+                    command=args,
+                    result=result,
+                    state=state_of(SimpleNamespace(state=state, avatar=avatar)),
+                )
+            return result
+
+    @staticmethod
+    async def _dispatch(
+        db: AsyncSession,
+        state: SessionState,
+        args: str,
+        user: Optional[User],
+        adventure: AdventureTemplate | AdventureSnapshot | None,
+        avatar: Optional[Any],
+    ) -> str:
         sub = args.split(" ", maxsplit=1)[0].lower() if args else ""
         handler = _HANDLERS.get(sub)
         if handler is not None:

@@ -31,7 +31,7 @@ def _before_cursor(
     keyword = statement.lstrip().split(None, 1)[0].upper() if statement.strip() else "OTHER"
     operation = keyword if keyword in _OPERATIONS else "OTHER"
     context.__dict__["system_diagnostic_query"] = (time.perf_counter(), operation)
-    if getattr(_service(), "detailed_logging", False):
+    if getattr(_service(), "capture_token", lambda: None)() is not None:
         _service().detail(
             "detail.db.query", statement=statement, operation=operation, executemany=_many
         )

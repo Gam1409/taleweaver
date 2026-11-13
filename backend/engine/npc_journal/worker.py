@@ -5,9 +5,11 @@ import logging
 import time
 
 from backend.core import database
+from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.diagnostic_operations import diagnostic_job
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
+from backend.core.state_rejection_trace import reject
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal import progress, queue
@@ -31,6 +33,9 @@ async def process_message(message_id: str, user_id: str) -> bool:
     """Claim once; retries re-read current NPC rows before applying facts."""
     task = None
     session = None
+    original_content = None
+    payload = None
+    result = None
     try:
         prepared = await _prepare(message_id, user_id)
         if prepared is None:
@@ -59,9 +64,22 @@ async def process_message(message_id: str, user_id: str) -> bool:
             except Exception:
                 logger.exception("Could not release interrupted journal task %s", message_id)
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("NPC journal extraction failed for message %s", message_id)
         if task:
+            reject(
+                "npc_journal",
+                "npc_journal.extraction_failed",
+                failure_reason(exc, "Character learning failed to update the journal."),
+                session_id=session.id if session is not None else None,
+                message_id=message_id,
+                narration=original_content,
+                context=payload,
+                proposal=result,
+                task=task,
+                error_type=type(exc).__name__,
+                **failure_details(exc),
+            )
             await _fail(message_id, task)
         return False
     finally:

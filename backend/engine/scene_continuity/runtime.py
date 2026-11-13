@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 
 from backend.core.engine_detailed_trace import step, sync_step
+from backend.core.state_rejection_trace import reject
 from backend.models.world_entity import WorldScene
 
 from .ledger import apply
@@ -105,6 +106,16 @@ def finish(manager: Any, message: Any) -> list[str]:
         return []
     states = manager.state.entity_states or {}
     if states.get(KEY) != pending.before or pending.scene_id != manager.state.current_scene_id:
+        reject(
+            "scene_continuity",
+            "stale_state",
+            "The source scene or saved state changed during extraction.",
+            updates=pending.updates,
+            actions=pending.actions,
+            message_id=getattr(message, "id", None),
+            expected_scene=pending.scene_id,
+            current_scene=manager.state.current_scene_id,
+        )
         return ["Scene continuity needs review: the source state changed during extraction."]
     try:
         result, errors = apply(
@@ -119,7 +130,16 @@ def finish(manager: Any, message: Any) -> list[str]:
             targets=pending.targets,
             actor_targets=pending.actor_targets,
         )
-    except ValueError:
+    except ValueError as error:
+        reject(
+            "scene_continuity",
+            "invalid_state",
+            "Scene continuity could not be validated.",
+            validation_reason=str(error),
+            updates=pending.updates,
+            actions=pending.actions,
+            message_id=getattr(message, "id", None),
+        )
         return ["Scene continuity is invalid and was preserved; review Debug → State."]
     if pending.unconfirmed_sections:
         ledger = result[KEY]
@@ -128,6 +148,18 @@ def finish(manager: Any, message: Any) -> list[str]:
             ledger["frame_message_id"] = ""
             ledger["frame_actions"] = []
     manager.state.entity_states = result
+    if errors or pending.unconfirmed_sections:
+        reject(
+            "scene_continuity",
+            "rejected_or_unconfirmed",
+            "Scene updates were rejected or sections were not confirmed.",
+            updates=pending.updates,
+            actions=pending.actions,
+            errors=errors,
+            unconfirmed_sections=pending.unconfirmed_sections,
+            message_id=getattr(message, "id", None),
+            audit=result.get(KEY, {}).get("last_check"),
+        )
     return (
         ["Some scene continuity updates need review; previous facts were preserved."]
         if errors

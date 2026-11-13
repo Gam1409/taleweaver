@@ -46,6 +46,23 @@ test('detailed logging is an explicit opt-in on the saved settings', async () =>
   ])
 })
 
+test('legacy responses keep state rejection traces disabled', async () => {
+  response = { ok: true, json: async () => ({ enabled: true, detailed_logging: true, log_directory: 'log', retention_files: 5 }) }
+  assert.equal((await service.getSettings()).state_failure_traces, false)
+})
+
+test('state rejection traces save independently of detailed logging', async () => {
+  calls.length = 0
+  await service.saveSettings(true, false, true)
+  await service.saveSettings(true, true, false)
+  await service.saveSettings(false, false, false)
+  assert.deepEqual(calls.map(([, options]) => JSON.parse(options.body)), [
+    { enabled: true, detailed_logging: false, state_failure_traces: true },
+    { enabled: true, detailed_logging: true, state_failure_traces: false },
+    { enabled: false, detailed_logging: false, state_failure_traces: false }
+  ])
+})
+
 test('server errors never expose raw diagnostic details or secrets', async () => {
   response = { ok: false, status: 500, json: async () => { throw new Error('private player text and api key') } }
   await assert.rejects(service.saveSettings(true), error => {

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.engine_detailed_trace import sync_step
+from backend.core.state_rejection_trace import reject
 from backend.engine.physical_conditions.ledger import apply, read
 from backend.engine.physical_conditions.references import bind_records
 from backend.engine.physical_conditions.schema import KEY
@@ -65,9 +66,25 @@ def finish(manager: Any, message: Any) -> list[str]:
         return []
     states = manager.state.entity_states or {}
     if states.get(KEY) != pending.before:
+        reject(
+            "physical_conditions",
+            "stale_state",
+            "Saved state changed during the check.",
+            proposals=pending.proposals,
+            expected_state=pending.before,
+            current_state=states.get(KEY),
+            message_id=getattr(message, "id", None),
+        )
         return ["Physical condition changes need review: the saved state changed during the check."]
     try:
         if pending.error:
+            reject(
+                "physical_conditions",
+                "unconfirmed_check",
+                pending.error,
+                proposals=pending.proposals,
+                message_id=getattr(message, "id", None),
+            )
             ledger = read(states)
             ledger.last_check = {
                 "message_id": message.id,
@@ -93,11 +110,30 @@ def finish(manager: Any, message: Any) -> list[str]:
         )
         if bindings:
             result[KEY]["last_check"]["reference_bindings"] = bindings
-    except ValueError:
+    except ValueError as error:
+        reject(
+            "physical_conditions",
+            "invalid_state",
+            "The physical ledger could not be validated.",
+            validation_reason=str(error),
+            proposals=pending.proposals,
+            message_id=getattr(message, "id", None),
+        )
         return [
             "Physical condition state is invalid and was preserved. Review it in Debug → State."
         ]
     manager.state.entity_states = result
+    if errors:
+        reject(
+            "physical_conditions",
+            "proposals_rejected",
+            "Some physical or item-state proposals were rejected.",
+            proposals=pending.proposals,
+            errors=errors,
+            message_id=getattr(message, "id", None),
+            audit=result.get(KEY, {}).get("last_check"),
+            narration=message.content,
+        )
     return (
         [
             "Some physical condition changes were not applied. Existing facts were preserved; review Debug → State."

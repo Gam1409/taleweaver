@@ -14,6 +14,7 @@ from backend.core.npc_presentation import (
     PortraitPreferences,
     source_hash,
 )
+from backend.core.state_rejection_trace import reject
 from backend.engine.npc_presence import presence
 from backend.engine.npc_presentation.diagnostics import report
 from backend.engine.npc_presentation.settings import effective
@@ -164,11 +165,29 @@ class PresentationTurn:
     def _capture(self, text: str, footer: str) -> None:
         try:
             data = json.loads(footer)
-        except (ValueError, TypeError, RecursionError):
+        except (ValueError, TypeError, RecursionError) as exc:
+            reject(
+                "emotion",
+                "presentation.invalid_json",
+                str(exc),
+                proposal=footer,
+                narration=text,
+                catalog=self.catalog,
+                preferences=self.preferences,
+            )
             self._note(text, "invalid_json")
             return
         entries = data.get("npcs") if isinstance(data, dict) else None
         if not isinstance(entries, list) or len(entries) > MAX_NPCS:
+            reject(
+                "emotion",
+                "presentation.invalid_entries",
+                "Portrait metadata requires a bounded NPC entry list.",
+                proposal=data,
+                narration=text,
+                catalog=self.catalog,
+                limit=MAX_NPCS,
+            )
             self._note(text, "invalid_entries")
             return
         states = {}
@@ -176,6 +195,15 @@ class PresentationTurn:
             identifier, cue = self._entry(entry)
             if identifier and cue and identifier not in states:
                 states[identifier] = cue
+            elif identifier and cue:
+                reject(
+                    "emotion",
+                    "presentation.duplicate_actor",
+                    "A second presentation entry for the same NPC was ignored.",
+                    proposal=entry,
+                    accepted_cue=states[identifier],
+                    actor_id=identifier,
+                )
         if states and len(self.candidates) < 4:
             key = source_hash(text)
             self.candidates[key] = {"version": 1, "source_hash": key, "npcs": states}
@@ -185,8 +213,22 @@ class PresentationTurn:
     @sync_step("npc.presentation.validate_entry")
     def _entry(self, entry: Any) -> tuple[str | None, dict | None]:
         if not isinstance(entry, dict) or not isinstance(entry.get("npc_id"), str):
+            reject(
+                "emotion",
+                "presentation.invalid_entry",
+                "Portrait entry does not contain an NPC identifier.",
+                proposal=entry,
+                catalog=self.catalog,
+            )
             return None, None
         if entry["npc_id"] not in self.catalog:
+            reject(
+                "emotion",
+                "presentation.unavailable_actor",
+                "Portrait entry refers to an NPC outside the visible cast.",
+                proposal=entry,
+                catalog=self.catalog,
+            )
             return None, None
         emotion = Cue()
         if self.preferences.emotion_palette:
@@ -194,9 +236,29 @@ class PresentationTurn:
                 emotion = Cue.model_validate(
                     {"emotion": entry.get("emotion"), "intensity": entry.get("intensity")}
                 )
-            except ValidationError:
+            except ValidationError as exc:
+                reject(
+                    "emotion",
+                    "presentation.invalid_emotion",
+                    str(exc),
+                    proposal=entry,
+                    validation_errors=exc.errors(include_url=False),
+                    preferences=self.preferences,
+                )
                 emotion = Cue()
         thought = entry.get("thought")
+        if (
+            self.preferences.character_thoughts
+            and thought is not None
+            and (not isinstance(thought, str) or len(thought) > MAX_THOUGHT)
+        ):
+            reject(
+                "emotion",
+                "presentation.invalid_thought",
+                "The proposed thought does not satisfy the enabled presentation field.",
+                proposal=entry,
+                limit=MAX_THOUGHT,
+            )
         if (
             not self.preferences.character_thoughts
             or not isinstance(thought, str)
@@ -207,6 +269,14 @@ class PresentationTurn:
         else:
             thought = " ".join(thought.split())
         if emotion.emotion is None or emotion.intensity is None:
+            if emotion.emotion not in (None, "unknown") or emotion.intensity is not None:
+                reject(
+                    "emotion",
+                    "presentation.unconfirmed_emotion",
+                    "The proposed emotion lacks a complete emotion and intensity pair.",
+                    proposal=entry,
+                    preferences=self.preferences,
+                )
             emotion = Cue()
         emotion.thought = thought
         if emotion.emotion is None and thought is None:
