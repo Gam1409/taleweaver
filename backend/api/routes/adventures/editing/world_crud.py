@@ -14,6 +14,8 @@ from backend.api.routes.adventures.editing.common import (
     _normalize_lock_fields,
     _sanitize_object_id,
 )
+from backend.api.routes.adventures.editing.creation_metadata import entity_creation_metadata
+from backend.api.routes.adventures.editing.entity_update.fields import clipped_or_none
 from backend.api.routes.adventures.editing.exit_fields import exit_behavior_values
 from backend.api.routes.adventures.editing.image_clone import _clone_entity_image
 from backend.api.routes.adventures.editing.payload import _serialize_model
@@ -25,7 +27,6 @@ from backend.api.routes.adventures.editing.schemas import (
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.clothing.authoring import store_editor_clothing
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -308,29 +309,7 @@ async def create_editor_entity(
     item_type = (
         str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
     )
-    metadata_json = dict(payload.metadata_json or {})
-    store_editor_clothing(metadata_json, payload)
-    if payload.entity_type == "NPC" and payload.personality_profile is not None:
-        metadata_json["personality_profile"] = payload.personality_profile.model_dump()
-    if item_type == "SWITCH":
-        switch_config = metadata_json.get("switch") or {}
-        states = switch_config.get("states") or []
-        states_list = [str(s).strip().upper() for s in states if str(s).strip()]
-        if len(states_list) < 2:
-            raise HTTPException(status_code=400, detail="A switch must have at least 2 states.")
-        initial_state = str(switch_config.get("initial_state") or "").strip().upper()
-        if not initial_state:
-            raise HTTPException(
-                status_code=400, detail="An initial state must be defined for the switch."
-            )
-        if initial_state not in states_list:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.",
-            )
-        switch_config["states"] = states_list
-        switch_config["initial_state"] = initial_state
-        metadata_json["switch"] = switch_config
+    metadata_json = entity_creation_metadata(payload, item_type)
 
     entity = WorldEntity(
         id=entity_id,
@@ -342,6 +321,7 @@ async def create_editor_entity(
         name=name,
         description=description,
         current_scene_id=scene_id,
+        spatial_position=clipped_or_none(payload.spatial_position, 255),
         image_url=str(payload.image_url or "").strip() or None,
         item_type=item_type,
         is_hidden=True

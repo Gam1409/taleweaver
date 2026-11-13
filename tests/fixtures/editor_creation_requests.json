@@ -1,0 +1,208 @@
+[
+  {
+    "case": "CONTAINER",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "POST",
+    "data": {
+      "entity_id": "CHEST_REQUEST",
+      "scene_id": "LAB",
+      "name": "Supply chest",
+      "description": "A sturdy supply chest.",
+      "entity_type": "OBJECT",
+      "item_type": "CONTAINER",
+      "is_portable": false,
+      "inventory": [],
+      "wearable_slots": [],
+      "combination_ingredients": [],
+      "is_hidden": false,
+      "spatial_position": "Beside the workbench.",
+      "on_pickup_script": "tw.vars.set('picked_up', True)",
+      "on_pickup_text": "The chest is lifted.",
+      "metadata_json": {
+        "locked": true,
+        "code_to_unlock": "1234",
+        "item_to_unlock": "",
+        "rule_to_unlock": "",
+        "unlock_expression": "True",
+        "on_unlock_success_script": "tw.vars.set('opened', True)",
+        "on_unlock_success_text": "",
+        "on_unlock_failure_script": "",
+        "on_unlock_failure_text": "The latch stays closed.",
+        "pickup_trigger": {
+          "mode": "narration",
+          "cue": "A muted click."
+        }
+      }
+    }
+  },
+  {
+    "case": "READABLE",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "POST",
+    "data": {
+      "entity_id": "NOTICE_REQUEST",
+      "scene_id": "LAB",
+      "name": "New Item",
+      "description": "A mysterious object found in this scene.",
+      "entity_type": "OBJECT",
+      "item_type": "READABLE",
+      "is_portable": false,
+      "inventory": [],
+      "wearable_slots": [],
+      "combination_ingredients": [],
+      "is_hidden": false,
+      "metadata_json": {
+        "text_log_content": "A technical notice.",
+        "text_log_format": "SIGN",
+        "on_read_script": "tw.vars.set('read', True)",
+        "on_read_text": "The notice is legible."
+      }
+    }
+  },
+  {
+    "case": "CONSTRUCTABLE",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "POST",
+    "data": {
+      "entity_id": "ASSEMBLY_REQUEST",
+      "scene_id": "LAB",
+      "name": "New Item",
+      "description": "A mysterious object found in this scene.",
+      "entity_type": "OBJECT",
+      "item_type": "CONSTRUCTABLE",
+      "is_portable": true,
+      "inventory": [],
+      "wearable_slots": [],
+      "combination_ingredients": [
+        "PART_A",
+        "PART_B"
+      ],
+      "is_hidden": false,
+      "metadata_json": {
+        "craft_guard_expression": "True",
+        "on_craft_success_script": "",
+        "on_craft_success_text": "The assembly fits.",
+        "on_craft_failure_script": "tw.vars.set('retry', True)",
+        "on_craft_failure_text": ""
+      }
+    }
+  },
+  {
+    "case": "SWITCH",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "POST",
+    "data": {
+      "entity_id": "SW_REQUEST",
+      "scene_id": "LAB",
+      "name": "New Item",
+      "description": "A mysterious object found in this scene.",
+      "entity_type": "OBJECT",
+      "item_type": "SWITCH",
+      "is_portable": false,
+      "inventory": [],
+      "wearable_slots": [],
+      "combination_ingredients": [],
+      "is_hidden": false,
+      "metadata_json": {
+        "switch_states": [
+          "OFF",
+          "ON"
+        ],
+        "switch_initial_state": "OFF",
+        "switch_transitions": [],
+        "on_success_script": "tw.vars.set('success', True)",
+        "on_failure_script": "tw.vars.set('failure', True)",
+        "switch": {
+          "states": [
+            "OFF",
+            "ON"
+          ],
+          "initial_state": "OFF",
+          "transitions": [],
+          "outcomes": [],
+          "on_success_script": "tw.vars.set('success', True)",
+          "on_failure_script": "tw.vars.set('failure', True)"
+        }
+      }
+    }
+  },
+  {
+    "case": "NPC_ZERO",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "POST",
+    "data": {
+      "entity_id": "NPC_ZERO_REQUEST",
+      "scene_id": "LAB",
+      "name": "Ari",
+      "description": "A careful technician.",
+      "entity_type": "NPC",
+      "hp": 0,
+      "stamina": 0,
+      "mana": 0,
+      "gender": null,
+      "age_years": null,
+      "personality_profile": {},
+      "is_killable": true,
+      "moveable": false,
+      "allowed_scenes": [],
+      "is_hidden": false,
+      "spatial_position": "Beside the bench.",
+      "inventory": [],
+      "on_defeat_script": "tw.vars.set('defeated', True)",
+      "on_defeat_text": "Ari steps back.",
+      "on_protagonist_enters_scene_script": "tw.vars.set('arrived', True)",
+      "on_protagonist_enters_scene_text": "Ari notices the arrival."
+    }
+  },
+  {
+    "case": "NPC_ZERO_PATCH",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "PATCH",
+    "data": {
+      "target_type": "npc",
+      "target_id": "ACTOR_REQUEST",
+      "new_id": "ACTOR_REQUEST",
+      "name": "Ari",
+      "description": "A careful technician.",
+      "hp": 0,
+      "stamina": 0,
+      "mana": 0,
+      "goal": "",
+      "character": "",
+      "gender": null,
+      "age_years": null,
+      "personality_profile": {},
+      "is_killable": true,
+      "moveable": false,
+      "allowed_scenes": [],
+      "notes": "",
+      "inventory": [],
+      "spatial_position": "",
+      "is_hidden": false,
+      "reveal_rule": "",
+      "on_defeat_script": "",
+      "on_defeat_text": "",
+      "on_protagonist_enters_scene_script": "",
+      "on_protagonist_enters_scene_text": ""
+    }
+  },
+  {
+    "case": "PROTAGONIST_ZERO_PATCH",
+    "path": "/adventures/AUTHORING_FIXTURE/editor/entity",
+    "method": "PATCH",
+    "data": {
+      "target_type": "protagonist",
+      "target_id": "ACTOR_REQUEST",
+      "new_id": "ACTOR_REQUEST",
+      "name": "Ari",
+      "description": "A careful technician.",
+      "hp": 0,
+      "stamina": 0,
+      "mana": 0,
+      "goal": "",
+      "character": "",
+      "gender": null,
+      "age_years": null
+    }
+  }
+]

@@ -123,6 +123,9 @@ def _adventure_extras(adventure: AdventureTemplate, _data: dict[str, Any]) -> di
 
 def _switch_fields(metadata_json: dict[str, Any]) -> dict[str, Any]:
     switch_config = metadata_json.get("switch") or {}
+    script_source = (
+        switch_config if isinstance(metadata_json.get("switch"), dict) else metadata_json
+    )
 
     def pick(flat_key: str, nested_key: str, default: Any) -> Any:
         return metadata_json.get(flat_key) or switch_config.get(nested_key) or default
@@ -131,8 +134,8 @@ def _switch_fields(metadata_json: dict[str, Any]) -> dict[str, Any]:
         "switch_states": pick("switch_states", "states", []),
         "switch_initial_state": pick("switch_initial_state", "initial_state", ""),
         "switch_transitions": pick("switch_transitions", "transitions", []),
-        "on_success_script": pick("on_success_script", "on_success_script", ""),
-        "on_failure_script": pick("on_failure_script", "on_failure_script", ""),
+        "on_success_script": script_source.get("on_success_script") or "",
+        "on_failure_script": script_source.get("on_failure_script") or "",
     }
 
 

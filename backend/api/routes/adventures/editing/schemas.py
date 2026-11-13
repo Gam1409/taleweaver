@@ -14,7 +14,25 @@ from backend.schemas.character_outfits import CharacterOutfitDraft
 logger = logging.getLogger(__name__)
 
 
-class EntityUpdateRequest(CharacterIdentityFields):
+class EntityBehaviorFields(CharacterIdentityFields):
+    """Shared authored position and lifecycle callbacks for creation and editing."""
+
+    spatial_position: Optional[str] = None
+    on_pickup_script: Optional[str] = None
+    on_pickup_text: Optional[str] = None
+    on_drop_script: Optional[str] = None
+    on_drop_text: Optional[str] = None
+    on_equip_script: Optional[str] = None
+    on_equip_text: Optional[str] = None
+    on_unequip_script: Optional[str] = None
+    on_unequip_text: Optional[str] = None
+    on_defeat_script: Optional[str] = None
+    on_defeat_text: Optional[str] = None
+    on_protagonist_enters_scene_script: Optional[str] = None
+    on_protagonist_enters_scene_text: Optional[str] = None
+
+
+class EntityUpdateRequest(EntityBehaviorFields):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist", "exit"]
     target_id: str
     new_id: Optional[str] = None
@@ -45,7 +63,6 @@ class EntityUpdateRequest(CharacterIdentityFields):
     combination_ingredients: Optional[list[str]] = None
     reveal_rule: Optional[str] = None
     is_hidden: Optional[bool] = None
-    spatial_position: Optional[str] = None
     reveals_item_id: Optional[str] = None
     pickup_trigger_mode: Optional[str] = None
     pickup_trigger_cue: Optional[str] = None
@@ -66,18 +83,6 @@ class EntityUpdateRequest(CharacterIdentityFields):
     exp: Optional[int] = None
     equipment: Optional[dict[str, Any]] = None
     decorative_objects: Optional[list[str]] = None
-    on_pickup_script: Optional[str] = None
-    on_pickup_text: Optional[str] = None
-    on_drop_script: Optional[str] = None
-    on_drop_text: Optional[str] = None
-    on_equip_script: Optional[str] = None
-    on_equip_text: Optional[str] = None
-    on_unequip_script: Optional[str] = None
-    on_unequip_text: Optional[str] = None
-    on_defeat_script: Optional[str] = None
-    on_defeat_text: Optional[str] = None
-    on_protagonist_enters_scene_script: Optional[str] = None
-    on_protagonist_enters_scene_text: Optional[str] = None
     on_enter_scene_script: Optional[str] = None
     on_enter_scene_text: Optional[str] = None
     on_leave_scene_script: Optional[str] = None
@@ -131,7 +136,7 @@ class ExitCreateRequest(ExitBehaviorFields):
     rule_to_unlock: Optional[str] = None
 
 
-class EntityCreateRequest(CharacterIdentityFields):
+class EntityCreateRequest(EntityBehaviorFields):
     entity_id: str
     entity_type: Literal["NPC", "OBJECT"]
     scene_id: str
