@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { NpcCurrentState } from '@/types/npcCurrentState'
-import type { EquipmentDisplay, EquipmentDisplayItem } from '@/utils/equipmentSlots'
+import { BODY_ITEM_SLOTS, type EquipmentCondition, type EquipmentDisplay, type EquipmentDisplayItem } from '@/utils/equipmentSlots'
 import EquipmentSilhouette from './EquipmentSilhouette.vue'
 import EquipmentList from './EquipmentList.vue'
 
@@ -20,6 +20,23 @@ const allItems = computed<EquipmentDisplayItem[]>(() =>
 const unassigned = computed(() =>
   allItems.value.filter(item => !(item.slots as string[] | undefined)?.length)
 )
+const placementSlots = computed(() => (props.state?.clothing.placement_slots ?? []).filter(slot => slot.status !== 'empty' || !props.compact || showEmpty.value || props.state?.conditions.items.some(condition => condition.display_slots?.includes(slot.key))))
+const bodyConditions = computed(() => {
+  const result: Record<string, EquipmentCondition[]> = {}
+  for (const condition of props.state?.conditions.items ?? []) {
+    if (allItems.value.some(item => item.id === condition.target_id)) continue
+    for (const slot of condition.display_slots ?? []) (result[slot] ??= []).push(condition)
+  }
+  return result
+})
+const itemConditions = computed(() => {
+  const result: Record<string, EquipmentCondition[]> = {}
+  for (const condition of props.state?.conditions.items ?? []) {
+    if (allItems.value.some(item => item.id === condition.target_id)) (result[condition.target_id] ??= []).push(condition)
+  }
+  return result
+})
+function slotLabel(key: string) { return BODY_ITEM_SLOTS.find(slot => slot.key === key)?.label ?? 'Placement area' }
 const kinds = {
   injury: 'Injury',
   contamination: 'Contamination',
@@ -39,12 +56,15 @@ const statuses = { active: 'Active', treated: 'Treated', reduced: 'Reduced' }
   >
     <section class="min-w-0 space-y-3" aria-label="Clothing">
       <h3 class="font-semibold text-slate-100">Clothing</h3>
-      <label v-if="compact && state.layout?.form === 'humanoid'" class="flex items-center gap-2 text-xs text-slate-400"><input v-model="showEmpty" type="checkbox" class="accent-amber-400" />Show empty slots</label>
+      <label v-if="compact && (state.layout?.form === 'humanoid' || state.clothing.placement_slots?.length)" class="flex items-center gap-2 text-xs text-slate-400"><input v-model="showEmpty" type="checkbox" class="accent-amber-400" />Show empty slots</label>
       <template v-if="state.layout?.form === 'humanoid'">
-        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" :data-hide-empty="compact && !showEmpty" />
+        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" :body-slots="placementSlots.map(slot => slot.key)" :unconfirmed-body-slots="placementSlots.filter(slot => slot.status === 'unconfirmed').map(slot => slot.key)" :body-conditions="bodyConditions" :item-conditions="itemConditions" :data-hide-empty="compact && !showEmpty" />
         <EquipmentList v-if="unassigned.length" :items="unassigned" />
       </template>
       <EquipmentList v-else :items="allItems" />
+      <ul v-if="placementSlots.length" class="space-y-1.5 text-xs" aria-label="Additional placement areas"><li v-for="slot in placementSlots" :key="slot.key" class="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-700/70 px-3 py-2"><span class="text-slate-300">{{ slotLabel(slot.key) }}</span><span :class="slot.status === 'unconfirmed' ? 'text-amber-200' : 'text-slate-400'">{{ slot.status === 'occupied' ? 'Item recorded' : slot.status === 'unconfirmed' ? 'Placement needs confirmation' : 'No recorded item' }}</span></li></ul>
+      <p v-if="state.clothing.placement_status === 'unassessed'" class="text-xs leading-relaxed text-slate-400">Additional area availability is not fully assessed. Only established areas are shown.</p>
+      <p v-else-if="state.clothing.placement_status === 'unavailable'" class="text-xs leading-relaxed text-slate-400">No additional placement areas are available in the recorded body layout.</p>
     </section>
     <section class="min-w-0" aria-label="Physical condition">
       <h3 class="font-semibold text-slate-100">Physical condition</h3>

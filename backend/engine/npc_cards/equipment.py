@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.clothing.body_schema import BODY_SLOT_KEYS
 from backend.engine.clothing.equipment_view import display_slots
 from backend.engine.clothing.profiles import (
     attachment_item_allowed,
@@ -131,10 +132,6 @@ async def equipment_rows(
             state.entity_states or {},
             uncovered_regions=row.uncovered_regions,
             description=garment.description if garment and detailed_for_state(state) else "",
-            **(
-                {"slots": ["BodyVaginal" if row.attachment_slot == "vaginal" else "BodyAnal"]}
-                if row.attachment_slot
-                else {}
-            ),
+            **({"slots": [BODY_SLOT_KEYS[row.attachment_slot]]} if row.attachment_slot else {}),
         )
     return sorted(result.values(), key=lambda row: -row["layer"])

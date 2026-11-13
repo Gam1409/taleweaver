@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from backend.engine.clothing.body_schema import BODY_SLOT_KEYS
+
 
 def placement_rules(schema: dict) -> None:
     field = schema["properties"]["uncovered_regions"]
@@ -27,7 +29,7 @@ def placement_rules(schema: dict) -> None:
             "properties": {
                 "disposition": {"const": "worn"},
                 "uncovered_regions": {"type": "null"},
-                "attachment_slot": {"enum": ["vaginal", "anal"]},
+                "attachment_slot": {"enum": list(BODY_SLOT_KEYS)},
             },
         },
     ]

@@ -3,6 +3,7 @@ import { computed, getCurrentInstance, watch } from 'vue'
 import {
   EQUIPMENT_SLOTS,
   BODY_ITEM_SLOTS,
+  type EquipmentCondition,
   type EquipmentDisplay,
   type EquipmentDisplayItem
 } from '@/utils/equipmentSlots'
@@ -20,6 +21,10 @@ const props = withDefaults(
     compact?: boolean
     readOnly?: boolean
     miniList?: boolean
+    bodySlots?: string[]
+    unconfirmedBodySlots?: string[]
+    bodyConditions?: Record<string, EquipmentCondition[]>
+    itemConditions?: Record<string, EquipmentCondition[]>
   }>(),
   { variant: 'neutral', compact: true, readOnly: true, miniList: true }
 )
@@ -33,15 +38,23 @@ const hover = useEquipmentHover()
 const { active, target, style } = hover
 const tooltipId = `equipment-hover-${getCurrentInstance()?.uid ?? 0}`
 const source = computed(() => (props.variant === 'female' ? femaleSilhouette : maleSilhouette))
-const extra = computed(() => BODY_ITEM_SLOTS.filter(slot => props.equipment[slot.key]?.length))
+const extra = computed(() => BODY_ITEM_SLOTS.filter(slot => props.equipment[slot.key]?.length || props.bodySlots?.includes(slot.key)))
 const slots = computed(() =>
   [...EQUIPMENT_SLOTS, ...extra.value].map(slot => ({
     ...slot,
-    top: slot.key === 'Legs' && extra.value.length ? '73%' : slot.top,
+    body: slot.key.startsWith('Body'),
+    shortLabel: 'shortLabel' in slot ? slot.shortLabel : '',
+    top: extra.value.length && slot.key === 'Legs' ? '75%' : extra.value.length && slot.key === 'Feet' ? '87%' : slot.top,
+    left: slot.key === 'Legs' && extra.value.length ? '36%' : slot.left,
     items: props.equipment[slot.key] || []
   }))
 )
 const selected = computed(() => slots.value.find(slot => slot.key === active.value))
+const currentBodyConditions = computed(() => props.bodyConditions?.[active.value] ?? [])
+function itemFacts(item: EquipmentDisplayItem) {
+  const known = new Set((item.current_state ?? []).map(row => row.detail))
+  return (props.itemConditions?.[item.id] ?? []).filter(row => !known.has(row.detail))
+}
 watch(
   () => props.equipment,
   () => {
@@ -86,18 +99,21 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       type="button"
       :data-equipment-slot="slot.key"
       :data-slot-occupied="slot.items.length > 0"
+      :data-slot-has-state="!!bodyConditions?.[slot.key]?.length || !!unconfirmedBodySlots?.includes(slot.key)"
       :style="{ top: slot.top, left: slot.left }"
       :aria-label="
-        [slot.label, ...slot.items.map(item => item.name)].filter(Boolean).join(': ') || 'Contents'
+        [slot.label, ...slot.items.map(item => item.name), unconfirmedBodySlots?.includes(slot.key) ? 'Placement needs confirmation' : ''].filter(Boolean).join(': ') || 'Contents'
       "
       :aria-describedby="
         active === slot.key && (miniList || slot.key.startsWith('Body')) ? tooltipId : undefined
       "
       class="group/slot absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-xl border bg-slate-950/90 shadow-lg focus-visible:outline-amber-300"
       :class="[
-        compact ? (slot.label ? 'h-10 w-10' : 'h-7 w-7') : 'h-12 w-12 sm:h-15 sm:w-15',
+        compact ? (slot.body ? 'h-7 w-7' : 'h-10 w-10') : 'h-12 w-12 sm:h-15 sm:w-15',
         slot.items.length
           ? 'border-amber-500/70 text-slate-200'
+          : unconfirmedBodySlots?.includes(slot.key) ? 'border-dashed border-amber-400/70 text-amber-200'
+          : bodyConditions?.[slot.key]?.length ? 'border-rose-400/60 text-rose-200'
           : 'border-slate-700 text-slate-600',
         active === slot.key ? 'z-10 ring-2 ring-amber-400/25' : ''
       ]"
@@ -124,6 +140,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
         :icon="slot.icon"
         :compact="compact"
       />
+      <span v-else-if="slot.body" class="text-[10px] font-semibold" aria-hidden="true">{{ slot.shortLabel }}</span>
       <i
         v-else
         :class="['ra', slot.icon, compact ? 'text-[14px]' : 'text-xl']"
@@ -135,7 +152,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
         >{{ slot.items.length }}</span
       >
       <span
-        v-if="slot.label"
+        v-if="slot.label && !slot.body"
         class="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[10px] text-slate-400"
         :class="
           compact ? '' : 'rounded bg-slate-950/95 px-1 opacity-0 group-hover/slot:opacity-100'
@@ -160,6 +177,12 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       <p v-if="selected.label" class="mb-2 text-xs font-semibold text-amber-200">
         {{ selected.label }}
       </p>
+      <section v-if="selected.body || currentBodyConditions.length" class="mb-3 border-b border-slate-700 pb-3" aria-label="Body state">
+        <h4 class="mb-2 text-xs font-semibold text-rose-200">Body state</h4>
+        <ul v-if="currentBodyConditions.length" class="space-y-2"><li v-for="condition in currentBodyConditions" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span v-if="condition.part" class="text-slate-400">{{ condition.part.split('_').join(' ') }} · </span>{{ condition.detail }}</li></ul>
+        <p v-else class="text-xs text-slate-400">No confirmed body state for this area.</p>
+      </section>
+      <h4 class="mb-2 text-xs font-semibold text-slate-300">Items</h4>
       <ul v-if="selected.items.length" class="space-y-2.5">
         <li v-for="item in selected.items" :key="item.id" class="flex items-start gap-2.5">
           <span class="mt-0.5 shrink-0"
@@ -168,13 +191,15 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
           <div class="min-w-0">
             <p class="break-words text-xs">{{ item.name }}</p>
             <p v-for="fact in item.current_state || []" :key="fact.dimension" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ fact.detail }}</p>
+            <p v-for="condition in itemFacts(item)" :key="condition.id" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ condition.detail }}</p>
             <p v-if="item.uncovered_regions?.length" class="mt-1 text-[10px] text-amber-200">
               Partially displaced
             </p>
           </div>
         </li>
       </ul>
-      <span v-else class="text-slate-500">—</span>
+      <span v-else-if="unconfirmedBodySlots?.includes(selected.key)" class="text-xs text-amber-200">Recorded placement needs source confirmation.</span>
+      <span v-else class="text-xs text-slate-400">No recorded item.</span>
     </div>
   </Teleport>
 </template>

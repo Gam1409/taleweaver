@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.engine.character_identity import identity_facts, identity_profile
+from backend.engine.clothing.body_schema import BODY_SLOT_KEYS
 from backend.engine.clothing.equipment_view import display_slots, layout
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.projection import visible_character
@@ -41,7 +42,7 @@ def player_clothing(avatar: Any, manifest: Any) -> dict | None:
                     "id": identifier,
                     "name": str(item.get("name") or "")[:200],
                     "image_url": item.get("image_url"),
-                    "slot": "BodyVaginal" if worn.attachment_slot == "vaginal" else "BodyAnal",
+                    "slot": BODY_SLOT_KEYS[worn.attachment_slot],
                 }
             )
             continue

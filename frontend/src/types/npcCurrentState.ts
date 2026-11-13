@@ -23,6 +23,7 @@ export interface NpcKnownCondition {
   status: 'active' | 'treated' | 'reduced'
   observation: 'visible' | 'recorded'
   last_changed_minute: number | null
+  display_slots?: string[]
 }
 
 export interface NpcCurrentState {
@@ -36,6 +37,8 @@ export interface NpcCurrentState {
     status: 'available' | 'unavailable'
     detail_limited: boolean
     items: NpcVisibleGarment[]
+    placement_status?: 'available' | 'unassessed' | 'unavailable'
+    placement_slots?: { key: string; status: 'empty' | 'occupied' | 'unconfirmed' }[]
   }
   conditions: {
     status: 'available' | 'unavailable'

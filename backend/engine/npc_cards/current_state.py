@@ -13,6 +13,8 @@ from backend.engine.clothing.equipment_view import layout
 from backend.engine.clothing.profiles import load_profile
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
+from backend.engine.npc_cards.body_slots import placement_projection
+from backend.engine.npc_cards.condition_slots import condition_position
 from backend.engine.npc_cards.equipment import equipment_rows
 from backend.engine.npc_presence import physically_present
 from backend.engine.physical_conditions.ledger import read
@@ -46,6 +48,7 @@ async def _conditions(
     actor: dict,
     detailed: bool,
     clothing: dict | None,
+    placement: dict | None = None,
 ) -> dict:
     try:
         ledger = read(state.entity_states)
@@ -62,7 +65,6 @@ async def _conditions(
         if row.status != "resolved"
         and row.visibility == "public"
         and row.target_id in {actor["id"], *names}
-        and row.id not in by_id
         and row.latest.kind in {"narration", "manual"}
     ]
     message_ids = {row.latest.message_id for row in candidates if row.latest.kind == "narration"}
@@ -81,9 +83,13 @@ async def _conditions(
         else []
     )
     sources = {message.id: message.content for message in messages}
+    confirmed_ids = set()
     for row in candidates:
         quote = row.detail if row.latest.kind == "manual" else _source_quote(row, sources)
-        if quote:
+        if not quote:
+            continue
+        confirmed_ids.add(row.id)
+        if row.id not in by_id:
             by_id[row.id] = {
                 "id": row.id,
                 "target_id": row.target_id,
@@ -100,6 +106,12 @@ async def _conditions(
                 "kind": ledger.conditions[row["id"]].kind,
                 "part": ledger.conditions[row["id"]].part,
                 "last_changed_minute": ledger.conditions[row["id"]].last_changed_minute,
+                **condition_position(
+                    ledger.conditions[row["id"]],
+                    actor["id"],
+                    placement or {},
+                    source_confirmed=row["id"] in confirmed_ids,
+                ),
                 **(
                     {"detail": ledger.conditions[row["id"]].detail}
                     if ledger.conditions[row["id"]].kind == "item_state"
@@ -157,10 +169,16 @@ async def character_current_state(
         result["conditions"] = await _conditions(db, state, actor, detailed, visual)
         return result
     clothes = await equipment_rows(db, state, actor, objects, visual)
-    result["conditions"] = await _conditions(db, state, actor, detailed, {"clothing": clothes})
+    placement = placement_projection(actor, clothes, detailed=detailed)
+    result["conditions"] = await _conditions(
+        db, state, actor, detailed, {"clothing": clothes}, placement
+    )
     result["clothing"] = {
         "status": "available",
         "detail_limited": visual["clothing_detail_limited"],
         "items": clothes,
+        **placement_projection(
+            actor, clothes, detailed=detailed, conditions=result["conditions"]["items"]
+        ),
     }
     return result

@@ -235,7 +235,7 @@ test('equipment icons use canonical images at 14 px with a missing-image fallbac
   assert.match(missing, /ra-vest/)
 })
 
-test('silhouettes show overlapping layers and only occupied unlabelled body positions', async t => {
+test('silhouettes show overlapping layers and occupied named body positions', async t => {
   const path = new URL('../src/utils/equipmentSlots.ts', import.meta.url)
   const utility = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   const key = `__equipmentSlots${sequence++}`
@@ -259,7 +259,7 @@ const useEquipmentHover=()=>({active:ref(''),target:ref(null),style:ref({}),clos
   assert.match(layered, /src="male.svg"/)
   assert.equal((layered.match(/data-equipment-slot=/g) || []).length, 12)
   assert.match(layered, /aria-label="Feet: Boots: &lt;b&gt;Socks&lt;\/b&gt;"/)
-  assert.match(layered, /aria-label="Medical sensor"/)
+  assert.match(layered, /aria-label="Anal area: Medical sensor"/)
   assert.doesNotMatch(layered, /BodyVaginal|>Anal<|>Vaginal<|<b>/)
 })
 

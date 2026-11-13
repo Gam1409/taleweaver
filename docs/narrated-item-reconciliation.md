@@ -191,13 +191,34 @@ unclassified types use a list. Gender chooses only the silhouette, never anatomy
 Legacy player equipment keeps its existing mechanical actions and humanoid layout
 unless an explicit body form specifies otherwise.
 
-A worn ordinary object can have `attachment_slot` (`vaginal` or `anal`) without
-becoming clothing or covering other garments. The optional `body.attachment_slots`
-means unassessed when null and explicitly unavailable when empty. Completed,
-evidence-backed placement requires an established adult and cannot override an
-explicitly unavailable region. Carrying, holding or transferring removes the old
-binding. These view-only positions have no anatomical labels and are absent until
-occupied by a source-confirmed item. No extra model call is added.
+A worn ordinary object can have `attachment_slot` (`vaginal`, `anal`, `uterine` or
+`penile`) without becoming clothing or covering other garments. The optional
+`body.attachment_slots` means unassessed when null and explicitly unavailable when
+empty. Completed, evidence-backed placement requires an established adult and
+cannot override an explicit exclusion. Carrying, holding or transferring removes
+the old binding. Each display group remains one position: clitoris/labia/vagina,
+sphincter/anus, uterus, and penis/testicles. No extra model call is added.
+
+For a physically present, visible character with a valid profile, known adult age
+and detailed clothing enabled, the read-only card adds `clothing.placement_status`
+(`available`, `unavailable` or `unassessed`) and `placement_slots`. Each exposed key
+has `empty`, `occupied` or `unconfirmed` status. Declared regions stay visible when
+empty. An owned binding with missing or invalid proof is unconfirmed and does not
+reveal its item's name or ID. Confirmed items require an unchanged exact quote,
+hash and any saved span in a non-debug assistant/user message from the same session
+with the matching source role. Explicit exclusions remain authoritative.
+
+Public bodily conditions retain their canonical IDs, parts and saved state.
+Exact known part identifiers and explicit aliases add `display_slots` for hover
+grouping; unknown parts stay in the general condition list. Ordinary body positions
+do not require adult age or detailed clothing. The four additional groups follow
+the same metadata gates above. When availability is unassessed, a currently
+source-verified public condition or confirmed occupied binding may establish its
+reported group without asserting a complete body layout. Narrated condition proof
+must match the original non-debug assistant message in the same session; explicit
+public manual corrections are also eligible. Private, resolved and unsupported
+conditions do not establish new groups. A status-only group has no item row, and
+its empty placement status makes no claim that the body is healthy or clean.
 
 Partial clothing displacement remains worn and owned. A source-confirmed displaced
 garment remains known on the card even if it no longer covers its original region.

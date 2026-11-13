@@ -77,7 +77,7 @@
   border-radius: 13px;
 }
 .npc-card-refined
-  :deep(.equipment-silhouette[data-hide-empty='true'] [data-slot-occupied='false']) {
+  :deep(.equipment-silhouette[data-hide-empty='true'] [data-slot-occupied='false']:not([data-slot-has-state='true'])) {
   display: none;
 }
 .npc-card-refined :deep([aria-label='Physical condition'] li) {

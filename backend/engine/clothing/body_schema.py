@@ -13,7 +13,13 @@ from pydantic import (
 
 from backend.core.text_evidence import WithEvidenceSpan
 
-BodySlot = Literal["vaginal", "anal"]
+BodySlot = Literal["vaginal", "anal", "uterine", "penile"]
+BODY_SLOT_KEYS: dict[BodySlot, str] = {
+    "vaginal": "BodyVaginal",
+    "anal": "BodyAnal",
+    "uterine": "BodyUterine",
+    "penile": "BodyPenile",
+}
 
 
 class BodyLayout(BaseModel):
@@ -22,7 +28,7 @@ class BodyLayout(BaseModel):
     silhouette: Literal["male", "female", "neutral"] | None = None
     attachment_slots: list[BodySlot] | None = Field(
         default=None,
-        max_length=2,
+        max_length=4,
         description="Explicit available regions. Null is unassessed; [] explicitly excludes them. Never derive anatomy from gender.",
     )
 

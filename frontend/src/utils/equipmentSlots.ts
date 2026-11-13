@@ -16,6 +16,12 @@ export interface EquipmentDisplayItem {
 }
 
 export type EquipmentDisplay = Record<string, EquipmentDisplayItem[]>
+export interface EquipmentCondition {
+  id: string
+  detail: string
+  part?: string
+  status?: string
+}
 
 export const EQUIPMENT_SLOTS = [
   { key: 'Head', label: 'Head', icon: 'ra-helmet', top: '10%', left: '50%' },
@@ -32,8 +38,10 @@ export const EQUIPMENT_SLOTS = [
 ] as const
 
 export const BODY_ITEM_SLOTS = [
-  { key: 'BodyVaginal', label: '', icon: 'ra-emerald', top: '57%', left: '50%' },
-  { key: 'BodyAnal', label: '', icon: 'ra-emerald', top: '64%', left: '50%' }
+  { key: 'BodyVaginal', label: 'Vaginal area', shortLabel: 'V', icon: 'ra-emerald', top: '54%', left: '44%' },
+  { key: 'BodyAnal', label: 'Anal area', shortLabel: 'A', icon: 'ra-emerald', top: '64%', left: '50%' },
+  { key: 'BodyUterine', label: 'Uterus', shortLabel: 'U', icon: 'ra-emerald', top: '44%', left: '50%' },
+  { key: 'BodyPenile', label: 'Penile area', shortLabel: 'P', icon: 'ra-emerald', top: '54%', left: '68%' }
 ] as const
 
 export function legacyEquipment(equipment: Record<string, unknown>): EquipmentDisplay {
