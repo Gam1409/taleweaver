@@ -188,11 +188,13 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
 
     options = preset_options(comfy_options, workflow, template="pony6")
     options["comfyui_presets"]["detailed"] = named_preset(workflow, template="flux1")
+    options["advanced_model_provider"] = "comfyui"
+    options["comfyui_assignments"]["advanced"] = "detailed"
     options["comfyui_presets"]["art"]["mature_themes"] = enabled
     options["comfyui_presets"]["detailed"]["mature_themes"] = not enabled
     story = SimpleNamespace(
         original_manifest={
-            "visual_presets": {"advanced": "detailed"},
+            "visual_preset_source": "current",
             "nsfw_settings": {"enabled": enabled, "level": "hard"},
         },
         selected_image_styles=[],
@@ -216,6 +218,49 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     system = llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
     # The advanced profile has the opposite flag, so both gates are never on.
     assert marker not in system
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("advanced", [False, True])
+async def test_story_pinned_task_matches_real_generation_despite_quality_override(
+    comfy_options, workflow, monkeypatch, advanced
+):
+    from backend.core.comfyui_config import prompt_rules
+    from backend.engine.preset_prompt_suggestion import suggest_preset_prompt
+    from backend.schemas.adventure_visuals import SuggestPromptRequest
+
+    options = preset_options(comfy_options, workflow, template="pony6")
+    options["comfyui_presets"]["detailed"] = named_preset(workflow, template="flux1")
+    story = SimpleNamespace(
+        original_manifest={"visual_presets": {"advanced": "detailed"}},
+        selected_image_styles=[],
+        selected_tone=None,
+    )
+    user = SimpleNamespace(t2i_settings=options, image_styles_catalog=[], tone_catalog=[])
+    generate = AsyncMock(return_value="/data/synthetic.png")
+    monkeypatch.setattr(MediaEngine, "generate_image", generate)
+    await MediaEngine.generate_entity_image(
+        "A blue coat.",
+        "archive",
+        "keeper",
+        "npc",
+        {"t2i_settings": story_t2i(options, story)},
+        {},
+        use_advanced_model=advanced,
+    )
+    generation_options = generate.await_args.kwargs["provider_options"]
+    expected = prompt_rules(generation_options)
+    assert generation_options["image_purpose"] == "npc" and expected.format == "description"
+    assert generation_options["comfyui_assignments"]["npc"] == "detailed"
+    assert generation_options["comfyui_profile"] == ("advanced" if advanced else "simple")
+    assert select_profile(generation_options).name == "Illustrations"
+    capture = AsyncMock(return_value="blue coat")
+    monkeypatch.setattr("backend.engine.preset_prompt_suggestion.adapt_body", capture)
+    payload = SuggestPromptRequest(
+        target_type="npc", target_id="keeper", use_advanced_model=advanced
+    )
+    await suggest_preset_prompt(user, story, payload, "Keeper", "A blue coat.")
+    assert capture.await_args.args[1] == expected
 
 
 @pytest.mark.asyncio

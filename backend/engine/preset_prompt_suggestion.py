@@ -4,6 +4,7 @@ from fastapi import HTTPException
 
 from backend.core import prompts
 from backend.core.comfyui_config import prompt_rules, select_profile
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
@@ -51,9 +52,10 @@ async def suggest_preset_prompt(
             if advanced_for(t2i, payload.target_type, payload.use_advanced_model)
             else "simple"
         )
-        if t2i.get(f"{profile}_model_provider") != "comfyui":
+        purpose = purpose_for(payload.target_type)
+        if image_provider(t2i, profile, purpose) != "comfyui":
             return None
-        options = {**t2i, "comfyui_profile": profile}
+        options = {**t2i, "comfyui_profile": profile, "image_purpose": purpose}
         rules = prompt_rules(options)
         if not rules:
             return None
