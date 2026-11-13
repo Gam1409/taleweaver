@@ -63,9 +63,9 @@ async def _message_ids(db: Any, sid: str, query: str, candidates: list[dict]) ->
 
 
 async def _npcs(db: Any, sid: str, npc_ids: set[str], candidates: list[dict]) -> list[Any]:
-    wanted = sorted(npc_ids | {str(row["npc_id"]) for row in candidates[:32] if row.get("npc_id")})[
-        :MAX_NPCS
-    ]
+    present = sorted(npc_ids)[:MAX_NPCS]
+    semantic = {str(row["npc_id"]) for row in candidates[:32] if row.get("npc_id")}
+    wanted = present + sorted(semantic - npc_ids)[: MAX_NPCS - len(present)]
     return list(
         await db.scalars(
             select(WorldEntity)
@@ -73,7 +73,11 @@ async def _npcs(db: Any, sid: str, npc_ids: set[str], candidates: list[dict]) ->
                 WorldEntity.session_id == sid,
                 WorldEntity.entity_type == "NPC",
             )
-            .order_by(WorldEntity.id.in_(wanted).desc(), WorldEntity.id)
+            .order_by(
+                WorldEntity.id.in_(present).desc(),
+                WorldEntity.id.in_(wanted).desc(),
+                WorldEntity.id,
+            )
             .limit(MAX_NPCS)
             .execution_options(populate_existing=True)
         )
