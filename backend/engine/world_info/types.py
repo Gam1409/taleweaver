@@ -181,7 +181,3 @@ def searchable_text(entry: EntryDraft) -> str:
 def entry_hash(entry: EntryDraft) -> str:
     payload = json.dumps(entry.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-entry_search_text = searchable_text
-entry_content_hash = entry_hash

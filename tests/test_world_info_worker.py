@@ -14,8 +14,8 @@ from backend.engine.world_info.types import (
     EntryDraft,
     Evidence,
     Fact,
-    entry_content_hash,
-    entry_search_text,
+    entry_hash,
+    searchable_text,
 )
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
@@ -106,8 +106,8 @@ async def test_failure_resume_reuses_validated_batches_and_freezes_language(
             relations=entry.relations,
             kind=entry.kind,
         )
-        entry.search_text = entry_search_text(edited)
-        entry.content_hash = entry_content_hash(edited)
+        entry.search_text = searchable_text(edited)
+        entry.content_hash = entry_hash(edited)
         session = await db.get(GameSession, "portrait-session")
         session.content_language = "Arabic"
         await db.commit()

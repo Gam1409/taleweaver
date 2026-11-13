@@ -17,8 +17,8 @@ from backend.engine.world_info.parsing import validate_evidence
 from backend.engine.world_info.types import (
     EntryDraft,
     SourcePlan,
-    entry_content_hash,
-    entry_search_text,
+    entry_hash,
+    searchable_text,
 )
 from backend.models.world_info import WorldInfoEntry, WorldInfoRevision, WorldInfoSource
 
@@ -60,8 +60,8 @@ def _new_entry(claim: queue.Claim, entry: EntryDraft, ordinal: int) -> WorldInfo
         audience="narrator_only",
         known_by=[],
         status="draft",
-        search_text=entry_search_text(entry),
-        content_hash=entry_content_hash(entry),
+        search_text=searchable_text(entry),
+        content_hash=entry_hash(entry),
     )
 
 
