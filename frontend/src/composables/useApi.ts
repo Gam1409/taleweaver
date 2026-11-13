@@ -149,6 +149,7 @@ async function request<T>(path: string, init?: ApiFetchInit): Promise<T> {
     if (res.status === 204) return undefined as T
     return res.json() as Promise<T>
   } catch (err: any) {
+    if (init?.signal?.aborted) throw err
     // If it's not already an API error (thrown above), it's likely a network error
     if (!(err instanceof ApiError)) {
       configState.isBackendReachable = false
@@ -869,12 +870,13 @@ export const api = {
     })
   },
 
-  transcribeAudio(fileBlob: Blob): Promise<{ text: string }> {
+  transcribeAudio(fileBlob: Blob, signal?: AbortSignal): Promise<{ text: string }> {
     const formData = new FormData()
     formData.append('file', fileBlob, 'audio.wav')
     return request('/stt/transcribe', {
       method: 'POST',
       body: formData,
+      signal,
       timeoutMs: 60000,
     })
   },

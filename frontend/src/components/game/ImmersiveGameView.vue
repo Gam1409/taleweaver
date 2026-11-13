@@ -375,6 +375,7 @@ defineExpose({
 
       <ImmersiveInputBar
         ref="inputBarRef"
+        :session-id="props.gameId"
         :can-send-input="canSendInput"
         :is-evaluating="isEvaluating"
         :status-text="props.statusText"

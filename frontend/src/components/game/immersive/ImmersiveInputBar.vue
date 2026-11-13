@@ -12,6 +12,7 @@ import { useVoiceInput } from '@/composables/useVoiceInput'
 import { Mic, SendHorizontal, AlertTriangle, RotateCcw } from 'lucide-vue-next'
 
 const props = defineProps<{
+  sessionId?: string
   canSendInput?: boolean
   isEvaluating?: boolean
   statusText?: string
@@ -131,6 +132,7 @@ const {
   isTranscribing,
   handleMicButtonMousedown,
 } = useVoiceInput({
+  sessionId: toRef(props, 'sessionId'),
   canSendInput: toRef(props, 'canSendInput'),
   inputText,
   onSend: handleSend,
