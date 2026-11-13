@@ -1093,7 +1093,8 @@ async def export_adventure_manifest(
 
     entity_res = await db.execute(
         select(WorldEntity.id, WorldEntity.current_scene_id).where(
-            WorldEntity.template_id == template_id
+            WorldEntity.template_id == template_id,
+            WorldEntity.session_id.is_(None),
         )
     )
     backfill_item_start_scenes(
@@ -1101,7 +1102,12 @@ async def export_adventure_manifest(
     )
 
     # Sync exits from world_exits table to reflect world editor updates
-    exit_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id))
+    exit_res = await db.execute(
+        select(WorldExit).where(
+            WorldExit.template_id == template_id,
+            WorldExit.session_id.is_(None),
+        )
+    )
     db_exits = exit_res.scalars().all()
     if db_exits:
         manifest["exits"] = [serialize_exit(x) for x in db_exits]

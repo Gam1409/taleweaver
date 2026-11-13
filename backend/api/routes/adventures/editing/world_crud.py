@@ -19,6 +19,7 @@ from backend.api.routes.adventures.editing.entity_update.fields import clipped_o
 from backend.api.routes.adventures.editing.exit_fields import exit_behavior_values
 from backend.api.routes.adventures.editing.image_clone import _clone_entity_image
 from backend.api.routes.adventures.editing.payload import _serialize_model
+from backend.api.routes.adventures.editing.scene_deletion import sync_deleted_scene_manifest
 from backend.api.routes.adventures.editing.schemas import (
     EntityCreateRequest,
     ExitCreateRequest,
@@ -136,22 +137,7 @@ async def delete_editor_scene(
     )
     await db.delete(scene)
 
-    manifest = deepcopy(adv.original_manifest or {})
-    if (manifest.get("start_scene_id") or "") == scene_id:
-        replacement_scene_res = await db.execute(
-            select(WorldScene.id).where(
-                WorldScene.template_id == template_id,
-                WorldScene.session_id.is_(None),
-                WorldScene.id != scene_id,
-            )
-        )
-        replacement_scene_id = replacement_scene_res.scalars().first()
-        if replacement_scene_id:
-            manifest["start_scene_id"] = replacement_scene_id
-        else:
-            manifest.pop("start_scene_id", None)
-        adv.original_manifest = manifest
-
+    await sync_deleted_scene_manifest(db, adv)
     await db.commit()
     return {"status": "success", "deleted_scene_id": scene_id}
 
