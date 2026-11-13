@@ -15,7 +15,11 @@ from backend.models.chat import ChatMessage
 def _bindings(extraction: ItemExtraction, actors: dict) -> dict[tuple[str, str], WearSource]:
     result = {}
     for action in extraction.actions[:6]:
-        if action.basis != "observed_placement" or not action.item_id:
+        if action.basis not in {"observed_wear", "observed_placement"} or not action.item_id:
+            continue
+        if action.basis == "observed_wear" and not (
+            action.uncovered_regions or action.attachment_slot
+        ):
             continue
         actor = actors.get(action.destination_owner)
         profile = load_profile(actor.get("visual_profile")) if actor else None

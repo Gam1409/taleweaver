@@ -31,12 +31,13 @@ def unchanged_observation(
             )
             and (action.attachment_slot is None or row.attachment_slot == action.attachment_slot)
         )
-        needs_source = row.source is None and bool(
-            action.uncovered_regions or action.attachment_slot
-        )
-        if same and not needs_source and action.basis == "observed_wear":
+        if (
+            same
+            and action.basis == "observed_wear"
+            and not (action.uncovered_regions or action.attachment_slot)
+        ):
             return True
-        if same and row.source is not None and action.basis == "observed_placement":
+        if same and row.source is not None:
             source = row.source
             current = (
                 source.source_message_id is None
