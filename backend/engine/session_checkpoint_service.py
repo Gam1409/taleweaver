@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine import checkpoint_sources
 from backend.engine.checkpoint_avatar import restore as restore_avatar
 from backend.engine.checkpoint_world import capture as capture_world
 from backend.engine.checkpoint_world import restore as restore_world
@@ -232,6 +233,9 @@ class SessionCheckpointService:
         snapshot["session_status"] = game_session.status
         snapshot["npc_recovery"] = await recovery_queue.capture(db, session_id)
         snapshot.update(await capture_world(db, state))
+        snapshot[checkpoint_sources.KEY] = await checkpoint_sources.capture(
+            db, session_id, snapshot
+        )
         snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
 
@@ -273,7 +277,12 @@ class SessionCheckpointService:
 
     @staticmethod
     async def restore_checkpoint(
-        db: AsyncSession, session_id: str, checkpoint_id: str, *, warnings: list[str] | None = None
+        db: AsyncSession,
+        session_id: str,
+        checkpoint_id: str,
+        *,
+        warnings: list[str] | None = None,
+        requeued: list[str] | None = None,
     ) -> int:
         cp_res = await db.execute(
             select(SessionCheckpoint).where(
@@ -288,6 +297,7 @@ class SessionCheckpointService:
         game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         snapshot = checkpoint.state_snapshot or {}
         validate_world(snapshot)
+        checkpoint_sources.validate(snapshot)
         if warnings is not None and (
             "canonical_items" not in snapshot or "canonical_actors" not in snapshot
         ):
@@ -332,6 +342,7 @@ class SessionCheckpointService:
             await rewind_journals(db, session_id, stale_ids)
             await db.execute(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
         await recovery_queue.restore(db, session_id, snapshot.get("npc_recovery") or {})
+        await checkpoint_sources.reconcile(db, game_session, snapshot, requeued=requeued)
 
         await db.execute(
             delete(SessionCheckpoint)

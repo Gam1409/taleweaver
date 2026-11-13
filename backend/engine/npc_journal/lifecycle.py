@@ -16,9 +16,10 @@ def remap_journal(metadata: dict | None, message_ids: dict[str, str]) -> dict:
     if not isinstance(journal, dict):
         return result
     journal = expanded(journal)
-    original = journal.get("introduced_message_id")
-    if original:
-        journal["introduced_message_id"] = message_ids.get(original, original)
+    for field in ("introduced_message_id", "description_source"):
+        original = journal.get(field)
+        if original:
+            journal[field] = message_ids.get(original, original)
     for entry in journal.get("entries") or []:
         original = entry.get("message_id")
         entry["message_id"] = message_ids.get(original, original)

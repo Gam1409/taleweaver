@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.chpm.lifecycle import fork as fork_chpm
+from backend.engine.living_world.portability import remap_intentions
 from backend.engine.memory_rag.lifecycle import restore_memory
 from backend.engine.npc_journal.messages import restore_messages
 from backend.engine.scene_illustrations.snapshots import remap_illustrations
@@ -49,6 +50,7 @@ def restore_details(
         if field in old_state:
             setattr(state, field, deepcopy(old_state[field]))
     ids = restore_messages(db, state.session_id, history)
+    state.living_world = remap_intentions(state.living_world, ids)
     restore_memory(state, old_state, ids)
     state.entity_states = fork_chpm(
         remap_illustrations(remap_social_state(state.entity_states, ids), ids),

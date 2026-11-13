@@ -6,10 +6,16 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import null, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat import ChatMessage
+
+
+def _revision_id(raw: dict[str, Any]) -> Any:
+    if "revision_id" in raw and raw["revision_id"] is None:
+        return null()
+    return raw.get("revision_id") or str(uuid4())
 
 
 def restore_messages(
@@ -34,7 +40,7 @@ def restore_messages(
             sequence_id=raw.get("sequence_id"),
             npc_journal=journal,
             npc_recovery=deepcopy(raw.get("npc_recovery")),
-            revision_id=raw.get("revision_id") or str(uuid4()),
+            revision_id=_revision_id(raw),
             versions=deepcopy(raw.get("versions")),
             portrait_state=deepcopy(raw.get("portrait_state")),
             is_debug=bool(raw.get("is_debug", False)),

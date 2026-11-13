@@ -992,6 +992,9 @@ async def copy_session(
     # 6. Clone the conversation and map evidence to its new message IDs.
     message_ids = await copy_messages(db, original_session.id, copied_session.id)
     if original_state is not None and cloned_state is not None:
+        from backend.engine.living_world.portability import remap_intentions
+
+        cloned_state.living_world = remap_intentions(cloned_state.living_world, message_ids)
         restore_memory(cloned_state, memory_snapshot(original_state), message_ids)
         cloned_state.entity_states = copy_vn_state(
             cloned_state.entity_states,
@@ -1297,14 +1300,20 @@ async def restore_session_checkpoint(
         raise HTTPException(status_code=404, detail="Session not found.")
 
     restore_warnings: list[str] = []
+    journal_refresh: list[str] = []
     try:
         async with scheduler.foreground():
             deleted_messages = await SessionCheckpointService.restore_checkpoint(
-                db, game_id, checkpoint_id, warnings=restore_warnings
+                db, game_id, checkpoint_id, warnings=restore_warnings, requeued=journal_refresh
             )
             await db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if journal_refresh:
+        from backend.engine.npc_journal.worker import schedule
+
+        schedule(game_id, current_user.id)
 
     # Event-table pruning is intentionally deferred until a dedicated event store exists.
     logger.info(

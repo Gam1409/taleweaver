@@ -133,6 +133,18 @@ indexes stay paused. Rewind invalidates future-derived memory, and session
 copy/import remaps source message references. Session deletion cleans up its
 index; deleting a template preserves surviving sessions and their history.
 
+Checkpoints store revision IDs and content hashes only for narration sources
+referenced by their saved NPC journals, including archived entries and observed
+descriptions. Restoring a checkpoint keeps retained narration revisions and
+retracts evidence whose source changed or disappeared. Existing journal tasks
+return to the ordinary background queue; restoration makes no model request.
+Older checkpoints without these anchors retain matching evidence and validate
+available quotations against the current session-local assistant reply. Legacy
+records without quotations cannot establish a historical revision and retain
+their previous treatment. Private cognition continues to validate its own saved
+source revisions and hashes before live use. Authored and manually edited NPC
+descriptions remain independent of observed description provenance.
+
 For diagnostics, `gm.turn.memory_recall` records retrieval method, selected source
 IDs/layers, elapsed time and context length without logging embedding credentials
 or raw memory text.
