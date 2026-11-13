@@ -690,7 +690,7 @@ async def create_adventure(
     return {
         "game_id": created.session.id,
         "adventure_id": created.template.id,
-        "avatar_id": created.avatar.id,
+        "avatar_id": created.session.avatar_id if payload.skip_generation else created.avatar.id,
     }
 
 
