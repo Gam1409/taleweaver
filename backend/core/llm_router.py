@@ -35,6 +35,7 @@ from backend.core.llm_roles import resolve_llm_role
 from backend.core.llm_sampling import apply as apply_sampling
 from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
+from backend.core.llm_thinking import apply_thinking_settings
 from backend.core.security import encryption_util
 from backend.core.voice_repetition import clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
@@ -843,17 +844,13 @@ class GameMasterLLM:
 
     def _apply_thinking_settings(self, kwargs: dict) -> None:
         """Inject thinking parameters based on user settings and provider."""
-        # These providers default to thinking-on; omission does not disable it.
-        if self.provider in {"minimax", "deepseek"}:
-            enabled_type = "adaptive" if self.provider == "minimax" else "enabled"
-            kwargs["thinking"] = {"type": enabled_type if self.enable_thinking else "disabled"}
-            return
-
-        if not self.enable_thinking:
-            return
-
-        # LiteLLM maps 'thinking' to provider-specific params (budget_tokens for Anthropic, etc.)
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": self.max_thinking_tokens}
+        apply_thinking_settings(
+            kwargs,
+            provider=self.provider,
+            model=kwargs.get("model") or self.model,
+            enabled=self.enable_thinking,
+            budget_tokens=self.max_thinking_tokens,
+        )
 
     def _apply_openrouter_provider_routing(self, kwargs: dict) -> None:
         """Inject provider routing ordering into OpenRouter requests if configured."""
@@ -1159,7 +1156,7 @@ class GameMasterLLM:
         response_format = output.response_format
         if response_format is not None:
             kwargs["response_format"] = response_format
-        if not json_mode or self.provider == "deepseek":
+        if not json_mode or self.provider in {"deepseek", "minimax"}:
             self._apply_thinking_settings(kwargs)
         self._apply_provider_options(kwargs, model)
         self._apply_openrouter_provider_routing(kwargs)
