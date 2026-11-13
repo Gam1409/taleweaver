@@ -29,11 +29,14 @@ router = APIRouter(route_class=WorldInfoRoute)
 write = [Depends(session_mutation_lease)]
 
 
-async def _refresh_changed(db: AsyncSession, session_id: str, user: User) -> None:
-    if not db.info.pop("world_info_changed", False) or not read_settings(user).enabled:
-        return
-    row = await db.get(MemoryIndexState, session_id, populate_existing=True)
-    if row is not None and not row.paused:
+async def commit_changed(db: AsyncSession, session_id: str, user: User) -> None:
+    """Read maintenance gates in the write transaction, then wake after commit."""
+    refresh = False
+    if db.info.pop("world_info_changed", False) and read_settings(user).enabled:
+        row = await db.get(MemoryIndexState, session_id, populate_existing=True)
+        refresh = row is not None and row.user_id == user.id and not row.paused
+    await db.commit()
+    if refresh:
         schedule_index(session_id, user.id)
 
 
@@ -106,10 +109,8 @@ async def update_entry(
     user: User = Depends(get_current_user),
 ) -> object:
     entry = await entries.update_entry(db, user.id, game_id, entry_id, payload)
-    await db.commit()
-    result = await views.entry_detail(db, entry)
-    await _refresh_changed(db, game_id, user)
-    return result
+    await commit_changed(db, game_id, user)
+    return await views.entry_detail(db, entry)
 
 
 @router.delete("/entries/{entry_id}", dependencies=write)
@@ -121,8 +122,7 @@ async def delete_entry(
     user: User = Depends(get_current_user),
 ) -> dict:
     await entries.remove_entry(db, user.id, game_id, entry_id, version)
-    await db.commit()
-    await _refresh_changed(db, game_id, user)
+    await commit_changed(db, game_id, user)
     return {"deleted": True, "index": await views.index_state(db, user, game_id)}
 
 
@@ -135,10 +135,8 @@ async def unpublish_entry(
     user: User = Depends(get_current_user),
 ) -> object:
     entry = await entries.unpublish(db, user.id, game_id, entry_id, payload.version)
-    await db.commit()
-    result = await views.entry_detail(db, entry)
-    await _refresh_changed(db, game_id, user)
-    return result
+    await commit_changed(db, game_id, user)
+    return await views.entry_detail(db, entry)
 
 
 @router.delete("/sources/{source_id}", dependencies=write)
@@ -150,9 +148,8 @@ async def delete_source(
     user: User = Depends(get_current_user),
 ) -> dict:
     await sources.remove(db, user.id, game_id, source_id, version)
-    await db.commit()
+    await commit_changed(db, game_id, user)
     worker.cancel_source(source_id)
-    await _refresh_changed(db, game_id, user)
     return {"deleted": True, "index": await views.index_state(db, user, game_id)}
 
 
@@ -164,15 +161,13 @@ async def publish_entries(
     user: User = Depends(get_current_user),
 ) -> dict:
     published, replaced, source = await publishing.publish(db, user.id, game_id, payload)
-    await db.commit()
-    result = {
+    await commit_changed(db, game_id, user)
+    return {
         "published": published,
         "replaced": replaced,
         "source": await views.source_view(db, source),
         "index": await views.index_state(db, user, game_id),
     }
-    await _refresh_changed(db, game_id, user)
-    return result
 
 
 @router.post("/index/rebuild", dependencies=write)
@@ -199,6 +194,5 @@ async def rebuild_index(
         raise WorldInfoError("Session index is unavailable. Retry.", 409)
     await invalidate(db, row, paused=False)
     await db.commit()
-    result = {"index": await views.index_state(db, user, game_id)}
     schedule_index(game_id, user.id)
-    return result
+    return {"index": await views.index_state(db, user, game_id)}

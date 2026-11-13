@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.world_info_common import WorldInfoRoute
-from backend.api.routes.adventures.world_info_entries import _refresh_changed
+from backend.api.routes.adventures.world_info_entries import commit_changed
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.world_info import bulk, views
@@ -33,7 +33,6 @@ async def apply_collection(
     user: User = Depends(get_current_user),
 ) -> dict:
     result = await bulk.apply(db, user.id, game_id, payload)
-    await db.commit()
+    await commit_changed(db, game_id, user)
     result["index"] = await views.index_state(db, user, game_id)
-    await _refresh_changed(db, game_id, user)
     return result

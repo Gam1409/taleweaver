@@ -116,9 +116,8 @@ async def process_revision(
         db, user.id, game_id, revision_id, payload.control_version
     )
     await db.commit()
-    result = await views.revision_detail(db, revision)
     worker.schedule(game_id, user.id)
-    return result
+    return await views.revision_detail(db, revision)
 
 
 @router.post("/revisions/{revision_id}/cancel")
