@@ -98,6 +98,36 @@ def normalize_model(provider: str, model: str) -> str:
     return _MODEL_NORMALIZERS.get(provider, _normalize_default)(normalized)
 
 
+def _provider_endpoint(
+    provider: str, kimi_api_base: str | None, minimax_api_base: str | None
+) -> tuple[str | None, str | None]:
+    endpoints = {
+        **_FIXED_ENDPOINTS,
+        "kimi": ("openai", kimi_api_base),
+        "minimax": ("openai", minimax_api_base),
+    }
+    return endpoints.get(provider, (None, None))
+
+
+def effective_api_base(
+    *,
+    provider: str,
+    api_key: str | None,
+    api_base: str | None,
+    kimi_api_base: str | None = None,
+    minimax_api_base: str | None = None,
+) -> str | None:
+    """Resolve the same provider override for dispatch and reservation observers."""
+    if provider in {"ollama", "custom_openai"}:
+        return api_base
+    _, fixed_base = _provider_endpoint(provider, kimi_api_base, minimax_api_base)
+    if provider not in OPENAI_COMPATIBLE_PROVIDERS and (
+        str(api_key or "").startswith("sk-or-v1") or provider == "openrouter"
+    ):
+        return OPENROUTER_API_BASE
+    return fixed_base
+
+
 def apply_provider_endpoint(
     kwargs: dict[str, Any],
     *,
@@ -122,23 +152,18 @@ def apply_provider_endpoint(
         return
 
     kwargs["api_key"] = api_key
-    endpoints = {
-        **_FIXED_ENDPOINTS,
-        "kimi": ("openai", kimi_api_base),
-        "minimax": ("openai", minimax_api_base),
-    }
-    custom_provider, fixed_base = endpoints.get(provider, (None, None))
+    custom_provider, _ = _provider_endpoint(provider, kimi_api_base, minimax_api_base)
+    fixed_base = effective_api_base(
+        provider=provider,
+        api_key=api_key,
+        api_base=api_base,
+        kimi_api_base=kimi_api_base,
+        minimax_api_base=minimax_api_base,
+    )
     if custom_provider:
         kwargs["custom_llm_provider"] = custom_provider
     if fixed_base:
         kwargs["api_base"] = fixed_base
-
-    # Auto-detect OpenRouter keys (only when no other OpenAI-compatible provider is set).
-    is_openrouter_key = str(api_key or "").startswith("sk-or-v1")
-    if provider not in OPENAI_COMPATIBLE_PROVIDERS and (
-        is_openrouter_key or provider == "openrouter"
-    ):
-        kwargs["api_base"] = OPENROUTER_API_BASE
 
 
 def is_minimax_model(provider: str, normalized_model: str) -> bool:

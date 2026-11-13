@@ -2,23 +2,19 @@
 
 from typing import Any
 
-from backend.core.inference import admission
+from backend.core.inference import admission, transport
 from backend.core.inference.registry import (
     InferenceQueueError,
     InferenceUncertainError,
-    endpoint_key,
 )
 
 
 def reject_uncertain_fallback(router: Any, error: Exception) -> None:
     if isinstance(error, InferenceUncertainError):
         raise error
-    if not admission.enabled() or getattr(router, "provider", "") not in {
-        "ollama",
-        "custom_openai",
-    }:
+    key = transport.target(router)
+    if key is None:
         return
-    key = endpoint_key(router.api_base)
     records = admission.registry().status()
     if isinstance(error, TimeoutError) and any(
         row["endpoint_id"].split(":", 1)[0] == key and row["status"] == "RUNNING" for row in records

@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.core.inference.registry import endpoint_key
+from backend.core.llm_provider_config import effective_api_base
 
 PROVIDER_URLS = {
     "openai": "https://api.openai.com",
@@ -20,6 +21,13 @@ def target(router: Any, kwargs: dict | None = None) -> str | None:
     configured = getattr(router, f"{router.provider}_api_base", None)
     url = (
         options.get("api_base")
+        or effective_api_base(
+            provider=router.provider,
+            api_key=getattr(router, "api_key", None),
+            api_base=router.api_base,
+            kimi_api_base=getattr(router, "kimi_api_base", None),
+            minimax_api_base=getattr(router, "minimax_api_base", None),
+        )
         or router.api_base
         or configured
         or PROVIDER_URLS.get(router.provider)
