@@ -10,17 +10,20 @@ from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity
 
 
+def _unfinished_through(simulation: Simulation, boundary: int) -> bool:
+    return any(
+        item.status in {"PLANNED", "WAITING_FOR_LLM", "DEFERRED"} and item.due <= boundary
+        for item in simulation.events
+    )
+
+
 async def compile_slot(db: AsyncSession, state: SessionState, simulation: Simulation) -> None:
     settings = simulation.settings
     if not settings.auto_schedule or not settings.deliberation_enabled:
         return
-    pending = any(
-        item.status in {"PLANNED", "WAITING_FOR_LLM"} and item.due <= simulation.target
-        for item in simulation.events
-    )
-    if pending:
-        return
     due = max(simulation.cursor, simulation.schedule_next_due)
+    if _unfinished_through(simulation, due):
+        return
     if due > simulation.target:
         return
     entities = await db.scalars(
@@ -62,17 +65,9 @@ async def compile_slot(db: AsyncSession, state: SessionState, simulation: Simula
 
 
 def slot_limit(simulation: Simulation) -> int:
-    """A rules batch cannot leap over the next uncompiled recurring slot."""
+    """After compile_slot, reserve a boundary only when unfinished work holds it."""
     if simulation.settings.auto_schedule and simulation.settings.deliberation_enabled:
-        pending_due = max(
-            (
-                item.due
-                for item in simulation.events
-                if item.status in {"PLANNED", "WAITING_FOR_LLM"}
-            ),
-            default=simulation.cursor,
-        )
-        return min(
-            simulation.target, max(pending_due, simulation.cursor, simulation.schedule_next_due)
-        )
+        boundary = max(simulation.cursor, simulation.schedule_next_due)
+        if _unfinished_through(simulation, boundary):
+            return min(simulation.target, boundary)
     return simulation.target
