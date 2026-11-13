@@ -174,6 +174,12 @@ def decode_wav_to_numpy(wav_bytes: bytes) -> np.ndarray:
         return audio
 
 
+def _transcribed_text(model: WhisperModel, audio_data: np.ndarray) -> str:
+    """Consume Whisper's lazy inference generator on the same worker as transcribe."""
+    segments, _ = model.transcribe(audio_data)
+    return "".join(segment.text for segment in segments).strip()
+
+
 @router.post("/transcribe", response_model=None)
 async def transcribe_audio(
     file: UploadFile = File(...),
@@ -193,7 +199,7 @@ async def transcribe_audio(
     content = await file.read()
 
     try:
-        audio_data = decode_wav_to_numpy(content)
+        audio_data = await asyncio.to_thread(decode_wav_to_numpy, content)
     except Exception as e:
         logger.exception("Failed to decode WAV file")
         raise HTTPException(
@@ -203,8 +209,7 @@ async def transcribe_audio(
 
     try:
         model = await asyncio.to_thread(get_whisper_model, model_name)
-        segments, _ = await asyncio.to_thread(model.transcribe, audio_data)
-        text = "".join(segment.text for segment in segments).strip()
+        text = await asyncio.to_thread(_transcribed_text, model, audio_data)
         logger.info("Whisper transcription result (%s): %s", model_name, text)
         return {"text": text}
     except Exception as e:
