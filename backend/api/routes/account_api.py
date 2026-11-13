@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from backend.engine.profile import (
     list_player_sessions,
 )
 from backend.models.user import User
+from backend.utils.media_access import issue_media_cookie
 
 router = APIRouter(prefix="/users/me", tags=["Account"])
 logger = logging.getLogger(__name__)
@@ -100,6 +101,8 @@ async def _apply_password_change(
 @router.put("/credentials", response_model=UserCredentialsUpdateResponse)
 async def update_my_credentials(
     request: UserCredentialsUpdateRequest,
+    http_request: Request,
+    response: Response,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
 ) -> UserCredentialsUpdateResponse:
@@ -125,6 +128,7 @@ async def update_my_credentials(
 
     await db.commit()
     access_token = create_user_access_token(current_user) if changed else None
+    issue_media_cookie(response, http_request, current_user)
     await db.refresh(current_user)
     return UserCredentialsUpdateResponse(
         user=UserResponse(**await build_user_profile_data(db, current_user)),
