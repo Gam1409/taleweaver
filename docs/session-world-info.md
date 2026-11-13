@@ -40,7 +40,12 @@ necessary to assess interpretation and factual quality.
 
 ## Find and organize a large collection
 
-The catalog supports **10 to 10,000 records** with bounded server-side pages. Search
+The catalog supports **up to 10,000 compact records** with bounded server-side pages.
+Entry count, fact count and serialized storage have independent ceilings; the
+first reached limit stops further additions. Evidence-rich or longer entries can
+fill the 32 MiB storage budget before reaching 10,000 records. Searchable UTF-8
+text sizes do not measure that quota: source evidence, original proposals and
+entry metadata also count. Search
 matches all entered terms; combine a source revision, group, tag and record kind.
 Sort by title, source or update order. Group and tag navigation shows SQL aggregate
 counts rather than downloading all records into the browser.
@@ -96,6 +101,11 @@ transaction, including when SQLite foreign-key enforcement is enabled.
 - **Narrator only** is the extraction default.
 - **Common knowledge** can also be used by the existing shared narrative context.
 - **Selected characters** records an explicit scope for named session NPCs.
+
+Selected recipients currently annotate references supplied to the narrator.
+There is no production actor-recall consumer yet: these records do not enter
+the selected NPCs' autonomous decision or NPC Personality memory requests.
+Actor-scoped retrieval is tracked in [#28](https://github.com/Gam1409/taleweaver/issues/28).
 
 Record kinds separately distinguish background lore, world facts, reported claims,
 recollections/character knowledge, rumors, news and authored events. The model receives
@@ -169,6 +179,14 @@ Processing runs in bounded background units behind foreground game requests.
 Each batch uses one structured extraction and at most one validation correction;
 provider/router retries retain their configured behavior. Request counters represent
 logical extraction requests, including corrections, rather than billing totals.
+Each revision has a cumulative budget of four logical requests per parsed batch.
+Cancel, resume and service restart retain the counter. Reaching the budget stops
+further dispatch while preserving completed batches and reviewed entries; the
+last allowed valid response can still be saved. Uploading an unchanged file does
+not reset its budget. Further analysis requires a corrected source revision.
+Unstarted legacy sources determine their batch count and budget when started.
+Provider/router retries are outside this logical counter, so this is not a
+currency or exact HTTP-request spending limit.
 Only malformed completed output qualifies for a correction request. Queue pressure,
 uncertain inference, transport failures and timeouts retain their operational
 meaning instead of triggering another extraction. Invalid model configuration

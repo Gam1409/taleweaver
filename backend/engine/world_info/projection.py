@@ -40,6 +40,8 @@ def visible_to(
         return True
     if audience in {"vn_continuity", "vn_social"}:
         return document.audience == "common_knowledge"
+    # Reserved for an actor-scoped World Info lookup (#28). Production recall
+    # currently uses narrator/shared audiences; mixed historical recall is not actor-safe.
     if audience != "actor" or not actor_id or actor_id not in actual_npc_ids:
         return False
     return document.audience == "common_knowledge" or (

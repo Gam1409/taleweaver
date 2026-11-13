@@ -26,6 +26,8 @@ async def reserve_session_write(db: AsyncSession, user_id: str, session_id: str)
     SQLite's legacy SELECT handling can leave two uploads reading the same free
     capacity before either starts a write transaction. This owner-scoped no-op
     write acquires the writer first; callers commit or roll back their operation.
+    SQLite's database writer lock also serializes independent processes. The local
+    gameplay lease separately prevents overlap with streamed turns.
     """
     with db.no_autoflush:
         result = await db.execute(
