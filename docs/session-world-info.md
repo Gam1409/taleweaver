@@ -51,7 +51,11 @@ Sort by title, source or update order. Group and tag navigation shows SQL aggreg
 counts rather than downloading all records into the browser.
 
 The main window reserves its width for group navigation, search and record
-summaries. Reading and editing use a separate dialog, with only one dialog active
+summaries. Groups and tags stay in the left sidebar even in small collections;
+search, kind, source-version and sort controls are visible above the results.
+On narrow screens, **Groups & tags** opens the navigation panel and **Back to
+entries** returns to the results. **Organize all matching entries** opens bulk
+controls without hiding the regular filters. Reading and editing use a separate dialog, with only one dialog active
 at a time. **Back** restores the catalog's filters, page and scroll, then focuses
 the original record when it is still visible, or another available catalog control.
 Closing an edited record asks before discarding unsaved changes. The same flow

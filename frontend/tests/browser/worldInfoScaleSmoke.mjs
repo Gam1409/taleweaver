@@ -23,7 +23,7 @@ async function open(records = 10000) {
   await page.waitForFunction(n => document.querySelector('.world-info-catalog-pages')?.textContent.includes(`of ${n.toLocaleString()}`), records)
   await filters(false)
 }
-async function filters(open) { await dialog().locator('.world-info-filter-options').evaluate((node, value) => { node.open = value }, open) }
+async function filters() { await dialog().getByLabel('Sort entries', { exact: true }).waitFor() }
 async function settled() { await page.waitForFunction(() => !document.querySelector('.world-info-catalog-tools')?.textContent.includes('Loading page…')) }
 async function geometry() {
   const box = await dialog().boundingBox(), view = await page.evaluate(() => ({ x: visualViewport.offsetLeft, y: visualViewport.offsetTop, width: visualViewport.width, height: visualViewport.height }))
@@ -33,8 +33,8 @@ async function geometry() {
   if (footer) assert.ok(footer.y >= body.y - 1 && footer.y + footer.height <= body.y + body.height + 1, 'Catalog pagination must remain inside the available body')
 }
 async function preview(action, value) {
-  const section = dialog().locator('.world-info-bulk')
-  await section.evaluate(node => { node.open = true })
+  const toggle = button('Organize all matching entries')
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click()
   await dialog().getByLabel('Bulk action', { exact: true }).selectOption(action)
   if (action === 'set_group') await dialog().getByLabel('Group name', { exact: true }).fill(value)
   if (action === 'add_tags' || action === 'remove_tags') {

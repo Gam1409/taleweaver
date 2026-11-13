@@ -112,7 +112,7 @@ try {
     assert.deepEqual(saved.tags, [...originals, 'new, exact #label'])
     assert.equal(await dialog(page).locator('.world-info-read-tag').filter({ hasText: '##harbour' }).count(), 0)
     await button(page, 'Back to catalog').click()
-    await dialog(page).locator('.world-info-bulk').evaluate(node => { node.open = true })
+    await button(page, 'Organize all matching entries').click()
     await dialog(page).getByLabel('Bulk action', { exact: true }).selectOption('remove_tags')
     await addTags(page, 'Tags for matching entries', originals.slice(0, 3))
     await dialog(page).getByRole('group', { name: 'Tags for matching entries', exact: true }).getByLabel('Add a saved tag', { exact: true }).selectOption(originals[4])
@@ -152,7 +152,7 @@ try {
       await dialog(page).getByLabel('Select The harbour beacon', { exact: true }).check()
       await button(page, 'Publish selected (1)').click()
     } else {
-      await dialog(page).locator('.world-info-bulk').evaluate(node => { node.open = true })
+      await button(page, 'Organize all matching entries').click()
       await dialog(page).getByLabel('Group name', { exact: true }).fill('Confirmed group')
       await button(page, 'Preview matching entries').click()
       await dialog(page).getByRole('region', { name: 'Bulk action preview' }).waitFor()

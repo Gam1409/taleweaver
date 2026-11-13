@@ -273,6 +273,41 @@ test('saving remains busy through catalog and overview refresh before editing is
   assert.equal(duplicate, false); assert.equal(afterDuplicate, 'Saving entry…')
   assert.equal(c.data.busy, ''); assert.equal(c.dirty.value, false)
 })
+for (const operation of ['save', 'publish', 'unpublish', 'remove']) {
+  test(`${operation} refreshes group and tag counts without resetting the catalog scope`, async t => {
+    let changed = false
+    const filters = []
+    const updated = { ...entry, group_name: 'New archive group', tags: ['new-tag'], version: 3 }
+    const facet = (name, count) => ({ items: count ? [{ name, count }] : [], total: count })
+    t.mock.method(globalThis, 'fetch', async (path, options) => {
+      if (options.method !== 'GET') {
+        changed = true
+        if (operation === 'save') return reply(updated)
+        if (operation === 'publish') return reply({ published: 1, replaced: 0, source, index: state().index })
+        return reply({ deleted: true, index: state().index })
+      }
+      if (path.includes('/entries/facets')) {
+        filters.push(new URL(path, 'http://localhost').searchParams)
+        const gone = changed && operation !== 'save'
+        return reply({ groups: facet(changed ? updated.group_name : 'Old group', gone ? 0 : 1), tags: facet(changed ? 'new-tag' : 'old-tag', gone ? 0 : 1), kinds: facet('background_lore', gone ? 0 : 1) })
+      }
+      return defaultReply(path)
+    })
+    const { c } = fixture(t); await tick(); await c.changeTab('review')
+    c.data.query = 'archive'; c.data.sort = 'title_asc'; c.data.facetQuery = 'ar'
+    await c.catalog.search(); await c.openEntry(entry.id)
+    if (operation === 'save') { c.data.draft.group_name = updated.group_name; c.data.draft.tags = updated.tags; await c.saveEntry() }
+    if (operation === 'publish') { c.data.selected = [entry.id]; await c.publish() }
+    if (operation === 'unpublish') await c.unpublish()
+    if (operation === 'remove') await c.removeEntry()
+    assert.equal(changed, true)
+    assert.deepEqual(c.data.facets.groups.items, operation === 'save' ? [{ name: updated.group_name, count: 1 }] : [])
+    assert.deepEqual(c.data.facets.tags.items, operation === 'save' ? [{ name: 'new-tag', count: 1 }] : [])
+    assert.equal(filters.at(-1).get('query'), 'archive')
+    assert.equal(filters.at(-1).get('facet_query'), 'ar')
+    assert.equal(c.data.sort, 'title_asc')
+  })
+}
 test('processing refresh retains authoritative server budgets and controls without predicting a resume', async t => {
   let started = false
   const exhausted = { ...job, attempts: 8, request_limit: 8, cursor: 1, total_batches: 2, status: 'failed', last_error_code: 'invalid_output', can_start: false, can_resume: false, can_cancel: false }

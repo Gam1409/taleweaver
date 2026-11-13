@@ -62,7 +62,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
       if (result.token !== epoch || result.sid !== sessionId.value) return false
       const wasWorking = activeJobs()
       applyState(result.state)
-      if (wasWorking && !activeJobs() && data.tab !== 'files') void catalog.loadEntries(data.offset)
+      if (wasWorking && !activeJobs() && data.tab !== 'files') void Promise.all([catalog.loadEntries(data.offset), catalog.loadFacets()])
       return activeJobs()
     },
     onPaused: () => { data.offline = true },
@@ -214,9 +214,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
       data.draft = copy(saved)
       data.baseline = JSON.stringify(saved)
       data.message = 'Entry saved. Indexing is updated separately.'
-      await catalog.loadEntries(data.offset)
-      if (token !== epoch) return false
-      await load()
+      await refreshEntries()
       return token === epoch
     } finally {
       if (token === epoch) data.busy = ''
@@ -235,9 +233,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
     data.message = 'Selected entries are accepted for this session. Indexing is updated separately.'
     data.selected = []
     data.draft = null
-    await catalog.loadEntries(data.offset)
-    if (token !== epoch) return
-    await load()
+    if (token === epoch) await refreshEntries()
   }
   async function removeSource(source: WorldInfoSource) {
     if (!await mutate('Deleting source…', api => api.removeSource(source))) return
@@ -271,7 +267,7 @@ export function useWorldInfo(sessionId: Readonly<Ref<string>>) {
   }
   async function refreshEntries() {
     const token = epoch
-    await catalog.loadEntries(data.offset)
+    await Promise.all([catalog.loadEntries(data.offset), catalog.loadFacets()])
     if (token === epoch) await load()
   }
   function reset() {
