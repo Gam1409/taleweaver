@@ -18,6 +18,7 @@ from backend.api.routes.adventures.session_materializer import (
     copy_data_asset_to_session,
     materialize_initial_session_from_template,
 )
+from backend.api.routes.adventures.session_start_avatar import resolve_start_avatar
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.chpm.template_settings import initial_states as personality_initial_states
@@ -325,10 +326,14 @@ async def create_adventure_records(
     db.add(avatar)
     await db.flush()  # Ensure avatar.id is available
 
+    session_avatar = await resolve_start_avatar(db, template_id, user, adv)
+    db.add(session_avatar)
+    await db.flush()
+
     session = GameSession(
         id=generate_session_id(payload.title),
         user_id=user.id,
-        avatar_id=avatar.id,
+        avatar_id=session_avatar.id,
         template_id=template_id,
         adventure_title=payload.title,
         status="active",
@@ -351,7 +356,7 @@ async def create_adventure_records(
             "cover_name": cover.name,
             "cover_source_id": cover.adventure_id,
         }
-    await _create_initial_session_state(db, adv, session, avatar, user.id)
+    await _create_initial_session_state(db, adv, session, session_avatar, user.id)
     await db.commit()
     return CreatedAdventure(template=adv, avatar=avatar, session=session, cover=cover)
 

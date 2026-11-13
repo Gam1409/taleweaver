@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.gameplay.world import AdventureLogic
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -132,13 +133,7 @@ def _resolve_library_image_url(image_url: Optional[str]) -> Optional[str]:
 
 
 async def _get_template_avatar(db: AsyncSession, template_id: str) -> Optional[Avatar]:
-    avatar_res = await db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == template_id)
-        .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-        .limit(1)
-    )
-    return avatar_res.scalars().first()
+    return await get_template_avatar(db, template_id)
 
 
 async def _restore_missing_template_avatar(
@@ -155,48 +150,8 @@ async def _restore_missing_template_avatar(
     if image_url:
         image_url = AdventureLogic.resolve_existing_data_asset_url(image_url) or image_url
 
-    avatar = Avatar(
-        user_id=adventure.owner_id,
-        template_id=template_id,
-        name=str(prot.get("name") or "Hero"),
-        role=(str(prot.get("role") or "").strip() or "Protagonist"),
-        description=(str(prot.get("description") or "").strip() or None),
-        goal=(str(prot.get("goal") or "").strip() or None),
-        character=(str(prot.get("character") or "").strip() or None),
-        profile_image=image_url,
-        hp=int(prot.get("hp") or 200),
-        max_hp=int(prot.get("hp") or 200),
-        stamina=int(prot.get("stamina") or 200),
-        max_stamina=int(prot.get("stamina") or 200),
-        mana=int(prot.get("mana") or 200),
-        max_mana=int(prot.get("mana") or 200),
-        strength=int(prot.get("strength") or 10),
-        dexterity=int(prot.get("dexterity") or 10),
-        intelligence=int(prot.get("intelligence") or 10),
-        wisdom=int(prot.get("wisdom") or 10),
-        charisma=int(prot.get("charisma") or 10),
-        armor_class=int(prot.get("armor_class") or 10),
-        exp=int(prot.get("exp") or 0),
-        stats=dict(prot.get("stats") or {}),
-        inventory=list(prot.get("starting_inventory") or prot.get("inventory") or []),
-        equipment=dict(
-            prot.get("starting_equipment")
-            or {
-                "Head": None,
-                "Chest": None,
-                "Arms": None,
-                "Legs": None,
-                "Hands": None,
-                "Feet": None,
-                "Ring_1": None,
-                "Ring_2": None,
-                "Neck": None,
-                "MainHand": None,
-                "OffHand": None,
-            }
-        ),
-        status_effects=list(prot.get("status_effects") or []),
-    )
+    avatar = avatar_from_manifest(manifest, user_id=adventure.owner_id, template_id=template_id)
+    avatar.profile_image = image_url
     db.add(avatar)
     await db.commit()
     return avatar

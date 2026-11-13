@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
 from backend.core.visual_limits import VISUAL_LIMITS
+from backend.engine.template_avatar import template_avatar_query
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -58,12 +59,7 @@ async def resolve_visual_upload_target(
     if target_type == "cover":
         return adventure
     if target_type == "protagonist":
-        statement = (
-            select(Avatar)
-            .where(Avatar.template_id == adventure.id)
-            .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-            .limit(1)
-        )
+        statement = template_avatar_query(adventure.id)
         missing_detail = "Protagonist not found for this adventure"
     elif target_type == "scene":
         statement = select(WorldScene).where(

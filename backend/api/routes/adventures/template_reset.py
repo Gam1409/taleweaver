@@ -5,8 +5,10 @@ from typing import Any, Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.template_avatar import get_template_avatar
+from backend.engine.world_location_fields import scene_fields
+from backend.engine.world_ownership import detach_session_world
 from backend.models.adventure_template import AdventureTemplate
-from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
 from backend.utils.text_utils import slugify
 
@@ -42,11 +44,15 @@ def _scene_from_def(
 ) -> WorldScene:
     scene_id = scene_def["id"]
     return WorldScene(
-        id=scene_id,
         template_id=template_id,
-        label=scene_def.get("name") or scene_def.get("label") or scene_id,
-        description=scene_def.get("description", ""),
-        image_url=images.get(scene_id),
+        **(
+            scene_fields(scene_def)
+            | {
+                "label": scene_def.get("name") or scene_def.get("label") or scene_id,
+                "description": scene_def.get("description", ""),
+                "image_url": images.get(scene_id),
+            }
+        ),
     )
 
 
@@ -91,7 +97,9 @@ def _object_from_def(
 
 
 async def _image_urls(db: AsyncSession, model: Any, template_id: str) -> dict[str, Optional[str]]:
-    rows = await db.execute(select(model).where(model.template_id == template_id))
+    rows = await db.execute(
+        select(model).where(model.template_id == template_id, model.session_id.is_(None))
+    )
     return {row.id: row.image_url for row in rows.scalars().all()}
 
 
@@ -101,13 +109,7 @@ async def _restore_protagonist(
     """Restore static protagonist fields; keep the generated profile image."""
     if not prot_def:
         return
-    av_res = await db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == template_id)
-        .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-        .limit(1)
-    )
-    avatar = av_res.scalars().first()
+    avatar = await get_template_avatar(db, template_id)
     if not avatar:
         return
     avatar.name = prot_def.get("name") or avatar.name
@@ -125,11 +127,14 @@ async def rebuild_template_world(db: AsyncSession, adv: AdventureTemplate) -> No
     """Replace template-level scenes/entities with the manifest version, preserving image URLs."""
     template_id = adv.id
     manifest = adv.original_manifest or {}
+    await detach_session_world(db, template_id)
     scene_images = await _image_urls(db, WorldScene, template_id)
     entity_images = await _image_urls(db, WorldEntity, template_id)
 
-    await db.execute(delete(WorldScene).where(WorldScene.template_id == template_id))
-    await db.execute(delete(WorldEntity).where(WorldEntity.template_id == template_id))
+    for model in (WorldScene, WorldEntity):
+        await db.execute(
+            delete(model).where(model.template_id == template_id, model.session_id.is_(None))
+        )
 
     for scene_def in _with_ids(manifest.get("scenes", [])):
         db.add(_scene_from_def(scene_def, template_id, scene_images))

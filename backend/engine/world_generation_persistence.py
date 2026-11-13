@@ -11,6 +11,7 @@ from backend.engine.authoring_settings import preserve_authoring_settings
 from backend.engine.clothing.settings import preserve_clothing_settings
 from backend.engine.npc_cards.settings import preserve_card_settings
 from backend.engine.nsfw.settings import preserve_nsfw_settings
+from backend.engine.template_avatar import get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 
 
@@ -79,18 +80,11 @@ async def load_cover_source_assets(
     # Load source assets for cover-mode image reuse
     cover_source_assets = None
     if allow_reuse_source_assets and cover_source_adventure_id:
-        from backend.models.avatar import Avatar  # noqa: PLC0415
         from backend.models.world_entity import WorldEntity, WorldScene  # noqa: PLC0415
 
         src_adv = await db.get(AdventureTemplate, cover_source_adventure_id)
         if src_adv:
-            src_avatar_res = await db.execute(
-                select(Avatar)
-                .where(Avatar.template_id == cover_source_adventure_id)
-                .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-                .limit(1)
-            )
-            src_avatar = src_avatar_res.scalars().first()
+            src_avatar = await get_template_avatar(db, cover_source_adventure_id)
             src_scene_res = await db.execute(
                 select(WorldScene).where(WorldScene.template_id == cover_source_adventure_id)
             )

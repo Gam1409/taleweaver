@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
 from backend.engine.media_engine import MediaEngine
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
@@ -233,40 +235,46 @@ def _create_cloned_template_entity(
 
 
 async def _clone_avatars(db: AsyncSession, old_id: str, new_id: str, user_id: str) -> None:
-    avatars_query = select(Avatar).where(Avatar.template_id == old_id)
-    avatars = (await db.scalars(avatars_query)).all()
-    for orig in avatars:
-        cloned = Avatar(
-            user_id=user_id,
-            template_id=new_id,
-            name=orig.name,
-            role=orig.role,
-            description=orig.description,
-            character=orig.character,
-            gender=orig.gender,
-            age_years=orig.age_years,
-            visual_profile=deepcopy(orig.visual_profile),
-            goal=orig.goal,
-            profile_image=rewrite_asset_url(orig.profile_image, old_id, new_id),
-            hp=orig.hp,
-            max_hp=orig.max_hp,
-            stamina=orig.stamina,
-            max_stamina=orig.max_stamina,
-            mana=orig.mana,
-            max_mana=orig.max_mana,
-            exp=orig.exp,
-            strength=orig.strength,
-            dexterity=orig.dexterity,
-            intelligence=orig.intelligence,
-            wisdom=orig.wisdom,
-            charisma=orig.charisma,
-            armor_class=orig.armor_class,
-            stats=deepcopy(orig.stats) if orig.stats else {},
-            inventory=deepcopy(orig.inventory) if orig.inventory else [],
-            equipment=deepcopy(orig.equipment) if orig.equipment else {},
-            status_effects=(deepcopy(orig.status_effects) if orig.status_effects else []),
+    orig = await get_template_avatar(db, old_id)
+    if orig is None:
+        source = await db.get(AdventureTemplate, old_id)
+        cloned = avatar_from_manifest(
+            source.original_manifest if source else {}, template_id=new_id, user_id=user_id
         )
+        cloned.profile_image = rewrite_asset_url(cloned.profile_image, old_id, new_id)
         db.add(cloned)
+        return
+    cloned = Avatar(
+        user_id=user_id,
+        template_id=new_id,
+        name=orig.name,
+        role=orig.role,
+        description=orig.description,
+        character=orig.character,
+        gender=orig.gender,
+        age_years=orig.age_years,
+        visual_profile=deepcopy(orig.visual_profile),
+        goal=orig.goal,
+        profile_image=rewrite_asset_url(orig.profile_image, old_id, new_id),
+        hp=orig.hp,
+        max_hp=orig.max_hp,
+        stamina=orig.stamina,
+        max_stamina=orig.max_stamina,
+        mana=orig.mana,
+        max_mana=orig.max_mana,
+        exp=orig.exp,
+        strength=orig.strength,
+        dexterity=orig.dexterity,
+        intelligence=orig.intelligence,
+        wisdom=orig.wisdom,
+        charisma=orig.charisma,
+        armor_class=orig.armor_class,
+        stats=deepcopy(orig.stats) if orig.stats else {},
+        inventory=deepcopy(orig.inventory) if orig.inventory else [],
+        equipment=deepcopy(orig.equipment) if orig.equipment else {},
+        status_effects=(deepcopy(orig.status_effects) if orig.status_effects else []),
+    )
+    db.add(cloned)
 
 
 async def _clone_scenes(db: AsyncSession, old_id: str, new_id: str) -> None:
@@ -277,17 +285,15 @@ async def _clone_scenes(db: AsyncSession, old_id: str, new_id: str) -> None:
     scenes = (await db.scalars(scenes_query)).all()
     for s in scenes:
         cloned = WorldScene(
-            id=s.id,
             template_id=new_id,
             session_id=None,
-            label=s.label,
-            description=s.description,
-            image_url=rewrite_asset_url(s.image_url, old_id, new_id),
-            decorative_objects=(deepcopy(s.decorative_objects) if s.decorative_objects else None),
-            on_enter_scene_script=s.on_enter_scene_script,
-            on_enter_scene_text=s.on_enter_scene_text,
-            on_leave_scene_script=s.on_leave_scene_script,
-            on_leave_scene_text=s.on_leave_scene_text,
+            **(
+                scene_fields(s)
+                | {
+                    "image_url": rewrite_asset_url(s.image_url, old_id, new_id),
+                    "decorative_objects": deepcopy(s.decorative_objects) or None,
+                }
+            ),
         )
         db.add(cloned)
 
@@ -303,24 +309,7 @@ async def _clone_exits(db: AsyncSession, old_id: str, new_id: str) -> None:
             id=str(uuid6.uuid7()),
             template_id=new_id,
             session_id=None,
-            from_scene_id=e.from_scene_id,
-            to_scene_id=e.to_scene_id,
-            label=e.label,
-            exit_type=e.exit_type,
-            is_locked=e.is_locked,
-            lock_description=e.lock_description,
-            code_to_unlock=e.code_to_unlock,
-            item_to_unlock=e.item_to_unlock,
-            rule_to_unlock=e.rule_to_unlock,
-            unlock_expression=e.unlock_expression,
-            on_open_exit_script=e.on_open_exit_script,
-            on_open_exit_text=e.on_open_exit_text,
-            on_exit_used_script=e.on_exit_used_script,
-            on_exit_used_text=e.on_exit_used_text,
-            on_unlock_success_script=e.on_unlock_success_script,
-            on_unlock_success_text=e.on_unlock_success_text,
-            on_unlock_failure_script=e.on_unlock_failure_script,
-            on_unlock_failure_text=e.on_unlock_failure_text,
+            **exit_fields(e),
         )
         db.add(cloned)
 

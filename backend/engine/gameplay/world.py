@@ -10,6 +10,7 @@ from backend.engine.map_engine import MapEngine
 from backend.engine.npc_journal.presentation import npc_possession_ids, player_entity_view
 from backend.engine.npc_presence import physically_present
 from backend.engine.visual_novel.presentation import known_character, public_entity, session_is_vn
+from backend.engine.world_ownership import detach_session_world
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
@@ -606,12 +607,7 @@ class AdventureLogic:
             .values(template_id=None)
         )
 
-        # Detach session maps
-        await db.execute(
-            update(WorldMap)
-            .where(WorldMap.template_id == template_id, WorldMap.session_id.is_not(None))
-            .values(template_id=None)
-        )
+        await detach_session_world(db, template_id)
 
         # 2. Delete only template-owned avatars that are not used by any session.
         await db.execute(
@@ -622,14 +618,10 @@ class AdventureLogic:
         )
 
         # 3. Delete World Content
-        await db.execute(delete(WorldExit).where(WorldExit.template_id == template_id))
-        await db.execute(delete(WorldEntity).where(WorldEntity.template_id == template_id))
-        await db.execute(delete(WorldScene).where(WorldScene.template_id == template_id))
-        await db.execute(
-            delete(WorldMap).where(
-                WorldMap.template_id == template_id, WorldMap.session_id.is_(None)
+        for model in (WorldExit, WorldEntity, WorldScene, WorldMap):
+            await db.execute(
+                delete(model).where(model.template_id == template_id, model.session_id.is_(None))
             )
-        )
 
         # 4. Finally delete the template itself
         await db.execute(delete(AdventureTemplate).where(AdventureTemplate.id == template_id))

@@ -21,9 +21,9 @@ from backend.engine.clothing.profiles import (
 from backend.engine.clothing.schema import Appearance, Garment, VisualProfile, WornItem
 from backend.engine.clothing.settings import with_clothing_settings
 from backend.engine.clothing.visuals import canonical_inventory
+from backend.engine.template_avatar import get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
-from backend.models.game_session import GameSession
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 
@@ -100,15 +100,7 @@ def _actor_input(actor: Any, objects: list, *, protagonist: bool) -> dict:
 
 
 async def _template_records(db: AsyncSession, adventure: AdventureTemplate) -> tuple[list, list]:
-    avatar = await db.scalar(
-        select(Avatar)
-        .where(
-            Avatar.template_id == adventure.id,
-            ~select(GameSession.id).where(GameSession.avatar_id == Avatar.id).exists(),
-        )
-        .order_by(Avatar.created_at, Avatar.id)
-        .limit(1)
-    )
+    avatar = await get_template_avatar(db, adventure.id)
     entities = list(
         await db.scalars(
             select(WorldEntity).where(

@@ -15,8 +15,8 @@ from backend.engine.clothing.settings import clothing_settings
 from backend.engine.export_archives import pack_export_adz
 from backend.engine.narrator.settings import manifest_settings as narrator_settings
 from backend.engine.npc_cards.settings import manifest_card_settings
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
-from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.utils.async_files import run_file_operation
 
@@ -362,13 +362,11 @@ class AdventureExporter:
         )
         entities = entity_res.scalars().all()
 
-        avatar_res = await db.execute(
-            select(Avatar)
-            .where(Avatar.template_id == template_id, Avatar.user_id == adv.owner_id)
-            .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-            .limit(1)
-        )
-        avatar = avatar_res.scalars().first()
+        avatar = await get_template_avatar(db, template_id)
+        if avatar is None:
+            avatar = avatar_from_manifest(
+                adv.original_manifest, user_id=adv.owner_id, template_id=template_id
+            )
 
         local_final_inventory, local_final_equipment = normalize_exported_equipment(
             avatar, entities

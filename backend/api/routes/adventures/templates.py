@@ -48,9 +48,9 @@ from backend.core.prompts import (
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.generation_control import cancel_local_generation
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
 from backend.engine.world_generator import WorldGenerator
 from backend.models.adventure_template import AdventureTemplate
-from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
@@ -831,7 +831,6 @@ async def get_adventure_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
 
     """Retrieves the generation status and potential errors for an adventure."""
@@ -846,8 +845,7 @@ async def get_adventure_status(
 
     stats = None
     if adv.is_ready:
-        avatar_result = await db.execute(select(Avatar).where(Avatar.template_id == template_id))
-        avatar = avatar_result.scalars().first()
+        avatar = await get_template_avatar(db, template_id)
 
         scenes_result = await db.execute(
             select(WorldScene).where(
@@ -1169,17 +1167,12 @@ async def export_adventure_session(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Exports a minimal session payload for the template (useful for import/preview)."""
-    await require_owned_template(db, template_id, current_user.id)
-    # Find template-level avatar if present
-    av_res = await db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == template_id, Avatar.user_id == current_user.id)
-        .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-        .limit(1)
-    )
-    avatar = av_res.scalars().first()
-    if not avatar:
-        raise HTTPException(status_code=404, detail="Avatar not found for template.")
+    adventure = await require_owned_template(db, template_id, current_user.id)
+    avatar = await get_template_avatar(db, template_id)
+    if avatar is None:
+        avatar = avatar_from_manifest(
+            adventure.original_manifest, template_id=template_id, user_id=current_user.id
+        )
 
     avatar_payload = {
         "name": avatar.name,

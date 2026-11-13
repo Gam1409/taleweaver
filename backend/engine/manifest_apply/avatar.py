@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from sqlalchemy import select
-
 from backend.core import prompts
 from backend.engine.character_identity import describe_character
 from backend.engine.image_profiles import image_timeout
@@ -20,35 +18,11 @@ from backend.engine.manifest_apply.visuals import (
     t2i_config,
     uses_advanced_model,
 )
+from backend.engine.template_avatar import AVATAR_FIELDS, get_template_avatar
 
 EQUIPMENT_SLOTS = (
     "Head", "Chest", "Arms", "Legs", "Hands", "Feet", "Ring_1", "Ring_2", "Neck", "MainHand", "OffHand",
 )  # fmt: skip
-
-# (avatar attribute, manifest key, default for new avatars)
-AVATAR_FIELDS: tuple[tuple[str, str, Any], ...] = (
-    ("name", "name", "Hero"),
-    ("role", "role", "Protagonist"),
-    ("description", "description", ""),
-    ("goal", "goal", ""),
-    ("character", "character", ""),
-    ("gender", "gender", None),
-    ("age_years", "age_years", None),
-    ("visual_profile", "visual_profile", None),
-    ("hp", "hp", 200),
-    ("max_hp", "hp", 200),
-    ("stamina", "stamina", 200),
-    ("max_stamina", "stamina", 200),
-    ("mana", "mana", 200),
-    ("max_mana", "mana", 200),
-    ("strength", "strength", 10),
-    ("dexterity", "dexterity", 10),
-    ("intelligence", "intelligence", 10),
-    ("wisdom", "wisdom", 10),
-    ("charisma", "charisma", 10),
-    ("armor_class", "armor_class", 10),
-    ("exp", "exp", 0),
-)
 
 
 @dataclass
@@ -192,15 +166,7 @@ async def _portrait(ctx: ApplyContext, avatar: Any, prot: dict[str, Any]) -> Opt
 
 async def persist_avatar(ctx: ApplyContext, prot: dict[str, Any]) -> tuple[Any, StartingItems]:
     """Creates or updates the template avatar from the manifest and resolves its portrait."""
-    from backend.models.avatar import Avatar
-
-    res = await ctx.db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == ctx.template_id)
-        .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-        .limit(1)
-    )
-    avatar = res.scalars().first()
+    avatar = await get_template_avatar(ctx.db, ctx.template_id)
     items = collect_starting_items(prot)
     stats = starting_stats(prot)
     if avatar:

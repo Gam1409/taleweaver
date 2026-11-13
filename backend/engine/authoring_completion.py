@@ -15,9 +15,9 @@ from backend.engine.clothing.profiles import validate_profile
 from backend.engine.clothing.schema import Garment, VisualProfile, WornItem
 from backend.engine.clothing.visuals import canonical_inventory
 from backend.engine.personality.profile import read_profile
+from backend.engine.template_avatar import template_avatar_condition
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
-from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity
 from backend.schemas.authoring_completion import CharacterCompletion, OutfitItem, WearableCompletion
 
@@ -327,13 +327,7 @@ async def complete_owned_wearable(
     if not WEARABLE_FIELDS.intersection(updates):
         return
     adventure = await db.get(AdventureTemplate, template_id)
-    actors = list(
-        await db.scalars(
-            select(Avatar).where(
-                Avatar.template_id == template_id, Avatar.id.not_in(select(GameSession.avatar_id))
-            )
-        )
-    )
+    actors = list(await db.scalars(select(Avatar).where(template_avatar_condition(template_id))))
     npcs = list(
         await db.scalars(
             select(WorldEntity).where(

@@ -15,8 +15,11 @@ from backend.api.routes.adventures.session_asset_access import build_asset_copy_
 from backend.api.routes.adventures.session_start import ensure_generated_session_scene
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.template_avatar import get_template_avatar
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -24,7 +27,6 @@ from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 logger = logging.getLogger(__name__)
 
 _AVATAR_COPY_FIELDS = (
-    "user_id",
     "name",
     "role",
     "description",
@@ -43,17 +45,6 @@ _AVATAR_COPY_FIELDS = (
     "wisdom",
     "charisma",
     "armor_class",
-)
-_EXIT_COPY_FIELDS = (
-    "from_scene_id",
-    "to_scene_id",
-    "label",
-    "exit_type",
-    "is_locked",
-    "lock_description",
-    "code_to_unlock",
-    "item_to_unlock",
-    "rule_to_unlock",
 )
 _ENTITY_COPY_FIELDS = (
     "id",
@@ -136,6 +127,8 @@ async def _clone_session_avatar(
     session_id: str,
     avatar: Avatar,
     asset_cache: dict[str, str],
+    *,
+    user_id: str,
 ) -> Avatar:
     """Clone the template avatar so the session never mutates the template's protagonist."""
     healed_image = AdventureLogic.heal_template_avatar_profile_image(
@@ -147,11 +140,12 @@ async def _clone_session_avatar(
         await db.flush()
 
     session_avatar = Avatar(
-        template_id=template_id,
+        template_id=None,
+        user_id=user_id,
         **{field: getattr(avatar, field) for field in _AVATAR_COPY_FIELDS},
         stats=deepcopy(avatar.stats or {}),
         inventory=deepcopy(avatar.inventory or []),
-        equipment=normalize_equipment_keys(avatar.equipment),
+        equipment=normalize_equipment_keys(deepcopy(avatar.equipment)),
         status_effects=deepcopy(avatar.status_effects or []),
     )
     db.add(session_avatar)
@@ -206,12 +200,9 @@ async def _copy_world_to_session(
         image = copy_data_asset_to_session(session_id, "scenes", scene.image_url, asset_cache)
         db.add(
             WorldScene(
-                id=scene.id,
                 session_id=session_id,
                 template_id=None,
-                label=scene.label,
-                description=scene.description,
-                image_url=image or scene.image_url,
+                **(scene_fields(scene) | {"image_url": image or scene.image_url}),
             )
         )
 
@@ -220,7 +211,7 @@ async def _copy_world_to_session(
             WorldExit(
                 session_id=session_id,
                 template_id=None,
-                **{field: getattr(exit_row, field) for field in _EXIT_COPY_FIELDS},
+                **exit_fields(exit_row),
             )
         )
 
@@ -256,6 +247,23 @@ async def _store_asset_snapshot(
     session_state.entity_states = entity_states
 
 
+async def _pending_authored_avatar(
+    db: AsyncSession, template_id: str, session_id: str, avatar: Avatar | None
+) -> Avatar | None:
+    """Initialize untouched placeholders while retaining materialized or played characters."""
+    if avatar is None or avatar.template_id is None:
+        return None
+    owned_world = select(WorldScene.id).where(WorldScene.session_id == session_id).exists()
+    played_turn = (
+        select(ChatMessage.id)
+        .where(ChatMessage.session_id == session_id, ChatMessage.role == "user")
+        .exists()
+    )
+    if await db.scalar(select(owned_world | played_turn)):
+        return None
+    return await get_template_avatar(db, template_id)
+
+
 async def materialize_initial_session_from_template(
     db: AsyncSession,
     template_id: str,
@@ -282,10 +290,17 @@ async def materialize_initial_session_from_template(
         game_session.adventure_image_url = copied_cover
 
     protagonist_image = avatar.profile_image if avatar else None
-    if avatar:
+    source_avatar = await _pending_authored_avatar(db, template_id, session_id, avatar)
+    if avatar and source_avatar:
         session_avatar = await _clone_session_avatar(
-            db, template_id, session_id, avatar, asset_cache
+            db,
+            template_id,
+            session_id,
+            source_avatar,
+            asset_cache,
+            user_id=game_session.user_id,
         )
+        avatar.template_id = None
         game_session.avatar_id = session_avatar.id
         if session_state:
             session_state.avatar_id = session_avatar.id

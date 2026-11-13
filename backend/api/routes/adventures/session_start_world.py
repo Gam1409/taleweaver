@@ -4,6 +4,7 @@ from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -35,13 +36,9 @@ async def clone_template_world(
             new_session.id, "scenes", s.image_url, asset_copy_cache
         )
         new_s = WorldScene(
-            id=s.id,
             session_id=new_session.id,
             template_id=None,
-            label=s.label,
-            description=s.description,
-            image_url=(copied_scene_image or s.image_url),
-            decorative_objects=deepcopy(s.decorative_objects),
+            **(scene_fields(s) | {"image_url": copied_scene_image or s.image_url}),
         )
         db.add(new_s)
 
@@ -57,15 +54,7 @@ async def clone_template_world(
         new_e = WorldExit(
             session_id=new_session.id,
             template_id=None,
-            from_scene_id=e.from_scene_id,
-            to_scene_id=e.to_scene_id,
-            label=e.label,
-            exit_type=e.exit_type,
-            is_locked=e.is_locked,
-            lock_description=e.lock_description,
-            code_to_unlock=e.code_to_unlock,
-            item_to_unlock=e.item_to_unlock,
-            rule_to_unlock=e.rule_to_unlock,
+            **exit_fields(e),
         )
         db.add(new_e)
 

@@ -20,6 +20,7 @@ from backend.engine.session_archive_access import accessible_template
 from backend.engine.session_restore_sources import restore_sources
 from backend.engine.world_info.archive_parts import read_world_info
 from backend.engine.world_info.portability import import_world_info
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -250,13 +251,9 @@ class SessionImporter:
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
                     world_sc = WorldScene(
-                        id=sc.get("id"),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
-                        label=sc.get("label"),
-                        description=sc.get("description"),
-                        image_url=sc.get("image_url"),
-                        decorative_objects=sc.get("decorative_objects"),
+                        **scene_fields(sc),
                     )
                     db.add(world_sc)
 
@@ -264,17 +261,9 @@ class SessionImporter:
                 for ex in world_exits_data:
                     world_ex = WorldExit(
                         id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
-                        from_scene_id=ex.get("from_scene_id"),
-                        to_scene_id=ex.get("to_scene_id"),
-                        label=ex.get("label"),
-                        exit_type=ex.get("exit_type", "one_way"),
-                        is_locked=ex.get("is_locked", False),
-                        lock_description=ex.get("lock_description"),
-                        code_to_unlock=ex.get("code_to_unlock"),
-                        item_to_unlock=ex.get("item_to_unlock"),
-                        rule_to_unlock=ex.get("rule_to_unlock"),
+                        **exit_fields(ex),
                     )
                     db.add(world_ex)
 
@@ -282,7 +271,7 @@ class SessionImporter:
                 for ent in world_entities_data:
                     world_ent = WorldEntity(
                         id=ent.get("id"),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
                         entity_type=ent.get("entity_type"),
                         name=ent.get("name"),
@@ -337,7 +326,7 @@ class SessionImporter:
                 if world_map_data:
                     world_map = WorldMap(
                         id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
                         nodes=world_map_data.get("nodes", {}),
                         edges=world_map_data.get("edges", []),

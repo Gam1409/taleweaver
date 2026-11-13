@@ -13,6 +13,7 @@ from backend.api.routes.adventures.schemas import SuggestPromptRequest, SuggestP
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.media_engine import MediaEngine
+from backend.engine.template_avatar import get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
@@ -132,7 +133,6 @@ async def suggest_prompt(
     current_user: User = Depends(get_current_user),
 ) -> SuggestPromptResponse:
     """Generate an AI prompt suggestion based on the asset's description."""
-    from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
 
     adv = await db.get(AdventureTemplate, template_id)
@@ -153,13 +153,7 @@ async def suggest_prompt(
         name = adv.title
         description = adv.teaser or adv.original_prompt or ""
     elif payload.target_type == "protagonist":
-        av_res = await db.execute(
-            select(Avatar)
-            .where(Avatar.template_id == template_id)
-            .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-            .limit(1)
-        )
-        avatar = av_res.scalars().first()
+        avatar = await get_template_avatar(db, template_id)
         if avatar:
             name = avatar.name
             description = avatar.description or ""

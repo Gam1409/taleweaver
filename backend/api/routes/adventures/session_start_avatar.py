@@ -1,11 +1,11 @@
 import logging
 from copy import deepcopy
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.item_logic import normalize_equipment_keys
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
@@ -17,13 +17,7 @@ async def resolve_start_avatar(
     db: AsyncSession, template_id: str, current_user: User, adventure: AdventureTemplate
 ) -> Avatar:
     # 1. Resolve Avatar (Template-based or fresh manifest-based)
-    av_res = await db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == template_id)
-        .order_by(Avatar.created_at.asc())
-        .limit(1)
-    )
-    template_avatar = av_res.scalars().first()
+    template_avatar = await get_template_avatar(db, template_id)
 
     if template_avatar:
         # Heal template avatar image on the fly if corrupted
@@ -54,6 +48,7 @@ async def resolve_start_avatar(
             max_stamina=template_avatar.max_stamina,
             mana=template_avatar.mana,
             max_mana=template_avatar.max_mana,
+            exp=template_avatar.exp,
             strength=template_avatar.strength,
             dexterity=template_avatar.dexterity,
             intelligence=template_avatar.intelligence,
@@ -62,40 +57,13 @@ async def resolve_start_avatar(
             armor_class=template_avatar.armor_class,
             stats=deepcopy(template_avatar.stats or {}),
             inventory=deepcopy(template_avatar.inventory or []),
-            equipment=normalize_equipment_keys(template_avatar.equipment),
+            equipment=normalize_equipment_keys(deepcopy(template_avatar.equipment)),
             status_effects=deepcopy(template_avatar.status_effects or []),
         )
     else:
         # Fallback: Create from manifest if no template avatar exists (legacy/import)
-        prot = (adventure.original_manifest or {}).get("protagonist", {})
-        avatar = Avatar(
-            user_id=current_user.id,
-            template_id=template_id,
-            name=prot.get("name", "You"),
-            role=prot.get("role"),
-            description=prot.get("description"),
-            goal=prot.get("goal"),
-            character=prot.get("character"),
-            gender=prot.get("gender"),
-            age_years=prot.get("age_years"),
-            visual_profile=deepcopy(prot.get("visual_profile")),
-            profile_image=prot.get("profile_image"),
-            hp=prot.get("hp", 200),
-            max_hp=prot.get("hp", 200),
-            stamina=prot.get("stamina", 200),
-            max_stamina=prot.get("stamina", 200),
-            mana=prot.get("mana", 200),
-            max_mana=prot.get("mana", 200),
-            strength=prot.get("strength", 10),
-            dexterity=prot.get("dexterity", 10),
-            intelligence=prot.get("intelligence", 10),
-            wisdom=prot.get("wisdom", 10),
-            charisma=prot.get("charisma", 10),
-            armor_class=prot.get("armor_class", 10),
-            stats=prot.get("stats", {}),
-            inventory=deepcopy(prot.get("starting_inventory") or prot.get("inventory", [])),
-            equipment=normalize_equipment_keys(prot.get("starting_equipment")),
-            status_effects=deepcopy(prot.get("status_effects", [])),
+        avatar = avatar_from_manifest(
+            adventure.original_manifest, user_id=current_user.id, template_id=template_id
         )
 
     return avatar

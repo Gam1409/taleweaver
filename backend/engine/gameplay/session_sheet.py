@@ -13,6 +13,7 @@ from backend.engine.clothing.presentation import player_clothing
 from backend.engine.item_logic import get_item_slot, normalize_equipment_keys
 from backend.engine.npc_presentation.settings import effective as portrait_preferences
 from backend.engine.physical_conditions.item_state import project as item_states
+from backend.engine.template_avatar import get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -343,23 +344,11 @@ async def _sheet_profile_image(
                 manifest_protagonist.get("profile_image"),
             )
     if not profile_image and state.template_id:
-        avatar_image_res = await db.execute(
-            select(Avatar.profile_image)
-            .where(
-                Avatar.template_id == state.template_id,
-                Avatar.profile_image.is_not(None),
-                Avatar.profile_image != "",
+        template_avatar = await get_template_avatar(db, state.template_id)
+        if template_avatar:
+            profile_image = await run_file_operation(
+                AdventureLogic.resolve_existing_data_asset_url, template_avatar.profile_image
             )
-            .order_by(Avatar.updated_at.desc())
-            .limit(10)
-        )
-        for candidate in avatar_image_res.scalars().all():
-            resolved = await run_file_operation(
-                AdventureLogic.resolve_existing_data_asset_url, candidate
-            )
-            if resolved:
-                profile_image = resolved
-                break
     return profile_image
 
 

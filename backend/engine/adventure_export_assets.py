@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from backend.engine.export_asset_policy import checked_asset_path
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.utils.path_security import data_url_to_local_path
@@ -56,15 +57,9 @@ def normalize_exported_equipment(
 
 
 def serialize_world_location(obj: WorldScene | WorldExit | None) -> dict[str, Any] | None:
-    from backend.engine.adventure_exporter import _SYSTEM_ENTITY_KEYS
-
     if not obj:
         return None
-    data = {
-        c.name: getattr(obj, c.name)
-        for c in obj.__table__.columns
-        if c.name not in _SYSTEM_ENTITY_KEYS
-    }
+    data = scene_fields(obj) if isinstance(obj, WorldScene) else {"id": obj.id, **exit_fields(obj)}
     if isinstance(obj, WorldScene):
         decor = data.get("decorative_objects")
         if not isinstance(decor, list):

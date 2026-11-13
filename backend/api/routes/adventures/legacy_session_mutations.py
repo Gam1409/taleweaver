@@ -15,6 +15,7 @@ from backend.engine.visual_novel.concurrency import (
     session_write_lease,
 )
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
@@ -117,10 +118,15 @@ async def _purge_captured_sessions(
 ) -> None:
     """Fence derived data first; new sessions created after selection are untouched.
 
-    Template assets and avatars intentionally survive this legacy reset operation.
+    Template assets and avatars survive; retained session characters lose the template link.
     """
     for identifier, owner_id in targets:
         await purge_session_memory(db, owner_id, identifier)
+    await db.execute(
+        update(Avatar)
+        .where(Avatar.id.in_(select(GameSession.avatar_id).where(GameSession.id.in_(identifiers))))
+        .values(template_id=None)
+    )
     for model in (
         SessionCheckpoint,
         ChatMessage,

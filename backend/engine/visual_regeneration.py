@@ -26,6 +26,7 @@ from backend.engine.image_profiles import advanced_for
 from backend.engine.media_engine import MediaEngine
 from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.story_visual_presets import story_t2i
+from backend.engine.template_avatar import template_avatar_query
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -43,12 +44,7 @@ async def _target(
     if payload.target_type == "cover":
         return adventure, "image_url"
     if payload.target_type == "protagonist":
-        query = (
-            select(Avatar)
-            .where(Avatar.template_id == adventure.id)
-            .order_by(Avatar.created_at, Avatar.id)
-            .limit(1)
-        )
+        query = template_avatar_query(adventure.id)
         field = "profile_image"
     else:
         model = WorldScene if payload.target_type == "scene" else WorldEntity
