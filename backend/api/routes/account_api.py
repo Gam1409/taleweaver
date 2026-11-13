@@ -9,7 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.auth_api import UserResponse
-from backend.core.account_recovery import issue_recovery_codes, set_new_password
+from backend.core.account_recovery import (
+    lock_current_credentials,
+    regenerate_recovery_codes,
+    set_new_password,
+)
 from backend.core.auth import (
     averify_password,
     create_user_access_token,
@@ -76,7 +80,9 @@ async def _apply_username_change(db: AsyncSession, user: User, requested: str) -
     return True
 
 
-async def _apply_password_change(user: User, current_password: str, new_password: str) -> None:
+async def _apply_password_change(
+    db: AsyncSession, user: User, current_password: str, new_password: str
+) -> None:
     if new_password == current_password:
         raise HTTPException(
             status_code=400, detail="The new password must differ from the current one."
@@ -86,7 +92,9 @@ async def _apply_password_change(user: User, current_password: str, new_password
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Revokes every other session; the caller receives a fresh token below.
-    await set_new_password(user, new_password)
+    if not await set_new_password(db, user, new_password, require_current_credentials=True):
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Credentials changed. Please sign in again.")
 
 
 @router.put("/credentials", response_model=UserCredentialsUpdateResponse)
@@ -109,13 +117,15 @@ async def update_my_credentials(
     if request.username is not None:
         changed = await _apply_username_change(db, current_user, request.username)
     if request.password is not None:
-        await _apply_password_change(current_user, request.current_password, request.password)
+        await _apply_password_change(db, current_user, request.current_password, request.password)
         changed = True
+    elif not await lock_current_credentials(db, current_user):
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Credentials changed. Please sign in again.")
 
     await db.commit()
-    await db.refresh(current_user)
-
     access_token = create_user_access_token(current_user) if changed else None
+    await db.refresh(current_user)
     return UserCredentialsUpdateResponse(
         user=UserResponse(**await build_user_profile_data(db, current_user)),
         access_token=access_token,
@@ -131,7 +141,10 @@ async def regenerate_my_recovery_codes(
 ) -> RecoveryCodesResponse:
     """Create a fresh set of one-time recovery codes (invalidates the previous set)."""
     await _require_current_password(current_user, request.current_password)
-    codes = issue_recovery_codes(current_user)
+    codes = await regenerate_recovery_codes(db, current_user)
+    if codes is None:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Credentials changed. Please sign in again.")
     await db.commit()
     logger.info("Issued new recovery codes for user %s", current_user.id)
     return RecoveryCodesResponse(codes=codes)

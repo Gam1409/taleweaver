@@ -218,7 +218,7 @@ async def update_user(
         user.role = new_role
     if request.password:
         # Also revokes the user's existing sessions.
-        await set_new_password(user, _validated_password(request.password))
+        await set_new_password(db, user, _validated_password(request.password))
     if request.bio is not None:
         user.bio = request.bio
     if request.default_language is not None:

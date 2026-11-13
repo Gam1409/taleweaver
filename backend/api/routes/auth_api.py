@@ -12,9 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.account_recovery import (
+    consume_password_reset_token,
     consume_recovery_code,
-    find_user_by_reset_token,
-    set_new_password,
 )
 from backend.core.auth import (
     MIN_PASSWORD_LENGTH,
@@ -175,11 +174,13 @@ async def reset_password_with_recovery_code(
 
     result = await db.execute(select(User).filter(User.username == payload.username.strip()))
     user = result.scalars().first()
-    if user is None or not consume_recovery_code(user, payload.recovery_code):
+    if user is None or not await consume_recovery_code(
+        db, user, payload.recovery_code, payload.new_password
+    ):
+        await db.rollback()
         recovery_throttle.record_failure(client_ip, payload.username)
         raise HTTPException(status_code=400, detail="Invalid username or recovery code.")
 
-    await set_new_password(user, payload.new_password)
     await db.commit()
     recovery_throttle.reset(client_ip, payload.username)
     logger.info("Password reset via recovery code for user %s", user.id)
@@ -201,12 +202,12 @@ async def reset_password_with_token(
         )
     _validate_new_password(payload.new_password)
 
-    user = await find_user_by_reset_token(db, payload.token)
+    user = await consume_password_reset_token(db, payload.token, payload.new_password)
     if user is None:
+        await db.rollback()
         recovery_throttle.record_failure(client_ip, "reset-token")
         raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
 
-    await set_new_password(user, payload.new_password)
     await db.commit()
     logger.info("Password reset via admin reset link for user %s", user.id)
     return {"access_token": create_user_access_token(user), "token_type": "bearer"}
