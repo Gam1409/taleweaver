@@ -81,7 +81,12 @@ async def test_owner_export_still_works_and_unknown_template_is_hidden(
 
 
 async def test_template_export_never_chooses_another_players_avatar(auth_client, private_world):
+    owner_id, _ = private_world
     async with TestSessionLocal() as db:
+        own = await db.get(Avatar, "hero-own")
+        own.name = "Saved character"
+        own.inventory = [{"id": "SESSION_ONLY", "name": "Session-only keepsake"}]
+        db.add(Avatar(id="authored-hero", user_id=owner_id, template_id="SHARED", name="own"))
         other = await db.get(Avatar, "hero-other")
         other.template_id = "SHARED"
         other.created_at = (await db.get(Avatar, "hero-own")).created_at
@@ -90,6 +95,8 @@ async def test_template_export_never_chooses_another_players_avatar(auth_client,
         response = await auth_client.get(f"/api/adventures/SHARED/export/{format_name}")
         assert response.status_code == 200, response.text
         assert "hero-other" not in response.text
+        assert "Saved character" not in response.text
+        assert "SESSION_ONLY" not in response.text
         payload = response.json()
         assert (payload.get("avatar") or payload.get("protagonist"))["name"] == "own"
 
