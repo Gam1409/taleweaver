@@ -12,6 +12,7 @@ from backend.engine.chpm import (
     continuation,
     host_adapter,
     memory,
+    motivation,
     performance,
 )
 from backend.engine.chpm.host_state import Mind, removed_messages
@@ -51,6 +52,8 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Observation) ->
     causal_memory.invalidate(turn, actor.id, invalid)
     turn.memories[actor.id] = retained
     turn.agendas[actor.id] = entries
+    if actor.id in turn.minds:
+        motivation.ensure_grounded(turn.minds[actor.id], entries)
     legacy = (
         previous if not invalid and not retained and turn.initial.settings.memory_limit else None
     )

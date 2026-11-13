@@ -29,7 +29,7 @@ class AuthoredTrait(Contract):
 
 class Identity(Contract):
     source_revision: Identifier
-    description: Text
+    description: Annotated[str, Field(max_length=2000)] = ""
     authored_goals: tuple[Text, ...] = Field(default=(), max_length=16)
     values: tuple[Text, ...] = Field(default=(), max_length=16)
     roles: tuple[Text, ...] = Field(default=(), max_length=16)

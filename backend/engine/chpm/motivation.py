@@ -5,6 +5,7 @@ from typing import Final
 
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
+from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.motivation_contracts import MotiveSource, ResolvedMotive
@@ -42,16 +43,20 @@ def _visible_source(source: MotiveSource) -> dict:
 def build(mind: Mind, entries: list[AgendaEntry], window: Window) -> Catalogue:
     identity = mind.genesis.identity
     actor = mind.genesis.scope.observer_id
-    sources = [
-        MotiveSource(
-            id="character",
-            kind="authored_character",
-            text=identity.description,
-            provenance_id=identity.source_revision,
-            subject_id=actor,
-            status="authored",
-        )
-    ]
+    sources = (
+        [
+            MotiveSource(
+                id="character",
+                kind="authored_character",
+                text=identity.description,
+                provenance_id=identity.source_revision,
+                subject_id=actor,
+                status="authored",
+            )
+        ]
+        if identity.description
+        else []
+    )
     groups = (
         ("goal", "authored_goal", identity.authored_goals),
         ("value", "authored_value", identity.values),
@@ -96,6 +101,26 @@ def build(mind: Mind, entries: list[AgendaEntry], window: Window) -> Catalogue:
         for alias, belief in window.beliefs.items()
     )
     return Catalogue({source.id: source for source in sources}, actor)
+
+
+def ensure_grounded(mind: Mind, entries: list[AgendaEntry]) -> None:
+    """Ordinary RP handles absent personal grounds without inventing an identity."""
+    identity = mind.genesis.identity
+    if any(
+        (
+            identity.description,
+            identity.authored_goals,
+            identity.values,
+            identity.roles,
+            identity.traits,
+            _agenda_sources(entries, mind.genesis.scope.observer_id),
+        )
+    ):
+        return
+    raise RecoverableChpmError(
+        "NPC Personality has no authored Character, Goal, personality profile or active personal "
+        "agenda for this NPC. Add authored identity data or disable this NPC's personality analysis."
+    )
 
 
 def _agenda_sources(entries: list[AgendaEntry], actor: str) -> list[MotiveSource]:
