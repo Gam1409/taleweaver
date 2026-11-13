@@ -5,7 +5,7 @@ const uri = code => `data:text/javascript;base64,${Buffer.from(code).toString('b
 export async function voiceInputModule(transcribe) {
   const key = `voice-${crypto.randomUUID()}`
   globalThis[key] = transcribe
-  const api = uri(`export const api = { transcribeAudio: (...args) => globalThis[${JSON.stringify(key)}](...args) }`)
+  const api = `${uri('export const api = { transcribeAudio: (...args) => globalThis[new URL(import.meta.url).hash.slice(1)](...args) }')}#${key}`
   const source = compile('composables/useVoiceInput.ts')
     .replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
     .replace("import('@/composables/useApi')", `import('${api}')`)
