@@ -32,7 +32,11 @@ class ConditionProposal(Model, WithEvidenceSpan):
     target_id: str | None = Field(default=None, max_length=100)
     kind: Kind | None = None
     part: str = Field(default="", max_length=80)
-    detail: str = Field(default="", max_length=320)
+    detail: str = Field(
+        default="",
+        max_length=320,
+        description="For item_state records and changes to existing item_state, copy an exact contiguous excerpt of the selected evidence or player_evidence. Preserve spelling, grammatical inflection and source language; do not normalize or paraphrase the value.",
+    )
     visibility: Literal["public", "private"] | None = None
     visual_detail: str = Field(default="", max_length=320)
     visual_region: Region | None = None

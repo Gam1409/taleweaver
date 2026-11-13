@@ -20,6 +20,9 @@ Never create a replacement item because it became full, empty, dirty, clean, cre
 smoothed, written on or depleted. These are current states, including negative states;
 do not resolve/remove them. Each dimension is independent: cleaning does not smooth it.
 Use a short EXACT excerpt as detail, from evidence (or player_evidence when supplied).
+Preserve its original grammatical case, gender, number and language. Never normalize
+the value or rewrite it to agree with the item's name. For example, from
+"Коробка осталась открытой" copy detail="открытой", not "открытая" or "открыта".
 Partial states such as half full or a little water remaining are valid. Record exact
 amounts only when explicitly established; never calculate an unknown remainder.
 Contents and supplies here are descriptive facts, not another inventory. Existing
