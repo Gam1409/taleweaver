@@ -68,6 +68,8 @@ export interface EntityEditData extends ExitBehaviorData {
   switch_states?: string[] | null
   switch_initial_state?: string | null
   switch_transitions?: any[] | null
+  on_success_script?: string | null
+  on_failure_script?: string | null
   effects?: Record<string, any> | null
   stat_modifier_strength?: number | null
   current_scene_id?: string

@@ -9,6 +9,7 @@ import type { LivingWorldPreferences } from '@/services/livingWorld'
 import { visualService } from '@/services/visualService'
 import type { VisualKind } from '@/services/visualService'
 import { entityService } from '@/services/entityService'
+import { characterResourceFields, createEntityPayload, switchScriptFields } from '@/services/entityAuthoringPayload'
 import { notificationService } from '@/services/notificationService'
 import { useEntityTransfer } from '@/composables/useEntityTransfer'
 
@@ -1126,6 +1127,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     switch_states_json: JSON.stringify(selectedObject?.switch_states || metadata?.switch?.states || metadata?.switch_states || [], null, 2),
     switch_initial_state: String(selectedObject?.switch_initial_state || metadata?.switch?.initial_state || metadata?.switch_initial_state || ''),
     switch_transitions_json: JSON.stringify(selectedObject?.switch_transitions || metadata?.switch?.transitions || metadata?.switch_transitions || [], null, 2),
+    ...switchScriptFields(selectedObject),
     effects_hp: selectedObject?.effects?.hp || metadata?.effects?.hp || 0,
     effects_stamina: selectedObject?.effects?.stamina || metadata?.effects?.stamina || 0,
     effects_mana: selectedObject?.effects?.mana || metadata?.effects?.mana || 0,
@@ -1219,93 +1221,12 @@ async function saveEntityText(data: any) {
     isSavingText.value = true
     promptError.value = ''
     try {
-      if (creationType === 'npc') {
-        await entityService.createEntity(props.adventureId, {
-          entity_id: candidateId,
-          entity_type: 'NPC',
-          scene_id: sceneId,
-          name: entityName,
-          description: entityDescription,
-          hp: Number(data.hp || 20),
-          stamina: Number(data.stamina || 20),
-          mana: Number(data.mana || 20),
-          goal: String(data.goal || '').trim() || undefined,
-          character: String(data.character || '').trim() || undefined,
-          gender: data.gender,
-          age_years: data.age_years,
-          personality_profile: data.personality_profile || {},
-          is_killable: Boolean(data.is_killable),
-          moveable: Boolean(data.moveable),
-          allowed_scenes: data.allowed_scenes || [],
-          notes: String(data.notes || '').trim() || undefined,
-          is_hidden: Boolean(data.is_hidden),
-          reveal_rule: String(data.reveal_rule || '').trim() || undefined,
-          spatial_position: String(data.spatial_position || '').trim() || undefined,
-          inventory: data.inventory || [],
-          on_defeat_script: data.on_defeat_script || undefined,
-          on_defeat_text: data.on_defeat_text || undefined,
-          on_protagonist_enters_scene_script: data.on_protagonist_enters_scene_script || undefined,
-          on_protagonist_enters_scene_text: data.on_protagonist_enters_scene_text || undefined,
-        })
-      } else {
-        const itemType = String(data.item_type || 'DEFAULT').toUpperCase()
-        if (itemType === 'READABLE' && !String(data.text_log_content || '').trim()) {
-          addNotification('Readable items require text-log content.', 'error')
-          return
-        }
-
-        const createPayload: any = {
-          entity_id: candidateId,
-          entity_type: 'OBJECT',
-          scene_id: sceneId,
-          name: entityName,
-          description: entityDescription,
-          item_type: itemType,
-          is_portable: itemType !== 'SWITCH',
-          inventory: data.inventory || [],
-          wearable_slots: data.wearable_slots || undefined,
-          clothing: itemType === 'WEARABLE' ? data.clothing : undefined,
-          combination_ingredients: data.combination_ingredients || undefined,
-          stat_modifier_strength: data.stat_modifier_strength || undefined,
-          is_hidden: data.is_hidden,
-          reveal_rule: data.reveal_rule || undefined,
-          on_pickup_script: data.on_pickup_script || undefined,
-          on_pickup_text: data.on_pickup_text || undefined,
-          on_drop_script: data.on_drop_script || undefined,
-          on_drop_text: data.on_drop_text || undefined,
-          on_equip_script: data.on_equip_script || undefined,
-          on_equip_text: data.on_equip_text || undefined,
-          on_unequip_script: data.on_unequip_script || undefined,
-          on_unequip_text: data.on_unequip_text || undefined,
-        }
-        if (itemType === 'READABLE') {
-          createPayload.metadata_json = {
-            text_log_content: String(data.text_log_content || '').trim(),
-            text_log_format: String(data.text_log_format || 'DOCUMENT').toUpperCase(),
-          }
-        }
-        if (itemType === 'SWITCH') {
-          createPayload.metadata_json = {
-            ...(createPayload.metadata_json || {}),
-            switch_states: data.switch_states || [],
-            switch_initial_state: data.switch_initial_state || '',
-            switch_transitions: data.switch_transitions || [],
-            switch: {
-              states: data.switch_states || [],
-              initial_state: data.switch_initial_state || '',
-              transitions: data.switch_transitions || [],
-              outcomes: []
-            }
-          }
-        }
-        if (itemType === 'CONSUMABLE') {
-          createPayload.metadata_json = {
-            ...(createPayload.metadata_json || {}),
-            effects: data.effects || {},
-          }
-        }
-        await entityService.createEntity(props.adventureId, createPayload)
+      if (creationType === 'object' && String(data.item_type || '').toUpperCase() === 'READABLE'
+          && !String(data.text_log_content || '').trim()) {
+        addNotification('Readable items require text-log content.', 'error')
+        return
       }
+      await entityService.createEntity(props.adventureId, createEntityPayload(creationType, sceneId, candidateId, data))
 
       if (pendingProtagonistAssignment.value) {
         const target = pendingProtagonistAssignment.value
@@ -1391,9 +1312,9 @@ async function saveEntityText(data: any) {
       name: data.name,
       description: data.description,
       item_type: editEntityContext.value.type === 'object' ? data.item_type : undefined,
-      hp: data.hp || undefined,
-      stamina: data.stamina || undefined,
-      mana: data.mana || undefined,
+      ...(['npc', 'protagonist'].includes(editEntityContext.value.type)
+        ? characterResourceFields(data)
+        : { hp: data.hp || undefined, stamina: data.stamina || undefined, mana: data.mana || undefined }),
       goal: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.goal : undefined,
       character: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.character : undefined,
       gender: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.gender : undefined,
@@ -1423,6 +1344,8 @@ async function saveEntityText(data: any) {
       switch_states: editEntityContext.value.type === 'object' ? data.switch_states : undefined,
       switch_initial_state: editEntityContext.value.type === 'object' ? data.switch_initial_state : undefined,
       switch_transitions: editEntityContext.value.type === 'object' ? data.switch_transitions : undefined,
+      on_success_script: editEntityContext.value.type === 'object' && data.item_type === 'SWITCH' ? data.on_success_script : undefined,
+      on_failure_script: editEntityContext.value.type === 'object' && data.item_type === 'SWITCH' ? data.on_failure_script : undefined,
       effects: editEntityContext.value.type === 'object' ? data.effects : undefined,
       stat_modifier_strength: editEntityContext.value.type === 'object' ? data.stat_modifier_strength : undefined,
       is_hidden: ['npc', 'object'].includes(editEntityContext.value.type) ? data.is_hidden : undefined,
