@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import ClothingItemFields from '@/components/editor/ClothingItemFields.vue'
 import type { ClothingDraft } from '@/services/clothingAuthoring'
-import { EQUIPMENT_SLOTS } from '@/utils/equipmentSlots'
+import { BODY_ITEM_SLOTS, EQUIPMENT_SLOTS } from '@/utils/equipmentSlots'
 import { quoteError } from '@/utils/wardrobeQuotes'
 import DebugRecoverySource from './DebugRecoverySource.vue'
 
@@ -46,7 +46,7 @@ const valid = computed(() => {
     size(description.value) > 1000
   )
     return false
-  if (kind.value === 'ordinary') return ['vaginal', 'anal'].includes(attachment.value)
+  if (kind.value === 'ordinary') return BODY_ITEM_SLOTS.some(region => region.region === attachment.value)
   const layer = clothing.value.layer
   return (
     ['worn', 'carried'].includes(status.value) &&
@@ -157,8 +157,7 @@ function submit() {
         >Confirmed body placement
         <select v-model="attachment" class="mt-1 w-full rounded bg-slate-800 p-2">
           <option value="" disabled>Select the placement established in the source</option>
-          <option value="vaginal">Vaginal placement</option>
-          <option value="anal">Anal placement</option>
+          <option v-for="region in BODY_ITEM_SLOTS" :key="region.region" :value="region.region">{{ region.label }}</option>
         </select>
       </label>
       <label class="block text-sm"

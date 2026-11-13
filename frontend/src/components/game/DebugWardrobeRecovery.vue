@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import DebugWardrobeMentions, { type WardrobeMention } from './DebugWardrobeMentions.vue'
 import DebugWardrobeRejections, { type WardrobeRejection } from './DebugWardrobeRejections.vue'
 import DebugRecoveryManual from './DebugRecoveryManual.vue'
+import type { BodyPlacementSlot } from '@/utils/equipmentSlots'
 export interface WardrobeRecoveryPreview {
   token: string
   notes: string
@@ -32,7 +33,7 @@ export interface WardrobeRecoveryPreview {
     uncovered_regions?: string[]
     placement_evidence?: string
     restore_coverage?: boolean
-    attachment_slot?: 'vaginal' | 'anal'
+    attachment_slot?: BodyPlacementSlot
     source_role?: 'assistant' | 'user'
   }[]
 }

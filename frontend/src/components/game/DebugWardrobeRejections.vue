@@ -3,6 +3,7 @@ import DebugWardrobeCorrection from './DebugWardrobeCorrection.vue'
 import DebugBodyPlacementCorrection from './DebugBodyPlacementCorrection.vue'
 import DebugRecoverySource from './DebugRecoverySource.vue'
 import { ref, watch } from 'vue'
+import type { BodyPlacementSlot } from '@/utils/equipmentSlots'
 export interface WardrobeRejection {
   index: number
   label: string
@@ -15,7 +16,7 @@ export interface WardrobeRejection {
   coverage: string[]
   uncovered_regions: string[]
   reasons: string[]
-  attachment_slot?: 'vaginal' | 'anal'
+  attachment_slot?: BodyPlacementSlot
 }
 const props = defineProps<{
   entries: WardrobeRejection[]

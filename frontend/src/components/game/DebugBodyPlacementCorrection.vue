@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { WardrobeRejection } from './DebugWardrobeRejections.vue'
 import { quoteError } from '@/utils/wardrobeQuotes'
+import { BODY_ITEM_SLOTS } from '@/utils/equipmentSlots'
 
 const props = defineProps<{
   entry: WardrobeRejection
@@ -23,7 +24,7 @@ const error = computed(() => {
     : 'Select a longer passage that occurs only once in this message.'
 })
 const valid = computed(
-  () => !props.busy && !error.value && ['vaginal', 'anal'].includes(slot.value)
+  () => !props.busy && !error.value && BODY_ITEM_SLOTS.some(region => region.region === slot.value)
 )
 const canUseSelection = computed(
   () => !props.busy && !quoteError(props.source, props.selectedQuote ?? '')
@@ -59,8 +60,7 @@ function submit() {
       <label class="block text-sm">
         Confirmed placement
         <select v-model="slot" :disabled="busy" class="mt-1 w-full rounded bg-slate-800 p-2">
-          <option value="vaginal">Vaginal placement</option>
-          <option value="anal">Anal placement</option>
+          <option v-for="region in BODY_ITEM_SLOTS" :key="region.region" :value="region.region">{{ region.label }}</option>
         </select>
       </label>
       <label class="block text-sm">

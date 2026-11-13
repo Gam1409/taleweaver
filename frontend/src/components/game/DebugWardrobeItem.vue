@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DebugItemRepair from './DebugItemRepair.vue'
 import { Pencil } from 'lucide-vue-next'
+import type { BodyPlacementSlot } from '@/utils/equipmentSlots'
 
 export interface Clothing {
   category: string
@@ -17,7 +18,7 @@ export interface WardrobeItem {
   clothing: Clothing | null
   worn: boolean
   uncovered_regions?: string[]
-  attachment_slot?: 'vaginal' | 'anal' | null
+  attachment_slot?: BodyPlacementSlot | null
   spatial_position?: string
   location?: 'scene'
 }

@@ -38,11 +38,12 @@ export const EQUIPMENT_SLOTS = [
 ] as const
 
 export const BODY_ITEM_SLOTS = [
-  { key: 'BodyVaginal', label: 'Vaginal area', shortLabel: 'V', icon: 'ra-emerald', top: '54%', left: '44%' },
-  { key: 'BodyAnal', label: 'Anal area', shortLabel: 'A', icon: 'ra-emerald', top: '64%', left: '50%' },
-  { key: 'BodyUterine', label: 'Uterus', shortLabel: 'U', icon: 'ra-emerald', top: '44%', left: '50%' },
-  { key: 'BodyPenile', label: 'Penile area', shortLabel: 'P', icon: 'ra-emerald', top: '54%', left: '68%' }
+  { key: 'BodyVaginal', region: 'vaginal', label: 'Vaginal area', shortLabel: 'V', icon: 'ra-emerald', top: '54%', left: '44%' },
+  { key: 'BodyAnal', region: 'anal', label: 'Anal area', shortLabel: 'A', icon: 'ra-emerald', top: '64%', left: '50%' },
+  { key: 'BodyUterine', region: 'uterine', label: 'Uterus', shortLabel: 'U', icon: 'ra-emerald', top: '44%', left: '50%' },
+  { key: 'BodyPenile', region: 'penile', label: 'Penile area', shortLabel: 'P', icon: 'ra-emerald', top: '54%', left: '68%' }
 ] as const
+export type BodyPlacementSlot = (typeof BODY_ITEM_SLOTS)[number]['region']
 
 export function legacyEquipment(equipment: Record<string, unknown>): EquipmentDisplay {
   const result: EquipmentDisplay = {}

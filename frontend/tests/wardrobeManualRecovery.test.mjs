@@ -7,6 +7,9 @@ import ts from 'typescript'
 const quoteCode = ts.transpileModule(readFileSync(new URL('../src/utils/wardrobeQuotes.ts', import.meta.url), 'utf8'),
   {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
 const quoteModule = `data:text/javascript;base64,${Buffer.from(quoteCode).toString('base64')}`
+const slotCode = ts.transpileModule(readFileSync(new URL('../src/utils/equipmentSlots.ts', import.meta.url), 'utf8'),
+  {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
+const slotModule = `data:text/javascript;base64,${Buffer.from(slotCode).toString('base64')}`
 const script = readFileSync(new URL('../src/components/game/DebugRecoveryManual.vue', import.meta.url), 'utf8')
   .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   .replace(/import[^\n]+\n/g, '')
@@ -14,6 +17,7 @@ const script = readFileSync(new URL('../src/components/game/DebugRecoveryManual.
   .replace(/const emit = defineEmits<[^\n]+\n/, '')
 const compiled = ts.transpileModule(`import {computed,ref} from '${import.meta.resolve('vue')}';
 import {quoteError} from '${quoteModule}';
+import {BODY_ITEM_SLOTS} from '${slotModule}';
 export function setup(props, emit) {
   ${script}
   return {sourceId,evidence,name,description,kind,status,attachment,clothing,slots,valid,submit,quoteIssue};
@@ -81,3 +85,24 @@ test('repeated body evidence and unknown sources cannot submit a manual draft', 
   f.sourceId.value='unknown'
   assert.equal(f.valid.value,false)
 })
+
+for (const slot of ['vaginal', 'anal', 'uterine', 'penile']) {
+  test(`manual recovery retains the exact source and canonical placement ${slot}`, () => {
+    const f=fixture()
+    f.sourceId.value='message'
+    f.name.value='Sealed sensor'
+    f.description.value='A sealed medical sensor.'
+    f.evidence.value=TEXT
+    f.attachment.value=slot
+    assert.equal(f.valid.value,true)
+    f.submit()
+    const payload=JSON.parse(f.commands[0].slice('/debug wardrobe_add manual '.length))
+    assert.equal(payload.attachment_slot,slot)
+    assert.equal(payload.evidence,TEXT)
+    assert.equal(payload.source_message_id,'message')
+    f.attachment.value='unsupported'
+    assert.equal(f.valid.value,false)
+    f.submit()
+    assert.equal(f.commands.length,1)
+  })
+}

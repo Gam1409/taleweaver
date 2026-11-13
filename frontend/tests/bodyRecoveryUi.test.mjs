@@ -8,8 +8,12 @@ const quotes = { exports: {} }
 new Function('module', 'exports', ts.transpileModule(readFileSync(new URL('../src/utils/wardrobeQuotes.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText)(quotes, quotes.exports)
+const slots = { exports: {} }
+new Function('module', 'exports', ts.transpileModule(readFileSync(new URL('../src/utils/equipmentSlots.ts', import.meta.url), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(slots, slots.exports)
 
-test('a rejected body placement can be corrected with an exact quote without applying state', async t => {
+for (const slot of ['vaginal', 'anal', 'uterine', 'penile']) test(`a rejected placement ${slot} can be corrected with an exact quote without applying state`, async t => {
   const previous = { Document: globalThis.Document, ShadowRoot: globalThis.ShadowRoot }
   globalThis.Document = class Document {}
   globalThis.ShadowRoot = class ShadowRoot {}
@@ -21,10 +25,11 @@ test('a rejected body placement can be corrected with an exact quote without app
   })
   const calls = [], text = 'Lina keeps the sealed medical sensor in the recorded body slot.'
   const view = mountSfc('components/game/DebugBodyPlacementCorrection.vue', {
-    entry: { index: 3, attachment_slot: 'anal', evidence: 'A paraphrase.' }, source: text,
+    entry: { index: 3, attachment_slot: slot, evidence: 'A paraphrase.' }, source: text,
     token: 'preview', busy: false, selectedQuote: text, onCommand: command => calls.push(command),
-  }, { '@/utils/wardrobeQuotes': quotes.exports })
+  }, { '@/utils/wardrobeQuotes': quotes.exports, '@/utils/equipmentSlots': slots.exports })
   t.after(() => view.app.unmount())
+  assert.deepEqual(view.all().filter(node => node.type === 'option').map(node => node.props.value), ['vaginal', 'anal', 'uterine', 'penile'])
   assert.equal(view.button('Validate correction').props.disabled, true)
   view.button('Use selected source passage').props.onClick()
   await settle()
@@ -33,7 +38,7 @@ test('a rejected body placement can be corrected with an exact quote without app
   assert.equal(calls.length, 1)
   const prefix = '/debug wardrobe_correct preview 3 '
   assert.ok(calls[0].startsWith(prefix))
-  assert.deepEqual(JSON.parse(calls[0].slice(prefix.length)), { status: 'worn', evidence: text, attachment_slot: 'anal' })
+  assert.deepEqual(JSON.parse(calls[0].slice(prefix.length)), { status: 'worn', evidence: text, attachment_slot: slot })
 })
 
 test('player-sourced item previews are labelled and are unselected by default', t => {
