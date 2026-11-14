@@ -10,6 +10,7 @@ from .game_session import GameSession
 from .hook_run import HookRun
 from .memory_rag import MemoryIndexState as MemoryIndexState
 from .memory_rag import MemorySummary as MemorySummary
+from .npc_notebook import NpcNotebook
 from .session_checkpoint import SessionCheckpoint
 from .session_state import SessionState
 from .turn_replay import TurnReplay
@@ -29,6 +30,7 @@ __all__ = [
     "GameSession",
     "MemoryIndexState",
     "MemorySummary",
+    "NpcNotebook",
     "SessionCheckpoint",
     "SessionState",
     "User",

@@ -2,7 +2,9 @@
 
 import shutil
 import zipfile
+from collections.abc import Callable, Sequence
 from pathlib import PurePosixPath
+from typing import BinaryIO, Protocol, cast
 
 MEDIA_EXTENSIONS = frozenset(
     {
@@ -24,10 +26,44 @@ MEDIA_EXTENSIONS = frozenset(
         ".webm",
     }
 )
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 MAX_ENTRY_BYTES = 50 * 1024 * 1024
 MAX_ENTRIES = 1000
 MAX_COMPRESSION_RATIO = 100
+
+
+class _ZipTrailerAPI(Protocol):
+    _EndRecData: Callable[[BinaryIO], Sequence[object] | None]
+
+
+def rewind_archive(source: BinaryIO) -> int:
+    """Measure an already spooled upload without loading its bytes into memory."""
+    source.seek(0, 2)
+    size = source.tell()
+    source.seek(0)
+    if size > MAX_UPLOAD_BYTES:
+        raise ValueError("Session archive exceeds the upload budget.")
+    return size
+
+
+def validate_archive_stream(source: BinaryIO) -> None:
+    """Bound central-directory allocation before ZipFile reads its complete table."""
+    rewind_archive(source)
+    # The bounded stdlib parser supports ZIP64 but is absent from public stubs.
+    trailer = cast(_ZipTrailerAPI, zipfile)._EndRecData(source)
+    if trailer is None:
+        raise ValueError("Session archive has no valid ZIP directory.")
+    # The end-record layout stores total entries and directory bytes at 4 and 5.
+    entries, directory_bytes = trailer[4], trailer[5]
+    if not isinstance(entries, int) or not isinstance(directory_bytes, int):
+        raise ValueError("Session archive has invalid ZIP directory metadata.")
+    if entries > MAX_ENTRIES:
+        raise ValueError("Archive contains too many entries.")
+    # A 46-byte central header precedes three unsigned-16-bit metadata fields.
+    metadata_bound = MAX_ENTRIES * (46 + 3 * zipfile.ZIP_MAX_COMMENT)
+    if directory_bytes > metadata_bound:
+        raise ValueError("Archive directory exceeds its metadata budget.")
+    source.seek(0)
 
 
 def validate_archive(archive: zipfile.ZipFile) -> None:

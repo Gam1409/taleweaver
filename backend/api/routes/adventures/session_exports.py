@@ -1,6 +1,5 @@
 """Portable session downloads for both UUID and legacy multilingual save IDs."""
 
-import io
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,13 +7,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.routes.adventures.session_transfer import export_archive_response
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.export_archives import SessionArchiveLimitError
-from backend.engine.session_exporter import SessionExporter
 from backend.models.game_session import GameSession
 from backend.models.user import User
-from backend.utils.download_headers import attachment_disposition
 
 router = APIRouter(tags=["Sessions"])
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ async def export_session_ads(
         raise HTTPException(status_code=404, detail="Session not found.")
 
     try:
-        zip_data = await SessionExporter.export_ads(db, game_id)
+        return await export_archive_response(db, game_id)
     except SessionArchiveLimitError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from None
     except ValueError as exc:
@@ -44,10 +42,3 @@ async def export_session_ads(
     except Exception as exc:
         logger.exception("ADS export failed")
         raise HTTPException(status_code=500, detail="Session export failed.") from exc
-
-    # RFC 6266 / 5987: legacy IDs may contain Cyrillic or other Unicode letters.
-    return StreamingResponse(
-        io.BytesIO(zip_data),
-        media_type="application/zip",
-        headers={"Content-Disposition": attachment_disposition(f"session_{game_id}.ads")},
-    )

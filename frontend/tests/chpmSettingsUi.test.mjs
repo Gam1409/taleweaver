@@ -22,7 +22,7 @@ async function render(count, warnings = [], statusFields = {}, draftFields = {})
     draft: ref({ mode: 'live', actor_ids: Array.from({ length: count }, (_, i) => `${i}`), max_calls_per_turn: 8, ...draftFields }),
     busy: ref(false), error: ref(''), minimumCalls: ref(count + 5),
     budgetWarning: ref(false), historyWarnings: ref(warnings),
-    load() {}, save() {}, selectStandard() {},
+    load() {}, save() {}, selectStandard() {}, setNotebookEnabled() {},
   }
   try {
     return await renderToString(createSSRApp({ render: () => h(component, { sessionId: 'session' }) }))
@@ -38,6 +38,19 @@ test('multiple NPCs disclose waiting and the repair reserve, without a made-up E
   assert.match(html, /Minimum for this selection: 8/)
   assert.match(html, /Later card edits do not replace/)
   assert.doesNotMatch(await render(1), /processed sequentially/)
+})
+
+test('private notebook help explains opt-in tool costs and latest-only restore behavior', async () => {
+  const html = await render(1, [], {}, { notebook_enabled: true, agent_steps: 1 })
+  assert.match(html, /Private NPC notebooks/)
+  assert.match(html, /16,000,000 UTF-8 bytes/)
+  assert.match(html, /Notes may be mistaken and are not world facts/)
+  assert.match(html, /Undo or Chronicles restore/)
+  assert.match(html, /no notebook history is kept/)
+  assert.match(html, /<option value="0" disabled>/)
+  assert.match(html, /up to two local tool operations/)
+  assert.doesNotMatch(html, /read-only lookups/)
+  assert.doesNotMatch(await render(1, [], {}, { mode: 'shadow' }), /Private NPC notebooks/)
 })
 
 test('a localized proposal failure names only the paused NPC and escapes its detail', async () => {

@@ -1,15 +1,19 @@
+import asyncio
 import io
 import json
 import logging
 import os
 import shutil
 import zipfile
-from typing import Any, Optional, cast
+from contextlib import ExitStack
+from typing import Any, BinaryIO, Optional, cast
 
 import uuid6
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.engine.archive_safety import MAX_UPLOAD_BYTES, copy_asset, validate_archive
+from backend.engine.archive_safety import copy_asset, validate_archive, validate_archive_stream
+from backend.engine.chpm.notebook_archive import NotebookArchive, read_notebooks
+from backend.engine.chpm.notebook_portability import import_notebooks
 from backend.engine.clothing.wear_provenance import remap_profile
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.living_world.state import fork as fork_simulation
@@ -76,8 +80,11 @@ def _restore_manifest_paths(manifest: dict[str, Any], session_id: str) -> dict[s
     """Keep canonical source text outside the asset URL conversion boundary."""
     ordinary = dict(manifest)
     world_info = ordinary.pop("world_info", None)
+    notebooks = ordinary.pop("npc_notebooks", None)
     restored = cast(dict[str, Any], restore_session_paths(ordinary, session_id))
     restored["world_info"] = world_info
+    if notebooks is not None:
+        restored["npc_notebooks"] = notebooks
     return restored
 
 
@@ -98,11 +105,16 @@ def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
             copy_asset(zip_file, zip_info, safe_dest_path)
 
 
-def _read_session_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any]:
+def _read_session_manifest(zip_file: zipfile.ZipFile, cleanup: ExitStack) -> dict[str, Any]:
     data: object = json.loads(zip_file.read("session.json").decode("utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Session manifest must be an object.")
     data["world_info"] = read_world_info(zip_file, data.get("world_info"))
+    notebooks = read_notebooks(zip_file, data.get("npc_notebooks"))
+    if isinstance(notebooks, NotebookArchive):
+        # Register inside the worker: cancellation may discard its return value.
+        cleanup.callback(notebooks.stream.close)
+        data["npc_notebooks"] = notebooks
     return data
 
 
@@ -112,9 +124,33 @@ async def _add_session_parent(db: AsyncSession, session: GameSession) -> None:
     await db.flush()
 
 
+async def _cleanup_failed_import(db: AsyncSession, session_id: str | None) -> None:
+    await db.rollback()
+    if session_id:
+        await run_file_operation(
+            shutil.rmtree,
+            _safe_data_path("adventures", "sessions", session_id),
+            ignore_errors=True,
+        )
+
+
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
+        """Compatibility API for existing callers with in-memory archives."""
+        with io.BytesIO(content) as source:
+            return await SessionImporter.import_ads_from(db, source, owner_id)
+
+    @staticmethod
+    async def import_ads_from(db: AsyncSession, source: BinaryIO, owner_id: str) -> Optional[str]:
+        """Consume detached member spools on every return, failure or cancellation."""
+        with ExitStack() as cleanup:
+            return await SessionImporter._restore_ads(db, source, owner_id, cleanup)
+
+    @staticmethod
+    async def _restore_ads(
+        db: AsyncSession, source: BinaryIO, owner_id: str, cleanup: ExitStack
+    ) -> Optional[str]:
         """
         Unpacks a .ads ZIP file, reconstructs the game session and associated state/entities,
         and extracts assets into the local session directory.
@@ -124,16 +160,15 @@ class SessionImporter:
         """
         new_session_id = None
         try:
-            if len(content) > MAX_UPLOAD_BYTES:
-                raise ValueError("Session archive exceeds the upload budget.")
-            with zipfile.ZipFile(io.BytesIO(content), "r") as zip_file:
+            await run_file_operation(validate_archive_stream, source)
+            with zipfile.ZipFile(source, "r") as zip_file:
                 await run_file_operation(validate_archive, zip_file)
                 # 1. Read session manifest
                 if "session.json" not in zip_file.namelist():
                     logger.error("session.json missing in .ads archive")
                     return None
 
-                manifest = await run_file_operation(_read_session_manifest, zip_file)
+                manifest = await run_file_operation(_read_session_manifest, zip_file, cleanup)
 
                 # 2. Setup new IDs
                 new_session_id = str(uuid6.uuid7())
@@ -342,16 +377,13 @@ class SessionImporter:
                 db, session_state, owner_id, manifest.get("memory_summaries") or [], message_ids
             )
             await import_world_info(db, manifest.get("world_info"), new_session_id, owner_id)
+            await import_notebooks(db, session_state, owner_id, manifest.get("npc_notebooks"))
             await db.commit()
             return new_session_id
 
-        except Exception:
+        except (Exception, asyncio.CancelledError) as exc:
+            await _cleanup_failed_import(db, new_session_id)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             logger.exception("Import of ADS session failed")
-            await db.rollback()
-            if new_session_id:
-                await run_file_operation(
-                    shutil.rmtree,
-                    _safe_data_path("adventures", "sessions", new_session_id),
-                    ignore_errors=True,
-                )
             return None

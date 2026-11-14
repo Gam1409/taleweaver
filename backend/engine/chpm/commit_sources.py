@@ -16,3 +16,15 @@ async def prepare(manager: Any, turn: Any) -> None:
         return
     await reports.validate_commit(manager, turn)
     await recovery_queue.commit(manager, turn)
+    from backend.engine.chpm.notebook_store import persist_workspace
+
+    for actor, draft in getattr(turn, "notebook_drafts", {}).items():
+        if (
+            actor in turn.decisions
+            and actor in turn.minds
+            and draft.committable
+            and draft.workspace.changed
+        ):
+            await persist_workspace(
+                manager.db, turn.minds[actor], draft.workspace, owner_id=manager.user.id
+            )

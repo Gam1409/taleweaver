@@ -16,6 +16,8 @@ from backend.engine.chpm import (
     performance,
 )
 from backend.engine.chpm.host_state import Mind, removed_messages
+from backend.engine.chpm.notebook.workspace import NotebookWorkspace
+from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import Decision, Observation
 
 
@@ -26,6 +28,7 @@ class PreparedActor:
     supplied: dict
     previous: Decision | None
     mind: Mind | None
+    notebook: NotebookDraft | None = None
 
 
 @step("npc.build_context")
@@ -80,7 +83,19 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Observation) ->
         }
     )
     supplied["observation"] = actor_observation.model_dump()
-    return PreparedActor(actor.id, actor_observation, supplied, previous, turn.minds.get(actor.id))
+    notebook = None
+    if (
+        turn.initial.settings.mode == "live"
+        and turn.initial.settings.notebook_enabled
+        and turn.initial.settings.agent_steps
+    ):
+        from backend.engine.chpm.notebook_store import load_snapshot
+
+        snapshot = await load_snapshot(manager.db, turn.minds[actor.id], manager.user.id)
+        notebook = NotebookDraft(NotebookWorkspace(snapshot.payload, revision=snapshot.revision))
+    return PreparedActor(
+        actor.id, actor_observation, supplied, previous, turn.minds.get(actor.id), notebook
+    )
 
 
 @step("npc.decision")
@@ -104,6 +119,7 @@ async def _run(manager: Any, turn: Any, job: PreparedActor) -> tuple[Decision, M
             turn.agendas[job.actor_id],
             job.mind,
             job.previous,
+            notebook=job.notebook,
         )
     else:
         decision = await cognition.decide(
@@ -121,8 +137,16 @@ async def _run(manager: Any, turn: Any, job: PreparedActor) -> tuple[Decision, M
     return decision, mind
 
 
-def apply(turn: Any, actor: str, result: tuple[Decision, Mind | None]) -> None:
+def apply(
+    turn: Any,
+    actor: str,
+    result: tuple[Decision, Mind | None],
+    *,
+    notebook: NotebookDraft | None = None,
+) -> None:
     decision, mind = result
     turn.decisions[actor] = decision
     if mind is not None:
         turn.minds[actor] = mind
+    if notebook and notebook.committable:
+        turn.notebook_drafts[actor] = notebook

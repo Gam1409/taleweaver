@@ -29,6 +29,7 @@ class Settings(Contract):
     max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
     agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
+    notebook_enabled: StrictBool = False
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 

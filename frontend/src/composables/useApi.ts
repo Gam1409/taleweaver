@@ -22,6 +22,7 @@ import { authState } from '@/store/auth'
 import { configState } from '@/store/config'
 import { apiFetch, buildApiUrl } from '@/services/http'
 import type { ApiFetchInit } from '@/services/http'
+import { SESSION_TRANSFER_TIMEOUT_MS, withSessionTransferDeadline } from '@/services/sessionTransfer'
 
 export interface PasswordPolicy {
   min_length: number
@@ -170,7 +171,7 @@ async function requestBlob(path: string, init?: ApiFetchInit): Promise<Blob> {
     const res = await apiFetch(path, {
       ...init,
       headers,
-      timeoutMs: init?.timeoutMs ?? 20000,
+      timeoutMs: init?.timeoutMs === undefined ? 20000 : init.timeoutMs,
     })
     
     configState.isBackendReachable = true
@@ -202,8 +203,9 @@ async function requestBlob(path: string, init?: ApiFetchInit): Promise<Blob> {
 
       throw new ApiError(res.status, detail, parsed)
     }
-    return res.blob()
+    return await res.blob()
   } catch (err: any) {
+    if (init?.signal?.aborted) throw err
     if (!(err instanceof ApiError)) {
       configState.isBackendReachable = false
       configState.lastErrorMessage = err.message || 'Network Error'
@@ -855,18 +857,22 @@ export const api = {
   },
 
   /** Downloads the session as ADS (ZIP) bundle. */
-  downloadSessionAds(gameId: string): Promise<Blob> {
-    return requestBlob(`/adventures/sessions/${gameId}/export`)
+  downloadSessionAds(gameId: string, signal?: AbortSignal): Promise<Blob> {
+    return withSessionTransferDeadline(
+      transferSignal => requestBlob(`/adventures/sessions/${gameId}/export`, { timeoutMs: null, signal: transferSignal }),
+      signal,
+    )
   },
 
   /** Imports a session from ADS ZIP file. */
-  async importSession(file: File): Promise<{ status: string; game_id: string; message: string }> {
+  async importSession(file: File, signal?: AbortSignal): Promise<{ status: string; game_id: string; message: string }> {
     const formData = new FormData()
     formData.append('file', file)
     return request('/adventures/sessions/import', {
       method: 'POST',
       body: formData,
-      timeoutMs: 60000,
+      signal,
+      timeoutMs: SESSION_TRANSFER_TIMEOUT_MS,
     })
   },
 

@@ -1,19 +1,26 @@
 # Optional bounded CHPM agent
 
-The existing flow remains the default (`agent_steps=0`). In session settings →
-NPC behavior → Enabled → Agent lookups per active NPC, select one or two rounds.
-The setting belongs to the saved game session, not the adventure template or user.
+The existing flow remains the default (`agent_steps=0`). In **Session Memory &
+Settings → NPC Personality → Enabled → Agent tool rounds per active NPC**, select
+one or two rounds. The setting belongs to the saved game session; adventure
+defaults can seed new sessions without changing existing sessions.
 The existing Small/Complex role routes these calls; no separate endpoint is required.
+
+Tools remain read-only unless **Private NPC notebooks** is explicitly enabled.
+That option gives each NPC one current private JSON notebook and selects at least
+one existing tool round. See [private NPC notebooks](npc-notebook.md) for capacity,
+subjective contents and the rule that Undo and Chronicles keep the latest notes.
+Both options default to off; old saves acquire no new model calls.
 
 ## Execution
 
 Perception → reconcile this observer's sources → optional lookup rounds → existing
 source-grounded proposal and intent selection → narration → review/repair → commit.
-Each round asks the model for zero to two allowlisted read requests. An empty list
+Each round asks the model for zero to two allowlisted tool requests. An empty list
 ends investigation early. The next round can refine a search or read a returned
 source. At the step limit, the decision uses the evidence actually obtained;
 missing information remains unknown. There is no open-ended planning loop, browser,
-shell, arbitrary SQL, state-edit tool, or automatic retry of malformed agent JSON.
+shell, arbitrary SQL, world-state edit tool, or automatic retry of malformed agent JSON.
 
 Available tools:
 
@@ -26,11 +33,23 @@ Available tools:
 | `inspect_beliefs` | subject actor ID | Up to two recent own beliefs about that person, marked tentative/challenged and subjective; never that person's private thoughts |
 | `read_belief_basis` | belief ID returned by inspection in this investigation | Up to two recent interpretations, each with up to two exact source quotes, preserving support/challenge of the proposition |
 
-Search is **lexical**, not embedding-based. The model can supply alternate cues,
-but a miss does not establish that an event never occurred. The session-wide RAG
-index, global summaries, private thoughts, and other NPCs' inventories are not
-exposed. There is no certified NPC audience ACL on those broader sources yet.
-Reusing the RAG ranker does not grant access to its global document collector.
+With private notebooks enabled, the same rounds also offer `notebook_info`,
+`notebook_read`, `notebook_write`, `notebook_edit` and `notebook_delete`. They read
+or stage changes to this NPC's own freely organized document. Own thoughts,
+feelings, guesses and quotations need no evidence citations to be written. Notes
+remain fallible subjective context; they do not enter the world-evidence
+catalogue, grant player control or expose another NPC's notebook. There is no
+code execution. Read pages and all model inputs remain bounded by the existing
+budgets; enabling notebooks does not add a separate inference stage.
+
+Search is **lexical by default**. Enabling semantic NPC memory combines eligible
+observer-scoped semantic hits with lexical ranking; the argument refines the
+lexical part. The model can supply alternate cues, but a miss does not establish
+that an event never occurred. These CHPM tools do not expose global summaries,
+other NPCs' private thoughts or notebooks, or their inventories. Reusing the RAG
+ranker does not grant access to its global document collector. Living World's
+actor-visible World Info references use a separate audience-filtered path; see
+[Living World architecture](living-world-architecture.md).
 
 Belief inspection pins at most two propositions across the entire investigation.
 Their handles remain available in the proposal's belief and motive allowlists even
@@ -69,7 +88,7 @@ remain historical; current host facts take precedence.
 
 - `agent_steps`: 0–2; only Enabled/live mode uses the loop.
 - Each round: one logical model call, at most 768 output tokens (also limited by
-  the selected role and the saved CHPM output budget), up to two local reads.
+  the selected role and the saved CHPM output budget), up to two local tool operations.
 - Pinned source excerpts: at most eight distinct sources and 6,000 characters per
   NPC, shared by search, belief-basis, self and clothing reads. A ninth source
   returns `evidence_source_limit_reached` without evicting earlier reads. Expanding
@@ -90,6 +109,11 @@ remain historical; current host facts take precedence.
 - Psychological updates, looked-up clothing observations and audit records commit
   only with the successfully reviewed reply. Failure leaves saved state unchanged.
   Rewind/regeneration invalidate their source-bound causal history as before.
+- Notebook mutations are staged with read-your-writes and commit only with the
+  successfully reviewed reply. They replace one current document rather than
+  creating versions. Later Undo, regeneration or Chronicles restore keeps the
+  latest notebook. This deliberately differs from source-bound psychological
+  history; see the [notebook lifecycle](npc-notebook.md#latest-notes-survive-undo-and-chronicles).
 - Tool exposure, source handoff and persisted decisions use the same source bounds.
   The complete decision is validated after handoff. Save validates serialized state
   before replacing session JSON, including nested models mutated after construction.
@@ -100,6 +124,9 @@ remain historical; current host facts take precedence.
   A long optional purpose label is shortened to 180 characters with an explicit
   truncation flag; cosmetic verbosity cannot reject valid tool requests.
   This trace is exposed through the existing administrator-only endpoint.
+  With notebooks enabled, all tool audits retain hashed arguments and result
+  metadata, not note contents or raw paths. This also protects notes quoted in
+  legacy memory-search arguments. Notebook reads are never source pins.
 
 Host envelope version 6 migrates versions 1–5, retaining budgets and state, with
 agent lookups defaulting to off. The core snapshot is independently versioned.

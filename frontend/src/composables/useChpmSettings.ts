@@ -13,6 +13,7 @@ export interface ChpmSettings {
   max_calls_per_turn: number
   memory_limit: number
   agent_steps?: number
+  notebook_enabled?: boolean
   semantic_memory?: boolean
 }
 
@@ -82,6 +83,12 @@ export function useChpmSettings(sessionId: () => string) {
     if (draft.value) draft.value.mode = 'off'
   }
 
+  function setNotebookEnabled(enabled: boolean) {
+    if (!draft.value) return
+    draft.value.notebook_enabled = enabled
+    if (enabled) draft.value.agent_steps = Math.max(1, draft.value.agent_steps ?? 0)
+  }
+
   async function request(saving: boolean): Promise<boolean> {
     controller?.abort()
     const current = new AbortController()
@@ -125,5 +132,5 @@ export function useChpmSettings(sessionId: () => string) {
 
   watch(sessionId, () => { void load() }, { immediate: true })
   onScopeDispose(() => { controller?.abort(); controller = null })
-  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, load, save }
+  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, load, save }
 }

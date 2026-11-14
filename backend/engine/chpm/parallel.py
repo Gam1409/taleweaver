@@ -77,7 +77,12 @@ def _publish(turn: Any, jobs: list[actor_preparation.PreparedActor], results: li
             proposal_failures.defer(turn, job.actor_id, result)
             failures.append(result)
         else:
-            actor_preparation.apply(turn, job.actor_id, cast(tuple[Decision, Mind | None], result))
+            actor_preparation.apply(
+                turn,
+                job.actor_id,
+                cast(tuple[Decision, Mind | None], result),
+                notebook=job.notebook,
+            )
     proposal_failures.require_survivor(turn, failures)
 
 

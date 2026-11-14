@@ -14,6 +14,7 @@ from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind, Source
+from backend.engine.chpm.notebook_tools import packed_context
 from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
 
 # recent sources, old excerpt characters, recall fragments, beliefs, dialogue window
@@ -104,6 +105,15 @@ def _payload(
         **{key: value for key, value in supplied.items() if key != "_chpm_gap_cursors"},
         "witnessed_utterances_not_world_facts": kept,
         **({"own_action_observations_not_world_facts": kept_actions} if actions else {}),
+        **(
+            {
+                "private_notebook_not_world_facts": packed_context(
+                    supplied["private_notebook_not_world_facts"], tier
+                )
+            }
+            if "private_notebook_not_world_facts" in supplied
+            else {}
+        ),
         "appraisal_context": window.payload,
         "motivation_context": catalogue.payload(),
         "experience_context": narrative_context.experience_reasons(

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.adventures import legacy_session_mutations
 from backend.api.routes.adventures.schemas import GameSessionResponse
 from backend.api.routes.adventures.session_asset_access import build_asset_copy_cache
+from backend.api.routes.adventures.session_transfer import import_uploaded_archive
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -32,7 +33,6 @@ from backend.engine.memory_rag.scheduling import scheduler
 from backend.engine.npc_journal.messages import copy_messages
 from backend.engine.physical_conditions.ledger import remap as remap_conditions
 from backend.engine.session_checkpoint_service import SessionCheckpointService
-from backend.engine.session_importer import SessionImporter
 from backend.engine.turn_replay.service import ReplayUnavailableError
 from backend.engine.turn_replay.undo import undo_latest
 from backend.engine.visual_novel.lifecycle import copy_vn_state
@@ -1012,6 +1012,10 @@ async def copy_session(
     from .session_copy_world import clone_saved_world
 
     await clone_saved_world(db, original_session, copied_session, asset_copy_cache, message_ids)
+    if original_state is not None and cloned_state is not None:
+        from backend.engine.chpm.notebook_portability import copy_notebooks
+
+        await copy_notebooks(db, original_state, cloned_state, current_user.id)
     await copy_world_info(db, original_session.id, copied_session.id, current_user.id)
 
     await copy_session_summaries(
@@ -1335,12 +1339,7 @@ async def import_session_ads(
 ) -> dict[str, Any]:
     """Import a game session from a portable .ads (ZIP) file."""
     try:
-        from backend.engine.archive_safety import MAX_UPLOAD_BYTES
-
-        content = await file.read(MAX_UPLOAD_BYTES + 1)
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise HTTPException(413, "Session archive exceeds the upload budget.")
-        new_session_id = await SessionImporter.import_ads(db, content, owner_id=current_user.id)
+        new_session_id = await import_uploaded_archive(db, file, current_user.id)
         if not new_session_id:
             raise HTTPException(
                 status_code=400, detail="The ADS file is invalid or could not be processed."

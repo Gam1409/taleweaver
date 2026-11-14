@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
+import { sessionTransferModule } from './sessionTransferModule.mjs'
 const uri = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
 const compile = path => ts.transpileModule(readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const http = uri(compile('services/http.ts').replace(/import .* from '@\/store\/auth';/, 'const authState = {token:null};'))
@@ -10,6 +11,7 @@ const source = compile('composables/useApi.ts')
   .replace(/import .* from '@\/store\/auth';/, 'const authState = {token:null, isAuthenticated:false};')
   .replace(/import .* from '@\/store\/config';/, 'const configState = globalThis.voiceApiHealth;')
   .replace("from '@/services/http'", `from '${http}'`)
+  .replace("from '@/services/sessionTransfer'", `from '${sessionTransferModule}'`)
 globalThis.voiceApiHealth = { isBackendReachable: true, lastErrorMessage: '' }
 const { api } = await import(uri(source))
 function setup(t) {

@@ -20,6 +20,11 @@ observer-scoped evidence with administrator-configured embeddings. It defaults
 to off and adds no generative model calls. Other references to lexical-only
 retrieval below describe the default path.
 
+Optional [private NPC notebooks](npc-notebook.md) give each NPC one freely
+organized current JSON document, up to 16,000,000 UTF-8 bytes. They default to
+off and reuse existing agent tool rounds. Notes are subjective and may be wrong;
+Undo and Chronicles keep the latest notebook without storing notebook history.
+
 CHPM is an opt-in Visual Novel session feature. Existing sessions default to
 **Standard** and make no CHPM model requests. No separate inference server or
 Concordia installation is required. The pilot uses the configured Small or Complex
@@ -128,6 +133,8 @@ Versioned state is stored in `SessionState.entity_states.__chpm__`; existing ful
 session snapshots therefore capture it without a database migration. Writes
 replace the JSON value and fence the expected revision. Settings changes also use
 an SQL compare-and-swap and the existing session mutation lease.
+Private notebook documents are stored separately as one current row per NPC;
+they are excluded from snapshots so replay and Chronicles retain the latest notes.
 
 The pilot keeps a high-water decision per selected actor, including the accepted
 proposal, source ID/revision/hash, observation time and selected intention. A

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useChpmSettings } from '@/composables/useChpmSettings'
 
 const props = defineProps<{ sessionId: string }>()
-const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, load, save } = useChpmSettings(() => props.sessionId)
+const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, load, save } = useChpmSettings(() => props.sessionId)
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
 const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
 const elapsed = (value: number | null | undefined): string => value == null ? 'Unavailable' : `${(value / 1000).toFixed(3)} s`
@@ -76,13 +76,18 @@ defineExpose({ save })
           Semantic NPC memory (experimental)
           <span class="mt-2 block text-slate-400">Requires administrator Memory &amp; recall settings. Combines semantic and exact-word search within each NPC's witnessed sources. Uses one bounded embeddings batch for active NPCs; no extra generative model request. Falls back to lexical memory when unavailable. Disabled by default.</span>
         </label>
-        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent lookups per active NPC
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
+          <input name="npc-private-notebooks" type="checkbox" :checked="draft.notebook_enabled ?? false" class="mr-2 accent-cyan-400" @change="setNotebookEnabled(($event.target as HTMLInputElement).checked)" />
+          Private NPC notebooks
+          <span class="mt-2 block text-slate-400">One freely organized JSON notebook per NPC, up to 16,000,000 UTF-8 bytes each. NPCs choose what to read, write or delete. Notes may be mistaken and are not world facts. The latest notes stay after Undo or Chronicles restore; no notebook history is kept. Disabled by default. Enabling selects at least one agent tool round; check the request budget below.</span>
+        </label>
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent tool rounds per active NPC
           <select v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
-            <option :value="0">Off — existing decision flow</option>
+            <option :value="0" :disabled="draft.notebook_enabled">Off — existing decision flow</option>
             <option :value="1">Up to 1 lookup round</option>
             <option :value="2">Up to 2 rounds — can refine a search or read a result</option>
           </select>
-          <span class="mt-2 block text-slate-400">Optional, read-only lookups scoped to this session and NPC. Searches known history, checks own possessions, and reads visible clothing layers of present NPCs. Each round adds one model request with up to two local tool reads; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, or 6 for two rounds.</span>
+          <span class="mt-2 block text-slate-400">Optional tools scoped to this session and NPC. Search witnessed history, check own possessions, and read visible clothing layers of present NPCs. When private notebooks are enabled, these rounds can also read or edit that NPC's own notes. Each round adds one model request with up to two local tool operations; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, or 6 for two rounds.</span>
         </label>
         <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</p>
         <details class="rounded-lg border border-slate-700 p-3">
