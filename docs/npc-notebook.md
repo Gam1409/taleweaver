@@ -35,6 +35,10 @@ For three active NPCs, that means 8 requests with rounds off, 11 with one round,
 request and permits up to two local tool operations. The model can stop early. The ordinary narrator
 request remains separate. Enabling notebooks does not silently raise any budget.
 
+This reserve covers NPC Personality requests. Shared post-narration state
+extraction has its own request and can make one bounded coverage correction
+within its original deadline; see [state reconciliation](narrated-item-reconciliation.md).
+
 ## Contents and authority
 
 The notebook has no required sections or psychological schema. Any JSON value is

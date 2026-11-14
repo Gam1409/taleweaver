@@ -15,7 +15,7 @@ RANGE_DESCRIPTION = (
 
 
 def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -> dict:
-    schema = deepcopy(model.model_json_schema())
+    schema = citation_schema(model, catalog)
     if complete:
         schema["required"] = list(schema["properties"])
     definitions = schema.setdefault("$defs", {})
@@ -49,6 +49,13 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
     staging = definitions.get("SceneExtraction")
     if complete and isinstance(staging, dict):
         staging["required"] = ["changes", "props", "explicit"]
+    return schema
+
+
+def citation_schema(model: type[BaseModel], catalog: Catalog) -> dict:
+    """Reuse the same request-scoped proof contract for bounded correction patches."""
+    schema = deepcopy(model.model_json_schema())
+    definitions = schema.setdefault("$defs", {})
     definitions["NarrationEvidenceReference"] = {
         "type": "string",
         "enum": catalog.references(include_ranges=True),

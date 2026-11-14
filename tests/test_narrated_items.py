@@ -206,7 +206,7 @@ async def test_runtime_persists_change_and_deduplicates_retries(timeout):
             await reconcile_items(manager, action().evidence, completed=True, resolution="") == []
         )
     assert llm.aexecute_complex_task.await_count == 1
-    assert deadline.call_args.kwargs["timeout"] == timeout
+    assert 0 < deadline.call_args.kwargs["timeout"] <= timeout
     assert avatar.inventory[0]["id"] == "SHIRT"
     assert manager.state.entity_states["NPC"]["inventory"] == []
     assert manager.state.entity_states["NPC"]["visual_profile"]["worn"] == []

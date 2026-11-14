@@ -113,6 +113,11 @@ def annotate(result: Any, catalog: Catalog, sections: Any, *, staging: bool) -> 
     return body, replace(sections, coverage=audit.payload())
 
 
+def anchored(row: dict, reference_groups: list[list[str]], catalog: Catalog) -> bool:
+    """Use the same single-occurrence ownership rule for correction admission."""
+    return any(_linked(row, references, catalog) for references in reference_groups)
+
+
 def _group(
     key: str,
     tags: Any,
