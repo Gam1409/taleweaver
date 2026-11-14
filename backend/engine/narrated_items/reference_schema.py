@@ -15,7 +15,15 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
         schema["required"] = list(schema["properties"])
     definitions = schema.setdefault("$defs", {})
     keys = groups(catalog)
-    tags = ["items", "conditions", "scene", "unchanged", "historical", "uncertain"]
+    tags = [
+        "items",
+        "conditions",
+        "scene",
+        "unchanged",
+        "historical",
+        "uncertain",
+        "conditions_deferred",
+    ]
     if "staging" in schema["properties"]:
         tags.append("staging")
     schema["properties"]["coverage"] = {
@@ -25,7 +33,7 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
                 "type": "array",
                 "items": {"enum": tags},
                 "minItems": 1,
-                "maxItems": 4,
+                "maxItems": 5 if "staging" in schema["properties"] else 4,
                 "uniqueItems": True,
             }
             for key in keys

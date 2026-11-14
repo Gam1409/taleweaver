@@ -43,13 +43,30 @@ class Sections:
         }
 
     def messages(self) -> list[str]:
-        if not self.unconfirmed:
-            return []
-        return [
-            "Some state checks need review: the response did not confirm sections "
-            + ", ".join(self.unconfirmed)
-            + ". Confirmed independent changes were retained."
-        ]
+        messages = (
+            [
+                "Some state checks need review: the response did not confirm sections "
+                + ", ".join(self.unconfirmed)
+                + ". Confirmed independent changes were retained."
+            ]
+            if self.unconfirmed
+            else []
+        )
+        if self.coverage and self.coverage.get("status") in {"incomplete", "needs_review"}:
+            messages.append(_coverage_message(self.coverage))
+        return messages
+
+
+def _coverage_message(coverage: dict) -> str:
+    budget = coverage.get("condition_budget") or {}
+    deferred = budget.get("deferred_groups", [])
+    if deferred:
+        reason = f"State extraction reached its condition-update budget; {len(deferred)} source groups remain unapplied for review."
+    elif budget.get("limit") and budget.get("proposed") == budget["limit"]:
+        reason = "State extraction reached its condition-update budget. Some source groups were not fully accounted for."
+    else:
+        reason = "State extraction needs review: some source groups were not fully accounted for."
+    return reason + " Confirmed independent changes were retained."
 
 
 def read(result: Any, *, staging: bool) -> Sections:

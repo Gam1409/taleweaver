@@ -174,6 +174,7 @@ async def reconcile_items(
         {
             "completed_narration": catalog.narration_passages,
             "extraction_coverage_groups": coverage.groups(catalog),
+            "extraction_limits": coverage.limits(),
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
