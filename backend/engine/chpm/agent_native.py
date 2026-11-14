@@ -20,6 +20,7 @@ from backend.engine.chpm.notebook_tools import NotebookDraft, request_summary, r
 from backend.engine.chpm.schema import Observation, Settings, Usage
 
 INSTRUCTIONS = """Choose only necessary offered memory functions before this NPC responds.
+Use at most two function calls per response, within the supplied remaining rounds.
 You are this observer, with your own identity and motives. The host binds every
 function to this NPC; you cannot select another notebook, session, system file or
 network address. Other people's hidden possessions and thoughts are unavailable.
