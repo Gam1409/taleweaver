@@ -144,9 +144,14 @@ def test_prompt_schema_and_native_decoder_receive_the_same_anchor_capacity():
     prompted = json.loads(system.split("JSON schema:\n", 1)[1])
     native = decoder(["lina"])
     for field in FIELDS:
-        assert (
-            prompted["properties"][field]["maxItems"]
-            == native["properties"][field]["maxItems"]
-            == 1
-        )
+        assert prompted["properties"][field]["maxItems"] == 1
+        body = {"matches": True, field: [{"actor_id": "lina", "passage_id": "p0"}]}
+        for contract in (prompted, native):
+            validator = Draft202012Validator(contract)
+            assert validator.is_valid(body)
+            repeated = {**body, field: [*body[field], *body[field]]}
+            errors = list(validator.iter_errors(repeated))
+            assert any(
+                error.validator == "maxItems" and list(error.path) == [field] for error in errors
+            )
     assert native["properties"]["heard"]["maxItems"] == 12

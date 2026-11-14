@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.core.llm_schema_compaction import map_schema
+
 # Keys that only document the schema; dropping them does not change what is valid.
 _SCHEMA_PRESENTATION_KEYS = {"title"}
 _CACHE_CONTROL = {"type": "ephemeral"}
@@ -18,20 +20,14 @@ _CACHE_CONTROL = {"type": "ephemeral"}
 
 def compact_json_schema(schema: Any) -> Any:
     """Recursively removes presentation-only keys (e.g. `title`) from a JSON schema."""
-    if isinstance(schema, list):
-        return [compact_json_schema(item) for item in schema]
-    if not isinstance(schema, dict):
-        return schema
-    compacted: dict[str, Any] = {}
-    for key, value in schema.items():
-        # `properties` maps field names to schemas: a field literally named "title" must stay.
-        if key == "properties" and isinstance(value, dict):
-            compacted[key] = {name: compact_json_schema(sub) for name, sub in value.items()}
-            continue
-        if key in _SCHEMA_PRESENTATION_KEYS and isinstance(value, str):
-            continue
-        compacted[key] = compact_json_schema(value)
-    return compacted
+    return map_schema(
+        schema,
+        lambda node: {
+            key: value
+            for key, value in node.items()
+            if key not in _SCHEMA_PRESENTATION_KEYS or not isinstance(value, str)
+        },
+    )
 
 
 def supports_explicit_prompt_cache(provider: str, model: str) -> bool:

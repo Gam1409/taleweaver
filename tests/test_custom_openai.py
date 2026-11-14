@@ -398,7 +398,7 @@ def test_explicit_structured_output_capability(local_policy, mode):
         value: int
 
     request = router._build_structured_request("sys", "hello", Answer, "vendor/model")
-    assert "SCHEMA:" in request.system_prompt
+    assert ("SCHEMA:" in request.system_prompt) is (mode != "json_schema")
     if mode == "prompt":
         assert "response_format" not in request.kwargs
         return
