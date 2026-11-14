@@ -19,11 +19,28 @@ def response_schema(
 ) -> dict:
     contract = schema.model_json_schema()
     _bind_ids(contract, identifiers or {})
+    _bound_review_anchors(schema, contract, identifiers or {})
     contract = prune_unavailable(contract)
     if explicit_keys:
         _explicit_enum_maps(contract)
     _strip_titles(contract)
     return contract
+
+
+def _bound_review_anchors(
+    schema: type[BaseModel], contract: dict, identifiers: dict[str, list[str]]
+) -> None:
+    """Expose the existing one-anchor-per-actor limit to the prompt and decoder."""
+    if "actor_id" not in identifiers:
+        return
+    from backend.engine.chpm.passages import Review
+
+    if schema is not Review:
+        return
+    capacity = len(set(identifiers["actor_id"]))
+    for field in ("evidence", "actions", "agenda_evidence"):
+        array = contract["properties"][field]
+        array["maxItems"] = min(array["maxItems"], capacity)
 
 
 def _explicit_enum_maps(node: Any) -> None:
