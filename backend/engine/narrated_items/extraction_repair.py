@@ -36,7 +36,13 @@ class Additions(BaseModel):
         default_factory=list, max_length=MAX_PROPOSALS
     )
     classification_review: list[ClassificationReview] = Field(
-        default_factory=list, max_length=coverage.MAX_GROUPS * 2
+        default_factory=list,
+        max_length=coverage.MAX_GROUPS * 2,
+        description=(
+            "Only unresolved missing group/domain pairs, never a pair supported by an added "
+            "proposal. Adding a proposal and reviewing its same group/domain are mutually "
+            "exclusive. Return [] when all missing pairs have supported additions."
+        ),
     )
 
 
@@ -155,6 +161,12 @@ The previous completed extraction classified source groups as changed but suppli
 no corresponding anchored proposal. Return only ADDITIONAL actions/condition_updates
 for the listed missing group/domain, within remaining_capacity. Preserve original
 IDs and do not repeat, replace, reverse, or extend an existing proposal's lifecycle.
+For EACH missing (group, domain) pair, choose exactly one outcome: supported additions
+OR a classification_review note, never both for that same pair. A review note is not
+rationale or a success annotation for a supplied proposal. If you add an action for
+c0/items, do not also review c0/items as no_supported_change, different_domain,
+repeated_confirmation or uncertain. Notes for OTHER unresolved pairs may coexist
+with additions. Return classification_review=[] when all missing pairs are supplied.
 All prior instructions, source restrictions and domain ownership rules still apply.
 Do not invent a transfer, wear observation, body fact or parallel property merely to
 make coverage complete. Cleaning, contents or condition changes do not by themselves

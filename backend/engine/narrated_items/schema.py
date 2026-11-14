@@ -224,7 +224,7 @@ mark their groups with conditions_deferred. This means unapplied changes needing
 review, never unchanged state. Use it only at capacity. Mixed groups still name
 other changed domains and supply their proposals; a partially handled condition
 group may use both conditions and conditions_deferred. Do not invent or silently
-discard facts to make the coverage look complete. No extra request follows.
+discard facts to make the coverage look complete. Never rely on a follow-up request.
 Use ["unchanged"] for genuinely unchanged state, ["historical"] only when the whole
 group concerns recollection/quotation/plans rather than current changes, or
 ["uncertain"] for an unresolved interpretation. These three tags are exclusive.
