@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.engine.living_world import rules
+from backend.engine.living_world import event_recall, rules
 from backend.engine.living_world.routes import outgoing, permitted
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.npc_movement import allowed_scenes
@@ -38,16 +38,9 @@ async def context_for(
             WorldScene.session_id == state.session_id, WorldScene.id == location
         )
     )
-    observations = [
-        item.result
-        for item in simulation.events
-        if item.status == "COMMITTED"
-        and item.kind in {"MOVE", "MEET", "SOCIAL"}
-        and event.actor in {item.actor, item.participant}
-        and item.due <= event.due
-    ][-8:]
+    observations = [item.result for item in event_recall.eligible(simulation, event)][-8:]
     notes = simulation.private_notes.get(actor.id)
-    return {
+    context = {
         "actor": {
             "id": actor.id,
             "name": str(actor.name)[:100],
@@ -61,12 +54,15 @@ async def context_for(
             "description": str(scene.description or "")[:1000] if scene else "",
         },
         "minute": event.due,
+        "event_id": event.event_id,
         "event_kind": event.kind,
         "participants": await participants(db, state, actor.id, location, event),
         "observations": observations,
         "private_notes": notes.model_dump(exclude={"observations"}) if notes else {},
         "destinations": await destinations(db, state, actor, scene),
     }
+    context["recalled_events"] = event_recall.recall(simulation, event, context)
+    return context
 
 
 async def destinations(db: AsyncSession, state: SessionState, actor: Any, scene: Any) -> list[str]:

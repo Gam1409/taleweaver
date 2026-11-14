@@ -97,9 +97,10 @@ class LanceMemoryStore:
         layers: list[str] | None = None,
         npc_ids: list[str] | None = None,
         scene_id: str | None = None,
+        source_ids: list[str] | None = None,
         limit: int = 8,
     ) -> list[dict]:
-        predicate = query_filter(scope, layers, npc_ids, scene_id)
+        predicate = query_filter(scope, layers, npc_ids, scene_id, source_ids)
         validated = validate_vectors([vector], 1)[0]
         return await asyncio.to_thread(
             self._query, scope, validated, text, predicate, max(1, min(limit, 32))

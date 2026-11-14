@@ -15,6 +15,8 @@ from backend.engine.living_world import concordia_adapter, rules, runner
 from backend.engine.living_world.conflicts import SimulationConflict
 from backend.engine.living_world.decision_context import context_for, fingerprint
 from backend.engine.living_world.decisions import INSTRUCTION, Decision, PrivateNotes
+from backend.engine.living_world.reference_recall import References
+from backend.engine.living_world.reference_recall import validate as validate_references
 from backend.engine.living_world.request_slot import decision_slot
 from backend.engine.living_world.schema import Event, Simulation
 from backend.engine.living_world.state import save
@@ -32,6 +34,7 @@ class Prepared:
     engine: str
     concurrent: bool = False
     timeline: str = ""
+    references: References = References()
 
 
 def require_enabled(simulation: Simulation, llm: GameMasterLLM) -> None:
@@ -95,12 +98,18 @@ async def infer(llm: GameMasterLLM, prepared: Prepared, game_id: str) -> Decisio
     async with decision_slot(prepared.concurrent):
         result = await llm.aexecute_simple_task(
             INSTRUCTION,
-            json.dumps(prepared.context, ensure_ascii=False),
+            json.dumps(request_context(prepared), ensure_ascii=False),
             llm.model,
             game_id=game_id,
             operation="living_world_decision",
         )
     return Decision.model_validate_json(result)
+
+
+def request_context(prepared: Prepared) -> dict[str, Any]:
+    if not prepared.references.block:
+        return prepared.context
+    return {**prepared.context, "reference_recall": prepared.references.block}
 
 
 async def infer_until_stopped(
@@ -110,7 +119,7 @@ async def infer_until_stopped(
         return await infer(llm, prepared, game_id)
 
     request = (
-        concordia_adapter.decide(prepared.context, generate)
+        concordia_adapter.decide(request_context(prepared), generate)
         if prepared.engine == "concordia"
         else generate()
     )
@@ -158,6 +167,7 @@ async def apply(
         raise SimulationConflict(
             "The world changed during inference. The late result was discarded."
         )
+    await validate_references(db, state, prepared.references)
     if decision.action == "MOVE" and decision.destination not in context["destinations"]:
         raise HTTPException(
             422, "The model proposed an unavailable destination. No result was applied."

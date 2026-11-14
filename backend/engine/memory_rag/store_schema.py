@@ -108,7 +108,11 @@ def row(scope: Scope, document: dict, vector: list[float]) -> dict[str, str | in
 
 
 def query_filter(
-    scope: Scope, layers: list[str] | None, npc_ids: list[str] | None, scene_id: str | None
+    scope: Scope,
+    layers: list[str] | None,
+    npc_ids: list[str] | None,
+    scene_id: str | None,
+    source_ids: list[str] | None = None,
 ) -> str:
     filters = [scope_filter(scope)]
     if layers is not None:
@@ -117,6 +121,8 @@ def query_filter(
         filters.append(_membership("npc_id", npc_ids))
     if scene_id is not None:
         filters.append(f"scene_id = {literal(scene_id)}")
+    if source_ids is not None:
+        filters.append(_membership("source_id", source_ids))
     return " AND ".join(filters)
 
 

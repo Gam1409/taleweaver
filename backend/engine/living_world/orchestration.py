@@ -2,13 +2,14 @@
 
 import asyncio
 import logging
+from dataclasses import replace
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.living_world import deliberation
+from backend.engine.living_world import deliberation, reference_recall
 from backend.engine.living_world.access import check_revision, owned, read_simulation
 from backend.engine.living_world.schema import Command
 from backend.engine.living_world.state import public_status
@@ -40,6 +41,10 @@ async def deliberate(
             simulation = read_simulation(state)
             check_revision(simulation, payload.expected_revision)
             prepared = await deliberation.prepare(db, state, simulation, llm)
+        references = await reference_recall.until_stopped(
+            user, game_id, prepared.context["actor"]["id"], prepared.context, prepared.fence, stop
+        )
+        prepared = replace(prepared, references=references)
         decision = await deliberation.infer_until_stopped(llm, prepared, game_id, stop)
         with session_write_lease(game_id):
             state = await owned(db, game_id, user)
