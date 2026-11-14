@@ -3,7 +3,7 @@
 import json
 import math
 from copy import deepcopy
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -22,6 +22,17 @@ from backend.engine.chpm.notebook_requests import (
 MAX_VALUE_CHARS = 8192
 MAX_OPERATIONS = 16
 MAX_ERROR_CHARS = 400
+_Issue = tuple[str, str, str]
+_HINTS = {
+    "argument": "nonempty string, at most 160 characters",
+    "path": "JSON Pointer string <=8192; '' only for intentional root",
+    "expected_revision": "nonnegative integer; current revision, not a string/bool",
+    "offset": "integer >=0",
+    "limit": "integer 256..1400",
+    "operations": "1 to 16 operation objects",
+    "op": "add, replace, remove, or test",
+    "value": "JSON value required; null is allowed",
+}
 _LOOKUPS = {
     "search_memory": "Search this observer's source-checked prior turns. A miss proves nothing.",
     "read_memory": "Read an ID returned by search_memory in this turn.",
@@ -198,12 +209,16 @@ def _arguments(raw: str) -> dict:
     return value
 
 
-def _fields(value: dict, allowed: set[str]) -> None:
+def _known_fields(value: dict, allowed: set[str], issues: list[_Issue], field: str) -> dict:
     if set(value) - allowed:
-        raise NativeToolArgumentError(
-            "invalid_arguments",
-            "Unexpected argument fields. Use only this function's declared arguments; notebook scope is host-owned.",
+        issues.append(
+            (
+                field,
+                "invalid_arguments",
+                "unexpected fields; declared arguments only; scope is host-owned",
+            )
         )
+    return {key: item for key, item in value.items() if key in allowed}
 
 
 def _value_json(value: Any) -> str:
@@ -221,68 +236,108 @@ def _value_json(value: Any) -> str:
     return canonical
 
 
-def _operation(value: Any) -> dict:
+def _converted(value: Any, issues: list[_Issue], field: str) -> str:
+    try:
+        return _value_json(value)
+    except NativeToolArgumentError as exc:
+        issues.append((field, exc.code, exc.message))
+        return "null"  # Validation probe only; the recorded issue prevents returning a request.
+
+
+def _pointer(value: Any, issues: list[_Issue], field: str) -> None:
+    if type(value) is not str or len(value) > 8192:
+        return
+    try:
+        tokens(value)
+    except NotebookError:
+        issues.append(
+            (field, "invalid_pointer", "JSON Pointer; ''=root, '/'=empty key; escape ~0/~1")
+        )
+
+
+def _operation(value: Any, index: int, issues: list[_Issue]) -> Any:
     if type(value) is not dict:
-        raise NativeToolArgumentError(
-            "invalid_arguments",
-            "Each edit operation must be an object with op, path, and value where required.",
-        )
-    _fields(value, {"op", "path", "value"})
-    name = value.get("op")
-    if type(name) is not str or name not in {"add", "replace", "remove", "test"}:
-        raise NativeToolArgumentError(
-            "invalid_arguments", "Edit op must be add, replace, remove, or test."
-        )
-    if (name == "remove") == ("value" in value):
-        raise NativeToolArgumentError(
-            "invalid_arguments",
-            "Add, replace, and test require value, including explicit null; remove must omit value.",
-        )
-    result = dict(value)
+        return value
+    field = f"operations[{index}]"
+    result = _known_fields(value, {"op", "path", "value"}, issues, field)
+    name = result.get("op")
+    _pointer(result.get("path"), issues, f"{field}.path")
+    if name == "remove" and "value" in result:
+        issues.append((f"{field}.value", "invalid_arguments", "remove must omit value"))
+        result.pop("value")
+    if type(name) is str and name in {"add", "replace", "test"} and "value" not in result:
+        issues.append((f"{field}.value", "invalid_arguments", _HINTS["value"]))
+        result["value_json"] = "null"  # Keep collecting other fields; this request is rejected.
     if "value" in result:
-        result["value_json"] = _value_json(result.pop("value"))
+        result["value_json"] = _converted(result.pop("value"), issues, f"{field}.value")
     return result
 
 
-def _prepare(name: str, arguments: dict) -> dict:
-    _fields(arguments, set(_parameters(name)["properties"]))
-    result = dict(arguments)
-    if name in {"notebook_write", "notebook_delete"} and "path" not in result:
-        raise NativeToolArgumentError(
-            "invalid_arguments",
-            "An explicit path is required for notebook_write and notebook_delete. Use '' only to intentionally replace or clear the whole document; use '/key' to change a member.",
-        )
-    if name == "notebook_write":
-        if "value" not in result:
-            raise NativeToolArgumentError(
-                "invalid_arguments", "notebook_write requires value, including explicit null."
-            )
-        result["value_json"] = _value_json(result.pop("value"))
+def _prepare(name: str, arguments: dict, issues: list[_Issue]) -> dict:
+    parameters = _parameters(name)
+    result = _known_fields(arguments, set(parameters["properties"]), issues, "arguments")
+    issues.extend(
+        (field, "invalid_arguments", _HINTS[field])
+        for field in parameters["required"]
+        if field not in result
+    )
+    _pointer(result.get("path"), issues, "path")
+    if name == "notebook_write" and "value" in result:
+        result["value_json"] = _converted(result.pop("value"), issues, "value")
     if name == "notebook_edit":
         operations = result.get("operations")
         if type(operations) is not list or not 1 <= len(operations) <= MAX_OPERATIONS:
-            raise NativeToolArgumentError(
-                "invalid_arguments", "notebook_edit requires 1 to 16 operations."
-            )
-        result["operations"] = [_operation(operation) for operation in operations]
+            issues.append(("operations", "invalid_arguments", _HINTS["operations"]))
+            result.pop("operations", None)
+        else:
+            result["operations"] = [
+                _operation(operation, index, issues) for index, operation in enumerate(operations)
+            ]
     return result
 
 
-def _validation_message(error: ValidationError) -> str:
-    known = {
-        "argument",
-        "path",
-        "expected_revision",
-        "offset",
-        "limit",
-        "operations",
-        "op",
-        "value_json",
-    }
-    entry = error.errors(include_input=False, include_url=False)[0]
-    fields = ["value" if key == "value_json" else key for key in entry["loc"] if key in known]
-    field = ".".join(fields) or "arguments"
-    return f"Invalid {field}: {entry['type']}. Follow the declared field types, required fields, and bounds."
+def _field(location: tuple, default: str) -> str:
+    result = ""
+    for key in location:
+        if type(key) is int and 0 <= key < MAX_OPERATIONS and result:
+            result += f"[{key}]"
+        elif type(key) is str and key in {*_HINTS, "value_json"}:
+            result += ("." if result else "") + ("value" if key == "value_json" else key)
+    return result or default
+
+
+def _validation_issues(error: ValidationError, name: str) -> list[_Issue]:
+    result = []
+    for entry in error.errors(include_input=False, include_url=False, include_context=False):
+        field = _field(entry["loc"], "argument" if name in _LOOKUPS else "arguments")
+        leaf = field.rsplit(".", 1)[-1]
+        hint = _HINTS.get(leaf, "operation object with op, path and value")
+        result.append((field, "invalid_arguments", hint))
+    return result
+
+
+def _issue_order(item: tuple[str, tuple[str, str]]) -> tuple[int, str]:
+    field = item[0]
+    index = field.partition("[")[2].partition("]")[0]
+    return (int(index) if index else -1), field
+
+
+def _reject(issues: list[_Issue]) -> NoReturn:
+    unique: dict[str, tuple[str, str]] = {}
+    for field, code, hint in issues:
+        unique.setdefault(field, (code, hint))
+    rendered: list[str] = []
+    for field, (_, hint) in sorted(unique.items(), key=_issue_order)[:6]:
+        candidate = "; ".join([*rendered, f"{field}: {hint}"])
+        remaining = len(unique) - len(rendered) - 1
+        suffix = f"; +{remaining} more issues" if remaining else ""
+        if len(candidate + suffix) > MAX_ERROR_CHARS:
+            break
+        rendered.append(f"{field}: {hint}")
+    remaining = len(unique) - len(rendered)
+    message = "; ".join(rendered) + (f"; +{remaining} more issues" if remaining else "")
+    code = next(iter(unique.values()))[0] if len(unique) == 1 else "invalid_arguments"
+    raise NativeToolArgumentError(code, message) from None
 
 
 def _validate_paths(request: Lookup | NotebookRequest) -> None:
@@ -303,13 +358,17 @@ def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest:
     """Strictly decode one pure request; callers validate the full batch before execution."""
     if type(name) is not str or name not in _KNOWN_TOOL_NAMES:
         raise NativeToolArgumentError(
-            "invalid_tool", "Unknown tool. Use one of the declared native function names."
+            "invalid_tool", "Unknown tool. Allowed: " + ", ".join([*_LOOKUPS, *_NOTEBOOKS])
         )
-    prepared = _prepare(name, _arguments(arguments_raw))
+    issues: list[_Issue] = []
+    prepared = _prepare(name, _arguments(arguments_raw), issues)
     model = Lookup if name in _LOOKUPS else _NOTEBOOKS[name]
     try:
         request = cast(Lookup | NotebookRequest, model.model_validate({"tool": name, **prepared}))
     except ValidationError as exc:
-        raise NativeToolArgumentError("invalid_arguments", _validation_message(exc)) from None
+        issues.extend(_validation_issues(exc, name))
+        _reject(issues)
+    if issues:
+        _reject(issues)
     _validate_paths(request)
     return request
