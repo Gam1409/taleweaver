@@ -52,6 +52,22 @@ regeneration preserves committed outcomes; a full turn replay uses its existing
 before-turn rollback rather than reapplying partial effects.
 
 These checks establish response completeness, not semantic extraction recall.
+
+The existing request also supplies `extraction_limits.condition_updates` from the
+canonical twelve-operation limit. The model should reuse existing IDs, avoid
+unchanged/repeated descriptions and prioritize completed resolutions and lasting
+state. Distinct lifecycle transitions still require their own evidence. Limits,
+saved fact capacity and the number of model requests are unchanged.
+
+At full capacity, `conditions_deferred` marks groups with additional established
+changes that could not fit. It can coexist with other changed domains or with
+`conditions` for a partially handled group. It is invalid below capacity and can
+never mark a turn complete. The audit records the limit, proposed count and deferred
+groups; saturation without an explanation remains a missing-proposal warning.
+The turn displays a review notice even when every response section was present.
+Confirmed independent proposals are retained. Deferred groups are not applied,
+treated as unchanged, automatically retried or placed in a new background queue.
+
 An explicit empty array may still miss a narrated event; an exact quote may still
 be a negation, recollection or claim. Paired scene and physical-condition gold
 cases exercise literal/literary/Russian events, unchanged controls, another owner's
@@ -67,6 +83,11 @@ removal. Null or omitted placement preserves known coverage, while an explicit
 empty array restores normal coverage. Regions must belong to that garment's
 coverage. Existing ownership, appearance, detailed-clothing and age checks apply.
 Debug recovery retains its separate, evidence-bound outer placement fields.
+An existing garment can require a displacement correction even when its ownership
+and worn record are complete. An otherwise identical reviewed placement refreshes
+missing or stale source identity, content hash, quote or role; an already matching
+proof remains a no-op. No garment is recreated and preview/apply still require
+explicit selection, unchanged history and the original evidence/ownership checks.
 
 Prefer a final outcome per item. Multiple proposals for one existing ID can form
 an atomic chain, such as removal followed by handover, when completed actions have
@@ -208,7 +229,7 @@ reveal its item's name or ID. Confirmed items require an unchanged exact quote,
 hash and any saved span in a non-debug assistant/user message from the same session
 with the matching source role. Explicit exclusions remain authoritative.
 
-Public bodily conditions retain their canonical IDs, parts and saved state.
+Known bodily conditions retain their canonical IDs, parts and saved state.
 Exact known part identifiers and explicit aliases add `display_slots` for hover
 grouping; unknown parts stay in the general condition list. Ordinary body positions
 do not require adult age or detailed clothing. The four additional groups follow
@@ -216,9 +237,18 @@ the same metadata gates above. When availability is unassessed, a currently
 source-verified public condition or confirmed occupied binding may establish its
 reported group without asserting a complete body layout. Narrated condition proof
 must match the original non-debug assistant message in the same session; explicit
-public manual corrections are also eligible. Private, resolved and unsupported
-conditions do not establish new groups. A status-only group has no item row, and
+public manual corrections are also eligible. An adult owner view with detailed
+tracking and mature content enabled can also show private conditions already
+disclosed in an unchanged, non-debug assistant message from that session. The card
+labels these **Known from narration**. This read-only view does not make them public
+or change NPC, memory, image or shared-knowledge projections. Private manual facts,
+unavailable sources and resolved conditions do not establish new groups. A status-only group has no item row, and
 its empty placement status makes no claim that the body is healthy or clean.
+
+With **Show empty slots**, an unassessed humanoid layout can show additional
+presentation markers labelled **Not assessed**. The silhouette chooses their
+positions, never canonical anatomy or availability. Explicit exclusions stay
+authoritative; no inventory, body declaration or condition is created by the view.
 
 Partial clothing displacement remains worn and owned. A source-confirmed displaced
 garment remains known on the card even if it no longer covers its original region.
