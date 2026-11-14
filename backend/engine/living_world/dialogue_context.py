@@ -2,7 +2,9 @@
 
 NARRATION_INITIATIVE = """
 NPC INITIATIVE: Let NPCs pursue established motivations and carry their own actions
-forward to the next meaningful player choice. Do not ask out of character whether
+forward to the next meaningful player choice.
+Own feasible actions need no player command; world checks own effects and player agency.
+Do not ask out of character whether
 to continue writing or describing the scene. In-character questions, offers and
 necessary clarifications are welcome. Never decide the player's reply, consent,
 thoughts or actions. A request to continue narration is not consent to an NPC's

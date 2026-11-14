@@ -1,6 +1,6 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
-PROPOSE = """Propose 2-4 meaningfully different message plans for ONE NPC from
+PROPOSE = """Propose 2-4 meaningfully different next intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -15,8 +15,11 @@ actual answer, preference, stance or proposal in its plan field. When a candidat
 answers a preference question, settle the preference here rather than saying 'share a preference'.
 Use established personal details when available; a newly chosen compatible personal
 answer remains proposed speech until published, not an invented past experience.
-The narrator supplies wording and emotional delivery. Plans concern communication;
-physical outcomes remain with world resolution. CONTINUE/INITIATE advance
+The narrator realizes speech, feasible own actions, or both. Act on the reachable
+world, possessions or self from the NPC's motives without player approval. Never
+choose the player's words, inner state or voluntary response. World checks own
+effects, access and possessions; intent is not completion.
+CONTINUE/INITIATE advance
 personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
 Ground motives before choice; never ask permission to keep generating.
@@ -50,8 +53,8 @@ previous_intention_not_world_completion is a previously expressed intention, not
 proof of an action or continuing consent. For maintain, preserve its actual course,
 not just its action label. For revise, express the selected new course with its
 grounded motivation; do not invent a triggering event, completed check or promise.
-For the named NPCs, intention contains the selected message's concrete meaning.
-Realize its chosen answer, preference, stance or proposal in their established
+For the named NPCs, intention contains their selected next step.
+Realize its chosen answer, preference, stance, action or proposal in their established
 voice, with free wording and emotional delivery. World-pass hints do not choose
 a different answer for them. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
@@ -84,13 +87,18 @@ goal, promise, withdrawal or report of completion in this NPC's own speech. With
 it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
 is a character's claim, not a world fact. Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
-events: omit missing details or suggest a future step. Do not add private revelations,
-consequential voluntary actions or completed outcomes; host-resolved actions may be described.
-Wording, tone and ordinary non-consequential expression remain free.
+events: omit missing details or suggest a future step. Do not add unauthorized private
+revelations or replace the selected intention with an unrelated voluntary decision.
+Compatible own actions need no speech or player approval. Preserve access, capabilities,
+IDs and host outcomes; existing state checks own effects, not wishes/offers.
+NPCs may initiate interaction and supported external consequences, never player words,
+inner state, consent or voluntary participation. Leave their next decision open;
+an unanswered offer is not acceptance.
+Wording, tone and compatible expressive or practical actions remain free.
 Realize the scene's emotional intensity in each NPC's own voice: interjections,
 pauses, cadence, sighs and small expressive gestures are available when appropriate,
 not a checklist. These do not themselves change the selected decision or authorize
-new movement, possession changes or commitments.
+new movement, possession changes or commitments merely from an emotion label.
 Do not explain scores, candidates or appraisal. Do not ask permission to keep
 writing. Do not repeat unchanged scenery just to fill the response.
 Do not hand an already selected NPC decision back to the player. Concrete player
@@ -137,8 +145,14 @@ Return matches=true only if stance AND facts fit the contract/host resolution.
 Reject invented shared history, prior agreements/checks/findings or possessions even
 when stance fits. Plausibility is not evidence of a past event. Sourced history and
 future suggestions are allowed; do not add unauthorized promises, private revelations,
-consequential voluntary actions or world outcomes. Only DEFER permits silence.
-Literal wording is unnecessary; style and ordinary non-consequential expression are free.
+or consequences contradicting host resolution. A feasible action consistent with the
+selected intention is allowed without a separate player command or approval. Review
+speech and action for the same actor, access, identity, motive and continuity rules.
+An action-only intention may be realized without dialogue. DEFER may remain entirely
+silent and inactive. An offer or plan alone is not proof of physical completion.
+Reject invented player speech, decisions, thoughts, feelings or voluntary reactions;
+initiating an interaction does not itself control the player. Preserve their next choice.
+Literal wording is unnecessary; style and compatible expressive or practical actions are free.
 Emotional delivery is not a new decision: contextual interjections, pauses, cadence,
 sighs and small expressive gestures need no separately enumerated authorization.
 Assess their actual meaning against the contract; expression alone is not a mismatch.
@@ -169,13 +183,19 @@ obligation to approach its target or describe sexual behaviour. Do not require s
 Allow contextual development explicitly grounded in developing_tendencies while
 preserving the historical identity and unrelated traits; contested is not certain.
 Do not infer consent, agreement or completed actions from the player's request.
-Return one evidence entry per controlled NPC. actor_id must copy an ID from
-controlled_actor_ids, never a display name. Choose ONE representative passage_id
-from passages containing that NPC's own spoken words. Do not output a quote field. Passages
-are text references, not verified attribution. Do not select narration or thoughts.
-Do not concatenate separated speech or reconstruct a cleaned quotation. A short
+For each controlled NPC return evidence of its expression: evidence contains its
+own spoken words, actions contains its own performed physical action. Use one entry
+per actor per array; a mixed expression may appear in both. The union must cover all
+controlled_actor_ids. An action-only NPC needs actions, not invented dialogue.
+actor_id must copy an ID from controlled_actor_ids, never a display name. Choose ONE
+representative passage_id per entry. Do not output a quote field. Passages
+are text references, not verified attribution. Speech evidence must be spoken words,
+never narration or thoughts. Do not concatenate or reconstruct separated passages.
+Action evidence must describe this NPC's performed action, not the player's action,
+thoughts, quoted plans, a proposal, or a hoped-for outcome. A short
 representative passage is enough; review the WHOLE narration for violations.
-For a silent DEFER, use passage_id=null. Evidence uses passage IDs only; the host
+For a silent inactive DEFER, use an evidence entry with passage_id=null and no action.
+Both expression arrays use passage IDs only; the host
 resolves the actual quotation. Do not rewrite, shorten or concatenate passages.
 For speaker_id use an exact KEY from present_speakers, never a display name.
 You may also return heard entries: actor_id is a controlled observer; speaker_id
@@ -190,7 +210,7 @@ An origin may itself be reported or historical; neither a relay nor repetition
 confirms world truth. Check who heard the current utterance independently of who
 knew its origin. Do not expose ancestor text or another actor's private knowledge.
 For each selected non-null agenda_change, return exactly one agenda_evidence entry:
-actor_id and the same passage_id used in that NPC's evidence, explicitly expressing
+actor_id and the same spoken passage_id used in that NPC's evidence, explicitly expressing
 the selected undertaking, withdrawal or completion claim. Use only the passage ID;
 do not output a quote field.
 No entry for NPCs without a selected change. If every agenda_change is null, agenda_evidence MUST be []. On success all selected changes must
