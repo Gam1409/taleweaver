@@ -30,6 +30,7 @@ class Settings(Contract):
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
     agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
     notebook_enabled: StrictBool = False
+    tool_protocol: Literal["auto", "native", "json"] = "auto"
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 

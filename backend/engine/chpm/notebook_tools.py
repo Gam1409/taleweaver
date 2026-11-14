@@ -21,6 +21,7 @@ class NotebookDraft:
     workspace: NotebookWorkspace
     committable: bool = True
     reads: list[dict] = field(default_factory=list)
+    tool_feedback: list[dict] = field(default_factory=list)
 
     def metadata(self) -> dict:
         return {
@@ -63,7 +64,16 @@ class NotebookDraft:
             "meaning": "self_authored_subjective_notes_not_world_evidence",
             "selected_reads": list(self.reads),
             "pending_changes": self.committable and self.workspace.changed,
+            "updates_committable": self.committable,
+            **({"tool_feedback": list(self.tool_feedback)} if self.tool_feedback else {}),
         }
+
+    def remember_feedback(self, tool: str, result: dict) -> None:
+        """Carry final operation outcomes privately into the existing decision call."""
+        item = {"tool": tool[:80], **result_summary(result)}
+        if isinstance(result.get("message"), str):
+            item["message"] = result["message"][:240]
+        self.tool_feedback = [*self.tool_feedback, item][-2:]
 
 
 def request_summary(request: Lookup | NotebookRequest) -> dict:

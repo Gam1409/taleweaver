@@ -18,6 +18,7 @@ const defaults: ChpmSettings = {
   memory_limit: 12,
   agent_steps: 0,
   notebook_enabled: false,
+  tool_protocol: 'auto',
   semantic_memory: false,
   failure_policy: 'continue'
 }
@@ -159,6 +160,7 @@ function selectActor(id: string, selected: boolean) {
           /></label>
           <label v-if="draft.mode === 'live'" class="text-xs text-slate-300"
             >Agent tool rounds per active NPC<select
+              name="npc-agent-tool-rounds"
               :value="draft.agent_steps ?? 0"
               class="mt-2 w-full rounded-lg bg-slate-800 p-2"
               @change="update('agent_steps', Number(($event.target as HTMLSelectElement).value))"
@@ -169,6 +171,14 @@ function selectActor(id: string, selected: boolean) {
             </select></label
           >
         </div>
+        <label v-if="draft.mode === 'live' && draft.notebook_enabled" class="mt-4 block text-xs text-slate-300">Memory tool compatibility
+          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
+            <option value="auto">Automatic</option>
+            <option value="native">Native function calls</option>
+            <option value="json">JSON compatibility</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
+        </label>
         <p v-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
           Each round adds one model request per active NPC and up to two local tool operations.
           Tools read this NPC's witnessed history and host observations; enabled notebooks also allow

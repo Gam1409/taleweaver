@@ -53,6 +53,14 @@ test('private notebook help explains opt-in tool costs and latest-only restore b
   assert.doesNotMatch(await render(1, [], {}, { mode: 'shadow' }), /Private NPC notebooks/)
 })
 
+test('notebook compatibility is selectable without changing the tool round limit', async () => {
+  const html = await render(1, [], {}, { notebook_enabled: true, agent_steps: 2, tool_protocol: 'json' })
+  assert.match(html, /Memory tool compatibility/)
+  assert.match(html, /<select name="npc-memory-tool-protocol" value="json"[^>]*>/)
+  assert.match(html, /same private notebook, limits and request budget/)
+  assert.doesNotMatch(await render(1, [], {}, { notebook_enabled: false }), /Memory tool compatibility/)
+})
+
 test('a localized proposal failure names only the paused NPC and escapes its detail', async () => {
   const html = await render(2, [], {
     characters: [{ id: 'LINA', name: 'Lina' }, { id: 'MILA', name: 'Mila' }],

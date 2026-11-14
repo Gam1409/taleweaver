@@ -63,6 +63,27 @@ test('semantic memory is opt-in, session-scoped, and does not increase generativ
   assert.equal(f.status.value.settings.semantic_memory, true)
 })
 
+test('tool protocol changes persist without changing notebook data or request limits', async t => {
+  const saved = state(3)
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC'], max_active_npcs: 1,
+    notebook_enabled: true, agent_steps: 2, tool_protocol: 'auto', max_calls_per_turn: 8 })
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return new Response(JSON.stringify(saved))
+    const body = JSON.parse(options.body)
+    assert.equal(body.settings.tool_protocol, 'json')
+    assert.equal(body.settings.notebook_enabled, true)
+    assert.equal(body.settings.agent_steps, 2)
+    assert.equal(body.settings.max_calls_per_turn, 8)
+    return new Response(JSON.stringify({ ...saved, revision: 4, settings: body.settings }))
+  })
+  await tick()
+  const minimum = f.minimumCalls.value
+  f.draft.value.tool_protocol = 'json'
+  assert.equal(f.minimumCalls.value, minimum)
+  assert.equal(await f.save(), true)
+  assert.equal(f.status.value.settings.tool_protocol, 'json')
+})
+
 test('private notebooks stay off for legacy sessions until explicitly enabled and saved', async t => {
   const saved = state(2), methods = []
   const f = fixture(t, async (_url, options) => {

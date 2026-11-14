@@ -82,12 +82,20 @@ defineExpose({ save })
           <span class="mt-2 block text-slate-400">One freely organized JSON notebook per NPC, up to 16,000,000 UTF-8 bytes each. NPCs choose what to read, write or delete. Notes may be mistaken and are not world facts. The latest notes stay after Undo or Chronicles restore; no notebook history is kept. Disabled by default. Enabling selects at least one agent tool round; check the request budget below.</span>
         </label>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent tool rounds per active NPC
-          <select v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+          <select name="npc-agent-tool-rounds" v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option :value="0" :disabled="draft.notebook_enabled">Off — existing decision flow</option>
             <option :value="1">Up to 1 lookup round</option>
             <option :value="2">Up to 2 rounds — can refine a search or read a result</option>
           </select>
           <span class="mt-2 block text-slate-400">Optional tools scoped to this session and NPC. Search witnessed history, check own possessions, and read visible clothing layers of present NPCs. When private notebooks are enabled, these rounds can also read or edit that NPC's own notes. Each round adds one model request with up to two local tool operations; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, or 6 for two rounds.</span>
+        </label>
+        <label v-if="draft.mode === 'live' && draft.notebook_enabled" class="block text-xs text-slate-300">Memory tool compatibility
+          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
+            <option value="auto">Automatic</option>
+            <option value="native">Native function calls</option>
+            <option value="json">JSON compatibility</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Automatic uses native functions when the provider adapter supports them. Choose JSON compatibility for a server without native tools. Both use the same private notebook, limits and request budget. An uncertain request is never automatically repeated.</span>
         </label>
         <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</p>
         <details class="rounded-lg border border-slate-700 p-3">

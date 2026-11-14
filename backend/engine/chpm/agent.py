@@ -3,11 +3,9 @@
 from typing import Any
 
 from backend.engine.chpm import (
-    agent_beliefs,
-    continuation,
-    host_observations,
+    agent_lookup_payload,
+    agent_native,
     inference,
-    narrative_context,
 )
 from backend.engine.chpm.agent_contracts import (
     INSTRUCTIONS,
@@ -54,7 +52,20 @@ async def investigate(
         episode_contexts={hit.record_id: hit.context for hit in hits},
         notebook=notebook,
     )
-    facts = host_observations.previous(mind)
+    if notebook and settings.agent_steps:
+        native_model = agent_native.select_model(manager, settings)
+        if native_model is not None:
+            return await agent_native.investigate(
+                manager,
+                settings,
+                usage,
+                mind,
+                observation,
+                supplied,
+                tools=tools,
+                notebook=notebook,
+                llm=native_model,
+            )
     transcript: list[dict] = []
     audit: list[dict] = []
     contract: type[Step] | type[NotebookStep] = NotebookStep if notebook else Step
@@ -67,39 +78,9 @@ async def investigate(
                 ),
                 usage,
                 NOTEBOOK_INSTRUCTIONS if notebook else INSTRUCTIONS,
-                {
-                    "observer_id": mind.genesis.scope.observer_id,
-                    "identity": mind.genesis.identity.model_dump(mode="json"),
-                    "observation": observation.model_dump(),
-                    "current_state": {
-                        key: value
-                        for key, value in supplied.get("psychological_state", {}).items()
-                        if key != "belief_context_ref"
-                    },
-                    "experience_context": narrative_context.experience_reasons(
-                        mind,
-                        continuation.experience_view(mind, supplied.get("_chpm_gap_cursors", {})),
-                    ),
-                    **agent_beliefs.subject_view(tools.mind),
-                    "agenda": supplied.get("declared_agenda_not_world_facts", []),
-                    **(
-                        {
-                            "causal_continuity_not_world_facts": supplied[
-                                "causal_continuity_not_world_facts"
-                            ]
-                        }
-                        if supplied.get("causal_continuity_not_world_facts")
-                        else {}
-                    ),
-                    "visible_clothing_actors": {
-                        key: value["name"]
-                        for key, value in tools.clothing.items()
-                        if facts and key in facts.visible_actor_ids
-                    },
-                    "remaining_rounds": settings.agent_steps - index,
-                    "previous_lookups": transcript,
-                    **({"personal_notebook": notebook.metadata()} if notebook else {}),
-                },
+                agent_lookup_payload.build(
+                    mind, observation, supplied, tools, settings.agent_steps - index, transcript
+                ),
                 contract,
                 "agent_lookup",
             )

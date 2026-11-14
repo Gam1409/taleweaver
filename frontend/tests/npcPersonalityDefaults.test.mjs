@@ -63,12 +63,24 @@ test('template notebook controls retain two agent rounds and keep the off option
   f.checkbox().props.onChange({ target: { checked: true } })
   await nextTick()
   assert.equal(f.value.value.agent_steps, 2)
-  const off = descendants(f.root).filter(node => node.tag === 'select').at(-1).children.find(node => node.props?.value === 0)
+  const rounds = descendants(f.root).find(node => node.props?.name === 'npc-agent-tool-rounds')
+  const off = rounds.children.find(node => node.props?.value === 0)
   assert.equal(off.props.disabled, true)
   f.checkbox().props.onChange({ target: { checked: false } })
   await nextTick()
   assert.equal(f.value.value.notebook_enabled, false)
   assert.equal(f.value.value.agent_steps, 2)
+})
+
+test('template tool compatibility changes preserve private notebook choice and request limits', async t => {
+  const f = fixture(t, { ...settings(), notebook_enabled: true, agent_steps: 2, tool_protocol: 'auto' })
+  const protocol = descendants(f.root).find(node => node.props?.name === 'npc-memory-tool-protocol')
+  protocol.props.onChange({ target: { value: 'json' } })
+  await nextTick()
+  assert.equal(f.value.value.tool_protocol, 'json')
+  assert.equal(f.value.value.notebook_enabled, true)
+  assert.equal(f.value.value.agent_steps, 2)
+  assert.equal(f.value.value.max_calls_per_turn, 8)
 })
 
 test('new adventure defaults leave notebooks and tool rounds off', async t => {

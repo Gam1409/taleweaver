@@ -21,6 +21,14 @@ Enabling notebooks preserves an existing choice of two rounds. Disabling noteboo
 keeps the selected agent rounds; choose **Off** for those rounds to stop their
 additional requests. Standard and Observe modes do not run notebook tools.
 
+**Memory tool compatibility** selects the model-facing protocol. **Automatic**
+uses native function calls when the provider adapter supports them. **Native
+function calls** requires that support; **JSON compatibility** represents the same
+operations as a portable JSON plan for a text-only server. Both use the same
+scoped executor, current document and request limits. If an otherwise compatible
+server rejects native tools, select JSON compatibility explicitly. An uncertain
+request is never resent automatically using a different protocol.
+
 The existing live request reserve is `active NPCs × (1 + agent_steps) + 5`.
 For three active NPCs, that means 8 requests with rounds off, 11 with one round,
 or 14 with two rounds. Each invoked round costs one model request and permits up
@@ -77,6 +85,43 @@ the same turn. Mutation requests include the expected technical counter; a stale
 counter rejects the operation. A successful change advances that counter.
 This is an ordering and conflict check, not a stored notebook version.
 
+## Agent interaction
+
+Native operations are individual function declarations with argument schemas.
+The model returns function calls, and the host returns each operation's result
+using its matching call ID before the next configured round. Duplicate or invalid
+IDs, ambiguous envelopes, rejected completion states and truncated responses never
+execute notebook operations. Transport failures and cancellation are not retried.
+
+Write arguments carry an ordinary JSON `value`; edit operations also use `value`.
+For example, an object value is an object in the function arguments rather than
+JSON text encoded inside another string. The host strictly decodes the complete
+argument batch before executing any call and preserves JSON types and whitespace
+inside strings. The private document still has no fixed record layout.
+
+A valid call can return an actionable error such as a missing parent path, stale
+counter or exceeded quota. Another configured round can correct it. Two rounds
+allow a read or correction after the first result; one round cannot observe a
+result and then make another tool call. There is no obligatory extra request.
+The existing private decision call receives the final bounded operation outcomes,
+including unresolved errors and whether pending changes remain committable.
+
+Separate function calls execute sequentially; one successful call is not undone
+merely because a later independent operation fails. Use `notebook_edit` when all
+related changes must succeed together. A rejected or failed turn still publishes
+none of its pending edits.
+
+JSON compatibility feeds the same bounded loop and argument checks, using text
+instead of native assistant/tool messages on the provider wire. It preserves
+correlated feedback and ordinary JSON values. Structured-output settings used by
+other game phases do not establish native tool support. Local servers also need
+the model's appropriate tool-capable chat template.
+
+The native exchange follows the [function calling flow](https://developers.openai.com/api/docs/guides/function-calling).
+Tool failures remain visible for correction, consistent with the
+[MCP tool error distinction](https://modelcontextprotocol.io/specification/2026-07-28/server/tools).
+No MCP server, shell, filesystem access or code-execution capability is added.
+
 ## Capacity and validation
 
 Each current notebook is limited to **16,000,000 canonical UTF-8 JSON bytes**.
@@ -96,7 +141,8 @@ can still use the entire byte allowance. Non-finite numbers, duplicate object
 keys, invalid Unicode and values outside JSON types are rejected. Raw structure
 is checked before parsing, and serialization stays within the byte budget.
 
-Exposed writes carry at most 8,192 JSON-text characters; pointers have the same
+Exposed writes carry values whose canonical JSON is at most 8,192 characters;
+pointers have the same
 character limit. One edit request contains at most 16 operations. Existing model
 output and request-input budgets also apply. Large notebooks grow through bounded
 operations or an explicit session transfer; the capacity is not a promise that

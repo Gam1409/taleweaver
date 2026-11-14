@@ -14,6 +14,7 @@ export interface ChpmSettings {
   memory_limit: number
   agent_steps?: number
   notebook_enabled?: boolean
+  tool_protocol?: 'auto' | 'native' | 'json'
   semantic_memory?: boolean
 }
 
