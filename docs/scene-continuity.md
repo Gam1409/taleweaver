@@ -40,6 +40,21 @@ minutes, visibility, witnesses and optional causal link. Unsupported candidates
 are rejected independently; existing facts are preserved. These records cannot
 move actors, transfer possessions, expose clothing, change HP or grant capabilities.
 
+The extraction-only view includes stable keys, recorded visibility and observers.
+A repeated `record` proposal matching exactly one non-ended fact by current scene,
+subject, kind and key is bound to that fact's existing ID. This resolves identity
+only: source, subject, audience, game-time and causal checks still run. Ended or
+ambiguous identities are not reopened or guessed. Omitted audience and review
+deadlines survive a rebound observation; explicit changes retain their existing
+meaning. `last_check.reference_bindings` records these mappings.
+
+Automatically rebound observations within the same narration require selected,
+non-overlapping source occurrences in order. Legacy literals must be unique,
+including overlapping matches. Authored room text is not a sequence of current
+events and does not acquire an artificial action order. Explicit ID-based lifecycle
+operations retain their existing contract, including a final ending established
+in the same passage as the preceding activity. Origins remain unchanged.
+
 ## Exact source occurrences
 
 The existing passage segmentation now preserves character offsets. Each extraction

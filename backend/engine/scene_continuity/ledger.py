@@ -9,7 +9,9 @@ from pydantic import ValidationError
 
 from backend.core.text_evidence import require_span
 
+from .references import bind_records
 from .schema import KEY, MAX_RECORDS, MAX_UPDATES, Action, Evidence, Ledger, Record, Update
+from .source_order import require_order
 
 
 def digest(text: str) -> str:
@@ -79,7 +81,9 @@ def _new(
     )
 
 
-def _changed(ledger: Ledger, update: Update, source: Evidence, minute: int) -> Record:
+def _changed(
+    ledger: Ledger, update: Update, source: Evidence, minute: int, *, observation: bool = False
+) -> Record:
     current = ledger.records.get(update.record_id)
     if current is None or current.status == "ended":
         raise ValueError("Changing a fact requires an existing non-ended record.")
@@ -96,7 +100,17 @@ def _changed(ledger: Ledger, update: Update, source: Evidence, minute: int) -> R
     )
     if update.cause_id:
         row.cause_id = update.cause_id
+    if observation:
+        _preserve_omitted(row, current, update)
     return row
+
+
+def _preserve_omitted(row: Record, current: Record, update: Update) -> None:
+    for field in ("visibility", "observers"):
+        if field not in update.model_fields_set:
+            setattr(row, field, getattr(current, field))
+    if "review_after_minutes" not in update.model_fields_set:
+        row.review_at_minute = current.review_at_minute
 
 
 def _validate(row: Record, ledger: Ledger, targets: set[str], scene_id: str) -> None:
@@ -141,19 +155,25 @@ def apply(
     if type(minute) is not int or minute < 0:
         raise ValueError("Scene continuity requires a nonnegative game minute.")
     errors = []
-    entries = updates if len(updates) <= MAX_UPDATES else []
+    entries, bindings = bind_records(ledger, updates, scene_id)
+    entries = entries if len(entries) <= MAX_UPDATES else []
+    observed = {row["proposal"] - 1 for row in bindings}
     if updates and not entries:
         errors.append("Scene update batch exceeds its limit; previous facts were preserved.")
     for index, raw in enumerate(entries):
         try:
             update = Update.model_validate(raw)
             source = _source(update, message, scene_description, scene_id)
+            current = ledger.records.get(update.record_id)
+            if current is not None and index in observed:
+                text = message.content if source.kind == "narration" else scene_description
+                require_order(current, source, text)
             row = (
                 _new(
                     ledger, update, source, scene_id=scene_id, session_id=session_id, minute=minute
                 )
                 if update.operation == "record"
-                else _changed(ledger, update, source, minute)
+                else _changed(ledger, update, source, minute, observation=index in observed)
             )
             if row.visibility == "public":
                 row.observers = sorted(actor_targets or {"__player__"})
@@ -172,6 +192,7 @@ def apply(
         "hash": digest(message.content),
         "minute": minute,
         "rejected": errors,
+        **({"reference_bindings": bindings} if bindings else {}),
     }
     result = deepcopy(states or {})
     result[KEY] = Ledger.model_validate(ledger.model_dump()).model_dump()

@@ -41,3 +41,14 @@ class WithEvidenceSpan(BaseModel):
 def require_span(text: str, quote: str, span: EvidenceSpan | None) -> None:
     if span is not None and not span.matches(text, quote):
         raise ValueError("Evidence span does not match its original source occurrence.")
+
+
+def unique_span(text: str, quote: str, span: EvidenceSpan | None) -> EvidenceSpan | None:
+    """Use an exact selected occurrence, or a unique legacy literal including overlaps."""
+    if span is not None:
+        require_span(text, quote, span)
+        return span
+    start = text.find(quote)
+    if not quote or start < 0 or text.find(quote, start + 1) >= 0:
+        return None
+    return EvidenceSpan(start=start, end=start + len(quote))

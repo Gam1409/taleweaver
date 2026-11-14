@@ -51,6 +51,8 @@ def project(
             "recorded_minute": row.recorded_minute,
             "updated_minute": row.updated_minute,
         }
+        if include_private:
+            item.update(key=row.key, visibility=row.visibility, observers=row.observers)
         if outdated:
             item["status"] = "needs_confirmation"
         if (
