@@ -115,12 +115,13 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
     mind: Mind = turn.minds[actor_id]
     sources = []
     for entry in additions:
-        # Player observations were already ingested at prepare. Only reviewed speech
-        # is added here; narration never becomes a witnessed world outcome.
+        # Reviewed expressions remain transcript sources. Physical outcomes are
+        # observed separately from canonical host state on the following turn.
         if entry.source_role != "assistant":
             continue
         if entry.source_message_id != reply.id or entry.quote not in reply.content:
-            raise ChpmError("CHPM speech source differs from the completed reply.")
+            raise ChpmError("CHPM expression source differs from the completed reply.")
+        action = getattr(entry, "kind", None) == "own_action"
         sources.append(
             Source(
                 message_id=entry.source_message_id,
@@ -128,9 +129,9 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
                 content_hash=entry.source_hash,
                 role="assistant",
                 speaker_id=entry.speaker_id,
-                kind="speech",
+                kind="narration" if action else "speech",
                 text=entry.quote,
-                report=reports.lineage(turn, actor_id, entry),
+                report=None if action else reports.lineage(turn, actor_id, entry),
             )
         )
     return record_many(mind, sources, minute=minute)

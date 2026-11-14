@@ -27,17 +27,22 @@ def previous_context(
         observed.session_id,
     ) or previous.observation.message_id == observed.message_id:
         return None
-    valid = any(
-        source.message_id == previous.reply_id
-        and source.content_hash == previous.reply_hash
-        and source.revision_id == previous.reply_revision
-        and source.speaker_id == previous.actor_id
-        and source.role == "assistant"
-        and previous.spoken_evidence
-        and previous.spoken_evidence in source.text
-        for source in mind.sources.values()
-    )
-    if not valid:
+
+    def retained(quote: str, kind: str) -> bool:
+        return bool(quote) and any(
+            source.message_id == previous.reply_id
+            and source.content_hash == previous.reply_hash
+            and source.revision_id == previous.reply_revision
+            and source.speaker_id == previous.actor_id
+            and source.role == "assistant"
+            and source.kind == kind
+            and quote in source.text
+            for source in mind.sources.values()
+        )
+
+    speech = previous.spoken_evidence if retained(previous.spoken_evidence, "speech") else ""
+    action = previous.action_evidence if retained(previous.action_evidence, "narration") else ""
+    if not speech and not action:
         return None
     return PreviousIntention(
         selected=previous.selected,
@@ -45,7 +50,8 @@ def previous_context(
         source_message_id=str(previous.reply_id),
         source_hash=str(previous.reply_hash),
         source_revision_id=previous.reply_revision,
-        spoken_evidence=previous.spoken_evidence,
+        spoken_evidence=speech,
+        action_evidence=action,
     )
 
 

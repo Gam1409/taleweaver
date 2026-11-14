@@ -23,6 +23,7 @@ class Review(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
     evidence: list[Reference] = Field(default_factory=list, max_length=20)
+    actions: list[Reference] = Field(default_factory=list, max_length=20)
     heard: list[HeardReference] = Field(default_factory=list, max_length=12)
     agenda_evidence: list[Reference] = Field(default_factory=list, max_length=20)
     causal_updates: list[Any] = Field(default_factory=list, max_length=20)
@@ -40,7 +41,7 @@ def resolve(review: Review, available: dict[str, str]) -> Verdict:
             "causal_updates": review.causal_updates,
             **{
                 field: [_resolve_entry(entry, available) for entry in getattr(review, field)]
-                for field in ("evidence", "heard", "agenda_evidence")
+                for field in ("evidence", "actions", "heard", "agenda_evidence")
             },
         }
     )

@@ -56,8 +56,14 @@ def append(state: KernelState, actor_id: str, additions: list[MemoryEntry]) -> N
     state.memories[actor_id] = entries[-limit:] if limit else []
 
 
-def _key(entry: MemoryEntry) -> tuple[str, str | None, str, str]:
-    return entry.source_message_id, entry.source_revision_id, entry.speaker_id, entry.quote
+def _key(entry: MemoryEntry) -> tuple[str, str | None, str, str, str]:
+    return (
+        entry.source_message_id,
+        entry.source_revision_id,
+        entry.speaker_id,
+        entry.kind,
+        entry.quote,
+    )
 
 
 def from_source(

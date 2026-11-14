@@ -33,9 +33,11 @@ from backend.engine.chpm import (
 from backend.engine.chpm.causal_contracts import Thread
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.reducer import TransitionError
+from backend.engine.chpm.delivery import finish_decision as _finish_decision
+from backend.engine.chpm.delivery import new_memories as _new_memories
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
-from backend.engine.chpm.kernel import ChpmError, digest
+from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
@@ -359,60 +361,3 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         continuation.mark_verified(result)
     save(manager.state, result, expected_revision=turn.initial.revision)
     manager._chpm_turn = None
-
-
-def _finish_decision(turn: Turn, decision: Decision, reply: Any) -> None:
-    if turn.initial.settings.mode == "shadow":
-        decision.status = "shadow"
-        return
-    if turn.verdict is None or not turn.verdict.matches:
-        reject(
-            "emotion",
-            "chpm.commit_unconfirmed",
-            "CHPM cannot commit a reply without successful validation.",
-            decisions=turn.decisions,
-            verdict=turn.verdict,
-            confirmed_state=turn.initial,
-        )
-        raise ChpmError("CHPM cannot commit a reply without successful validation.")
-    decision.status = "delivered"
-    decision.reply_id = reply.id
-    decision.reply_revision = reply.revision_id
-    decision.reply_hash = digest(reply.content)
-    decision.spoken_evidence = next(
-        evidence.quote
-        for evidence in turn.verdict.evidence
-        if evidence.actor_id == decision.actor_id
-    )
-
-
-def _new_memories(turn: Turn, decision: Decision, reply: Any) -> list[MemoryEntry]:
-    actor = decision.actor_id
-    source = decision.observation
-    perceived = turn.perceptions.get(actor, Perception(actor_id=actor))
-    additions = [
-        MemoryEntry(
-            source_message_id=source.message_id,
-            source_revision_id=source.revision_id,
-            source_hash=source.content_hash,
-            source_role="user",
-            scene_id=source.source_scene_id or source.scene_id,
-            observer_id=actor,
-            speaker_id="@player",
-            kind="player_observation",
-            quote=quote,
-        )
-        for quote in perceived.quotes
-    ]
-    if turn.verdict is None:
-        return additions
-    if decision.spoken_evidence:
-        additions.append(
-            memory.from_source(reply, actor, actor, decision.spoken_evidence, "own_speech")
-        )
-    additions.extend(
-        memory.from_source(reply, actor, heard.speaker_id, heard.quote, "heard_speech")
-        for heard in turn.verdict.heard
-        if heard.actor_id == actor
-    )
-    return additions

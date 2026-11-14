@@ -9,7 +9,7 @@ import pytest
 from pydantic import BaseModel
 
 from backend.core.npc_presentation import PortraitPreferences
-from backend.engine.chpm import inference, proposal_attempt, rendering, runtime, state
+from backend.engine.chpm import delivery, inference, proposal_attempt, rendering, runtime, state
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Settings, Usage, Verdict
 from backend.engine.npc_presentation import diagnostics
@@ -20,7 +20,15 @@ from tests.test_chpm_runtime import prepared
 @pytest.fixture
 def rejection(monkeypatch):
     observer = Mock()
-    for module in (proposal_attempt, rendering, runtime, state, presentation, diagnostics):
+    for module in (
+        delivery,
+        proposal_attempt,
+        rendering,
+        runtime,
+        state,
+        presentation,
+        diagnostics,
+    ):
         monkeypatch.setattr(module, "reject", observer, raising=False)
     return observer
 

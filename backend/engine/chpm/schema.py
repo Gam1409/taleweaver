@@ -8,6 +8,7 @@ from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCE
 from backend.engine.chpm.causal_audit import MAX_NOTES
 from backend.engine.chpm.causal_contracts import Memory as CausalMemory
 from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.memory_contracts import MemoryEntry
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 from backend.engine.chpm.performance import RequestTiming
 from backend.engine.chpm.recovery_contracts import RecoveryState
@@ -77,18 +78,6 @@ class Perception(Contract):
 
 class Projection(Contract):
     audience: list[Perception] = Field(max_length=20)
-
-
-class MemoryEntry(Contract):
-    source_message_id: str
-    source_revision_id: str | None = None
-    source_hash: str
-    source_role: Literal["user", "assistant"]
-    scene_id: str
-    observer_id: str
-    speaker_id: str
-    kind: Literal["player_observation", "own_speech", "heard_speech"]
-    quote: str = Field(min_length=1, max_length=2000)
 
 
 class AgendaIntent(Contract):
@@ -227,7 +216,14 @@ class PreviousIntention(Contract):
     source_message_id: str
     source_hash: str
     source_revision_id: str | None = None
-    spoken_evidence: str = Field(min_length=1, max_length=2000)
+    spoken_evidence: str = Field(default="", max_length=2000)
+    action_evidence: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def expressed(self) -> "PreviousIntention":
+        if not self.spoken_evidence and not self.action_evidence:
+            raise ValueError("A previous intention requires reviewed speech or action evidence.")
+        return self
 
 
 class Decision(Contract):
@@ -253,6 +249,7 @@ class Decision(Contract):
     reply_revision: str | None = None
     reply_hash: str | None = None
     spoken_evidence: str = ""
+    action_evidence: str = Field(default="", max_length=2000)
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
     experience_ids: list[str] = Field(default_factory=list, max_length=2)
     development_ids: list[str] = Field(default_factory=list, max_length=2)
@@ -364,6 +361,11 @@ class SpokenEvidence(Contract):
     quote: str = Field(max_length=2000)
 
 
+class ActionEvidence(Contract):
+    actor_id: str
+    quote: str = Field(max_length=2000)
+
+
 class HeardSpeech(SpokenEvidence):
     speaker_id: str
     origin_id: str | None = Field(default=None, min_length=1, max_length=80)
@@ -377,6 +379,7 @@ class Verdict(Contract):
     matches: StrictBool
     issues: list[str] = Field(default_factory=list, max_length=8)
     evidence: list[SpokenEvidence] = Field(default_factory=list, max_length=20)
+    actions: list[ActionEvidence] = Field(default_factory=list, max_length=20)
     heard: list[HeardSpeech] = Field(default_factory=list, max_length=12)
     agenda_evidence: list[AgendaEvidence] = Field(default_factory=list, max_length=20)
     causal_updates: list[Any] = Field(default_factory=list, max_length=20)

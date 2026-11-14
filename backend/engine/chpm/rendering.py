@@ -11,6 +11,7 @@ from backend.engine.chpm import (
     agenda,
     continuation,
     continuation_writer,
+    expression,
     inference,
     passages,
     prompts,
@@ -218,19 +219,11 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], raw, payload)
         raise RecoverableChpmError(str(exc)) from exc
-    ids = [entry.actor_id for entry in verdict.evidence]
-    if set(ids) != set(turn.decisions) or len(ids) != len(set(ids)):
-        _reject_review(
-            turn, text, resolution, ["Invalid controlled NPC coverage."], verdict, payload
-        )
-        raise RecoverableChpmError(
-            "CHPM validator did not identify every controlled NPC exactly once."
-        )
-    for entry in verdict.evidence:
-        silent = turn.decisions[entry.actor_id].selected.kind == "DEFER" and not entry.quote
-        if not silent and (not entry.quote or entry.quote not in text):
-            _reject_review(turn, text, resolution, ["No exact speech evidence."], verdict, payload)
-            raise RecoverableChpmError("CHPM validator supplied no exact speech evidence.")
+    try:
+        expression.validate(turn.decisions, verdict, text)
+    except ChpmError as exc:
+        _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
+        raise RecoverableChpmError(str(exc)) from exc
     if verdict.matches and verdict.issues:
         _reject_review(
             turn, text, resolution, ["Contradictory validation verdict."], verdict, payload

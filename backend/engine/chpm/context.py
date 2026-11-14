@@ -90,5 +90,16 @@ async def actor_context(
             else {}
         ),
         "own_previous_words": speech,
-        "witnessed_utterances_not_world_facts": [entry.model_dump() for entry in memories or []],
+        "witnessed_utterances_not_world_facts": [
+            entry.model_dump() for entry in memories or [] if entry.kind != "own_action"
+        ],
+        **(
+            {
+                "own_action_observations_not_world_facts": [
+                    entry.model_dump() for entry in memories or [] if entry.kind == "own_action"
+                ]
+            }
+            if any(entry.kind == "own_action" for entry in memories or [])
+            else {}
+        ),
     }

@@ -98,9 +98,12 @@ def _payload(
 ) -> dict:
     previous = supplied.get("witnessed_utterances_not_world_facts", [])
     kept = previous[-dialogue:] if dialogue else []
+    actions = supplied.get("own_action_observations_not_world_facts", [])
+    kept_actions = actions[-dialogue:] if dialogue else []
     result = {
         **{key: value for key, value in supplied.items() if key != "_chpm_gap_cursors"},
         "witnessed_utterances_not_world_facts": kept,
+        **({"own_action_observations_not_world_facts": kept_actions} if actions else {}),
         "appraisal_context": window.payload,
         "motivation_context": catalogue.payload(),
         "experience_context": narrative_context.experience_reasons(
@@ -110,6 +113,7 @@ def _payload(
             "policy": "focused-view-budget-v2",
             "tier": tier,
             "dialogue_entries_omitted": len(previous) - len(kept),
+            **({"action_entries_omitted": len(actions) - len(kept_actions)} if actions else {}),
             "canonical_history_changed": False,
         },
     }

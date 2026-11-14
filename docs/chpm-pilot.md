@@ -1,4 +1,4 @@
-# NPC Personality — optional CHPM dialogue module
+# NPC Personality — optional CHPM intentions module
 
 Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
 
@@ -8,6 +8,9 @@ historical catch-up and observer-to-observer transmission in the existing calls.
 The [causal continuity guide](chpm-causal-memory.md) explains how unfinished
 purposes retain their initiating events, concrete consequences and remaining steps.
 See [release history](chpm-changelog.md) for module versions independent of data contracts.
+
+See [NPC action autonomy](npc-action-autonomy.md) for self-directed actions,
+nonverbal expression and the boundary between NPC decisions and player agency.
 
 See [performance measurements and parallel NPC analysis](chpm-performance.md) for
 request timings and the optional concurrency experiment.
@@ -31,7 +34,7 @@ known characters and save between turns. The active limit defaults to three; see
 - **Standard:** the existing dialogue pipeline.
 - **Observe:** compute alternatives and a selected intention without adding them
   to the narrator prompt or suppressing ordinary planners.
-- **Enabled:** select dialogue intentions for present selected NPCs, suppress
+- **Enabled:** select speech/action intentions for present selected NPCs, suppress
   their legacy dialogue/social/story-director planning, and review the complete
   narration before publishing it. A semantic review remains fallible.
 
@@ -54,12 +57,15 @@ the saved mode and memory along with other session state.
 
 ## Current scope
 
-This is a bounded dialogue experiment, not the complete CHPM research model.
+This is a bounded intentions experiment, not the complete CHPM research model.
 The pure kernel records provenance, rejects stale/conflicting observations,
 validates authored-goal citations, deduplicates candidate kinds, and selects an
 intention with a versioned policy. It does not introduce numerical personality,
 relationship, attachment, needs, or mood scales, background reflection, new
-physical actions, or automatic world progress. Selected dialogue may now explicitly
+world-state mutation paths or automatic background progress. Selected intentions
+may include feasible physical actions, resolved by the existing world-state owners.
+Speech and actions are reviewed separately; a performed action needs no invented
+dialogue or per-action player approval. Selected dialogue may explicitly
 create or close declared goals and commitments through the ledger below.
 
 The cognitive input contains the selected NPC's authored character/goal/profile,
@@ -139,7 +145,7 @@ CHPM does not add a distributed locking guarantee beyond that host contract.
 The default window keeps 12 quotations per selected NPC (configurable 0–24).
 Each entry identifies its observer, speaker, source message, revision, content
 hash, scene and kind. The kinds distinguish projected player observations, the
-NPC's own speech, and speech heard from another present NPC. Quotations remain
+NPC's own speech, its own reviewed action and speech heard from another present NPC. Quotations remain
 claims or attempted actions, never independent proof that a world event happened.
 
 Before every use, the adapter checks the source session, role, revision, hash,
@@ -450,7 +456,7 @@ Invalid preferences receive the existing single proposal repair, without a hidde
 fallback choice or an extra arbitration request. Historical decisions and the legacy
 shadow evaluator retain their recorded policies; loading does not reselect them.
 
-A previous intention is supplied only when its delivered own speech still exists
+A previous intention is supplied only when its delivered own speech or action still exists
 in this observer/session with the exact content hash and revision. Maintaining a
 course is distinct from revising it; a revision needs an accessible exact citation.
 The narrator and reviewer receive this continuity contract. Semantic relevance,
