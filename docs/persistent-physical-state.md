@@ -20,6 +20,13 @@ A valid quote proves that the words occur in the reply. It does **not** prove th
 
 Automatic extraction may mistakenly repeat `record` for an existing condition. Before applying that response, the host binds it to the existing ID only when canonical subject, condition kind and case-insensitive body part identify exactly one non-resolved record. The resulting `change` still passes the normal source, scope and transition checks. It preserves origin, first-recorded time and treatment status; `last_check.reference_bindings` records the local correction. Ambiguous matches stay rejected, resolved facts are not reopened, and manual Debug `record` operations remain strict. Reconfirming an unchanged fact refreshes its source without restarting its last-change clock.
 
+An update to a known active condition may repeat its immutable `target_id`, `kind`
+or `part`. The host removes these fields only when every supplied identity value
+matches that available canonical record. Conflicts, unavailable targets and
+resolved IDs remain rejected. Evidence, source order and transition validation
+still run normally; accepted normalization records only the condition ID and
+field names in `last_check.identity_echoes`.
+
 | Operation | Result |
 | --- | --- |
 | `record` | Register a new fact for a canonical actor or known item. Private by default. |
