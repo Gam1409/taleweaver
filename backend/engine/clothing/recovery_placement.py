@@ -1,17 +1,24 @@
 """Restore evidenced placement of a registered garment without recreating it."""
 
 from copy import deepcopy
+from hashlib import sha256
 
 from backend.engine.clothing.profiles import load_profile, validate_profile
 from backend.engine.clothing.recovery_schema import RecoveryEntry
 from backend.engine.clothing.resolution_facts import inner_details_allowed
-from backend.engine.clothing.schema import Garment
+from backend.engine.clothing.schema import Garment, WornItem
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.visual_novel.continuity import Possessions
 
 
 def restore(
-    actors: dict, entry: RecoveryEntry, garment: Garment, snapshot: Possessions, detailed: bool
+    actors: dict,
+    entry: RecoveryEntry,
+    garment: Garment,
+    snapshot: Possessions,
+    detailed: bool,
+    *,
+    source: dict,
 ) -> tuple[dict, list[dict], list[ItemFailure]]:
     """Caller already verified ownership and literal source/placement quotations."""
     action = entry.action
@@ -29,7 +36,7 @@ def restore(
         or worn is None
         or (
             worn.uncovered_regions == entry.uncovered_regions
-            and (not entry.uncovered_regions or worn.source is not None)
+            and (not entry.uncovered_regions or _same_source(worn, entry, source))
         )
     ):
         return actors, [], []
@@ -73,3 +80,18 @@ def restore(
         "evidence": action.evidence,
     }
     return {**actors, action.source_owner: candidate}, [addition], []
+
+
+def _same_source(worn: WornItem, entry: RecoveryEntry, source: dict) -> bool:
+    proof = worn.source
+    return bool(
+        proof is not None
+        and proof.source_message_id == entry.source_message_id
+        and proof.content_hash == sha256(source["content"].encode()).hexdigest()
+        and proof.evidence == entry.placement_evidence
+        and proof.source_role == source["role"]
+        and (
+            proof.evidence_span is None
+            or proof.evidence_span.matches(source["content"], proof.evidence)
+        )
+    )

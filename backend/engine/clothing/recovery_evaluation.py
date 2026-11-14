@@ -82,7 +82,7 @@ def evaluate(
         )
         if not additions and not failures and garment is not None:
             changed, additions, failures = restore_placement(
-                changed, entry, garment, snapshot, detailed
+                changed, entry, garment, snapshot, detailed, source=source
             )
         actors = changed
         blocking, omitted = partition_rejections(
