@@ -168,6 +168,7 @@ function selectActor(id: string, selected: boolean) {
               <option :value="0" :disabled="draft.notebook_enabled">Off</option>
               <option :value="1">Up to one round</option>
               <option :value="2">Up to two rounds</option>
+              <option :value="3">Up to three rounds — can correct and check</option>
             </select></label
           >
         </div>

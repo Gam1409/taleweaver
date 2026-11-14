@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
-from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
+from backend.engine.chpm.agent_limits import MAX_AGENT_ROUNDS, MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.causal_audit import MAX_NOTES
 from backend.engine.chpm.causal_contracts import Memory as CausalMemory
 from backend.engine.chpm.host_state import Mind
@@ -28,7 +28,7 @@ class Settings(Contract):
     max_input_chars: int = Field(default=24000, ge=8000, le=192000, strict=True)
     max_calls_per_turn: int = Field(default=8, ge=1, le=25, strict=True)
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
-    agent_steps: int = Field(default=0, ge=0, le=2, strict=True)
+    agent_steps: int = Field(default=0, ge=0, le=MAX_AGENT_ROUNDS, strict=True)
     notebook_enabled: StrictBool = False
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     semantic_memory: StrictBool = False
@@ -232,7 +232,7 @@ class Decision(Contract):
     choice_preference: ChoicePreference | None = None
     previous_intention: PreviousIntention | None = None
     agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=MAX_PINNED_SOURCES)
-    agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
+    agent_audit: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_AGENT_ROUNDS)
     perception_audit: dict[str, str] = Field(default_factory=dict, max_length=32)
     actor_id: str
     observation: Observation

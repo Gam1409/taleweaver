@@ -19,9 +19,9 @@ __all__ = ["chpm_world", "portrait_world"]
 async def test_protocol_survives_defaults_new_sessions_copy_and_ads(
     auth_client, chpm_world, protocol
 ):
-    preferences = update("live", notebook_enabled=True, agent_steps=2, tool_protocol=protocol)[
-        "settings"
-    ]
+    preferences = update(
+        "live", notebook_enabled=True, agent_steps=3, max_calls_per_turn=9, tool_protocol=protocol
+    )["settings"]
     template_path = "/api/adventures/portrait-template"
     defaults = await auth_client.patch(
         template_path, json={"npc_personality_settings": preferences}
@@ -62,6 +62,7 @@ async def test_protocol_survives_defaults_new_sessions_copy_and_ads(
         assert loaded.status_code == 200, loaded.text
         assert loaded.json()["settings"]["tool_protocol"] == protocol
         assert loaded.json()["settings"]["notebook_enabled"] is True
+        assert loaded.json()["settings"]["agent_steps"] == 3
     async with TestSessionLocal() as db:
         assert (
             await db.scalar(

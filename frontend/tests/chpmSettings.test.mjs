@@ -234,6 +234,9 @@ test('agent rounds reserve calls per active NPC and stay off in observe mode', a
   f.draft.value.max_calls_per_turn = 8
   assert.equal(f.minimumCalls.value, 14)
   assert.equal(await f.save(), false)
+  f.draft.value.agent_steps = 3
+  assert.equal(f.minimumCalls.value, 17)
+  assert.equal(await f.save(), false)
   f.draft.value.mode = 'shadow'
   assert.equal(f.minimumCalls.value, 4)
 })

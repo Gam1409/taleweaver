@@ -14,7 +14,7 @@ from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import TransitionError, apply
 from backend.engine.chpm.host_state import Mind, identifier, payload
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.schema import KernelState, Perception, Settings, Verdict
+from backend.engine.chpm.schema import Decision, KernelState, Perception, Settings, Verdict
 from backend.engine.chpm.state import KEY, load
 from tests.test_chpm_host_state import mind, source
 from tests.test_chpm_kernel import decision
@@ -73,6 +73,22 @@ def test_turn_reserve_covers_all_allowed_sources_and_interpretations():
     assert capacity.SOURCE_RESERVE + interpretations + experiences + 2 == capacity.EVENT_RESERVE
     assert experiences == capacity.EXPERIENCE_RESERVE
     assert interpretations + 1 == capacity.BELIEF_RESERVE
+
+
+def test_three_round_limit_matches_saved_audits_and_the_maximum_admitted_cast():
+    assert Settings.model_json_schema()["properties"]["agent_steps"]["maximum"] == 3
+    assert Decision.model_json_schema()["properties"]["agent_audit"]["maxItems"] == 3
+    settings = Settings(
+        mode="live",
+        actor_ids=[str(index) for index in range(6)],
+        max_active_npcs=5,
+        agent_steps=3,
+        max_calls_per_turn=25,
+    )
+    assert capacity.required_calls(settings) == 25
+    capacity.ensure_budget(KernelState(settings=settings), settings.actor_ids[:5])
+    with pytest.raises(ValueError, match="at least 29"):
+        capacity.ensure_budget(KernelState(settings=settings), settings.actor_ids)
 
 
 def test_full_beliefs_allow_revisions_but_reject_new_beliefs_with_transition_error(monkeypatch):

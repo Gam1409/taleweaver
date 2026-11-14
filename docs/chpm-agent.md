@@ -2,7 +2,7 @@
 
 The existing flow remains the default (`agent_steps=0`). In **Session Memory &
 Settings → NPC Personality → Enabled → Agent tool rounds per active NPC**, select
-one or two rounds. The setting belongs to the saved game session; adventure
+one, two or three rounds. The setting belongs to the saved game session; adventure
 defaults can seed new sessions without changing existing sessions.
 The existing Small/Complex role routes these calls; no separate endpoint is required.
 
@@ -86,7 +86,7 @@ remain historical; current host facts take precedence.
 
 ## Limits and safety of state
 
-- `agent_steps`: 0–2; only Enabled/live mode uses the loop.
+- `agent_steps`: 0–3; only Enabled/live mode uses the loop.
 - Each round: one logical model call, at most 768 output tokens (also limited by
   the selected role and the saved CHPM output budget), up to two local tool operations.
 - Pinned source excerpts: at most eight distinct sources and 6,000 characters per
@@ -162,7 +162,7 @@ and paraphrased recall, revised old facts, dense short speech/actions, visible
 clothing changes, multi-session isolation, and two active NPCs. Evaluate semantic
 errors and unnecessary questions, not just JSON validity or agreement with the player.
 
-The matrix CLI supports `--agent-steps 0|1|2` and `--input-chars`. Plan without any
+The matrix CLI supports `--agent-steps 0|1|2|3` and `--input-chars`. Plan without any
 network calls first, for example:
 
 ```bash

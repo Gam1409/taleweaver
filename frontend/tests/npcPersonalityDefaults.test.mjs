@@ -92,3 +92,14 @@ test('new adventure defaults leave notebooks and tool rounds off', async t => {
   assert.equal(f.value.value.agent_steps, 0)
   assert.equal(f.checkbox().props.checked, false)
 })
+
+test('template defaults can select three rounds with the matching request reserve', async t => {
+  const f = fixture(t)
+  const rounds = descendants(f.root).find(node => node.props?.name === 'npc-agent-tool-rounds')
+  assert.ok(rounds.children.some(node => node.props?.value === 3))
+  rounds.props.onChange({ target: { value: '3' } })
+  await nextTick()
+  assert.equal(f.value.value.agent_steps, 3)
+  assert.equal(f.value.value.max_calls_per_turn, 8)
+  assert.match(text(f.root), /Minimum request budget: 9,/)
+})

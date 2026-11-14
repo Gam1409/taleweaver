@@ -61,6 +61,13 @@ test('notebook compatibility is selectable without changing the tool round limit
   assert.doesNotMatch(await render(1, [], {}, { notebook_enabled: false }), /Memory tool compatibility/)
 })
 
+test('session tools offer a third recovery round and explain its cast budget', async () => {
+  const html = await render(3, [], {}, { notebook_enabled: true, agent_steps: 3 })
+  assert.match(html, /<select name="npc-agent-tool-rounds"[^>]*>[\s\S]*?<option value="3">Up to 3 rounds/)
+  assert.match(html, /correct an error and check the result/)
+  assert.match(html, /5 for three rounds/)
+})
+
 test('a localized proposal failure names only the paused NPC and escapes its detail', async () => {
   const html = await render(2, [], {
     characters: [{ id: 'LINA', name: 'Lina' }, { id: 'MILA', name: 'Mila' }],
