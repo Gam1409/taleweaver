@@ -2,8 +2,9 @@
 
 import asyncio
 import json
+from collections.abc import Coroutine
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from backend.engine.living_world.state import save
 from backend.models.session_state import SessionState
 
 pending: dict[str, asyncio.Event] = {}
+Result = TypeVar("Result")
 
 
 @dataclass(frozen=True)
@@ -51,9 +53,19 @@ def require_enabled(simulation: Simulation, llm: GameMasterLLM) -> None:
         raise HTTPException(409, "The timeline's decision request budget is exhausted.")
 
 
+def require_compatible(state: SessionState) -> None:
+    from backend.engine.chpm.template_settings import ensure_session_compatible
+
+    try:
+        ensure_session_compatible(state)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 async def prepare(
     db: AsyncSession, state: SessionState, simulation: Simulation, llm: GameMasterLLM
 ) -> Prepared:
+    require_compatible(state)
     require_enabled(simulation, llm)
     limit = simulation.target
     if simulation.settings.mode == "PAUSE":
@@ -92,17 +104,25 @@ async def prepare(
     return prepared
 
 
-async def infer(llm: GameMasterLLM, prepared: Prepared, game_id: str) -> Decision:
+async def infer(
+    llm: GameMasterLLM, prepared: Prepared, game_id: str, *, admitted: bool = False
+) -> Decision:
+    if admitted:
+        return await _infer_admitted(llm, prepared, game_id)
+    async with decision_slot(prepared.concurrent):
+        return await _infer_admitted(llm, prepared, game_id)
+
+
+async def _infer_admitted(llm: GameMasterLLM, prepared: Prepared, game_id: str) -> Decision:
     llm.max_tokens = min(llm.max_tokens, prepared.max_tokens)
     llm.enable_thinking = False
-    async with decision_slot(prepared.concurrent):
-        result = await llm.aexecute_simple_task(
-            INSTRUCTION,
-            json.dumps(request_context(prepared), ensure_ascii=False),
-            llm.model,
-            game_id=game_id,
-            operation="living_world_decision",
-        )
+    result = await llm.aexecute_simple_task(
+        INSTRUCTION,
+        json.dumps(request_context(prepared), ensure_ascii=False),
+        llm.model,
+        game_id=game_id,
+        operation="living_world_decision",
+    )
     return Decision.model_validate_json(result)
 
 
@@ -113,21 +133,33 @@ def request_context(prepared: Prepared) -> dict[str, Any]:
 
 
 async def infer_until_stopped(
-    llm: GameMasterLLM, prepared: Prepared, game_id: str, stop: asyncio.Event
+    llm: GameMasterLLM,
+    prepared: Prepared,
+    game_id: str,
+    stop: asyncio.Event,
+    *,
+    admitted: bool = False,
 ) -> Decision:
     async def generate() -> Decision:
-        return await infer(llm, prepared, game_id)
+        return await infer(llm, prepared, game_id, admitted=admitted)
 
     request = (
         concordia_adapter.decide(request_context(prepared), generate)
         if prepared.engine == "concordia"
         else generate()
     )
+    return await wait_until_stopped(request, stop, timeout=float(llm.request_timeout))
+
+
+async def wait_until_stopped(
+    request: Coroutine[Any, Any, Result], stop: asyncio.Event, *, timeout: float
+) -> Result:
+    """Bound queue admission and the complete decision pipeline with one stop signal."""
     task = asyncio.create_task(request)
     stopped = asyncio.create_task(stop.wait())
     try:
         done, _ = await asyncio.wait(
-            {task, stopped}, timeout=float(llm.request_timeout), return_when=asyncio.FIRST_COMPLETED
+            {task, stopped}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
         )
         if stop.is_set():
             raise HTTPException(409, "The private decision was stopped. No result was applied.")

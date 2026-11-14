@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import select
 
 from backend.core import database
@@ -41,28 +40,6 @@ class References:
     timeline: str = ""
     configuration: str = ""
     generation: tuple | None = None
-
-
-async def until_stopped(
-    user: Any, session: str, actor: str, context: dict, fence: str, stop: asyncio.Event
-) -> References:
-    task = asyncio.create_task(retrieve(user, session, actor, context, fence))
-    stopped = asyncio.create_task(stop.wait())
-    try:
-        await asyncio.wait({task, stopped}, return_when=asyncio.FIRST_COMPLETED)
-        if stop.is_set():
-            raise HTTPException(409, "The private decision was stopped. No result was applied.")
-        return task.result()
-    finally:
-        task.cancel()
-        stopped.cancel()
-        task.add_done_callback(_consume_late_result)
-        await asyncio.gather(stopped, return_exceptions=True)
-
-
-def _consume_late_result(task: asyncio.Task) -> None:
-    if not task.cancelled():
-        task.exception()
 
 
 def configuration(user: Any) -> str:

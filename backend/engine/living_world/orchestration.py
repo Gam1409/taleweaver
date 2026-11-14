@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.living_world import deliberation, reference_recall
 from backend.engine.living_world.access import check_revision, owned, read_simulation
+from backend.engine.living_world.decisions import Decision
+from backend.engine.living_world.request_slot import decision_slot
 from backend.engine.living_world.schema import Command
 from backend.engine.living_world.state import public_status
 from backend.engine.visual_novel.concurrency import SessionBusyError, session_write_lease
@@ -41,11 +43,11 @@ async def deliberate(
             simulation = read_simulation(state)
             check_revision(simulation, payload.expected_revision)
             prepared = await deliberation.prepare(db, state, simulation, llm)
-        references = await reference_recall.until_stopped(
-            user, game_id, prepared.context["actor"]["id"], prepared.context, prepared.fence, stop
+        prepared, decision = await deliberation.wait_until_stopped(
+            _admitted_decision(llm, user, game_id, prepared, stop),
+            stop,
+            timeout=float(llm.request_timeout),
         )
-        prepared = replace(prepared, references=references)
-        decision = await deliberation.infer_until_stopped(llm, prepared, game_id, stop)
         with session_write_lease(game_id):
             state = await owned(db, game_id, user)
             simulation = read_simulation(state)
@@ -68,6 +70,26 @@ async def deliberate(
         ) from None
     finally:
         deliberation.pending.pop(game_id, None)
+
+
+async def _admitted_decision(
+    llm: GameMasterLLM,
+    user: User,
+    game_id: str,
+    prepared: deliberation.Prepared,
+    stop: asyncio.Event,
+) -> tuple[deliberation.Prepared, Decision]:
+    """Reference queries and generation share one existing background admission."""
+    async with decision_slot(prepared.concurrent):
+        deliberation.check_stop(game_id)
+        references = await reference_recall.retrieve(
+            user, game_id, prepared.context["actor"]["id"], prepared.context, prepared.fence
+        )
+        prepared = replace(prepared, references=references)
+        decision = await deliberation.infer_until_stopped(
+            llm, prepared, game_id, stop, admitted=True
+        )
+        return prepared, decision
 
 
 async def cycle(

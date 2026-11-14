@@ -173,6 +173,12 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     settings = control_settings.read((manager.state.entity_states or {}).get(KEY))
     if settings.mode == "off" or not is_vn(manager.adventure):
         return ""
+    from backend.engine.chpm.template_settings import ensure_session_compatible
+
+    try:
+        ensure_session_compatible(manager.state, settings)
+    except ValueError as exc:
+        raise ChpmError(str(exc)) from exc
     state = load(manager.state)
     input_id = getattr(manager, "_vn_player_message_id", None)
     if not input_id:

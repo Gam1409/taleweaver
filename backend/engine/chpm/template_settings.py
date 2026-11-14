@@ -40,6 +40,23 @@ def ensure_compatible(settings: Settings | None, living_world: dict | None) -> N
         raise ValueError("Disable Living World private decisions before enabling NPC Personality.")
 
 
+def ensure_session_compatible(state: Any, settings: Settings | None = None) -> None:
+    """Restored session flags must obey the same rule as owner-facing controls."""
+    raw = getattr(state, "living_world", None)
+    if not raw:
+        return
+    from backend.engine.chpm.control_settings import read
+    from backend.engine.living_world.schema import Settings as LivingWorldSettings
+
+    settings = settings or read((state.entity_states or {}).get(KEY))
+    if settings.mode != "live":
+        return
+    if not isinstance(raw, dict):
+        raise ValueError("Living World controller settings are unavailable.")
+    living_world = LivingWorldSettings.model_validate(raw.get("settings", {}))
+    ensure_compatible(settings, living_world.model_dump(mode="json"))
+
+
 async def validate_update(db: AsyncSession, adventure: Any, updates: dict) -> None:
     if not {"npc_personality_settings", "living_world_settings"} & updates.keys():
         return
