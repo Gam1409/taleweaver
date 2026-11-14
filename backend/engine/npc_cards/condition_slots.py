@@ -11,7 +11,7 @@ _PARTS = {
     "Feet": ("foot", "feet", "left_foot", "right_foot", "left foot", "right foot"),
     "BodyVaginal": ("vaginal", "vagina", "clitoris", "labia", "vulva"),
     "BodyAnal": ("anal", "anus", "sphincter", "anal_sphincter", "anal sphincter"),
-    "BodyUterine": ("uterine", "uterus"),
+    "BodyUterine": ("uterine", "uterus", "cervix"),
     "BodyPenile": ("penile", "penis", "testicle", "testicles", "testis", "testes"),
 }
 _PART_SLOT = {part: slot for slot, parts in _PARTS.items() for part in parts}

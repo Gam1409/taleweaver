@@ -61,3 +61,10 @@ test('body state text remains escaped and does not imply unrecorded diagnoses', 
   assert.match(tooltip, /&lt;ScRiPt&gt;/)
   assert.doesNotMatch(tooltip, /<script\b|pregnant|healthy/i)
 })
+
+test('a source-confirmed private fact is labelled as known from narration', async () => {
+  const ui = await component('EquipmentSilhouette', 'BodyUterine')
+  const { tooltip } = await render(ui, { equipment: {}, bodySlots: ['BodyUterine'], bodyConditions: { BodyUterine: [{ id: 'known', detail: 'A recorded observation.', status: 'active', visibility: 'private' }] } })
+  assert.match(tooltip, /Known from narration/)
+  assert.match(tooltip, /A recorded observation/)
+})

@@ -14,7 +14,7 @@ const state = ref<CurrentState>({
   conditions: { status: 'available', items: [
     { id: 'wound', target_id: 'NPC', kind: 'injury', part: 'hand', detail: 'A recorded cut on the hand.', status: 'active', observation: 'recorded', last_changed_minute: 470, display_slots: ['Hands'] },
     { id: 'dust', target_id: 'glove', target_name: 'Black glove', kind: 'contamination', part: 'fabric', detail: 'Dust coats the glove.', status: 'active', observation: 'recorded', last_changed_minute: 470 },
-    { id: 'medical', target_id: 'NPC', kind: 'other', part: 'uterus', detail: 'A source-confirmed medical observation.', status: 'active', observation: 'recorded', last_changed_minute: 475, display_slots: ['BodyUterine'] },
+    { id: 'medical', target_id: 'NPC', kind: 'other', part: 'uterus', detail: 'A source-confirmed medical observation.', status: 'active', observation: 'recorded', last_changed_minute: 475, display_slots: ['BodyUterine'], visibility: 'private' },
   ] },
 })
 function unknown() { state.value = { ...state.value, clothing: { status: 'available', detail_limited: false, items: [], placement_status: 'unassessed', placement_slots: [] }, conditions: { status: 'available', items: [] } } }

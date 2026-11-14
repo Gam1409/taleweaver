@@ -23,6 +23,7 @@ const props = withDefaults(
     miniList?: boolean
     bodySlots?: string[]
     unconfirmedBodySlots?: string[]
+    unassessedBodySlots?: string[]
     bodyConditions?: Record<string, EquipmentCondition[]>
     itemConditions?: Record<string, EquipmentCondition[]>
   }>(),
@@ -102,7 +103,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       :data-slot-has-state="!!bodyConditions?.[slot.key]?.length || !!unconfirmedBodySlots?.includes(slot.key)"
       :style="{ top: slot.top, left: slot.left }"
       :aria-label="
-        [slot.label, ...slot.items.map(item => item.name), unconfirmedBodySlots?.includes(slot.key) ? 'Placement needs confirmation' : ''].filter(Boolean).join(': ') || 'Contents'
+        [slot.label, ...slot.items.map(item => item.name), unconfirmedBodySlots?.includes(slot.key) ? 'Placement needs confirmation' : unassessedBodySlots?.includes(slot.key) ? 'Availability not assessed' : ''].filter(Boolean).join(': ') || 'Contents'
       "
       :aria-describedby="
         active === slot.key && (miniList || slot.key.startsWith('Body')) ? tooltipId : undefined
@@ -113,6 +114,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
         slot.items.length
           ? 'border-amber-500/70 text-slate-200'
           : unconfirmedBodySlots?.includes(slot.key) ? 'border-dashed border-amber-400/70 text-amber-200'
+          : unassessedBodySlots?.includes(slot.key) ? 'border-dashed border-slate-500 text-slate-300'
           : bodyConditions?.[slot.key]?.length ? 'border-rose-400/60 text-rose-200'
           : 'border-slate-700 text-slate-600',
         active === slot.key ? 'z-10 ring-2 ring-amber-400/25' : ''
@@ -177,9 +179,10 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       <p v-if="selected.label" class="mb-2 text-xs font-semibold text-amber-200">
         {{ selected.label }}
       </p>
+      <p v-if="unassessedBodySlots?.includes(selected.key)" class="mb-3 text-xs text-slate-400">Availability not assessed. This layout marker does not confirm anatomy or an empty area.</p>
       <section v-if="selected.body || currentBodyConditions.length" class="mb-3 border-b border-slate-700 pb-3" aria-label="Body state">
         <h4 class="mb-2 text-xs font-semibold text-rose-200">Body state</h4>
-        <ul v-if="currentBodyConditions.length" class="space-y-2"><li v-for="condition in currentBodyConditions" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span v-if="condition.part" class="text-slate-400">{{ condition.part.split('_').join(' ') }} · </span>{{ condition.detail }}</li></ul>
+        <ul v-if="currentBodyConditions.length" class="space-y-2"><li v-for="condition in currentBodyConditions" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span v-if="condition.part" class="text-slate-400">{{ condition.part.split('_').join(' ') }} · </span>{{ condition.detail }}<span v-if="condition.visibility === 'private'" class="mt-1 block text-[10px] text-amber-200">Known from narration</span></li></ul>
         <p v-else class="text-xs text-slate-400">No confirmed body state for this area.</p>
       </section>
       <h4 class="mb-2 text-xs font-semibold text-slate-300">Items</h4>

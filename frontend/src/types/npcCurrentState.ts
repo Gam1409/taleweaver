@@ -24,6 +24,7 @@ export interface NpcKnownCondition {
   observation: 'visible' | 'recorded'
   last_changed_minute: number | null
   display_slots?: string[]
+  visibility?: 'public' | 'private'
 }
 
 export interface NpcCurrentState {

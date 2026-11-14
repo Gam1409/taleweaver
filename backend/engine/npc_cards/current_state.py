@@ -16,6 +16,7 @@ from backend.engine.clothing.visuals import detailed_for_state, session_objects
 from backend.engine.npc_cards.body_slots import placement_projection
 from backend.engine.npc_cards.condition_slots import condition_position
 from backend.engine.npc_cards.equipment import equipment_rows
+from backend.engine.npc_cards.narrated_knowledge import enabled as narrated_knowledge_enabled
 from backend.engine.npc_presence import physically_present
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import Condition
@@ -57,13 +58,14 @@ async def _conditions(
     visible = project(state, {actor["id"]: actor}, detailed=detailed, limit=None)
     by_id = {row["id"]: {**row, "observation": "visible"} for row in visible}
     names = {row["item_id"]: row["name"] for row in (clothing or {}).get("clothing", [])}
-    # Public facts remain known when covered. Explicit public Debug corrections
-    # use their chosen detail; narrated facts must still match their original source.
+    # The enabled owner view may retain facts already disclosed in narration.
+    # This does not change their private visibility for other characters.
+    narrated_private = narrated_knowledge_enabled(state, actor, detailed=detailed)
     candidates = [
         row
         for row in ledger.conditions.values()
         if row.status != "resolved"
-        and row.visibility == "public"
+        and (row.visibility == "public" or narrated_private and row.latest.kind == "narration")
         and row.target_id in {actor["id"], *names}
         and row.latest.kind in {"narration", "manual"}
     ]
@@ -106,6 +108,11 @@ async def _conditions(
                 "kind": ledger.conditions[row["id"]].kind,
                 "part": ledger.conditions[row["id"]].part,
                 "last_changed_minute": ledger.conditions[row["id"]].last_changed_minute,
+                **(
+                    {"visibility": "private"}
+                    if ledger.conditions[row["id"]].visibility == "private"
+                    else {}
+                ),
                 **condition_position(
                     ledger.conditions[row["id"]],
                     actor["id"],

@@ -21,6 +21,7 @@ export interface EquipmentCondition {
   detail: string
   part?: string
   status?: string
+  visibility?: 'public' | 'private'
 }
 
 export const EQUIPMENT_SLOTS = [
@@ -44,6 +45,12 @@ export const BODY_ITEM_SLOTS = [
   { key: 'BodyPenile', region: 'penile', label: 'Penile area', shortLabel: 'P', icon: 'ra-emerald', top: '54%', left: '68%' }
 ] as const
 export type BodyPlacementSlot = (typeof BODY_ITEM_SLOTS)[number]['region']
+
+export function unassessedLayoutSlots(variant: 'male' | 'female' | 'neutral') {
+  return BODY_ITEM_SLOTS.filter(slot => variant === 'female'
+    ? slot.region !== 'penile'
+    : variant === 'male' ? slot.region === 'penile' || slot.region === 'anal' : true)
+}
 
 export function legacyEquipment(equipment: Record<string, unknown>): EquipmentDisplay {
   const result: EquipmentDisplay = {}
