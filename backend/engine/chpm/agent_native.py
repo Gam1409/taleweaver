@@ -6,7 +6,7 @@ from hashlib import sha256
 from typing import Any
 
 from backend.core.llm_tool_turn import NativeToolsUnsupportedError, ToolCall, ensure_tools_supported
-from backend.engine.chpm import agent_lookup_payload, inference
+from backend.engine.chpm import agent_lookup_payload, inference, tool_feedback
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
@@ -147,14 +147,16 @@ def _feedback(
     messages: list[dict], notebook: NotebookDraft, calls: tuple[ToolCall, ...], results: list[dict]
 ) -> None:
     for call, result in zip(calls, results, strict=True):
+        name = canonical_tool_name(call.name)
+        feedback = tool_feedback.for_model(name, result)
         messages.append(
             {
                 "role": "tool",
                 "tool_call_id": call.id,
-                "content": json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+                "content": json.dumps(feedback, ensure_ascii=False, separators=(",", ":")),
             }
         )
-        notebook.remember_feedback(canonical_tool_name(call.name), result)
+        notebook.remember_feedback(name, feedback)
 
 
 async def investigate(

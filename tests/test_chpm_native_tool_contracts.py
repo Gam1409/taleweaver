@@ -25,7 +25,9 @@ def definition(name):
 def write(value, **arguments):
     return parse_call(
         "notebook_write",
-        json.dumps({"expected_revision": 0, "value": value, **arguments}, ensure_ascii=False),
+        json.dumps(
+            {"path": "", "expected_revision": 0, "value": value, **arguments}, ensure_ascii=False
+        ),
     )
 
 
@@ -103,7 +105,7 @@ def test_native_values_preserve_every_json_root_type_and_freely_chosen_keys(valu
     request = write(value)
     assert isinstance(request, NotebookWrite) and decode(request.value_json) == value
     assert Draft202012Validator(definition("notebook_write")["parameters"]).is_valid(
-        {"expected_revision": 0, "value": value}
+        {"path": "", "expected_revision": 0, "value": value}
     )
     draft = NotebookDraft(NotebookWorkspace())
     assert draft.execute(request)["status"] == "ok"
@@ -120,7 +122,9 @@ def test_native_text_quotes_unicode_and_pointer_whitespace_survive_exactly():
     draft.execute(request)
     assert json.loads(draft.execute(read)["json_fragment"]) == value["  key/with~escapes  "]
     assert json.loads(write("🙂").value_json) == json.loads(
-        parse_call("notebook_write", '{"expected_revision":0,"value":"\\ud83d\\ude42"}').value_json
+        parse_call(
+            "notebook_write", '{"path":"","expected_revision":0,"value":"\\ud83d\\ude42"}'
+        ).value_json
     )
 
 

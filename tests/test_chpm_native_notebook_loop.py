@@ -319,7 +319,11 @@ async def test_truncated_native_call_is_not_executed_or_retried():
     model = NativeModel(
         [
             turn(
-                call("cutoff", "notebook_write", {"value": PRIVATE, "expected_revision": 0}),
+                call(
+                    "cutoff",
+                    "notebook_write",
+                    {"path": "", "value": PRIVATE, "expected_revision": 0},
+                ),
                 finish_reason="length",
             ),
             turn(),

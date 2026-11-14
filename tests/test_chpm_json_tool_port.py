@@ -388,9 +388,12 @@ def test_compose_keeps_sources_instructions_and_feedback_exactly_once():
         ("notebook_read", {"path": "", "offset": 0, "limit": 1400}),
         ("notebook_read", {"limit": 1401}),
         ("notebook_read", {"offset": True}),
-        ("notebook_write", {"expected_revision": 0, "value": {"freely_chosen": {"title": None}}}),
-        ("notebook_write", {"expected_revision": -1, "value": None}),
-        ("notebook_write", {"value": None}),
+        (
+            "notebook_write",
+            {"path": "", "expected_revision": 0, "value": {"freely_chosen": {"title": None}}},
+        ),
+        ("notebook_write", {"path": "", "expected_revision": -1, "value": None}),
+        ("notebook_write", {"path": "", "value": None}),
         ("notebook_info", {"npc_id": "other"}),
         (
             "notebook_edit",

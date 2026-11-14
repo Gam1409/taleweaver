@@ -17,8 +17,8 @@ limits & agent lookups**. Save the adventure to apply those defaults to new
 sessions. Existing sessions keep their own settings.
 
 Old saves load with `notebook_enabled=false`; `agent_steps=0` remains the default.
-Enabling notebooks preserves an existing choice of two rounds. Disabling notebooks
-keeps the selected agent rounds; choose **Off** for those rounds to stop their
+Enabling notebooks preserves an existing choice of two or three rounds. Disabling
+notebooks keeps the selected agent rounds; choose **Off** for those rounds to stop their
 additional requests. Standard and Observe modes do not run notebook tools.
 
 **Memory tool compatibility** selects the model-facing protocol. **Automatic**
@@ -31,8 +31,8 @@ request is never resent automatically using a different protocol.
 
 The existing live request reserve is `active NPCs × (1 + agent_steps) + 5`.
 For three active NPCs, that means 8 requests with rounds off, 11 with one round,
-or 14 with two rounds. Each invoked round costs one model request and permits up
-to two local tool operations. The model can stop early. The ordinary narrator
+14 with two rounds, or 17 with three rounds. Each invoked round costs one model
+request and permits up to two local tool operations. The model can stop early. The ordinary narrator
 request remains separate. Enabling notebooks does not silently raise any budget.
 
 ## Contents and authority
@@ -69,6 +69,9 @@ Paths use JSON Pointer: `""` selects the root, `/plans/0` selects an array eleme
 are not created automatically. Array indices are nonnegative canonical integers;
 `-` appends when writing or adding. A JSON `null` value is distinct from a missing
 path. An edit's `add` inserts an array element; `write` sets an existing slot.
+Write and delete calls must include an explicit `path`. Omitting it returns a
+correctable error; replacing or clearing the complete notebook requires an
+explicit empty path. Reading may omit the path to inspect the root.
 
 Read offsets count characters in the selected value's canonical JSON, including
 its quotes and escapes. Results contain `json_fragment`, `next_offset` and
@@ -100,9 +103,10 @@ argument batch before executing any call and preserves JSON types and whitespace
 inside strings. The private document still has no fixed record layout.
 
 A valid call can return an actionable error such as a missing parent path, stale
-counter or exceeded quota. Another configured round can correct it. Two rounds
-allow a read or correction after the first result; one round cannot observe a
-result and then make another tool call. There is no obligatory extra request.
+counter or exceeded quota. Another configured round can correct it. Three rounds
+allow an initial attempt, a correction and a readback of the corrected result.
+Two rounds allow a read or correction after the first result; one round cannot
+observe a result and then make another tool call. There is no obligatory extra request.
 The existing private decision call receives the final bounded operation outcomes,
 including unresolved errors and whether pending changes remain committable.
 
@@ -147,6 +151,9 @@ character limit. One edit request contains at most 16 operations. Existing model
 output and request-input budgets also apply. Large notebooks grow through bounded
 operations or an explicit session transfer; the capacity is not a promise that
 one model response can produce 16 MB.
+Tool definitions, context and earlier operation results share the request-input
+budget. Three rounds need not fit its smallest 8,000-character setting. Oversized
+requests fail before dispatch and cannot publish pending notebook changes.
 
 A failed mutation leaves the preceding staged document unchanged. A failed or
 cancelled turn does not publish its pending edits. Accepted edits replace the

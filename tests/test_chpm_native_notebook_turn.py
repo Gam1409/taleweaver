@@ -60,7 +60,9 @@ class NativeRoles(NotebookRoles):
         if self.fault == "last_error":
             return turn(call("metadata", "notebook_info", {}))
         if self.fault == "correction":
-            return turn(call("missing-revision", "notebook_write", {"value": NOTE}))
+            return turn(
+                call("missing-revision", "notebook_write", {"path": "/private", "value": NOTE})
+            )
         if self.fault == "exact_limit":
             return turn(call("root-page", "notebook_read", {"path": "", "limit": 1400}))
         if len(self.native_turn_ids) > 1:

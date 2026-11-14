@@ -80,6 +80,9 @@ def _parameters(name: str) -> dict:
         return _lookup_parameters(name, parameters)
     if "path" in parameters["properties"]:
         parameters["properties"]["path"]["description"] = _POINTER
+    if name in {"notebook_write", "notebook_delete"}:
+        parameters["properties"]["path"].pop("default", None)
+        parameters["required"].append("path")
     if name == "notebook_write":
         parameters["properties"].pop("value_json")
         parameters["properties"]["value"] = deepcopy(_VALUE)
@@ -244,6 +247,11 @@ def _operation(value: Any) -> dict:
 def _prepare(name: str, arguments: dict) -> dict:
     _fields(arguments, set(_parameters(name)["properties"]))
     result = dict(arguments)
+    if name in {"notebook_write", "notebook_delete"} and "path" not in result:
+        raise NativeToolArgumentError(
+            "invalid_arguments",
+            "An explicit path is required for notebook_write and notebook_delete. Use '' only to intentionally replace or clear the whole document; use '/key' to change a member.",
+        )
     if name == "notebook_write":
         if "value" not in result:
             raise NativeToolArgumentError(
