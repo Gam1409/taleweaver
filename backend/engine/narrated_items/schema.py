@@ -206,6 +206,17 @@ Classify every extraction_coverage_groups key in coverage. Use the union of chan
 domains in its source references: items, conditions, scene, and staging when enabled.
 Every listed domain needs its corresponding evidence-backed proposal. Check each
 event, including multiple changes within one reference and later consequences.
+extraction_limits states the unchanged output capacity. Reuse canonical IDs and
+avoid spending slots on unchanged facts or repeated descriptions. Prefer one final
+current description per fact; retain distinct completed lifecycle operations when
+they are needed to establish its final state. Prioritize explicit resolutions,
+lasting state and item-property changes before transient descriptive signs.
+When condition_updates fills its limit and further established changes cannot fit,
+mark their groups with conditions_deferred. This means unapplied changes needing
+review, never unchanged state. Use it only at capacity. Mixed groups still name
+other changed domains and supply their proposals; a partially handled condition
+group may use both conditions and conditions_deferred. Do not invent or silently
+discard facts to make the coverage look complete. No extra request follows.
 Use ["unchanged"] for genuinely unchanged state, ["historical"] only when the whole
 group concerns recollection/quotation/plans rather than current changes, or
 ["uncertain"] for an unresolved interpretation. These three tags are exclusive.

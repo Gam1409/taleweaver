@@ -4,7 +4,7 @@ from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 
 PROMPT = (
     """Task: prepare reviewable Debug corrections for target_actor's missing garments,
-missing wear records and explicitly body-placed ordinary objects.
+missing wear records, incorrect placement of known garments and explicitly body-placed ordinary objects.
 This is a general story-state repair task for any setting or scene, not a medical
 or intimate-scene task. Review evidenced everyday, work, travel, ceremonial and
 fantasy garments alike; neither the item's purpose nor the scene's genre makes
@@ -56,6 +56,11 @@ Garment branches:
 - Existing garment: exact item_id from existing_garments; new_item=null.
 - Missing garment: item_id=null; new_item has kind=clothing, name, description,
   garment metadata and nonempty wearable_slots. The host assigns its ID.
+An existing garment can need a placement correction even when it is already owned
+and worn. Compare target_actor.worn_placements with the latest established state;
+"already exists" does not justify omitting a required displacement correction.
+Resolve attached straps, cuffs and hems through the known garment and full context;
+they do not become new items merely because the source uses a component reference.
 For partial displacement, put uncovered_regions and placement_evidence on the entry,
 not inside action. The placement quote must be from the same message; exposed
 regions must belong to the garment's coverage. Otherwise leave both empty.

@@ -14,6 +14,9 @@ Do not turn dialogue claims, requests, plans, memories, hypotheticals or intenti
 For record, give a compact stable key, supplied subject_id, kind and resulting current detail.
 The host assigns id; use an existing saved record_id for change/end. A new occurrence after an
 ended event needs a fresh key. Reuse existing facts, do not restate all unchanged records.
+Match current facts by scene, subject, kind and stable key. Their supplied id is the
+record_id for an update; alternate wording does not create a second process or effect.
+Keep recorded audience and observers unless current evidence establishes a change.
 Environment uses subject_id=scene_id, never an actor. Separate the room from people/outfits.
 For room-only environment facts, evidence may select a reference from
 scene_continuity.scene_description. Current processes, effects and actions must select
