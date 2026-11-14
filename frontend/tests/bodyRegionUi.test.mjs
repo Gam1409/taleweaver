@@ -8,11 +8,14 @@ import ts from 'typescript'
 
 const utility = ts.transpileModule(readFileSync(new URL('../src/utils/equipmentSlots.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const utilityUrl = `data:text/javascript;base64,${Buffer.from(utility).toString('base64')}`
+const snapshotCode = ts.transpileModule(readFileSync(new URL('../src/utils/conditionSnapshot.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const snapshotUrl = `data:text/javascript;base64,${Buffer.from(snapshotCode).toString('base64')}`
 async function component(name, active = '') {
   const { descriptor } = parse(readFileSync(new URL(`../src/components/game/${name}.vue`, import.meta.url), 'utf8'))
   const source = compileScript(descriptor, { id: name, inlineTemplate: true }).content.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
     if (path === '@/utils/equipmentSlots') return statement.replace(/['"]@\/utils\/equipmentSlots['"]/, `'${utilityUrl}'`)
+    if (path === '@/utils/conditionSnapshot') return statement.replace(/['"]@\/utils\/conditionSnapshot['"]/, `'${snapshotUrl}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })
@@ -67,4 +70,26 @@ test('a source-confirmed private fact is labelled as known from narration', asyn
   const { tooltip } = await render(ui, { equipment: {}, bodySlots: ['BodyUterine'], bodyConditions: { BodyUterine: [{ id: 'known', detail: 'A recorded observation.', status: 'active', visibility: 'private' }] } })
   assert.match(tooltip, /Known from narration/)
   assert.match(tooltip, /A recorded observation/)
+})
+
+test('the hover leads with current values from the latest source and keeps older facts separately', async () => {
+  const ui = await component('EquipmentSilhouette', 'Hands')
+  const { tooltip } = await render(ui, { equipment: {}, bodyConditions: { Hands: [
+    { id: 'wound', kind: 'injury', part: 'hand', detail: 'An earlier action quote.', current_detail: 'A small cut remains.', status: 'active', updated_revision: 1, observed_message_id: 'earlier', last_changed_minute: 10 },
+    { id: 'dirt', kind: 'contamination', part: 'hand', detail: 'A recent action quote.', current_detail: 'Dust coats the hand.', status: 'active', updated_revision: 2, observed_message_id: 'latest', last_changed_minute: 20 },
+  ] } })
+  const split = tooltip.indexOf('<details')
+  assert.ok(split > 0)
+  assert.ok(tooltip.slice(0, split).includes('Dust coats the hand.'))
+  assert.ok(!tooltip.slice(0, split).includes('A small cut remains.'))
+  assert.ok(tooltip.slice(split).includes('A small cut remains.'))
+  assert.match(tooltip, /Other active records/)
+  assert.doesNotMatch(tooltip, /earlier action quote|recent action quote/)
+})
+
+test('item facts use current values and do not duplicate an existing current property', async () => {
+  const ui = await component('EquipmentSilhouette', 'Hands')
+  const { tooltip } = await render(ui, { equipment: { Hands: [{ id: 'glove', name: 'Glove', current_state: [{ dimension: 'cleanliness', detail: 'Dust remains.' }] }] }, itemConditions: { glove: [{ id: 'known', detail: 'An old source action.', current_detail: 'Dust remains.' }] } })
+  assert.equal(tooltip.split('Dust remains.').length - 1, 1)
+  assert.doesNotMatch(tooltip, /An old source action/)
 })

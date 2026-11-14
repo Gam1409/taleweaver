@@ -117,6 +117,9 @@ async def test_only_enabled_adult_owner_view_uses_unchanged_narration(
         assert all(
             row["visibility"] == "private" and row["observation"] == "recorded" for row in rows
         )
+        assert all(row["current_detail"] == "A recorded current condition." for row in rows)
+        assert all(row["observed_message_id"] == "private-proof" for row in rows)
+        assert all(type(row["updated_revision"]) is int for row in rows)
         assert [row["key"] for row in current["clothing"]["placement_slots"]] == [
             "BodyVaginal",
             "BodyAnal",

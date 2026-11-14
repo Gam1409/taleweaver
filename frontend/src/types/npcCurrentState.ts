@@ -25,6 +25,9 @@ export interface NpcKnownCondition {
   last_changed_minute: number | null
   display_slots?: string[]
   visibility?: 'public' | 'private'
+  current_detail?: string
+  updated_revision?: number
+  observed_message_id?: string | null
 }
 
 export interface NpcCurrentState {

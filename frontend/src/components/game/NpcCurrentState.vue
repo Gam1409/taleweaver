@@ -4,6 +4,7 @@ import type { NpcCurrentState } from '@/types/npcCurrentState'
 import { BODY_ITEM_SLOTS, unassessedLayoutSlots, type EquipmentCondition, type EquipmentDisplay, type EquipmentDisplayItem } from '@/utils/equipmentSlots'
 import EquipmentSilhouette from './EquipmentSilhouette.vue'
 import EquipmentList from './EquipmentList.vue'
+import { conditionAge } from '@/utils/conditionSnapshot'
 
 const props = defineProps<{ state?: NpcCurrentState; compact?: boolean }>()
 const showEmpty = ref(false)
@@ -68,12 +69,12 @@ const statuses = { active: 'Active', treated: 'Treated', reduced: 'Reduced' }
       <h3 class="font-semibold text-slate-100">Clothing</h3>
       <label v-if="compact && (state.layout?.form === 'humanoid' || state.clothing.placement_slots?.length)" class="flex items-center gap-2 text-xs text-slate-400"><input v-model="showEmpty" type="checkbox" class="accent-amber-400" />Show empty slots</label>
       <template v-if="state.layout?.form === 'humanoid'">
-        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" :body-slots="placementSlots.map(slot => slot.key)" :unconfirmed-body-slots="placementSlots.filter(slot => slot.status === 'unconfirmed').map(slot => slot.key)" :unassessed-body-slots="placementSlots.filter(slot => slot.status === 'unassessed').map(slot => slot.key)" :body-conditions="bodyConditions" :item-conditions="itemConditions" :data-hide-empty="compact && !showEmpty" />
+        <EquipmentSilhouette :equipment="equipment" :variant="state.layout.silhouette" :game-minute="state.game_minute" :body-slots="placementSlots.map(slot => slot.key)" :unconfirmed-body-slots="placementSlots.filter(slot => slot.status === 'unconfirmed').map(slot => slot.key)" :unassessed-body-slots="placementSlots.filter(slot => slot.status === 'unassessed').map(slot => slot.key)" :body-conditions="bodyConditions" :item-conditions="itemConditions" :data-hide-empty="compact && !showEmpty" />
         <EquipmentList v-if="unassigned.length" :items="unassigned" />
       </template>
       <EquipmentList v-else :items="allItems" />
       <ul v-if="placementSlots.length" class="space-y-1.5 text-xs" aria-label="Additional placement areas"><li v-for="slot in placementSlots" :key="slot.key" class="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-700/70 px-3 py-2"><span class="text-slate-300">{{ slotLabel(slot.key) }}</span><span :class="slot.status === 'unconfirmed' ? 'text-amber-200' : 'text-slate-400'">{{ slot.status === 'occupied' ? 'Item recorded' : slot.status === 'unconfirmed' ? 'Placement needs confirmation' : slot.status === 'unassessed' ? 'Not assessed' : 'No recorded item' }}</span></li></ul>
-      <p v-if="state.clothing.placement_status === 'unassessed'" class="text-xs leading-relaxed text-slate-400">Additional area availability is not fully assessed. Only established areas are shown.</p>
+      <p v-if="state.clothing.placement_status === 'unassessed'" class="text-xs leading-relaxed text-slate-400">Additional area availability is not fully assessed. Show empty slots also reveals unassessed positions.</p>
       <p v-else-if="state.clothing.placement_status === 'unavailable'" class="text-xs leading-relaxed text-slate-400">No additional placement areas are available in the recorded body layout.</p>
     </section>
     <section class="min-w-0" aria-label="Physical condition">
@@ -97,8 +98,9 @@ const statuses = { active: 'Active', treated: 'Treated', reduced: 'Reduced' }
           </p>
           <p v-if="condition.visibility === 'private'" class="mt-2 text-xs text-amber-200" title="Known to you from narration; this does not make the fact shared knowledge.">Known from narration</p>
           <p class="mt-2 whitespace-pre-wrap break-words leading-relaxed text-slate-200">
-            {{ condition.detail }}
+            {{ condition.current_detail ?? condition.detail }}
           </p>
+          <p v-if="conditionAge(condition, state.game_minute)" class="mt-2 text-xs text-slate-400">{{ conditionAge(condition, state.game_minute) }}</p>
         </li>
       </ul>
     </section>

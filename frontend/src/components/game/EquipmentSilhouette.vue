@@ -8,6 +8,7 @@ import {
   type EquipmentDisplayItem
 } from '@/utils/equipmentSlots'
 import { useEquipmentHover } from '@/composables/useEquipmentHover'
+import { conditionSnapshot, conditionAge, conditionKind } from '@/utils/conditionSnapshot'
 import EquipmentItemIcon from './EquipmentItemIcon.vue'
 import maleSilhouette from '@/assets/svg/full-body-human-silhouette.svg'
 import femaleSilhouette from '@/assets/female-equipment-silhouette.png'
@@ -24,6 +25,7 @@ const props = withDefaults(
     bodySlots?: string[]
     unconfirmedBodySlots?: string[]
     unassessedBodySlots?: string[]
+    gameMinute?: number
     bodyConditions?: Record<string, EquipmentCondition[]>
     itemConditions?: Record<string, EquipmentCondition[]>
   }>(),
@@ -52,9 +54,10 @@ const slots = computed(() =>
 )
 const selected = computed(() => slots.value.find(slot => slot.key === active.value))
 const currentBodyConditions = computed(() => props.bodyConditions?.[active.value] ?? [])
+const bodySnapshot = computed(() => conditionSnapshot(currentBodyConditions.value))
 function itemFacts(item: EquipmentDisplayItem) {
   const known = new Set((item.current_state ?? []).map(row => row.detail))
-  return (props.itemConditions?.[item.id] ?? []).filter(row => !known.has(row.detail))
+  return (props.itemConditions?.[item.id] ?? []).filter(row => !known.has(row.current_detail ?? row.detail))
 }
 watch(
   () => props.equipment,
@@ -181,9 +184,14 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
       </p>
       <p v-if="unassessedBodySlots?.includes(selected.key)" class="mb-3 text-xs text-slate-400">Availability not assessed. This layout marker does not confirm anatomy or an empty area.</p>
       <section v-if="selected.body || currentBodyConditions.length" class="mb-3 border-b border-slate-700 pb-3" aria-label="Body state">
-        <h4 class="mb-2 text-xs font-semibold text-rose-200">Body state</h4>
-        <ul v-if="currentBodyConditions.length" class="space-y-2"><li v-for="condition in currentBodyConditions" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span v-if="condition.part" class="text-slate-400">{{ condition.part.split('_').join(' ') }} · </span>{{ condition.detail }}<span v-if="condition.visibility === 'private'" class="mt-1 block text-[10px] text-amber-200">Known from narration</span></li></ul>
+        <h4 class="mb-2 text-xs font-semibold text-rose-200">{{ bodySnapshot.retained.length ? 'Latest observation' : 'Body state' }}</h4>
+        <ul v-if="bodySnapshot.current.length" data-condition-snapshot="latest" class="space-y-2"><li v-for="condition in bodySnapshot.current" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span class="text-slate-400">{{ [conditionKind(condition), condition.part?.split('_').join(' ')].filter(Boolean).join(' · ') }} · </span>{{ condition.current_detail ?? condition.detail }}<span v-if="conditionAge(condition, gameMinute)" class="mt-1 block text-[10px] text-slate-400">{{ conditionAge(condition, gameMinute) }}</span><span v-if="condition.visibility === 'private'" class="mt-1 block text-[10px] text-amber-200">Known from narration</span></li></ul>
         <p v-else class="text-xs text-slate-400">No confirmed body state for this area.</p>
+        <details v-if="bodySnapshot.retained.length" data-condition-snapshot="retained" class="mt-3 border-t border-slate-700 pt-2">
+          <summary class="cursor-pointer text-xs text-slate-400">Other active records ({{ bodySnapshot.retained.length }})</summary>
+          <p class="mt-2 text-[10px] text-slate-400">These independent records remain active until a confirmed change resolves them.</p>
+          <ul class="mt-2 space-y-2"><li v-for="condition in bodySnapshot.retained" :key="condition.id" class="whitespace-pre-wrap break-words text-xs"><span class="text-slate-400">{{ [conditionKind(condition), condition.part?.split('_').join(' ')].filter(Boolean).join(' · ') }} · </span>{{ condition.current_detail ?? condition.detail }}<span v-if="conditionAge(condition, gameMinute)" class="mt-1 block text-[10px] text-slate-400">{{ conditionAge(condition, gameMinute) }}</span></li></ul>
+        </details>
       </section>
       <h4 class="mb-2 text-xs font-semibold text-slate-300">Items</h4>
       <ul v-if="selected.items.length" class="space-y-2.5">
@@ -194,7 +202,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
           <div class="min-w-0">
             <p class="break-words text-xs">{{ item.name }}</p>
             <p v-for="fact in item.current_state || []" :key="fact.dimension" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ fact.detail }}</p>
-            <p v-for="condition in itemFacts(item)" :key="condition.id" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ condition.detail }}</p>
+            <p v-for="condition in itemFacts(item)" :key="condition.id" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ condition.current_detail ?? condition.detail }}</p>
             <p v-if="item.uncovered_regions?.length" class="mt-1 text-[10px] text-amber-200">
               Partially displaced
             </p>

@@ -7,6 +7,8 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import ts from 'typescript'
 
 let sequence = 0
+const snapshotCode = ts.transpileModule(readFileSync(new URL('../src/utils/conditionSnapshot.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const snapshotUrl = `data:text/javascript;base64,${Buffer.from(snapshotCode).toString('base64')}`
 const read = name => readFileSync(new URL(`../src/components/game/${name}.vue`, import.meta.url), 'utf8')
 async function component(name, inject = '') {
   const { descriptor } = parse(read(name))
@@ -14,6 +16,7 @@ async function component(name, inject = '') {
   source = source.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
     if (path === 'lucide-vue-next') return statement.replace(/['"]lucide-vue-next['"]/, `'${import.meta.resolve('lucide-vue-next')}'`)
+    if (path === '@/utils/conditionSnapshot') return statement.replace(/['"]@\/utils\/conditionSnapshot['"]/, `'${snapshotUrl}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })

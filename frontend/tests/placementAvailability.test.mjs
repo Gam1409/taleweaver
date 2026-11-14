@@ -8,12 +8,16 @@ const utility = { exports: {} }
 new Function('module', 'exports', ts.transpileModule(readFileSync(new URL('../src/utils/equipmentSlots.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText)(utility, utility.exports)
+const snapshot = { exports: {} }
+new Function('module', 'exports', ts.transpileModule(readFileSync(new URL('../src/utils/conditionSnapshot.ts', import.meta.url), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(snapshot, snapshot.exports)
 function current(silhouette, placementStatus) {
   return { availability: 'present', game_minute: 10, layout: { form: 'humanoid', silhouette }, clothing: { status: 'available', detail_limited: false, items: [], placement_status: placementStatus, placement_slots: [] }, conditions: { status: 'available', items: [] } }
 }
 function fixture(t, state) {
   const view = mountSfc('components/game/NpcCurrentState.vue', { state, compact: true }, {
-    '@/utils/equipmentSlots': utility.exports, './EquipmentSilhouette.vue': { default: stubComponent }, './EquipmentList.vue': { default: stubComponent },
+    '@/utils/equipmentSlots': utility.exports, '@/utils/conditionSnapshot': snapshot.exports, './EquipmentSilhouette.vue': { default: stubComponent }, './EquipmentList.vue': { default: stubComponent },
   })
   t.after(() => view.app.unmount())
   return view

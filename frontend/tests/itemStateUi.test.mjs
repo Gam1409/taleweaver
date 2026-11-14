@@ -5,12 +5,15 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
+const snapshotCode = ts.transpileModule(readFileSync(new URL('../src/utils/conditionSnapshot.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const snapshotUrl = `data:text/javascript;base64,${Buffer.from(snapshotCode).toString('base64')}`
 
 async function component(name) {
   const { descriptor } = parse(readFileSync(new URL(`../src/components/game/${name}.vue`, import.meta.url), 'utf8'))
   let source = compileScript(descriptor, { id: name, inlineTemplate: true }).content
   source = source.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
+    if (path === '@/utils/conditionSnapshot') return statement.replace(/['"]@\/utils\/conditionSnapshot['"]/, `'${snapshotUrl}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })

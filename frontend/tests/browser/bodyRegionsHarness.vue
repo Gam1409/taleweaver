@@ -12,7 +12,8 @@ const state = ref<CurrentState>({
     { item_id: 'sensor', name: 'Sealed sensor', slots: ['BodyPenile'], description: '', layer: 0, visible_regions: [], uncovered_regions: [], image_url: null },
   ] },
   conditions: { status: 'available', items: [
-    { id: 'wound', target_id: 'NPC', kind: 'injury', part: 'hand', detail: 'A recorded cut on the hand.', status: 'active', observation: 'recorded', last_changed_minute: 470, display_slots: ['Hands'] },
+    { id: 'wound', target_id: 'NPC', kind: 'injury', part: 'hand', detail: 'The source describes how the mark appeared.', current_detail: 'A recorded cut on the hand.', status: 'active', observation: 'recorded', last_changed_minute: 470, display_slots: ['Hands'], updated_revision: 2, observed_message_id: 'latest-source' },
+    { id: 'earlier', target_id: 'NPC', kind: 'pain', part: 'hand', detail: 'An earlier action quote.', current_detail: 'A retained observation awaiting review.', status: 'active', observation: 'recorded', last_changed_minute: 430, display_slots: ['Hands'], updated_revision: 1, observed_message_id: 'earlier-source' },
     { id: 'dust', target_id: 'glove', target_name: 'Black glove', kind: 'contamination', part: 'fabric', detail: 'Dust coats the glove.', status: 'active', observation: 'recorded', last_changed_minute: 470 },
     { id: 'medical', target_id: 'NPC', kind: 'other', part: 'uterus', detail: 'A source-confirmed medical observation.', status: 'active', observation: 'recorded', last_changed_minute: 475, display_slots: ['BodyUterine'], visibility: 'private' },
   ] },

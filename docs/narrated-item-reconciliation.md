@@ -250,6 +250,12 @@ presentation markers labelled **Not assessed**. The silhouette chooses their
 positions, never canonical anatomy or availability. Explicit exclusions stay
 authoritative; no inventory, body declaration or condition is created by the view.
 
+The enabled owner card supplies canonical current detail separately from its source
+quotation, plus source-message and update-revision metadata. A hover leads with all
+independent facts from the most recent confirmed source for that area. Other active
+records remain available separately with their last-change age; they are not silently
+healed or removed. Legacy responses without ordering metadata retain their full list.
+
 Partial clothing displacement remains worn and owned. A source-confirmed displaced
 garment remains known on the card even if it no longer covers its original region.
 Its optional wear `source` records the exact quote/span, narration hash and saved

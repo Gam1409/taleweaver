@@ -22,6 +22,11 @@ export interface EquipmentCondition {
   part?: string
   status?: string
   visibility?: 'public' | 'private'
+  kind?: string
+  current_detail?: string
+  updated_revision?: number
+  observed_message_id?: string | null
+  last_changed_minute?: number | null
 }
 
 export const EQUIPMENT_SLOTS = [

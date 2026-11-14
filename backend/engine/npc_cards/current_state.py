@@ -108,6 +108,17 @@ async def _conditions(
                 "kind": ledger.conditions[row["id"]].kind,
                 "part": ledger.conditions[row["id"]].part,
                 "last_changed_minute": ledger.conditions[row["id"]].last_changed_minute,
+                "updated_revision": ledger.conditions[row["id"]].updated_revision,
+                "observed_message_id": (
+                    ledger.conditions[row["id"]].latest.message_id
+                    if row["id"] in confirmed_ids
+                    else None
+                ),
+                **(
+                    {"current_detail": ledger.conditions[row["id"]].detail}
+                    if narrated_private and row["id"] in confirmed_ids
+                    else {}
+                ),
                 **(
                     {"visibility": "private"}
                     if ledger.conditions[row["id"]].visibility == "private"
