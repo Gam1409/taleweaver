@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from backend.engine.narrated_items.source_catalog import Catalog
+from backend.engine.narrated_items.source_catalog import Catalog, Citation
 from backend.engine.physical_conditions.schema import MAX_PROPOSALS
 
 Tag = Literal[
@@ -152,12 +152,15 @@ def _group(
         issues.append({"group": key, "reason": "uncertain_interpretation"})
     blocked = 0
     if labels & {"historical", "uncertain"}:
-        for _, row in linked:
+        # Non-current evidence anywhere in the proof blocks the proposal, including
+        # a joined span's second occurrence that is not its coverage anchor.
+        proofs = [row for _, row in candidates if _linked(row, references, catalog, whole=True)]
+        for row in proofs:
             row["evidence"] = None
             blocked += 1
-        if linked:
+        if proofs:
             issues.append(
-                {"group": key, "reason": "non_current_candidate", "candidates": len(linked)}
+                {"group": key, "reason": "non_current_candidate", "candidates": len(proofs)}
             )
     return issues, blocked
 
@@ -174,7 +177,7 @@ def _candidates(body: dict) -> list[tuple[str, dict]]:
     return rows
 
 
-def _linked(row: dict, references: list[str], catalog: Catalog) -> bool:
+def _linked(row: dict, references: list[str], catalog: Catalog, *, whole: bool = False) -> bool:
     evidence = row.get("evidence")
     if not isinstance(evidence, str):
         return False
@@ -188,11 +191,23 @@ def _linked(row: dict, references: list[str], catalog: Catalog) -> bool:
         return False
     if chosen.kind != "narration":
         return False
+    if whole:
+        return any(
+            _overlaps(catalog.resolve(reference, allow_room=False), chosen)
+            for reference in references
+        )
+    anchor = catalog.coverage_anchor(chosen)
     return any(
-        catalog.resolve(reference, allow_room=False).span.start <= chosen.span.start
-        and chosen.span.end <= catalog.resolve(reference, allow_room=False).span.end
-        for reference in references
+        _contains(catalog.resolve(reference, allow_room=False), anchor) for reference in references
     )
+
+
+def _contains(original: Citation, chosen: Citation) -> bool:
+    return original.span.start <= chosen.span.start and chosen.span.end <= original.span.end
+
+
+def _overlaps(original: Citation, chosen: Citation) -> bool:
+    return original.span.start < chosen.span.end and chosen.span.start < original.span.end
 
 
 def _rows(value: Any) -> list[dict]:
