@@ -201,6 +201,14 @@ Use narration references for current actions, conditions, poses and frame action
 Only room environment facts may cite scene_continuity.scene_description references.
 References belong only to this request; never reuse an ID from history or another source.
 Do not return source labels or evidence offsets: they are assigned by the host.
+An offered reference ending p0..p1 selects one bounded, exact contiguous span of two
+adjacent original occurrences. Use such a range when one final fact needs both its
+completed action and its immediate result/confirmation. The first occurrence is its
+ONLY coverage anchor: mark that action's original group in the changed domain. A
+following confirmation of the same result is unchanged if no further change occurs.
+An independent fact in the second occurrence still needs its own domain and proposal;
+the joined quote never covers that later change. Do not join unrelated facts or use
+a range to conceal another domain's missing proposal. Do not mark the action unchanged.
 Quoted/recalled/planned actions are not new events merely because their words repeat.
 Classify every extraction_coverage_groups key in coverage. Use the union of changed
 domains in its source references: items, conditions, scene, and staging when enabled.
@@ -257,10 +265,17 @@ Moving an attached strap, cuff or hem is partial displacement of that garment.
 It remains worn with the same ID and owner unless a separate completed transfer occurs.
 Set uncovered_regions to the garment regions it no longer covers, not all bare body
 regions. [] explicitly restores normal coverage; null leaves known placement unchanged.
+Review the supplied worn entries: covering a previously uncovered region is a placement
+change even when the same garment stays on the same owner. Report that existing item
+with its final uncovered_regions, including [] when the sleeves are fully lowered again.
+Sleeves, straps and hems change their garment's placement, not a bodily condition on
+the garment. Keep separate explicit dirt, damage or other item-property changes.
 Removing it COMPLETELY uses carried/held, with uncovered_regions=null. Partial movement
 must never become complete removal. Metaphor, an emotional barrier, a memory or an
 unresolved pronoun does not establish a concrete item change. Leave uncertain changes out.
 Receiving, holding or pocketing an item is not wearing it. Holding does not equip a weapon.
+For carried/held disposition, uncovered_regions and attachment_slot are both null.
+An unchanged description of an already held item needs no new placement observation.
 Touching or holding a sleeve does not establish removal of a worn garment.
 Explicit completed placement of an ordinary owned object in a named body region uses
 disposition=worn, attachment_slot for that region and uncovered_regions=null. This is

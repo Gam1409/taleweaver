@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.core import mature_content_prompts
+from backend.core.narration_contracts import PLAYER_ACTION_ATTRIBUTION
 from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.visual_novel.config import read_settings
 
@@ -30,7 +31,7 @@ Allow the story to develop through conversations, choices and their consequences
 Do not force a predetermined solution or ending onto the player's decisions.
 """
 
-_NARRATION = """VISUAL NOVEL NARRATION CONTRACT:
+_NARRATION = f"""VISUAL NOVEL NARRATION CONTRACT:
 Respond to the player's latest contribution first. Give each speaking character
 a distinct voice based on established personality, current intention, relationship
 history and what that character actually knows. Express subtext through wording,
@@ -83,6 +84,7 @@ reactions and scene directions as a starting point for autonomous characterizati
 Preserve resolved transfers, failures and elapsed time. New completed NPC item actions
 use the same-turn state check; placement retains identity. Offers/plans are not effects
 or acceptance.
+{PLAYER_ACTION_ATTRIBUTION}
 Player travel must follow
 the current action explicitly chosen by the player, never a new invented departure. Characters
 may choose to disclose what they know, but do not expose hidden data through an

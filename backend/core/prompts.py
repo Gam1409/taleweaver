@@ -6,6 +6,7 @@ better maintainability and documentation.
 
 from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
 from backend.core.item_image_prompts import ITEM_COMPOSITION
+from backend.core.narration_contracts import PLAYER_ACTION_ATTRIBUTION
 from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION
@@ -391,7 +392,8 @@ GM_NARRATION_MANDATORY_FORMATTING = (
     "Separate narrative prose from speech with a blank line. "
     'NO COLONS IN NARRATION: NEVER use colons (:) in descriptive or narrative prose. Colons are strictly reserved for speaker dialogue attribution (Character Name: "..."). Use dashes (—), periods, or commas instead.\n\n'
     "NO SUMMARIES OR SEPARATORS: Do NOT append lists like 'AVAILABLE INTERACTIONS', 'Suggestions', or 'What do you do?'. Do NOT use horizontal rules or lines like '---' in your output.\n\n"
-    "CRITICAL: DO NOT output any JSON, code blocks, or curly braces { } in your response. Your entire response MUST be purely narrative prose/story."
+    "CRITICAL: DO NOT output any JSON, code blocks, or curly braces { } in your response. Your entire response MUST be purely narrative prose/story.\n"
+    + PLAYER_ACTION_ATTRIBUTION
 )
 
 

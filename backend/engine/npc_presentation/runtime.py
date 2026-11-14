@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from backend.core.engine_detailed_trace import sync_step
+from backend.core.narration_contracts import DISPLAY_NAME_IDENTITY
 from backend.core.npc_presentation import (
     MAX_EMOTION,
     MAX_NPCS,
@@ -86,6 +87,10 @@ class PresentationTurn:
             "cast. Prose-only formatting applies to the visible story, not this private footer. "
             "Enabled portrait output is independent of NPC Personality mode or analysis availability."
             + color_contract
+            + " "
+            + DISPLAY_NAME_IDENTITY
+            + " NPC cast: "
+            + json.dumps(self.catalog, ensure_ascii=False)
         )
 
     @property
@@ -129,7 +134,9 @@ class PresentationTurn:
             "Assess UI labels in their own meaning and context, separately from CHPM dimension names. "
             "Use unknown or omit an entry when unassessed; unknown never means calm. "
             "Do not invent events, possessions, knowledge, agreement or personality changes for "
-            "this display. Do not add protagonist thoughts. Do not include disabled fields. "
+            "this display. An offer of help is not completed help; thoughts must not credit the "
+            "player with unperformed work or assume an unchosen response. Do not add protagonist "
+            "thoughts. Do not include disabled fields. " + DISPLAY_NAME_IDENTITY + " "
             "Nothing follows the closing tag. NPC cast: "
             + json.dumps(self.catalog, ensure_ascii=False)
         )
