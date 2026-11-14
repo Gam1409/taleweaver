@@ -63,6 +63,75 @@ test('semantic memory is opt-in, session-scoped, and does not increase generativ
   assert.equal(f.status.value.settings.semantic_memory, true)
 })
 
+test('tool protocol changes persist without changing notebook data or request limits', async t => {
+  const saved = state(3)
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC'], max_active_npcs: 1,
+    notebook_enabled: true, agent_steps: 2, tool_protocol: 'auto', max_calls_per_turn: 8 })
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return new Response(JSON.stringify(saved))
+    const body = JSON.parse(options.body)
+    assert.equal(body.settings.tool_protocol, 'json')
+    assert.equal(body.settings.notebook_enabled, true)
+    assert.equal(body.settings.agent_steps, 2)
+    assert.equal(body.settings.max_calls_per_turn, 8)
+    return new Response(JSON.stringify({ ...saved, revision: 4, settings: body.settings }))
+  })
+  await tick()
+  const minimum = f.minimumCalls.value
+  f.draft.value.tool_protocol = 'json'
+  assert.equal(f.minimumCalls.value, minimum)
+  assert.equal(await f.save(), true)
+  assert.equal(f.status.value.settings.tool_protocol, 'json')
+})
+
+test('private notebooks stay off for legacy sessions until explicitly enabled and saved', async t => {
+  const saved = state(2), methods = []
+  const f = fixture(t, async (_url, options) => {
+    methods.push(options.method)
+    if (options.method === 'GET') return new Response(JSON.stringify(saved))
+    const body = JSON.parse(options.body)
+    assert.equal(body.expected_revision, 2)
+    assert.equal(body.settings.notebook_enabled, true)
+    assert.equal(body.settings.agent_steps, 1)
+    return new Response(JSON.stringify({ ...saved, revision: 3, settings: body.settings }))
+  })
+  await tick()
+  assert.equal(f.draft.value.notebook_enabled ?? false, false)
+  assert.equal(f.draft.value.agent_steps ?? 0, 0)
+  f.draft.value.mode = 'live'
+  f.draft.value.actor_ids = ['NPC']
+  f.setNotebookEnabled(true)
+  assert.equal(f.draft.value.notebook_enabled, true)
+  assert.equal(f.draft.value.agent_steps, 1)
+  assert.equal(f.status.value.settings.notebook_enabled ?? false, false)
+  assert.equal(f.draft.value.max_calls_per_turn, 6)
+  assert.equal(f.minimumCalls.value, 7)
+  assert.equal(await f.save(), false)
+  assert.deepEqual(methods, ['GET'])
+  f.draft.value.max_calls_per_turn = 7
+  assert.equal(await f.save(), true)
+  assert.deepEqual(methods, ['GET', 'PATCH'])
+  assert.equal(f.status.value.settings.notebook_enabled, true)
+})
+
+test('notebook toggles preserve selected agent rounds and observe mode request costs', async t => {
+  const f = fixture(t, async () => new Response(JSON.stringify(state())))
+  await tick()
+  f.draft.value.mode = 'live'
+  f.draft.value.actor_ids = ['NPC']
+  f.draft.value.agent_steps = 2
+  f.setNotebookEnabled(true)
+  assert.equal(f.draft.value.agent_steps, 2)
+  assert.equal(f.minimumCalls.value, 8)
+  f.setNotebookEnabled(false)
+  assert.equal(f.draft.value.notebook_enabled, false)
+  assert.equal(f.draft.value.agent_steps, 2)
+  f.draft.value.mode = 'shadow'
+  assert.equal(f.minimumCalls.value, 2)
+  f.draft.value.mode = 'off'
+  assert.equal(f.minimumCalls.value, 0)
+})
+
 test('selection stays local and save fences the revision without aliasing the saved array', async t => {
   const calls = []
   const f = fixture(t, async (url, options) => {
@@ -164,6 +233,9 @@ test('agent rounds reserve calls per active NPC and stay off in observe mode', a
   f.draft.value.agent_steps = 2
   f.draft.value.max_calls_per_turn = 8
   assert.equal(f.minimumCalls.value, 14)
+  assert.equal(await f.save(), false)
+  f.draft.value.agent_steps = 3
+  assert.equal(f.minimumCalls.value, 17)
   assert.equal(await f.save(), false)
   f.draft.value.mode = 'shadow'
   assert.equal(f.minimumCalls.value, 4)

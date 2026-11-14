@@ -3,16 +3,20 @@
 from typing import Any
 
 from backend.engine.chpm import (
-    agent_beliefs,
-    continuation,
-    host_observations,
+    agent_lookup_payload,
+    agent_native,
     inference,
-    narrative_context,
 )
-from backend.engine.chpm.agent_contracts import INSTRUCTIONS, Step
+from backend.engine.chpm.agent_contracts import (
+    INSTRUCTIONS,
+    NOTEBOOK_INSTRUCTIONS,
+    NotebookStep,
+    Step,
+)
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.notebook_tools import NotebookDraft, request_summary, result_summary
 from backend.engine.chpm.schema import Observation, Settings, Usage
 
 
@@ -25,6 +29,7 @@ async def investigate(
     supplied: dict,
     *,
     pinned: dict[str, tuple[str, Source, str]] | None = None,
+    notebook: NotebookDraft | None = None,
 ) -> tuple[Tools, list[dict]]:
     if (
         mind.genesis.scope.world_id != observation.session_id
@@ -45,57 +50,45 @@ async def investigate(
         pins=dict(pinned or {}),
         semantic_scores={hit.record_id: hit.score for hit in hits},
         episode_contexts={hit.record_id: hit.context for hit in hits},
+        notebook=notebook,
     )
-    facts = host_observations.previous(mind)
+    if notebook and settings.agent_steps:
+        native_model = agent_native.select_model(manager, settings)
+        if native_model is not None:
+            return await agent_native.investigate(
+                manager,
+                settings,
+                usage,
+                mind,
+                observation,
+                supplied,
+                tools=tools,
+                notebook=notebook,
+                llm=native_model,
+            )
     transcript: list[dict] = []
     audit: list[dict] = []
+    contract: type[Step] | type[NotebookStep] = NotebookStep if notebook else Step
     for index in range(settings.agent_steps):
         try:
-            step = await inference.request(
+            step: Step | NotebookStep = await inference.request(
                 manager,
                 settings.model_copy(
                     update={"max_output_tokens": min(768, settings.max_output_tokens)}
                 ),
                 usage,
-                INSTRUCTIONS,
-                {
-                    "observer_id": mind.genesis.scope.observer_id,
-                    "identity": mind.genesis.identity.model_dump(mode="json"),
-                    "observation": observation.model_dump(),
-                    "current_state": {
-                        key: value
-                        for key, value in supplied.get("psychological_state", {}).items()
-                        if key != "belief_context_ref"
-                    },
-                    "experience_context": narrative_context.experience_reasons(
-                        mind,
-                        continuation.experience_view(mind, supplied.get("_chpm_gap_cursors", {})),
-                    ),
-                    **agent_beliefs.subject_view(tools.mind),
-                    "agenda": supplied.get("declared_agenda_not_world_facts", []),
-                    **(
-                        {
-                            "causal_continuity_not_world_facts": supplied[
-                                "causal_continuity_not_world_facts"
-                            ]
-                        }
-                        if supplied.get("causal_continuity_not_world_facts")
-                        else {}
-                    ),
-                    "visible_clothing_actors": {
-                        key: value["name"]
-                        for key, value in tools.clothing.items()
-                        if facts and key in facts.visible_actor_ids
-                    },
-                    "remaining_rounds": settings.agent_steps - index,
-                    "previous_lookups": transcript,
-                },
-                Step,
+                NOTEBOOK_INSTRUCTIONS if notebook else INSTRUCTIONS,
+                agent_lookup_payload.build(
+                    mind, observation, supplied, tools, settings.agent_steps - index, transcript
+                ),
+                contract,
                 "agent_lookup",
             )
         except (inference.InvalidResponseError, inference.OutputBudgetError) as exc:
             # A completed but malformed optional plan is not evidence of no memory.
             # Never execute a partially valid batch or retry an uncertain transport.
+            if notebook:
+                notebook.committable = False
             audit.append(
                 {
                     "purpose": "",
@@ -111,10 +104,16 @@ async def investigate(
         transcript.append({"requests": [r.model_dump() for r in step.requests], "results": results})
         audit.append(
             {
-                "purpose": step.purpose[:180],
-                "purpose_truncated": len(step.purpose) > 180,
-                "requests": [r.model_dump() for r in step.requests],
-                "results": [_summary(result) for result in results],
+                # A model may quote private notes in its free-form purpose too.
+                "purpose": "Private memory tool round" if notebook else step.purpose[:180],
+                "purpose_truncated": False if notebook else len(step.purpose) > 180,
+                "requests": [
+                    request_summary(r) if notebook else r.model_dump() for r in step.requests
+                ],
+                "results": [
+                    result_summary(result) if notebook else _summary(result)
+                    for request, result in zip(step.requests, results, strict=True)
+                ],
                 "stop": "ready"
                 if not step.requests
                 else "step_limit"

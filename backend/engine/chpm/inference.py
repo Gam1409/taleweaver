@@ -36,7 +36,10 @@ def check_output_budget(
     if len(records) != 1:
         return
     record = records[0]
-    explicit = record.finish_reason in {"length", "max_tokens"}
+    explicit = isinstance(record.finish_reason, str) and record.finish_reason in {
+        "length",
+        "max_tokens",
+    }
     inferred = (
         invalid_json
         and record.finish_reason is None
@@ -159,6 +162,60 @@ async def request(
         raise InvalidResponseError(
             f"CHPM {phase} response invalid: {validation_feedback(exc)}", candidate=candidate
         ) from exc
+
+
+async def tool_request(
+    manager: Any,
+    settings: Settings,
+    usage: Usage,
+    messages: list[dict],
+    tools: list[dict],
+    *,
+    llm: Any,
+) -> Any:
+    """Reserve one native round through the same deadlines, admission and timings."""
+    from backend.core.llm_tool_turn import InvalidToolTurnError
+
+    sizing = getattr(llm, "input_size", None)
+    size = (
+        sizing(messages, tools)
+        if callable(sizing)
+        else len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False))
+    )
+    reserve(settings, usage, size)
+    parallel_budget.dispatched("agent_lookup")
+    llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens, 768)
+    llm.enable_thinking = False
+    try:
+        with performance.measure(usage, "agent_lookup"), capture_completions() as completions:
+            result = await asyncio.wait_for(
+                llm.aexecute_tool_turn(
+                    messages,
+                    tools,
+                    llm.model,
+                    game_id=manager.game_id,
+                    operation="chpm",
+                    phase="agent_lookup",
+                ),
+                timeout=float(llm.request_timeout),
+            )
+    except InvalidToolTurnError as exc:
+        check_output_budget(completions, llm.max_tokens, "agent_lookup")
+        raise InvalidResponseError("CHPM received an invalid native tool envelope.") from exc
+    except Exception as exc:
+        raise InferenceUnavailableError(
+            f"CHPM agent lookup failed ({type(exc).__name__}). No tool request was applied."
+        ) from exc
+    reason = result.finish_reason
+    if reason is not None and (
+        not isinstance(reason, str) or reason not in {"stop", "tool_calls", "length", "max_tokens"}
+    ):
+        raise InvalidResponseError("CHPM native tool response did not complete normally.")
+    check_output_budget(completions, llm.max_tokens, "agent_lookup")
+    if result.finish_reason in {"length", "max_tokens"}:
+        raise OutputBudgetError("CHPM native tool response was truncated; no retry was sent.")
+    usage.output_chars += len(json.dumps(result.assistant_message, ensure_ascii=False))
+    return result
 
 
 def reserve(settings: Settings, usage: Usage, size: int) -> None:

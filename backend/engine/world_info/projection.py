@@ -3,7 +3,6 @@
 import json
 from collections.abc import Collection
 from typing import Any, get_args
-from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.sqlite import insert
@@ -11,6 +10,7 @@ from sqlalchemy.dialects.sqlite import insert
 from backend.engine.memory_rag.documents import MemoryDocument, content_hash
 from backend.engine.memory_rag.ranking import ordered_terms
 from backend.engine.world_info import limits
+from backend.engine.world_info.actor_access import predicate as actor_predicate
 from backend.engine.world_info.types import EntryDraft, EntryKind, searchable_text
 from backend.models.game_session import GameSession
 from backend.models.world_entity import WorldEntity
@@ -40,8 +40,6 @@ def visible_to(
         return True
     if audience in {"vn_continuity", "vn_social"}:
         return document.audience == "common_knowledge"
-    # Reserved for an actor-scoped World Info lookup (#28). Production recall
-    # currently uses narrator/shared audiences; mixed historical recall is not actor-safe.
     if audience != "actor" or not actor_id or actor_id not in actual_npc_ids:
         return False
     return document.audience == "common_knowledge" or (
@@ -89,10 +87,9 @@ def _candidate_ids(candidates: list[dict]) -> list[str]:
         prefix, _, identifier = str(row.get("source_id") or "").partition(":")
         if row.get("layer") != LAYER or prefix != LAYER:
             continue
-        try:
-            identifiers.append(str(UUID(identifier)))
-        except ValueError:
-            continue
+        # Portable entry identities are bounded strings, including legacy non-UUID IDs.
+        if 1 <= len(identifier) <= 36:
+            identifiers.append(identifier)
     return list(dict.fromkeys(identifiers))
 
 
@@ -133,11 +130,22 @@ async def collect_documents(
     *,
     query: str | None = None,
     candidates: list[dict] | None = None,
+    actor_id: str | None = None,
+    source_ids: Collection[str] | None = None,
 ) -> list[MemoryDocument]:
     """Full idle corpus, or bounded fresh/lexical/candidate rows for foreground recall."""
     base = _published(user_id, state.session_id)
+    if actor_id is not None:
+        base = base.where(
+            actor_predicate(state.session_id, actor_id), WorldInfoEntry.kind.in_(_KINDS)
+        )
     ordered = base.order_by(WorldInfoEntry.updated_at.desc(), WorldInfoEntry.id)
-    if query is None:
+    if source_ids is not None:
+        identifiers = _candidate_ids(
+            [{"layer": LAYER, "source_id": identifier} for identifier in source_ids]
+        )
+        rows = list((await db.execute(base.where(WorldInfoEntry.id.in_(identifiers)))).all())
+    elif query is None:
         rows = list((await db.execute(ordered.limit(limits.MAX_SESSION_ENTRIES))).all())
     else:
         rows = list((await db.execute(ordered.limit(RECENT_ENTRIES))).all())
@@ -150,7 +158,27 @@ async def collect_documents(
     rows = list({row[0].id: row for row in rows}.values())
     actual = await _recipients(db, state.session_id, rows)
     documents = [_document(state, user_id, row, actual) for row in rows]
-    return [document for document in documents if document is not None]
+    return [
+        document
+        for document in documents
+        if document is not None
+        and (
+            actor_id is None
+            or visible_to(document, "actor", actor_id=actor_id, actual_npc_ids={actor_id})
+        )
+    ]
+
+
+async def actor_source_ids(db: Any, state: Any, user_id: str, actor_id: str) -> list[str]:
+    """Only accessible source identities may enter a bounded vector search."""
+    rows = await db.scalars(
+        _published(user_id, state.session_id)
+        .with_only_columns(WorldInfoEntry.id)
+        .where(actor_predicate(state.session_id, actor_id), WorldInfoEntry.kind.in_(_KINDS))
+        .order_by(WorldInfoEntry.id)
+        .limit(limits.MAX_SESSION_ENTRIES)
+    )
+    return [f"{LAYER}:{identifier}" for identifier in rows]
 
 
 async def _recipients(db: Any, session_id: str, rows: list[Any]) -> set[str]:

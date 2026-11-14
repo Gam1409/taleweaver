@@ -38,6 +38,7 @@ from backend.engine.chpm.delivery import new_memories as _new_memories
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
@@ -65,6 +66,7 @@ class Turn:
     present_names: dict[str, str] = field(default_factory=dict)
     perceptions: dict[str, Perception] = field(default_factory=dict)
     memories: dict[str, list[MemoryEntry]] = field(default_factory=dict)
+    notebook_drafts: dict[str, NotebookDraft] = field(default_factory=dict)
     agendas: dict[str, list[AgendaEntry]] = field(default_factory=dict)
     minds: dict[str, Mind] = field(default_factory=dict)
     deferred_names: dict[str, str] = field(default_factory=dict)
@@ -171,6 +173,12 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     settings = control_settings.read((manager.state.entity_states or {}).get(KEY))
     if settings.mode == "off" or not is_vn(manager.adventure):
         return ""
+    from backend.engine.chpm.template_settings import ensure_session_compatible
+
+    try:
+        ensure_session_compatible(manager.state, settings)
+    except ValueError as exc:
+        raise ChpmError(str(exc)) from exc
     state = load(manager.state)
     input_id = getattr(manager, "_vn_player_message_id", None)
     if not input_id:
@@ -305,7 +313,7 @@ async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observa
     job = await actor_preparation.prepare(manager, turn, actor, observed)
     await release_for_model(manager)
     result = await actor_preparation.run(manager, turn, job)
-    actor_preparation.apply(turn, actor.id, result)
+    actor_preparation.apply(turn, actor.id, result, notebook=job.notebook)
 
 
 def finish(manager: Any, reply: Any, *, completed: bool) -> None:

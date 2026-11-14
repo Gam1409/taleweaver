@@ -24,6 +24,10 @@ from backend.engine.physical_conditions.schema import (
     Status,
 )
 from backend.engine.physical_conditions.source_order import require_order
+from backend.engine.physical_conditions.update_identity import audit as identity_audit
+from backend.engine.physical_conditions.update_identity import (
+    normalize as normalize_update_identity,
+)
 from backend.engine.physical_conditions.validation import rejection
 
 _TRANSITIONS: dict[str, tuple[set[str], Status]] = {
@@ -177,13 +181,15 @@ def apply(
         return deepcopy(states or {}), [], []
     accepted: list[str] = []
     rejected: list[str] = []
+    identity_echoes: list[dict] = []
     recorded_minute = minute if type(minute) is int and minute >= 0 else None
     entries = proposals if len(proposals) <= MAX_PROPOSALS else []
     if not entries and proposals:
         rejected.append("Too many condition proposals; this batch was not applied.")
     for index, raw in enumerate(entries):
         try:
-            proposal = ConditionProposal.model_validate(raw)
+            candidate, echoed = normalize_update_identity(raw, ledger, targets)
+            proposal = ConditionProposal.model_validate(candidate)
             proposal = validate_item_state(proposal, ledger, item_targets or set(), manual=manual)
             require_order(
                 ledger.conditions.get(proposal.condition_id or ""),
@@ -224,6 +230,7 @@ def apply(
                 )
             )
             accepted.append(condition.id)
+            identity_echoes.extend(identity_audit(index, condition.id, echoed))
         except ValidationError as exc:
             rejected.append(rejection(index, exc))
         except ValueError as exc:
@@ -238,6 +245,7 @@ def apply(
         "rejected": rejected,
         "minute": minute,
         "proposed_count": len(proposals),
+        **({"identity_echoes": identity_echoes} if identity_echoes else {}),
     }
     result = deepcopy(states or {})
     result[KEY] = Ledger.model_validate(ledger.model_dump()).model_dump()

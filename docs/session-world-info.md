@@ -131,10 +131,10 @@ transaction, including when SQLite foreign-key enforcement is enabled.
 - **Common knowledge** can also be used by the existing shared narrative context.
 - **Selected characters** records an explicit scope for named session NPCs.
 
-Selected recipients currently annotate references supplied to the narrator.
-There is no production actor-recall consumer yet: these records do not enter
-the selected NPCs' autonomous decision or NPC Personality memory requests.
-Actor-scoped retrieval is tracked in [#28](https://github.com/Gam1409/taleweaver/issues/28).
+Selected recipients constrain references supplied to autonomous Living World
+decisions as well as annotating narrator references. With Memory RAG enabled,
+native and Concordia decisions receive the same bounded actor reference input.
+Publishing does not insert records into NPC Personality's observed memory.
 
 Record kinds separately distinguish background lore, world facts, reported claims,
 recollections/character knowledge, rumors, news and authored events. The model receives
@@ -164,19 +164,34 @@ items, access, actions or state transitions.
 
 ### Living World, Concordia and character memory
 
-World Info currently supplies narrative references; it does not feed autonomous
-Living World decisions. Living World already supplies an actor's own recent
-committed events to its decision context. The optional Concordia adapter invokes
-the same decision callback and has no separate retrieval store. NPC Personality
-already retrieves observed episodes and beliefs through its character memory
-mechanisms. These are distinct from author-provided reference knowledge.
+Living World decisions reuse World Info with an actor scope: common knowledge or
+explicit, resolved recipients in the current owned session. SQL audience checks
+run before recent/lexical bounds, and the optional hybrid query prefilters allowed
+source identities before vector and lexical limits. Missing, foreign and dormant
+actors fail closed. The narrator's mixed historical recall is never used as actor
+input. NPC Personality's observed episodes and beliefs retain their existing owner.
 
-A future autonomous reference lookup ([#28](https://github.com/Gam1409/taleweaver/issues/28))
-should reuse World Info with an actor scope:
-common knowledge or explicitly resolved recipients, filtered before candidate
-limits. It must keep reference material separate from witnessed memories and
-preserve current-state authority. Passing the narrator's entire recall block to
-an actor would be unsafe: other historical layers do not establish actor access.
+References occupy a separate, at most 2,500-character candidate block. A bounded
+one-hop lookup can include authored support/contradiction/related links only when
+both endpoints are accessible, within the existing candidate and prompt budgets.
+These labels remain assertions, not proof. Other recipients and inaccessible link
+targets are omitted from actor input. Native and Concordia consume the same block;
+there is no separate store or generative retrieval request. Optional embeddings
+use the configured provider once per decision; disabled RAG adds no references,
+and paused, unavailable or timed-out embeddings preserve the SQL fallback.
+
+Embedding and vector waits hold neither the session writer lease nor a SQL
+transaction. Short SQL reads before and after these waits check canonical sources,
+actor ownership and the decision state again. Applying a decision revalidates selected source hashes, audiences, owner,
+session, actor, timeline, recall settings and index generation without embedding
+again. No retrieval cache survives a decision or moves across copies/rewinds.
+
+The recent eight own-participation observations remain available. Up to three
+relevant older committed own events, within 1,200 JSON characters, can also be
+projected from the existing bounded simulation journal. They preserve timeline,
+event identity and game time; speech is an observed utterance whose assertions
+remain unverified. Declared `requires` links stay prerequisites, not inferred
+causes or motives. This does not create another canonical event log.
 
 Committed Living World events are not automatically public. A future event-to-RAG
 projection needs an explicit audience and observation policy, stable event
@@ -186,8 +201,8 @@ plans must remain private. No such projection is added by this feature.
 A possible sliding recall window ([#27](https://github.com/Gam1409/taleweaver/issues/27))
 should bound the active prompt, not delete older knowledge: retain recent events,
 retrieve relevant older evidence, and expire
-derived candidates when state or source versions change. This is a design option,
-not an additional retrieval mode implemented here.
+derived candidates when state or source versions change. The bounded event lookup
+above does not delete or archive old events to implement that broader proposal.
 
 A recipient removed by a timeline change can remain attached to a retained entry.
 Copy/export marks unavailable recipients as unresolved. They stay dormant in the

@@ -155,3 +155,11 @@ or raw memory text.
 to an individual session. Uploads and edits remain separate from adventure templates,
 canonical gameplay state and NPC observations. Its guide describes processing, audience
 scopes, publication, replacement, copying and checkpoint behavior.
+Autonomous Living World decisions use a separate actor-scoped projection of this
+same reference layer, with access checks before SQL/vector candidate limits and
+deterministic source/generation checks before applying a decision. The existing
+mixed narrator recall never enters actor input. The `living_world.reference_recall`
+diagnostic records method, source identities, candidate/selection counts, size and
+duration without raw reference text. Controlled regression fixtures verify bounds,
+old-event recall, accessible contradiction expansion and request counts; they do
+not establish live-model usefulness or psychological quality.

@@ -16,8 +16,8 @@ def manifest(
     agent_steps: int = 0,
     max_input_chars: int | None = None,
 ) -> dict:
-    if agent_steps not in {0, 1, 2}:
-        raise ValueError("Agent rounds must be 0, 1 or 2.")
+    if agent_steps not in {0, 1, 2, 3}:
+        raise ValueError("Agent rounds must be 0, 1, 2 or 3.")
     if max_input_chars is not None and not 8000 <= max_input_chars <= 192000:
         raise ValueError("Input budget must be between 8000 and 192000 characters.")
     if any(
@@ -130,7 +130,7 @@ def main() -> None:
         choices=range(512, 8193),
         help="Explicit CHPM output limit; also sets temporary endpoint role limits. Saved role limits still apply with --user.",
     )
-    parser.add_argument("--agent-steps", type=int, choices=(0, 1, 2), default=0)
+    parser.add_argument("--agent-steps", type=int, choices=(0, 1, 2, 3), default=0)
     parser.add_argument(
         "--input-chars",
         type=int,

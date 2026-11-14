@@ -12,6 +12,16 @@ def validate(
     *,
     manual: bool,
 ) -> ConditionProposal:
+    if (
+        not manual
+        and proposal.operation == "record"
+        and proposal.target_id in item_targets
+        and proposal.kind in {"injury", "pain"}
+    ):
+        raise ValueError(
+            "Injury and pain cannot target a known item. Use item_state for an item's "
+            "mutable properties and item actions for clothing placement."
+        )
     current = ledger.conditions.get(proposal.condition_id or "")
     kind = current.kind if current else proposal.kind
     if kind != "item_state":

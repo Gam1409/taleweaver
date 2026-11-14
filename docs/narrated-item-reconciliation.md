@@ -1,6 +1,6 @@
 # Completed narration and possessions
 
-VN turns reconcile item actions after completed narration and before scene staging and illustration snapshots. This uses one bounded Small-role request with that role's configured deadline. Ordinary narration can stream before the check; reviewed NPC narration waits for validation and the completed state transaction. Incomplete narration is never used. General guardrail rejection blocks state reconciliation; a localized canonical item denial can still admit unrelated state for known accessible targets. Failures produce a system notification rather than claiming inventory was updated.
+VN turns reconcile item actions after completed narration and before scene staging and illustration snapshots. This uses one bounded Small-role request, with at most one conditional correction inside the same role deadline. Ordinary narration can stream before the check; reviewed NPC narration waits for validation and the completed state transaction. Incomplete narration is never used. General guardrail rejection blocks state reconciliation; a localized canonical item denial can still admit unrelated state for known accessible targets. Failures produce a system notification rather than claiming inventory was updated.
 
 Shared extraction validates each item proposal with the existing strict item
 contract. Valid proposals keep their original indices for deterministic item IDs
@@ -40,10 +40,34 @@ results; independently valid sections survive malformed annotations.
 These checks expose inconsistent or incomplete extraction, not every semantic
 omission. A model can still misclassify a changed fragment as unchanged or miss
 one of several events in a group. Exact occurrence references keep a current
-event separate from later recollections using identical words. No additional
-model call or story-text editing is introduced.
+event separate from later recollections using identical words. Narration is not
+rewritten by this check.
 The standalone staging fallback uses the same required lists and completeness
 checks before defaults are applied.
+
+A completed response whose only coverage errors are missing item/condition
+proposals may receive one correction before any extracted effects are applied.
+The correction can append proposals for those original groups within the remaining
+six-item/twelve-condition capacity. It cannot replace earlier candidates, their
+order, coverage labels, scene changes or staging. Existing canonical chains remain
+protected even when a new record request resolves to an earlier condition ID.
+Read-only previews reuse the ordinary scope, source and domain validators; invalid
+or unchanged additions cannot make a missing change complete.
+
+Classification-review notes do not prove that a changed domain was mislabelled.
+They retain the original review warning rather than forcing a transfer, wear
+observation or parallel condition. A failed, invalid, oversized or expired
+correction leaves the independently valid original effects and warnings intact.
+The ledger records bounded correction diagnostics without raw proposal values.
+
+Initial extraction and correction each permit one physical provider attempt;
+transport, SDK and blank-response retries are disabled for these calls. No
+correction follows an incomplete or failed initial request. Both calls, their
+previews and transaction release share one absolute deadline; cancellation
+propagates. The initial payload keeps its existing context admission. The new
+correction additionally checks the complete prepared messages and decoder schema
+against 64,000 characters before sending. Read transactions are released before
+remote waits. There is no retry queue or retry-until-complete loop.
 
 Handled partial responses also retain their processed input ID. Repeating the
 same handled check cannot apply accepted inventory changes twice or invalidate
@@ -56,8 +80,9 @@ These checks establish response completeness, not semantic extraction recall.
 The existing request also supplies `extraction_limits.condition_updates` from the
 canonical twelve-operation limit. The model should reuse existing IDs, avoid
 unchanged/repeated descriptions and prioritize completed resolutions and lasting
-state. Distinct lifecycle transitions still require their own evidence. Limits,
-saved fact capacity and the number of model requests are unchanged.
+state. Distinct lifecycle transitions still require their own evidence. Fact and
+proposal capacities are unchanged; the conditional correction described above is
+the only additional model request.
 
 At full capacity, `conditions_deferred` marks groups with additional established
 changes that could not fit. It can coexist with other changed domains or with

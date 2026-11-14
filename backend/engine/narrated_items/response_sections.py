@@ -14,6 +14,7 @@ class Sections:
     provided: frozenset[str]
     unconfirmed: tuple[str, ...]
     coverage: dict | None = None
+    repair: dict | None = None
 
     @property
     def needs_review(self) -> bool:
@@ -40,6 +41,7 @@ class Sections:
             "response_sections": sorted(self.provided),
             "unconfirmed_sections": list(self.unconfirmed),
             **({"extraction_coverage": self.coverage} if self.coverage is not None else {}),
+            **({"coverage_repair": self.repair} if self.repair is not None else {}),
         }
 
     def messages(self) -> list[str]:
@@ -69,7 +71,7 @@ def _coverage_message(coverage: dict) -> str:
     return reason + " Confirmed independent changes were retained."
 
 
-def read(result: Any, *, staging: bool) -> Sections:
+def read(result: Any, *, staging: bool, repair: dict | None = None) -> Sections:
     raw = result.model_dump(exclude_unset=True) if isinstance(result, BaseModel) else result
     raw = raw if isinstance(raw, dict) else {}
     expected = (*ROOT_FIELDS, "staging") if staging else ROOT_FIELDS
@@ -80,7 +82,7 @@ def read(result: Any, *, staging: bool) -> Sections:
         missing.extend(f"staging.{key}" for key in STAGING_FIELDS if key in absent)
         if not isinstance(nested, dict):
             missing.append("staging")
-    return Sections(frozenset(raw) & frozenset(expected), tuple(missing))
+    return Sections(frozenset(raw) & frozenset(expected), tuple(missing), repair=repair)
 
 
 def missing_staging(result: Any) -> frozenset[str]:

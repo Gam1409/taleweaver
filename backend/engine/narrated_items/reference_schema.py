@@ -8,9 +8,14 @@ from pydantic import BaseModel
 from backend.engine.narrated_items.coverage import groups
 from backend.engine.narrated_items.source_catalog import Catalog
 
+RANGE_DESCRIPTION = (
+    "A pN..pN+1 reference supplies the exact contiguous text of two adjacent occurrences. "
+    "Only its first occurrence pN anchors coverage; independent later changes need their own proposal."
+)
+
 
 def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -> dict:
-    schema = deepcopy(model.model_json_schema())
+    schema = citation_schema(model, catalog)
     if complete:
         schema["required"] = list(schema["properties"])
     definitions = schema.setdefault("$defs", {})
@@ -44,14 +49,27 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
     staging = definitions.get("SceneExtraction")
     if complete and isinstance(staging, dict):
         staging["required"] = ["changes", "props", "explicit"]
-    definitions["NarrationEvidenceReference"] = {"type": "string", "enum": catalog.references()}
+    return schema
+
+
+def citation_schema(model: type[BaseModel], catalog: Catalog) -> dict:
+    """Reuse the same request-scoped proof contract for bounded correction patches."""
+    schema = deepcopy(model.model_json_schema())
+    definitions = schema.setdefault("$defs", {})
+    definitions["NarrationEvidenceReference"] = {
+        "type": "string",
+        "enum": catalog.references(include_ranges=True),
+        "description": RANGE_DESCRIPTION,
+    }
     definitions["VisualEvidenceReference"] = {
         "type": "string",
-        "enum": catalog.references(minimum=3),
+        "enum": catalog.references(minimum=3, include_ranges=True),
+        "description": RANGE_DESCRIPTION,
     }
     definitions["SceneEvidenceReference"] = {
         "type": "string",
-        "enum": catalog.references(allow_room=True),
+        "enum": catalog.references(allow_room=True, include_ranges=True),
+        "description": RANGE_DESCRIPTION,
     }
     for name in (
         "ExistingItemAction",

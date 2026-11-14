@@ -17,8 +17,9 @@ from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import (
     coverage,
     evidence,
+    extraction_request,
     independent_state,
-    reference_schema,
+    repair_validation,
     response_sections,
 )
 from backend.engine.narrated_items.apply import apply_actions
@@ -27,7 +28,7 @@ from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.observation_sources import verified_sources
 from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
-from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction, SharedItemExtraction
+from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.narrated_movement import runtime as narrated_movement
 from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INSTRUCTIONS
 from backend.engine.physical_conditions import runtime as physical_conditions
@@ -219,30 +220,36 @@ async def reconcile_items(
         return ["Item reconciliation needs review; the available item context is too large."]
     await release_for_model(manager)
     try:
-        llm = GameMasterLLM.for_role(manager.user, "small")
-        result = await asyncio.wait_for(
-            llm.aexecute_complex_task(
-                INSTRUCTIONS
-                + CONDITION_INSTRUCTIONS
-                + SCENE_INSTRUCTIONS
-                + MOVEMENT_INSTRUCTIONS
-                + independent_state.INSTRUCTIONS
-                + (STAGING_INSTRUCTIONS if staging_enabled else ""),
-                payload,
-                SharedItemExtraction,
-                llm.model,
-                game_id=manager.game_id,
-                operation="narrated_items",
-                phase="reconciliation",
-                response_schema=reference_schema.build(
-                    SharedItemExtraction if staging_enabled else ItemExtraction,
-                    catalog,
-                    complete=True,
-                ),
-            ),
+        checked = await extraction_request.request(
+            GameMasterLLM.for_role(manager.user, "small"),
+            INSTRUCTIONS
+            + CONDITION_INSTRUCTIONS
+            + SCENE_INSTRUCTIONS
+            + MOVEMENT_INSTRUCTIONS
+            + independent_state.INSTRUCTIONS
+            + (STAGING_INSTRUCTIONS if staging_enabled else ""),
+            payload,
+            catalog,
+            game_id=manager.game_id,
+            staging=staging_enabled,
             timeout=role_timeout(manager.user, "small"),
+            max_context=MAX_CONTEXT,
+            accept=repair_validation.Check(
+                manager,
+                actors,
+                snapshot,
+                catalog,
+                frozenset(scope.item_ids),
+                staging_enabled,
+                detail_settings(manager)["detailed"],
+                message_id,
+                pending_conditions.player_message,
+                skipped is None,
+                frozenset(blocked_targets or ()),
+            ),
         )
-        sections = response_sections.read(result, staging=staging_enabled)
+        result = checked.extraction
+        sections = response_sections.read(result, staging=staging_enabled, repair=checked.repair)
         original_actions = result.actions if isinstance(result, ItemExtraction) else None
         result, sections = coverage.annotate(result, catalog, sections, staging=staging_enabled)
         result = evidence.bind(result, narration, catalog=catalog)

@@ -15,6 +15,7 @@ from backend.core.llm_provider_config import (
     normalize_model,
     uses_json_mode_fallback,
 )
+from backend.core.llm_schema_compaction import share_schema
 from backend.core.llm_schema_merge import SchemaProjectionError
 from backend.core.llm_schema_projection import project
 
@@ -78,7 +79,7 @@ def select(
         return _simple(mode)
     try:
         projected = project(schema if schema is not None else response_model.model_json_schema())
-        contract = _native_schema(projected.schema, provider)
+        contract = share_schema(_native_schema(projected.schema, provider))
     except SchemaProjectionError:
         fallback = "prompt" if provider == "anthropic" else "json_object"
         logger.debug(

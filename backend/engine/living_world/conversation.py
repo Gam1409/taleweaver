@@ -10,7 +10,7 @@ from backend.core.game_modes import is_vn
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm.state import controls
 from backend.engine.living_world import concordia_adapter
-from backend.engine.living_world.deliberation import require_enabled
+from backend.engine.living_world.deliberation import require_compatible, require_enabled
 from backend.engine.living_world.dialogue_context import recent_context
 from backend.engine.living_world.dialogue_memory import Choice, grounded_choice, previous_context
 from backend.engine.living_world.state import load, save
@@ -140,6 +140,7 @@ async def prepare_choice(
     if actor is None:
         return ""
     try:
+        require_compatible(manager.state)
         llm = GameMasterLLM.for_role(manager.user, "small")
         require_enabled(simulation, llm)
         supplied = context(manager.state, simulation, actor, message, history)

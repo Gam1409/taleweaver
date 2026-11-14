@@ -11,6 +11,8 @@ from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCE
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source, identifier, record
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.notebook_requests import NotebookRequest
+from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
@@ -38,12 +40,22 @@ class Tools:
     beliefs: dict[str, Belief] = field(default_factory=dict)
     semantic_scores: dict[str, float] = field(default_factory=dict)
     episode_contexts: dict[str, EpisodeContext] = field(default_factory=dict)
+    notebook: NotebookDraft | None = None
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
             raise ChpmError("CHPM tools belong to another session.")
 
-    def execute(self, lookup: Lookup) -> dict:
+    def execute(self, lookup: Lookup | NotebookRequest) -> dict:
+        if not isinstance(lookup, Lookup):
+            return (
+                self.notebook.execute(lookup)
+                if self.notebook
+                else {"status": "unavailable_notebook"}
+            )
+        return self._lookup(lookup)
+
+    def _lookup(self, lookup: Lookup) -> dict:
         if lookup.tool == "search_memory":
             return self.search(lookup.argument)
         if lookup.tool == "read_memory":

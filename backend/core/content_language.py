@@ -1,5 +1,7 @@
 """Language policy for player-facing prose; engine tokens remain canonical."""
 
+from backend.core.narration_contracts import DISPLAY_NAME_IDENTITY
+
 LANGUAGES = {
     "en": "English",
     "de": "German",
@@ -62,5 +64,8 @@ def prose_language_instruction(language: str, fields: str = "narration and dialo
         "Preserve the required output format. Never translate JSON keys, IDs, references, "
         "enum values, status-effect tokens (e.g. Poisoned), slash commands, command target IDs, "
         "scripts, expressions, unlock codes, voice tags (e.g. [curious]) or speaker identifiers. "
-        "Keep existing entity names consistent with the supplied world; do not rename entities."
+        "Keep existing entity names consistent with the supplied world; do not rename entities. "
+        + DISPLAY_NAME_IDENTITY
+        + " Translate ordinary descriptive words into the chosen content language; "
+        "preserving names and machine tokens does not exempt unrelated scene words."
     )

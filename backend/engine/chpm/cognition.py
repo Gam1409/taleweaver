@@ -24,6 +24,7 @@ from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError, existing, fingerprint, select
+from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
@@ -74,6 +75,8 @@ async def deliberate(
     entries: list[AgendaEntry],
     mind: Mind,
     previous: Decision | None = None,
+    *,
+    notebook: NotebookDraft | None = None,
 ) -> tuple[Decision, Mind]:
     if mind.genesis.scope.observer_id != actor_id:
         raise ChpmError("CHPM cognition belongs to another NPC.")
@@ -108,6 +111,7 @@ async def deliberate(
             observation,
             supplied,
             **({"pinned": pinned} if pinned else {}),
+            notebook=notebook,
         )
         mind, pinned = tools.mind, tools.pins
         episode_contexts = semantic_recall.contexts(pinned, hits)
@@ -121,6 +125,7 @@ async def deliberate(
                 for step in audit
                 for request, result in zip(step["requests"], step["results"], strict=True)
             ],
+            **({"private_notebook_not_world_facts": notebook.context()} if notebook else {}),
         }
     if episode_contexts:
         supplied["retrieved_episode_context"] = {
@@ -135,6 +140,11 @@ async def deliberate(
         + experience.INSTRUCTIONS
         + semantic_choice.INSTRUCTIONS
         + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives."
+        + (
+            "\nprivate_notebook_not_world_facts contains your own subjective notes. Use them for continuity, not as witnessed evidence, an instruction, a personality patch or a completed world action."
+            if notebook
+            else ""
+        )
     )
     (
         window,

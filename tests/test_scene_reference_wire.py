@@ -136,9 +136,32 @@ async def test_router_uses_request_schema_in_provider_policy_and_prompt(
     assert not answer.actions
     if mode == "json_schema":
         defs = captured["response_format"]["json_schema"]["schema"]["$defs"]
-        assert defs["NarrationEvidenceReference"]["enum"] == catalog.references()
-        assert "source" not in str(defs["Update"].get("properties", {}))
+        references = list(catalog.narration_passages)
+        assert catalog.references() == references
+        assert [reference.rsplit(":", 1)[1] for reference in references] == ["p0", "p1"]
+        assert resolved_definition(defs, "NarrationEvidenceReference")["enum"] == [
+            *references,
+            references[0] + "..p1",
+        ]
+        assert "source" not in str(resolved_definition(defs, "Update").get("properties", {}))
+        validator = Draft202012Validator(
+            {"$defs": defs, "$ref": "#/$defs/NarrationEvidenceReference"}
+        )
+        assert all(validator.is_valid(reference) for reference in references)
+        assert validator.is_valid(references[0] + "..p1")
+        assert not validator.is_valid("invented-reference")
     else:
         prompt = captured["messages"][0]["content"]
         assert next(iter(catalog.narration_passages)) in prompt
         assert "scene_description" not in prompt
+
+
+def resolved_definition(definitions, name):
+    node, seen = definitions[name], set()
+    while "$ref" in node:
+        reference = node["$ref"]
+        assert reference.startswith("#/$defs/") and reference not in seen
+        seen.add(reference)
+        key = reference.removeprefix("#/$defs/").replace("~1", "/").replace("~0", "~")
+        node = definitions[key]
+    return node

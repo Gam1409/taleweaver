@@ -1,10 +1,11 @@
 import logging
-from typing import Any, cast
+from typing import Any, BinaryIO, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.engine.export_archives import pack_export_ads
+from backend.engine.chpm.notebook_portability import export_notebooks
+from backend.engine.export_archives import pack_export_ads, pack_export_ads_to
 from backend.engine.memory_rag.lifecycle import export_summaries
 from backend.engine.world_info.portability import export_world_info
 from backend.models.avatar import Avatar
@@ -55,9 +56,12 @@ class SessionExporter:
         async with db.begin_nested():
             manifest = await SessionExporter._snapshot(db, session_id)
         world_info = manifest.pop("world_info")
+        notebooks = manifest.pop("npc_notebooks", None)
         manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
         # Exact source text and evidence bypass generic asset URL rewriting.
         manifest["world_info"] = world_info
+        if notebooks is not None:
+            manifest["npc_notebooks"] = notebooks
         return manifest
 
     @staticmethod
@@ -136,7 +140,7 @@ class SessionExporter:
             return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
 
         # Build manifest structure
-        manifest = {
+        manifest: dict[str, Any] = {
             "format": "TaleWeaverSession",
             "version": "1.0",
             "original_session_id": session_id,
@@ -153,6 +157,10 @@ class SessionExporter:
         }
 
         manifest["world_info"] = await export_world_info(db, session_id, game_session.user_id)
+        if session_state is not None:
+            notebooks = await export_notebooks(db, session_state, game_session.user_id)
+            if notebooks is not None:
+                manifest["npc_notebooks"] = notebooks
         return manifest
 
     @staticmethod
@@ -163,3 +171,9 @@ class SessionExporter:
         manifest = await SessionExporter.build_session_manifest(db, session_id)
 
         return await run_file_operation(pack_export_ads, manifest, session_id)
+
+    @staticmethod
+    async def export_ads_to(db: AsyncSession, session_id: str, output: BinaryIO) -> None:
+        """Write a portable archive to a caller-owned seekable temporary file."""
+        manifest = await SessionExporter.build_session_manifest(db, session_id)
+        await run_file_operation(pack_export_ads_to, manifest, session_id, output)

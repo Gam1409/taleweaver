@@ -196,7 +196,9 @@ class StagingRoles(TurnRoles):
         ]
         assert all(reference.startswith("narration:") for reference in passages)
         references = kwargs["response_schema"]["$defs"]["VisualEvidenceReference"]["enum"]
-        assert references == list(passages)
+        plain_references = list(passages)
+        assert [reference.rsplit(":", 1)[1] for reference in plain_references] == ["p0", "p1"]
+        assert references == [*plain_references, plain_references[0] + "..p1"]
         staging = SceneExtraction(
             changes=[
                 {

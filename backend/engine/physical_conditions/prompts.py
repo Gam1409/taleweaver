@@ -40,6 +40,11 @@ of that result. Without such confirmation, retain saved state and omit the updat
 Only item_state supports player_evidence; leave it empty for other physical conditions.
 For multiple changes to one dimension, use source order and a distinct occurrence for
 each change. The final accepted state supersedes earlier states; do not restate unchanged facts.
+An action followed immediately by confirmation of that same resulting value is one
+change, not two. An offered adjacent range can supply that final detail while its first
+occurrence alone anchors conditions coverage. A following redundant confirmation is
+unchanged; a genuinely independent later change still requires its own proposal.
+Distinct successive values still keep their source order.
 
 PHYSICAL CONDITIONS: condition_updates is a small list of changes proved by completed_narration.
 Use only current subject IDs in actors/items and exact condition IDs in physical_conditions.
@@ -65,6 +70,12 @@ Do not retain a completed past event as current pain or another bodily condition
 because it mentions a body part. Omission alone still does not prove recovery or cleaning.
 Item placement, clothing and poses use their existing sections; record only their explicitly
 established bodily consequences here, not a duplicate inventory or pose entry.
+Known item targets cannot receive a new injury or pain record.
+Their generic mutable properties use item_state; real fluid or contamination traces
+and established physical damage may still target an item. Garment displacement and coverage restoration require the
+existing garment's item action, not kind=other with a garment component as its part.
+Do not repeat target_id, kind or part from that saved record in an update. They identify
+a new record only; use their null/empty defaults when the response schema requires keys.
 For an existing condition use only condition_id: change updates its detail without clearing it;
 treat keeps an injury/pain as treated; reduce keeps a partial remaining condition;
 clean removes contamination/fluid; heal resolves an explicitly healed injury/pain;

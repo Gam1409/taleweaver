@@ -122,12 +122,18 @@ verify mechanics and privacy, not narrative quality or model reasoning accuracy.
 1. Acquire the existing session lease, authorize ownership and validate revision.
 2. Read the NPC's local evidence and permitted choices. Persist the attempt count,
    commit and release both SQL transaction and lease before model work.
-3. Wait for the existing idle scheduler and endpoint reservation. Use the Utility
+3. When Memory RAG is enabled, retrieve bounded actor-accessible World Info outside
+   the lease, using SQL and optional existing hybrid search. Release the SQL read
+   transaction before embedding/vector waits. Read
+   canonical source text after awaits. Source identities constrain vector candidates
+   before limits, and the decision state fence must still match.
+4. Wait for the existing idle scheduler and endpoint reservation. Use the Utility
    role's timeout and configured output cap, without thinking or automatic retries.
-4. Reacquire the lease and reload canonical state. Compare a fingerprint covering
+5. Reacquire the lease and reload canonical state. Compare a fingerprint covering
    all SessionState columns (including timeline/revision), the actor context and
-   current permitted choices. A changed/deleted/rewound world discards the reply.
-5. Validate typed action, adjacency, locks and co-presence. Commit the concrete
+   current permitted choices, and deterministically revalidate selected reference
+   hashes, audiences and generation. A changed/deleted/rewound world discards the reply.
+6. Validate typed action, adjacency, locks and co-presence. Commit the concrete
    outcome and private notes in the same transaction. Narration and RAG never
    receive a proposed action as a committed event.
 
@@ -142,6 +148,12 @@ snapshot column. Each NPC replaces its short goal and uncertain belief, with up 
 eight committed observations. A bounded narrator block includes only motivations
 and at most two recent observations for each of up to three present NPCs
 (1,800 JSON characters), never the whole private journal.
+Decisions may also recall up to three relevant older own-participation events
+within 1,200 JSON characters, directly from the existing event journal, and receive
+up to 2,500 characters of separate actor-accessible author references. Native and
+Concordia share both projections. Speech retains attribution and uncertainty;
+event dependencies remain declared prerequisites, not causes. Neither projection
+publishes private events, plans or beliefs into shared RAG.
 Recurring scheduling, retry counts, timeline request allowances and the event cap
 are explicit and persisted. Reaching a cap reports the limit rather than discarding
 canonical history. See [usage](living-world-usage.md) for exact defaults and controls.

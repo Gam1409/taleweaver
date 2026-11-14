@@ -17,6 +17,8 @@ const defaults: ChpmSettings = {
   max_calls_per_turn: 8,
   memory_limit: 12,
   agent_steps: 0,
+  notebook_enabled: false,
+  tool_protocol: 'auto',
   semantic_memory: false,
   failure_policy: 'continue'
 }
@@ -35,8 +37,11 @@ const limits = [
   { key: 'max_input_chars', label: 'Input characters per request', min: 8000, max: 192000 },
   { key: 'memory_limit', label: 'Remembered quotations per NPC', min: 0, max: 24 }
 ] as const
-function update<K extends keyof ChpmSettings>(key: K, value: ChpmSettings[K]) {
-  emit('update:modelValue', { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value })
+function update<K extends keyof ChpmSettings>(key: K, value: ChpmSettings[K], extra: Partial<ChpmSettings> = {}) {
+  emit('update:modelValue', { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value, ...extra })
+}
+function setNotebookEnabled(enabled: boolean) {
+  update('notebook_enabled', enabled, enabled ? { agent_steps: Math.max(1, draft.value.agent_steps ?? 0) } : {})
 }
 function selectActor(id: string, selected: boolean) {
   update(
@@ -137,6 +142,11 @@ function selectActor(id: string, selected: boolean) {
           Semantic NPC memory (experimental)
           <span class="mt-2 block text-slate-400">Uses the administrator's embeddings with observer-scoped history and lexical fallback. No additional generative model request; disabled by default.</span>
         </label>
+        <label v-if="draft.mode === 'live'" class="mb-3 block text-xs text-slate-300">
+          <input name="npc-private-notebooks" type="checkbox" :checked="draft.notebook_enabled ?? false" class="mr-2 accent-cyan-400" @change="setNotebookEnabled(($event.target as HTMLInputElement).checked)" />
+          Private NPC notebooks
+          <span class="mt-2 block text-slate-400">One freely organized JSON notebook per NPC, up to 16,000,000 UTF-8 bytes each. Notes are subjective and may be mistaken. The latest notes stay after Undo or Chronicles restore; no notebook history is kept. Disabled by default. Enabling selects at least one agent tool round and uses the existing request budget.</span>
+        </label>
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
           <label v-for="field in limits" :key="field.key" class="text-xs text-slate-300"
             >{{ field.label
@@ -149,17 +159,33 @@ function selectActor(id: string, selected: boolean) {
               @input="update(field.key, Number(($event.target as HTMLInputElement).value))"
           /></label>
           <label v-if="draft.mode === 'live'" class="text-xs text-slate-300"
-            >Read-only agent rounds per active NPC<select
+            >Agent tool rounds per active NPC<select
+              name="npc-agent-tool-rounds"
               :value="draft.agent_steps ?? 0"
               class="mt-2 w-full rounded-lg bg-slate-800 p-2"
               @change="update('agent_steps', Number(($event.target as HTMLSelectElement).value))"
             >
-              <option :value="0">Off</option>
+              <option :value="0" :disabled="draft.notebook_enabled">Off</option>
               <option :value="1">Up to one round</option>
               <option :value="2">Up to two rounds</option>
+              <option :value="3">Up to three rounds — can correct and check</option>
             </select></label
           >
         </div>
+        <label v-if="draft.mode === 'live' && draft.notebook_enabled" class="mt-4 block text-xs text-slate-300">Memory tool compatibility
+          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
+            <option value="auto">Automatic</option>
+            <option value="native">Native function calls</option>
+            <option value="json">JSON compatibility</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
+        </label>
+        <p v-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
+          Each round adds one model request per active NPC and up to two local tool operations.
+          Tools read this NPC's witnessed history and host observations; enabled notebooks also allow
+          edits to its own private notes. They cannot change world state or read other NPCs' notes.
+          Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests.
+        </p>
         <p
           class="mt-4 text-xs"
           :class="draft.max_calls_per_turn < minimum ? 'text-amber-200' : 'text-slate-400'"

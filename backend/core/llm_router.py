@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.core.inference.admission import timeout_for
 from backend.core.inference.transport import guarded_async, guarded_sync, owned_stream, target
+from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_detailed_trace import trace_async, trace_sync
 from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
@@ -35,7 +36,9 @@ from backend.core.llm_roles import resolve_llm_role
 from backend.core.llm_sampling import apply as apply_sampling
 from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
+from backend.core.llm_structured_execution import require_complete, require_input_budget
 from backend.core.llm_thinking import apply_thinking_settings
+from backend.core.llm_tool_turn import ToolTurn
 from backend.core.security import encryption_util
 from backend.core.voice_repetition import clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
@@ -215,10 +218,10 @@ class GameMasterLLM:
     @guarded_async
     async def _acompletion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
-        if self.provider == "custom_openai":
-            from backend.core.custom_openai import acomplete
+        if self.provider == "custom_openai" or kwargs.get("_single_attempt"):
+            from backend.core.llm_tool_turn import single_attempt
 
-            return await acomplete(self, kwargs)
+            return await single_attempt(self, kwargs)
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
@@ -563,7 +566,9 @@ class GameMasterLLM:
         retry_kwargs["messages"] = retry_messages
         return retry_kwargs
 
-    async def _retry_blank_json_content_async(self, kwargs: dict, response: Any) -> Any:
+    async def _retry_blank_json_content_async(
+        self, kwargs: dict, response: Any, *, max_input_chars: int | None = None
+    ) -> Any:
         """Retry once when JSON-mode providers return only reasoning_content and an empty content channel."""
         try:
             message = response.choices[0].message
@@ -577,8 +582,9 @@ class GameMasterLLM:
         logger.warning(
             "LLM returned empty assistant content but reasoning_content was populated. Retrying once with explicit content-channel instruction."
         )
-        retry(self, 1)
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
+        require_input_budget(retry_kwargs, max_input_chars)
+        retry(self, 1)
         return await self._acompletion_with_openrouter_fallback(retry_kwargs)
 
     def _retry_blank_json_content(self, kwargs: dict, response: Any) -> Any:
@@ -985,6 +991,36 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("tools")
+    async def aexecute_tool_turn(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        model: str,
+        *,
+        tool_choice: str | dict[str, Any] = "auto",
+        adventure_id: Optional[str] = None,
+        game_id: Optional[str] = None,
+        operation: Optional[str] = None,
+        phase: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> ToolTurn:
+        """Return native tool calls intact through the shared single-attempt transport."""
+        from backend.core.llm_tool_turn import execute
+
+        return await execute(
+            self,
+            messages,
+            tools,
+            model,
+            tool_choice=tool_choice,
+            adventure_id=adventure_id,
+            game_id=game_id,
+            operation=operation,
+            phase=phase,
+            metadata=metadata,
+        )
+
     @async_call("simple")
     async def aexecute_simple_task(
         self,
@@ -994,6 +1030,7 @@ class GameMasterLLM:
         *,
         messages: Optional[list[dict[str, Any]]] = None,
         response_format: dict[str, Any] | None = None,
+        single_attempt: bool = False,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
@@ -1018,6 +1055,8 @@ class GameMasterLLM:
         }
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if single_attempt:
+            kwargs.update(_single_attempt=True, num_retries=0, max_retries=0)
         if technical:
             from backend.core.llm_structured_output import trace
 
@@ -1140,7 +1179,16 @@ class GameMasterLLM:
         trace(output.response_format, local_checks=output.local_checks)
         json_mode = uses_json_mode_fallback(self.provider, normalized_model)
         json_mode = json_mode or output.mode != "json_schema"
-        if json_mode or output.local_checks:
+        if output.mode == "json_schema":
+            from backend.core.llm_native_guidance import guidance
+
+            system_prompt += guidance(
+                response_schema
+                if response_schema is not None
+                else response_model.model_json_schema(),
+                output.local_checks,
+            )
+        elif json_mode or output.local_checks:
             # Ground rules checked locally as well as those enforced during decoding.
             system_prompt += json_schema_instruction(response_model, schema=response_schema)
 
@@ -1305,9 +1353,11 @@ class GameMasterLLM:
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
         response_schema: dict | None = None,
+        single_attempt: bool = False,
+        max_input_chars: int | None = None,
     ) -> T:
         """
-        Async version of execute_complex_task.
+        Async structured task; bounded callers can disable retries and require a complete stop.
         """
         log_context = {
             "adventure_id": adventure_id,
@@ -1319,11 +1369,16 @@ class GameMasterLLM:
         request = self._build_structured_request(
             system_prompt, user_prompt, response_model, model, response_schema=response_schema
         )
+        require_input_budget(request.kwargs, max_input_chars)
+        if single_attempt:
+            request.kwargs.update(_single_attempt=True, num_retries=0, max_retries=0)
         self._log_structured_request(request, response_model, log_context)
 
         response = await self._acompletion_with_openrouter_fallback(request.kwargs)
-        if request.json_mode and self._is_blank_response(response):
-            response = await self._retry_blank_json_content_async(request.kwargs, response)
+        if not single_attempt and request.json_mode and self._is_blank_response(response):
+            response = await self._retry_blank_json_content_async(
+                request.kwargs, response, max_input_chars=max_input_chars
+            )
 
         # Log thinking/reasoning if present
         if adventure_id:
@@ -1332,9 +1387,12 @@ class GameMasterLLM:
             if thinking_text:
                 await self._append_generation_log_async(adventure_id, "thinking", thinking_text)
 
-        self._log_structured_response(
-            request, response, model, user_prompt, response_model, log_context
-        )
+        with capture_completions() as completions:
+            self._log_structured_response(
+                request, response, model, user_prompt, response_model, log_context
+            )
+        if single_attempt:
+            require_complete(completions)
         return self._parse_structured_content(response, response_model)
 
     @sync_call("structured")

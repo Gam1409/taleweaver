@@ -89,7 +89,7 @@ async def test_import_errors_are_private(auth_client, monkeypatch, kind):
     elif kind == "adz":
         monkeypatch.setattr(AdventureTemplateImporter, "import_adz", failure)
     else:
-        monkeypatch.setattr(SessionImporter, "import_ads", failure)
+        monkeypatch.setattr(SessionImporter, "import_ads_from", failure)
     if kind == "manifest":
         response = await auth_client.post("/api/adventures/import", json={"title": "Fixture"})
     elif kind == "bundle":
@@ -104,6 +104,7 @@ async def test_import_errors_are_private(auth_client, monkeypatch, kind):
             path, files={"file": (f"fixture.{kind}", b"{}", "application/octet-stream")}
         )
     public_failure(response)
+    failure.assert_awaited_once()
 
 
 @pytest.mark.parametrize("operation", ["update-all", "update", "migrate"])

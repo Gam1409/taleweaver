@@ -110,13 +110,14 @@ async def test_stop_early_and_exhaust_rounds_without_spending_reserved_proposal_
     assert usage.calls == 1 and audit[0]["stop"] == "ready"
 
 
-def test_admission_reserves_agent_rounds_for_each_active_npc_and_defaults_off():
+@pytest.mark.parametrize("steps, required", [(2, 14), (3, 17)])
+def test_admission_reserves_agent_rounds_for_each_active_npc_and_defaults_off(steps, required):
     assert Settings().agent_steps == 0
-    settings = Settings(mode="live", actor_ids=["a", "b", "c"], agent_steps=2)
-    assert capacity.required_calls(settings) == 14
-    with pytest.raises(ValueError, match="at least 14"):
+    settings = Settings(mode="live", actor_ids=["a", "b", "c"], agent_steps=steps)
+    assert capacity.required_calls(settings) == required
+    with pytest.raises(ValueError, match=f"at least {required}"):
         capacity.ensure_budget(KernelState(settings=settings), settings.actor_ids)
-    settings.max_calls_per_turn = 14
+    settings.max_calls_per_turn = required
     capacity.ensure_budget(KernelState(settings=settings), settings.actor_ids)
     settings.mode = "shadow"
     assert capacity.required_calls(settings) == 4
@@ -139,7 +140,8 @@ def test_envelope_two_migrates_without_enabling_agent_or_changing_budget():
     assert raw["schema_version"] == 2 and "agent_steps" not in raw["settings"]
 
 
-async def test_matrix_agent_mode_records_calls_trace_and_original_identity_offline():
+@pytest.mark.parametrize("steps", [2, 3])
+async def test_matrix_agent_mode_records_calls_trace_and_original_identity_offline(steps):
     from backend.engine.chpm.evaluation import matrix_cli, matrix_runner
     from tests.test_chpm_matrix import Models, case
 
@@ -154,17 +156,20 @@ async def test_matrix_agent_mode_records_calls_trace_and_original_identity_offli
                 )
             return await super().aexecute_simple_task(system, content, model, **kwargs)
 
-    plan = matrix_cli.manifest([case(1, 12)], agent_steps=2, max_input_chars=32000)
-    assert plan["max_logical_calls"] == 9 and plan["agent_steps"] == 2
+    plan = matrix_cli.manifest([case(1, 12)], agent_steps=steps, max_input_chars=32000)
+    assert plan["max_logical_calls"] == 7 + steps and plan["agent_steps"] == steps
     result = await matrix_runner.run(
-        case(1, 12), LookupModel(), agent_steps=2, max_input_chars=32000
+        case(1, 12), LookupModel(), agent_steps=steps, max_input_chars=32000
     )
-    assert result["status"] == "ok", result["error"]
+    assert result["status"] == "ok", (
+        result["error"],
+        result["usage"]["proposal_feedback"],
+    )
     assert result["identity_unchanged"]
-    assert len([c for c in result["calls"] if c["phase"] == "agent_lookup"]) == 2
+    assert len([c for c in result["calls"] if c["phase"] == "agent_lookup"]) == steps
     assert result["decisions"]["npc-01"]["agent_audit"][-1]["stop"] == "step_limit"
     with pytest.raises(ValueError, match="25-call"):
-        matrix_cli.manifest([case(20)], all_present=True, agent_steps=2)
+        matrix_cli.manifest([case(20)], all_present=True, agent_steps=steps)
 
 
 async def test_cosmetic_purpose_length_does_not_reject_valid_tool_requests():
