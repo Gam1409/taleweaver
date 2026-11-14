@@ -57,6 +57,12 @@ Use kind=other for physical signs such as trembling or flushed skin, not emotion
 The server assigns its condition ID.
 Record a bodily condition still present at the end of this narration, including temporary
 conditions. A completed fleeting gesture or a single vocal cue alone is not an ongoing condition.
+Describe its resulting current state, not a retelling of the action that caused it.
+Review existing records before adding a new sign. When the completed outcome explicitly
+ends an earlier transient reaction or a record that merely duplicated now-ended contact
+or item placement, resolve that existing ID with the applicable operation and current evidence.
+Do not retain a completed past event as current pain or another bodily condition merely
+because it mentions a body part. Omission alone still does not prove recovery or cleaning.
 Item placement, clothing and poses use their existing sections; record only their explicitly
 established bodily consequences here, not a duplicate inventory or pose entry.
 For an existing condition use only condition_id: change updates its detail without clearing it;
