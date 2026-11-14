@@ -63,7 +63,14 @@ def test_metadata_recording_does_not_require_logging_or_retain_private_text(monk
         raw = response()
         raw["choices"][0]["message"] = {"content": "PRIVATE"}
         llm_logger.log_llm_interaction("model", "provider", "SECRET", "input", "reply", raw)
-    assert [asdict(r) for r in records] == [{"finish_reason": "length", "completion_tokens": 2048}]
+    assert [asdict(r) for r in records] == [
+        {
+            "finish_reason": "length",
+            "completion_tokens": 2048,
+            "tool_finish_reason": "length",
+            "tool_rejected": False,
+        }
+    ]
     record_completion(response())
     assert len(records) == 1
 

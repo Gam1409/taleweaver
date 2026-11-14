@@ -36,6 +36,7 @@ from backend.core.llm_sampling import apply as apply_sampling
 from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
 from backend.core.llm_thinking import apply_thinking_settings
+from backend.core.llm_tool_turn import ToolTurn
 from backend.core.security import encryption_util
 from backend.core.voice_repetition import clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
@@ -215,10 +216,10 @@ class GameMasterLLM:
     @guarded_async
     async def _acompletion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
-        if self.provider == "custom_openai":
-            from backend.core.custom_openai import acomplete
+        if self.provider == "custom_openai" or kwargs.get("_single_attempt"):
+            from backend.core.llm_tool_turn import single_attempt
 
-            return await acomplete(self, kwargs)
+            return await single_attempt(self, kwargs)
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
@@ -985,6 +986,36 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("tools")
+    async def aexecute_tool_turn(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        model: str,
+        *,
+        tool_choice: str | dict[str, Any] = "auto",
+        adventure_id: Optional[str] = None,
+        game_id: Optional[str] = None,
+        operation: Optional[str] = None,
+        phase: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> ToolTurn:
+        """Return native tool calls intact through the shared single-attempt transport."""
+        from backend.core.llm_tool_turn import execute
+
+        return await execute(
+            self,
+            messages,
+            tools,
+            model,
+            tool_choice=tool_choice,
+            adventure_id=adventure_id,
+            game_id=game_id,
+            operation=operation,
+            phase=phase,
+            metadata=metadata,
+        )
+
     @async_call("simple")
     async def aexecute_simple_task(
         self,
@@ -994,6 +1025,7 @@ class GameMasterLLM:
         *,
         messages: Optional[list[dict[str, Any]]] = None,
         response_format: dict[str, Any] | None = None,
+        single_attempt: bool = False,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
@@ -1018,6 +1050,8 @@ class GameMasterLLM:
         }
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if single_attempt:
+            kwargs.update(_single_attempt=True, num_retries=0, max_retries=0)
         if technical:
             from backend.core.llm_structured_output import trace
 
