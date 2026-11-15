@@ -116,3 +116,40 @@ not establish generated long-term emotional progression, VN streaming, portrait
 RGB or actual TTS behavior. Those need the corresponding integration paths and,
 where necessary, separate live observation. Keep unrun cases and unrated outputs
 explicit rather than interpreting technical success as psychological success.
+
+## Initial live findings
+
+The first smoke investigation covered **four distinct fixture contexts**, with
+repeated baseline/candidate attempts: **14 context executions and 56 recorded
+model calls** (53 CHPM calls and three narrator calls). It did not complete the
+24-context suite. Two executions reached an accepted narration; manual inspection
+still found unsupported scene details. These counts describe diagnostics, not a
+quality score or a statistically matched improvement.
+
+With one optional agent round, the model selected the existing memory search and
+belief-inspection tools. Search results retained their source IDs and historical
+status in the proposal context. This demonstrates an actual tool step; it does
+not introduce an MCP server or provide access to other observers' private data.
+
+The main reliability obstacle was invalid proposals and their repair. Long field
+values breached existing caps. When the original schema, required context and
+complete rejected proposal did not fit together, the former repair regenerated
+the object without seeing that proposal and could introduce different errors.
+
+The candidate now attempts bounded **field edits** in that same single reserved
+repair call when the smaller edit schema can retain the complete rejected object.
+It keeps required context, permits at most eight edits to enumerated JSON data
+paths, reconstructs an uncommitted copy and rechecks the original schema and
+semantic acceptance. It cannot execute commands, write files or publish partial
+psychological state. If the complete object still does not fit, the existing
+bounded regeneration fallback remains. Saved limits and request counts do not
+increase.
+
+Live field-edit repairs corrected the reported evidence error but exposed a
+second, independent question-gate or intention-continuity error. Missing gate
+feedback is now included when detectable before the first error is repaired.
+The continuity failure remains a model-compliance limitation: the host still
+requires a new intention when no prior delivered intention exists. An accepted
+candidate execution needed no repair, so it is not evidence that field edits
+improved acceptance. Generated multi-turn progression and psychological quality
+remain unverified.

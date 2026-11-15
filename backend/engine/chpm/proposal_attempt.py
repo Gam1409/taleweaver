@@ -6,7 +6,14 @@ from typing import Any, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from backend.core.state_rejection_trace import reject
-from backend.engine.chpm import choice_grounds, inference, parallel_budget, proposal_repair
+from backend.engine.chpm import (
+    choice_grounds,
+    inference,
+    parallel_budget,
+    proposal_edits,
+    proposal_repair,
+    wire_normalization,
+)
 from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import ProposalRejectedError
 from backend.engine.chpm.kernel import ChpmError
@@ -28,9 +35,10 @@ async def request(
     accept: Callable[[T], R],
 ) -> R:
     phase = "proposal"
+    repair = None
     while True:
         try:
-            raw = await inference.request(
+            raw = await _read(
                 manager,
                 settings,
                 usage,
@@ -38,7 +46,8 @@ async def request(
                 payload,
                 schema,
                 phase,
-                identifiers=identifiers,
+                identifiers,
+                repair,
             )
         except inference.InvalidResponseError as exc:
             reject(
@@ -53,9 +62,6 @@ async def request(
             )
             feedback = str(exc)
             candidate = exc.candidate
-            hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
-            if hint:
-                feedback = f"{feedback}; {hint}"[:600]
         except inference.OutputBudgetError as exc:
             reject(
                 "emotion",
@@ -85,6 +91,9 @@ async def request(
                     else None,
                 )
                 feedback = inference.validation_feedback(exc)
+        hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
+        if hint:
+            feedback = f"{feedback}; {hint}"[:600]
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
@@ -100,7 +109,7 @@ async def request(
             raise ProposalRejectedError(
                 "CHPM proposal retry has no reserved request budget. " + feedback
             )
-        payload = proposal_repair.payload_for(
+        repair = proposal_repair.prepare(
             payload,
             schema,
             feedback,
@@ -109,10 +118,51 @@ async def request(
             identifiers=identifiers,
             limit=settings.max_input_chars,
         )
-        prompt, content = inference.compose(instruction, payload, schema, identifiers)
+        payload = repair.payload
+        request_schema = proposal_edits.Corrections if repair.original is not None else schema
+        prompt, content = inference.compose(
+            repair.instruction(instruction), payload, request_schema, repair.identifiers
+        )
         if len(prompt) + len(content) > settings.max_input_chars:
             raise ProposalRejectedError(
                 "CHPM proposal retry cannot fit its input budget. " + feedback
             )
         usage.proposal_repairs += 1
         phase = "proposal_repair"
+
+
+async def _read(
+    manager: Any,
+    settings: Settings,
+    usage: Usage,
+    instruction: str,
+    payload: dict,
+    schema: type[T],
+    phase: str,
+    identifiers: dict,
+    repair: proposal_repair.Prepared | None,
+) -> T:
+    if repair is None or repair.original is None:
+        return await inference.request(
+            manager, settings, usage, instruction, payload, schema, phase, identifiers=identifiers
+        )
+    edits = await inference.request(
+        manager,
+        settings,
+        usage,
+        repair.instruction(instruction),
+        payload,
+        proposal_edits.Corrections,
+        phase,
+        identifiers=repair.identifiers,
+    )
+    candidate = repair.original
+    try:
+        candidate = proposal_edits.apply(candidate, edits, schema)
+        candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
+        usage.format_repairs += len(corrections)
+        return schema.model_validate(candidate)
+    except ValueError as exc:
+        raise inference.InvalidResponseError(
+            f"CHPM {phase} edits invalid: {inference.validation_feedback(exc)}", candidate=candidate
+        ) from exc

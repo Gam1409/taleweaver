@@ -355,13 +355,23 @@ Do not describe model-level psychological quality as solved by passing contracts
   forty-entry detour. These are not generated multi-turn trajectories.
 - Added the bounded experience projection to existing proposal/repair audits;
   full private notebook content remains outside that audit allowlist.
+- A live smoke investigation exposed a separate proposal-repair integration gap:
+  the complete rejected proposal may not fit beside the original response schema.
+  The existing single retry can now use a smaller bounded field-edit schema while
+  retaining required context and the complete uncommitted object. Original schema,
+  source, choice and commit checks still apply. Existing missing-gate diagnostics
+  are also supplied when another error is reported first. See the evaluation
+  document for actual run counts and remaining failures.
 - Broader relevance selection, persistent internal reappraisal and new structured
   regulation fields remain conditional. The current reproductions do not justify
   those runtime changes. Existing narrator/reviewer contracts already distinguish
-  feeling, attempted regulation and display; no prompt edits are justified yet.
-- A fresh provider comparison, generated multi-turn evaluation, actual voice and
-  portrait observation, and final issue coverage review remain open. Do not close
-  issue #33 or claim emotional-quality improvement from the offline results.
+  feeling, attempted regulation and display; emotional style instructions remain
+  unchanged. The new repair instruction describes only the transient edit format.
+- An initial provider comparison has run on four distinct authored contexts, with
+  repeated attempts. A complete matched comparison, generated multi-turn evaluation,
+  actual voice and portrait observation, and final issue coverage review remain
+  open. Do not close issue #33 or claim emotional-quality improvement from these
+  offline checks or the small live sample.
 
 Local implementation validation: **1,740** module/consumer tests and **155**
 cross-module integration/security tests passed. Full backend/script Ruff checks
