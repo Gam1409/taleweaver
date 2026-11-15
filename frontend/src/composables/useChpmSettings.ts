@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
 
 export interface ChpmSettings {
+  workflow?: 'staged' | 'integrated'
   npc_concurrency?: number
   failure_policy?: 'continue' | 'strict'
   mode: 'off' | 'shadow' | 'live'
@@ -44,7 +45,7 @@ export interface ChpmStatus {
   revision: number
   available: boolean
   characters: { id: string; name: string }[]
-  usage: { calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; format_repairs?: number; proposal_feedback?: string[]; actor_failures?: Record<string, string>; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number; preparation_ms?: number | null; timings?: RequestTiming[] }
+  usage: { workflow?: 'staged' | 'integrated' | null; calls: number; input_chars: number; output_chars: number; repairs: number; proposal_repairs?: number; format_repairs?: number; proposal_feedback?: string[]; actor_failures?: Record<string, string>; status: string; detail: string; memory_evictions: number; simplified?: boolean; fallback_requests?: number; preparation_ms?: number | null; timings?: RequestTiming[] }
   last_analysis_failure?: AnalysisFailure | null
   last_proposal_failure?: AnalysisFailure | null
   trace: unknown[]
@@ -90,6 +91,12 @@ export function useChpmSettings(sessionId: () => string) {
     if (enabled) draft.value.agent_steps = Math.max(1, draft.value.agent_steps ?? 0)
   }
 
+  function setWorkflow(workflow: 'staged' | 'integrated') {
+    if (!draft.value) return
+    draft.value.workflow = workflow
+    if (workflow === 'integrated') draft.value.max_input_chars = Math.max(48000, draft.value.max_input_chars)
+  }
+
   async function request(saving: boolean): Promise<boolean> {
     controller?.abort()
     const current = new AbortController()
@@ -133,5 +140,5 @@ export function useChpmSettings(sessionId: () => string) {
 
   watch(sessionId, () => { void load() }, { immediate: true })
   onScopeDispose(() => { controller?.abort(); controller = null })
-  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, load, save }
+  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setWorkflow, load, save }
 }

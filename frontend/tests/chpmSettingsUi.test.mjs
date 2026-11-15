@@ -101,6 +101,15 @@ test('saved timings distinguish unknown input processing from a measured zero qu
   assert.doesNotMatch(html, /<script>/)
 })
 
+test('timings retain the recorded workflow when another workflow is selected', async () => {
+  const timing = { phase: 'proposal', duration_ms: 1000 }
+  const html = await render(1, [], { usage: { workflow: 'staged', calls: 3, timings: [timing] } }, { workflow: 'integrated' })
+  assert.match(html, /Workflow used: Staged tools, then decision/)
+  assert.doesNotMatch(html, /Workflow used: Integrated/)
+  const legacy = await render(1, [], { usage: { calls: 3, timings: [timing] } }, { workflow: 'integrated' })
+  assert.match(legacy, /Not recorded for this result/)
+})
+
 test('large casts expose focused processing and an explicit all-present choice', async () => {
   const html = await render(20)
   assert.match(html, /Character roster \(up to 20/)

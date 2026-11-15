@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useChpmSettings } from '@/composables/useChpmSettings'
 
 const props = defineProps<{ sessionId: string }>()
-const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, load, save } = useChpmSettings(() => props.sessionId)
+const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
 const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
 const elapsed = (value: number | null | undefined): string => value == null ? 'Unavailable' : `${(value / 1000).toFixed(3)} s`
@@ -18,13 +18,20 @@ defineExpose({ save })
     <button v-if="!status" type="button" :disabled="busy" class="mt-3 text-cyan-300" @click="load">{{ busy ? 'Loading…' : 'Retry loading' }}</button>
     <fieldset v-if="draft && status" :disabled="busy || !status.available" class="mt-4 space-y-4 disabled:opacity-60">
       <label class="block text-xs text-slate-300">Mode
-        <select v-model="draft.mode" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+        <select name="npc-mode" v-model="draft.mode" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
           <option value="off">Standard — no extra requests</option>
           <option value="shadow">Observe — calculate decisions without changing replies</option>
           <option value="live">Enabled — validate dialogue before showing it</option>
         </select>
       </label>
       <template v-if="draft.mode !== 'off'">
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision workflow
+          <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
+            <option value="staged">Staged — memory tools, then decision (default)</option>
+            <option value="integrated">Integrated — tools or decision (experimental)</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Integrated can submit a decision immediately or use the configured memory rounds first. Selecting it sets the input budget to at least 48,000 characters; larger saved limits are kept. You can review the value under Request limits before saving. The server logs committed increases as WARNING without private content. With tool rounds Off both use the existing decision path. Compare recorded timings on equivalent turns; speed depends on the model.</span>
+        </label>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">If NPC analysis fails
           <select v-model="draft.failure_policy" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option value="continue">Keep playing — temporarily use standard RP (recommended)</option>
@@ -70,7 +77,7 @@ defineExpose({ save })
             <option value="complex">Complex model</option><option value="small">Small model</option>
           </select>
         </label>
-        <p class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs; Living World private decisions must be disabled.</p>
+        <p class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs. When Living World is enabled, its private decisions must be disabled.</p>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
           <input v-model="draft.semantic_memory" type="checkbox" class="mr-2 accent-cyan-400" />
           Semantic NPC memory (experimental)
@@ -90,7 +97,7 @@ defineExpose({ save })
           </select>
           <span class="mt-2 block text-slate-400">Optional tools scoped to this session and NPC. Search witnessed history, check own possessions, and read visible clothing layers of present NPCs. When private notebooks are enabled, these rounds can also read or edit that NPC's own notes. Each round adds one model request with up to two local tool operations; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, 6 for two rounds, or 5 for three rounds.</span>
         </label>
-        <label v-if="draft.mode === 'live' && draft.notebook_enabled" class="block text-xs text-slate-300">Memory tool compatibility
+        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="block text-xs text-slate-300">Memory tool compatibility
           <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
             <option value="auto">Automatic</option>
             <option value="native">Native function calls</option>
@@ -136,6 +143,7 @@ defineExpose({ save })
     </div>
     <details v-if="status?.usage.timings?.length" class="mt-3 space-y-2 text-xs text-slate-400">
       <summary class="cursor-pointer">Last NPC analysis timings</summary>
+      <p>Workflow used: {{ status.usage.workflow === 'integrated' ? 'Integrated tools & decision' : status.usage.workflow === 'staged' ? 'Staged tools, then decision' : 'Not recorded for this result' }}. Requests: {{ status.usage.calls }}.</p>
       <p>NPC preparation wall time: {{ elapsed(status.usage.preparation_ms) }}. Request times may overlap.</p>
       <p>Host queue is TaleWeaver admission waiting. First token includes network/server waiting and input processing; it is unavailable for non-streamed responses. Input processing and server generation appear only when the provider reports them. These measurements do not add model requests.</p>
       <div class="overflow-x-auto">

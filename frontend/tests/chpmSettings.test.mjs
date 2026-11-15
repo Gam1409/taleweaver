@@ -43,6 +43,43 @@ function fixture(t, fetch) {
   return { session, ...scope.run(() => useChpmSettings(() => session.value)) }
 }
 
+test('workflow switching preserves limits and the actual last-run timing mode', async t => {
+  const saved = state(3)
+  Object.assign(saved.settings, { workflow: 'staged', mode: 'live', actor_ids: ['NPC'], max_active_npcs: 1, agent_steps: 2, notebook_enabled: true, max_calls_per_turn: 8 })
+  saved.usage.workflow = 'staged'
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return Response.json(saved)
+    const body = JSON.parse(options.body)
+    assert.equal(body.expected_revision, 3)
+    assert.equal(body.settings.workflow, 'integrated')
+    assert.equal(body.settings.agent_steps, 2)
+    assert.equal(body.settings.notebook_enabled, true)
+    assert.equal(body.settings.max_calls_per_turn, 8)
+    return Response.json({ ...saved, revision: 4, settings: body.settings })
+  })
+  await tick()
+  const minimum = f.minimumCalls.value
+  f.setWorkflow('integrated')
+  assert.equal(f.draft.value.max_input_chars, 48000)
+  assert.equal(f.status.value.usage.workflow, 'staged')
+  assert.equal(f.minimumCalls.value, minimum)
+  assert.equal(await f.save(), true)
+  assert.equal(f.draft.value.workflow, 'integrated')
+  assert.equal(f.status.value.usage.workflow, 'staged')
+})
+
+test('selecting either workflow preserves an already larger input budget', async t => {
+  const saved = state()
+  saved.settings.max_input_chars = 64000
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  f.setWorkflow('integrated')
+  assert.equal(f.draft.value.max_input_chars, 64000)
+  f.setWorkflow('staged')
+  assert.equal(f.draft.value.max_input_chars, 64000)
+  assert.equal(saved.settings.max_input_chars, 64000)
+})
+
 test('semantic memory is opt-in, session-scoped, and does not increase generative calls', async t => {
   const saved = state(3)
   saved.settings.semantic_memory = false
