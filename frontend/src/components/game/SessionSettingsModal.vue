@@ -34,9 +34,10 @@ const emit = defineEmits<{
   ): void
 }>()
 
-const section = ref<'story' | 'memory' | 'characters'>('story')
+type Section = 'story' | 'memory' | 'characters' | 'living_world' | 'npc_personality'
+const section = ref<Section>('story')
 const frame = ref<InstanceType<typeof SessionSettingsFrame> | null>(null)
-async function showFailure(value: 'story' | 'characters') {
+async function showFailure(value: Section) {
   section.value = value
   await frame.value?.revealErrors()
 }
@@ -71,7 +72,7 @@ async function saveAll(): Promise<void> {
       return
     }
     if (livingWorld.value && !(await livingWorld.value.save())) {
-      await showFailure('characters')
+      await showFailure('living_world')
       return
     }
     if (portraitSettings.value && !(await portraitSettings.value.save())) {
@@ -79,7 +80,7 @@ async function saveAll(): Promise<void> {
       return
     }
     if (chpm.value && !(await chpm.value.save())) {
-      await showFailure('characters')
+      await showFailure('npc_personality')
       return
     }
     if (visualPresets.value && !(await visualPresets.value.save())) {
@@ -170,18 +171,25 @@ onMounted(() => {
       />
     </template>
     <template #characters>
-      <LivingWorldSettings
-        v-if="sessionId"
-        ref="livingWorld"
-        :session-id="sessionId"
-        class="settings-widget"
-      />
       <SessionPortraitSettings
         v-if="sessionId"
         ref="portraitSettings"
         :session-id="sessionId"
         class="settings-widget"
       />
+      <p class="mt-5 text-xs leading-relaxed text-slate-500">
+        Changes apply to future actions. Existing replies and images are kept.
+      </p>
+    </template>
+    <template #living_world>
+      <LivingWorldSettings
+        v-if="sessionId"
+        ref="livingWorld"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+    </template>
+    <template #npc_personality>
       <ChpmSettings
         v-if="sessionId && mode === 'vn'"
         ref="chpm"
@@ -190,9 +198,6 @@ onMounted(() => {
       />
       <p v-else class="text-xs leading-relaxed text-slate-400">
         NPC Personality is available in Visual Novel sessions.
-      </p>
-      <p class="mt-5 text-xs leading-relaxed text-slate-500">
-        Changes apply to future actions. Existing replies and images are kept.
       </p>
     </template>
   </SessionSettingsFrame>

@@ -50,7 +50,7 @@ try {
     await page.getByRole('tabpanel').locator('details').first().evaluate(node => { node.open = false })
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
-  assert.equal(await dialog().getByRole('tab').count(), 3)
+  assert.equal(await dialog().getByRole('tab').count(), 5)
   await page.waitForFunction(() => document.querySelector('[aria-label="Portrait presentation"] input')?.disabled === false)
   const initialRequests = await page.evaluate(() => window.groupedActionsFixture.requests.length)
   await dialog().getByLabel('Amount of narration').selectOption('rich')
@@ -77,7 +77,7 @@ try {
   await page.keyboard.press('ArrowDown')
   assert.equal(await tab('Memory & audio').getAttribute('aria-selected'), 'true')
   await page.keyboard.press('End')
-  assert.equal(await tab('Characters').getAttribute('aria-selected'), 'true')
+  assert.equal(await tab('NPC Personality').getAttribute('aria-selected'), 'true')
   // A save error in a collapsed form on another tab must become visible.
   await page.evaluate(() => window.groupedActionsFixture.failSettingsSave('dynamic-locations'))
   await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
@@ -98,14 +98,14 @@ try {
   assert.equal(await dialog().getByLabel('Narrator Turn Memory', { exact: true }).inputValue(), '27')
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 844 })
-    for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
+    for (const name of ['Story & world', 'Memory & audio', 'Characters', 'Living World', 'NPC Personality']) {
       await tab(name).click()
       await bounds()
     }
   }
   for (const [width, height] of [[720, 450], [844, 390], [320, 400]]) {
     await page.setViewportSize({ width, height })
-    for (const name of ['Story & world', 'Memory & audio', 'Characters']) {
+    for (const name of ['Story & world', 'Memory & audio', 'Characters', 'Living World', 'NPC Personality']) {
       await tab(name).click()
       await bounds()
     }
@@ -116,8 +116,35 @@ try {
   await open()
   await dialog().locator('summary').filter({ hasText: /^Visual novel narration$/ }).click()
   await dialog().getByRole('radio', { name: /^Brisk/ }).waitFor()
-  await tab('Characters').click()
-  await dialog().locator('summary').filter({ hasText: /^NPC Personality/ }).waitFor()
+  await tab('NPC Personality').click()
+  await dialog().locator('summary').filter({ hasText: /^NPC Personality/ }).click()
+  await dialog().locator('[name="npc-mode"]').selectOption('live')
+  await dialog().getByRole('checkbox', { name: 'Mira', exact: true }).check()
+  await dialog().locator('[name="npc-decision-workflow"]').selectOption('integrated')
+  assert.equal(await dialog().getByLabel('Input size per request (characters, including instructions)').inputValue(), '48000')
+  await dialog().locator('[name="npc-agent-tool-rounds"]').selectOption('1')
+  await tab('Living World').click()
+  await dialog().locator('summary').filter({ hasText: /^Living World/ }).click()
+  await dialog().getByRole('checkbox', { name: 'Enable Living World for this session', exact: true }).check()
+  await page.evaluate(() => window.groupedActionsFixture.failSettingsSave('living-world'))
+  await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
+  await dialog().getByRole('alert').waitFor()
+  assert.equal(await tab('Living World').getAttribute('aria-selected'), 'true')
+  await page.evaluate(() => window.groupedActionsFixture.failSettingsSave('chpm'))
+  await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
+  await dialog().locator('[data-settings-tab="npc_personality"][aria-selected="true"]').waitFor()
+  await dialog().getByRole('alert').waitFor()
+  assert.equal(await tab('NPC Personality').getAttribute('aria-selected'), 'true')
+  assert.equal(await dialog().locator('[name="npc-decision-workflow"]').inputValue(), 'integrated')
+  assert.equal(await dialog().locator('[name="npc-agent-tool-rounds"]').inputValue(), '1')
+  await page.evaluate(() => window.groupedActionsFixture.failSettingsSave(''))
+  await dialog().getByRole('button', { name: 'Save Settings', exact: true }).click()
+  await dialog().waitFor({ state: 'hidden' })
+  const workflowWrite = await page.evaluate(() => window.groupedActionsFixture.settingsWrites.filter(item => item.endpoint === 'chpm').at(-1))
+  assert.equal(workflowWrite.body.settings.workflow, 'integrated')
+  assert.equal(workflowWrite.body.settings.max_input_chars, 48000)
+  await open()
+  await tab('NPC Personality').click()
   await bounds()
   await dialog().getByRole('button', { name: 'Cancel', exact: true }).click()
   await dialog().waitFor({ state: 'hidden' })

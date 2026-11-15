@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { BookOpen, BrainCircuit, SlidersHorizontal, Users, X } from 'lucide-vue-next'
+import { BookOpen, BrainCircuit, Globe, MessageCircle, SlidersHorizontal, Users, X } from 'lucide-vue-next'
 import { useDialogFocus } from '@/composables/useDialogFocus'
 
-type Section = 'story' | 'memory' | 'characters'
+type Section = 'story' | 'memory' | 'characters' | 'living_world' | 'npc_personality'
 const props = defineProps<{ section: Section; saving?: boolean }>()
 const emit = defineEmits<{ 'update:section': [value: Section]; close: []; save: [] }>()
 const dialog = ref<HTMLElement | null>(null)
@@ -23,7 +23,9 @@ const sections = [
     hint: 'Context and speech',
     icon: BrainCircuit
   },
-  { id: 'characters' as const, label: 'Characters', hint: 'Behavior and portraits', icon: Users }
+  { id: 'characters' as const, label: 'Characters', hint: 'Portrait presentation', icon: Users },
+  { id: 'living_world' as const, label: 'Living World', hint: 'World simulation', icon: Globe },
+  { id: 'npc_personality' as const, label: 'NPC Personality', hint: 'Decisions and private memory', icon: MessageCircle }
 ]
 useDialogFocus(dialog, () => emit('close'))
 watch(

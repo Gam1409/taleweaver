@@ -31,27 +31,7 @@ async def investigate(
     pinned: dict[str, tuple[str, Source, str]] | None = None,
     notebook: NotebookDraft | None = None,
 ) -> tuple[Tools, list[dict]]:
-    if (
-        mind.genesis.scope.world_id != observation.session_id
-        or manager.game_id != observation.session_id
-    ):
-        raise ChpmError("CHPM agent observation belongs to another session.")
-    turn = getattr(manager, "_chpm_turn", None)
-    clothing = (
-        getattr(turn, "agent_clothing", {})
-        if getattr(turn, "input_id", None) == observation.message_id
-        else {}
-    )
-    hits = getattr(turn, "semantic_hits", {}).get(mind.genesis.scope.observer_id, [])
-    tools = Tools(
-        mind,
-        observation,
-        clothing,
-        pins=dict(pinned or {}),
-        semantic_scores={hit.record_id: hit.score for hit in hits},
-        episode_contexts={hit.record_id: hit.context for hit in hits},
-        notebook=notebook,
-    )
+    tools = make_tools(manager, mind, observation, pinned=pinned, notebook=notebook)
     if notebook and settings.agent_steps:
         native_model = agent_native.select_model(manager, settings)
         if native_model is not None:
@@ -132,3 +112,34 @@ def _summary(result: dict) -> dict:
         for key, value in result.items()
         if key not in {"text"}
     }
+
+
+def make_tools(
+    manager: Any,
+    mind: Mind,
+    observation: Observation,
+    *,
+    pinned: dict[str, tuple[str, Source, str]] | None = None,
+    notebook: NotebookDraft | None = None,
+) -> Tools:
+    if (
+        mind.genesis.scope.world_id != observation.session_id
+        or manager.game_id != observation.session_id
+    ):
+        raise ChpmError("CHPM agent observation belongs to another session.")
+    turn = getattr(manager, "_chpm_turn", None)
+    clothing = (
+        getattr(turn, "agent_clothing", {})
+        if getattr(turn, "input_id", None) == observation.message_id
+        else {}
+    )
+    hits = getattr(turn, "semantic_hits", {}).get(mind.genesis.scope.observer_id, [])
+    return Tools(
+        mind,
+        observation,
+        clothing,
+        pins=dict(pinned or {}),
+        semantic_scores={hit.record_id: hit.score for hit in hits},
+        episode_contexts={hit.record_id: hit.context for hit in hits},
+        notebook=notebook,
+    )

@@ -32,7 +32,7 @@ def dispatched(phase: str) -> None:
         return
     if phase == "proposal":
         pending.remaining[actor] = 0
-    elif phase == "agent_lookup":
+    elif phase in {"agent_lookup", "integrated_decision"}:
         pending.remaining[actor] = max(1, pending.remaining[actor] - 1)
 
 

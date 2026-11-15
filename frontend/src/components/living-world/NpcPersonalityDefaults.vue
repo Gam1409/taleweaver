@@ -19,6 +19,7 @@ const defaults: ChpmSettings = {
   agent_steps: 0,
   notebook_enabled: false,
   tool_protocol: 'auto',
+  workflow: 'staged',
   semantic_memory: false,
   failure_policy: 'continue'
 }
@@ -42,6 +43,9 @@ function update<K extends keyof ChpmSettings>(key: K, value: ChpmSettings[K], ex
 }
 function setNotebookEnabled(enabled: boolean) {
   update('notebook_enabled', enabled, enabled ? { agent_steps: Math.max(1, draft.value.agent_steps ?? 0) } : {})
+}
+function setWorkflow(workflow: 'staged' | 'integrated') {
+  update('workflow', workflow, workflow === 'integrated' ? { max_input_chars: Math.max(48000, draft.value.max_input_chars) } : {})
 }
 function selectActor(id: string, selected: boolean) {
   update(
@@ -172,7 +176,14 @@ function selectActor(id: string, selected: boolean) {
             </select></label
           >
         </div>
-        <label v-if="draft.mode === 'live' && draft.notebook_enabled" class="mt-4 block text-xs text-slate-300">Memory tool compatibility
+        <label v-if="draft.mode === 'live'" class="mt-4 block text-xs text-slate-300">NPC decision workflow
+          <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
+            <option value="staged">Staged — memory tools, then decision (default)</option>
+            <option value="integrated">Integrated — tools or decision (experimental)</option>
+          </select>
+          <span class="mt-2 block text-slate-400">With enabled tool rounds, Integrated can submit the validated decision without a separate readiness call. Selecting it sets the input budget to at least 48,000 characters and keeps larger limits. Existing sessions keep their saved workflow.</span>
+        </label>
+        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 block text-xs text-slate-300">Memory tool compatibility
           <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
             <option value="auto">Automatic</option>
             <option value="native">Native function calls</option>
