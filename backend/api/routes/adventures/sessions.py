@@ -990,7 +990,14 @@ async def copy_session(
     )
 
     # 6. Clone the conversation and map evidence to its new message IDs.
-    message_ids = await copy_messages(db, original_session.id, copied_session.id)
+    def copy_illustration_asset(url: str | None) -> str | None:
+        return _copy_data_asset_to_session(
+            copied_session.id, "illustrations", url, asset_copy_cache
+        )
+
+    message_ids = await copy_messages(
+        db, original_session.id, copied_session.id, copy_asset=copy_illustration_asset
+    )
     if original_state is not None and cloned_state is not None:
         from backend.engine.living_world.portability import remap_intentions
 
@@ -999,9 +1006,7 @@ async def copy_session(
         cloned_state.entity_states = copy_vn_state(
             cloned_state.entity_states,
             message_ids,
-            lambda url: _copy_data_asset_to_session(
-                copied_session.id, "illustrations", url, asset_copy_cache
-            ),
+            copy_illustration_asset,
         )
         cloned_state.entity_states = fork_chpm(
             remap_conditions(cloned_state.entity_states, message_ids),

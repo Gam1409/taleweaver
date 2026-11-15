@@ -1,5 +1,6 @@
 """Copy conversation IDs and durable work consistently when saves are imported or forked."""
 
+from collections.abc import Callable
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
@@ -42,6 +43,7 @@ def restore_messages(
             npc_recovery=deepcopy(raw.get("npc_recovery")),
             revision_id=_revision_id(raw),
             versions=deepcopy(raw.get("versions")),
+            illustration=deepcopy(raw.get("illustration")),
             portrait_state=deepcopy(raw.get("portrait_state")),
             is_debug=bool(raw.get("is_debug", False)),
         )
@@ -55,7 +57,24 @@ def restore_messages(
     return ids
 
 
-async def copy_messages(db: AsyncSession, original_id: str, copied_id: str) -> dict[str, str]:
+def _copy_illustration(
+    illustration: dict[str, Any] | None,
+    copy_asset: Callable[[str | None], str | None] | None,
+) -> dict[str, Any] | None:
+    """Rehome only the image link; generation details remain historical evidence."""
+    result = deepcopy(illustration)
+    if isinstance(result, dict) and copy_asset is not None and result.get("image_url"):
+        result["image_url"] = copy_asset(result["image_url"])
+    return result
+
+
+async def copy_messages(
+    db: AsyncSession,
+    original_id: str,
+    copied_id: str,
+    *,
+    copy_asset: Callable[[str | None], str | None] | None = None,
+) -> dict[str, str]:
     messages = (
         await db.scalars(
             select(ChatMessage)
@@ -78,6 +97,7 @@ async def copy_messages(db: AsyncSession, original_id: str, copied_id: str) -> d
                 "npc_recovery": m.npc_recovery,
                 "revision_id": m.revision_id,
                 "versions": m.versions,
+                "illustration": _copy_illustration(m.illustration, copy_asset),
                 "portrait_state": m.portrait_state,
                 "is_debug": m.is_debug,
             }

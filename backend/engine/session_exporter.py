@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import Any, BinaryIO, cast
 
 from sqlalchemy import select
@@ -35,11 +36,15 @@ def localize_session_paths(data: Any, session_id: str) -> Any:
     """
     Recursively replaces session-specific data paths with relative assets/ paths.
     E.g., /data/adventures/sessions/{session_id}/tts/abc.mp3 -> assets/tts/abc.mp3
+    Generation details contain historical prompts and queries, not live asset links.
     """
     prefix = f"/data/adventures/sessions/{session_id}/"
 
     if isinstance(data, dict):
-        return {k: localize_session_paths(v, session_id) for k, v in data.items()}
+        return {
+            k: deepcopy(v) if k == "generation_details" else localize_session_paths(v, session_id)
+            for k, v in data.items()
+        }
     elif isinstance(data, list):
         return [localize_session_paths(item, session_id) for item in data]
     elif isinstance(data, str):

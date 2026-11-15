@@ -6,6 +6,7 @@ import os
 import shutil
 import zipfile
 from contextlib import ExitStack
+from copy import deepcopy
 from typing import Any, BinaryIO, Optional, cast
 
 import uuid6
@@ -62,11 +63,17 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     """
     Recursively replaces relative assets/ paths with the new session's data paths.
     E.g., assets/tts/abc.mp3 -> /data/adventures/sessions/{new_session_id}/tts/abc.mp3
+    Generation details contain historical prompts and queries, not live asset links.
     """
     prefix = f"/data/adventures/sessions/{new_session_id}/"
 
     if isinstance(data, dict):
-        return {k: restore_session_paths(v, new_session_id) for k, v in data.items()}
+        return {
+            k: deepcopy(v)
+            if k == "generation_details"
+            else restore_session_paths(v, new_session_id)
+            for k, v in data.items()
+        }
     elif isinstance(data, list):
         return [restore_session_paths(item, new_session_id) for item in data]
     elif isinstance(data, str):
