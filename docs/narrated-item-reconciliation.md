@@ -1,5 +1,14 @@
 # Completed narration and possessions
 
+The conditional coverage correction measures its complete prepared request, including
+the provider's response contract, against the existing input limit. If the full
+context does not fit, it narrows the contract and instructions to missing item or
+condition domains and omits unrelated historical scene descriptions. Current source
+passages, public subjects, item IDs, ownership, condition state and original proposed
+effects remain available. Host evidence, merge and preview checks still apply.
+An irreducible input is reported as an input-budget failure before dispatch; the
+independently validated initial result is retained. This adds no retry or deadline.
+
 VN turns reconcile item actions after completed narration and before scene staging and illustration snapshots. This uses one bounded Small-role request, with at most one conditional correction inside the same role deadline. Ordinary narration can stream before the check; reviewed NPC narration waits for validation and the completed state transaction. Incomplete narration is never used. General guardrail rejection blocks state reconciliation; a localized canonical item denial can still admit unrelated state for known accessible targets. Failures produce a system notification rather than claiming inventory was updated.
 
 Shared extraction validates each item proposal with the existing strict item

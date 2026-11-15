@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pydantic import ValidationError
 
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+from backend.core.llm_structured_execution import InputBudgetError
 from backend.engine.narrated_items.validation_details import details
 
 
@@ -38,6 +39,12 @@ def describe_failure(exc: Exception) -> ReconciliationFailure:
     while current is not None and len(chain) < 5 and current not in chain:
         chain.append(current)
         current = current.__cause__ or current.__context__
+    budget = next((error for error in chain if isinstance(error, InputBudgetError)), None)
+    if budget is not None:
+        return ReconciliationFailure(
+            "input_budget",
+            f"the prepared input has {budget.measured} characters and exceeds its {budget.limit}-character limit.",
+        )
     validation = next((error for error in chain if isinstance(error, ValidationError)), None)
     if validation is not None:
         rows = tuple(details(validation))

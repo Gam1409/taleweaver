@@ -15,6 +15,7 @@ from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import (
+    correction_input,
     coverage,
     evidence,
     extraction_request,
@@ -234,6 +235,9 @@ async def reconcile_items(
             staging=staging_enabled,
             timeout=role_timeout(manager.user, "small"),
             max_context=MAX_CONTEXT,
+            correction_policy=correction_input.Policy(
+                INSTRUCTIONS, CONDITION_INSTRUCTIONS, independent_state.INSTRUCTIONS
+            ),
             accept=repair_validation.Check(
                 manager,
                 actors,

@@ -36,7 +36,11 @@ from backend.core.llm_roles import resolve_llm_role
 from backend.core.llm_sampling import apply as apply_sampling
 from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
-from backend.core.llm_structured_execution import require_complete, require_input_budget
+from backend.core.llm_structured_execution import (
+    input_characters,
+    require_complete,
+    require_input_budget,
+)
 from backend.core.llm_thinking import apply_thinking_settings
 from backend.core.llm_tool_turn import ToolTurn
 from backend.core.security import encryption_util
@@ -1162,6 +1166,26 @@ class GameMasterLLM:
         # Narration is source evidence: preserve its delivery cues and exact wording.
         return owned_stream(stream, timed_stream, raw_stream)
 
+    def structured_input_characters(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[T],
+        model: str,
+        *,
+        response_schema: dict | None = None,
+    ) -> int:
+        """Measure the same prepared input used by dispatch, without logging a model call."""
+        request = self._build_structured_request(
+            system_prompt,
+            user_prompt,
+            response_model,
+            model,
+            response_schema=response_schema,
+            emit_contract=False,
+        )
+        return input_characters(request.kwargs)
+
     def _build_structured_request(
         self,
         system_prompt: str,
@@ -1170,13 +1194,15 @@ class GameMasterLLM:
         model: str,
         *,
         response_schema: dict | None = None,
+        emit_contract: bool = True,
     ) -> _StructuredRequest:
         """Builds LiteLLM kwargs for a structured-output (Pydantic) task."""
         normalized_model = self._normalize_model(model)
         from backend.core.llm_structured_output import for_router, trace
 
         output = for_router(self, response_model, model=model, schema=response_schema)
-        trace(output.response_format, local_checks=output.local_checks)
+        if emit_contract:
+            trace(output.response_format, local_checks=output.local_checks)
         json_mode = uses_json_mode_fallback(self.provider, normalized_model)
         json_mode = json_mode or output.mode != "json_schema"
         if output.mode == "json_schema":

@@ -46,10 +46,41 @@ class Additions(BaseModel):
     )
 
 
-def schema(catalog: Catalog) -> dict:
+def schema(catalog: Catalog, *, domains: set[str] | None = None) -> dict:
     result = reference_schema.citation_schema(Additions, catalog)
     result["required"] = list(result["properties"])
+    if domains is not None:
+        for domain, field in (("items", "actions"), ("conditions", "condition_updates")):
+            if domain not in domains:
+                result["properties"][field] = {
+                    "type": "array",
+                    "items": {"type": "null"},
+                    "maxItems": 0,
+                    "default": [],
+                }
+        result["$defs"]["ClassificationReview"]["properties"]["domain"]["enum"] = sorted(domains)
+        _prune_unused_definitions(result)
     return result
+
+
+def _prune_unused_definitions(schema: dict) -> None:
+    definitions = schema.get("$defs", {})
+    pending: list = [{key: value for key, value in schema.items() if key != "$defs"}]
+    retained = set()
+    while pending:
+        node = pending.pop()
+        if isinstance(node, list):
+            pending.extend(node)
+            continue
+        if not isinstance(node, dict):
+            continue
+        ref = node.get("$ref", "")
+        name = ref.removeprefix("#/$defs/") if isinstance(ref, str) else ""
+        if name in definitions and name not in retained:
+            retained.add(name)
+            pending.append(definitions[name])
+        pending.extend(value for key, value in node.items() if key != "$defs")
+    schema["$defs"] = {name: value for name, value in definitions.items() if name in retained}
 
 
 def targets(result: ItemExtraction, catalog: Catalog, *, staging: bool) -> dict[str, set[str]]:

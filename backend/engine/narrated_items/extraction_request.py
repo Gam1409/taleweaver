@@ -6,7 +6,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from backend.engine.narrated_items import extraction_repair, reference_schema
+from backend.core.llm_structured_execution import InputBudgetError
+from backend.engine.narrated_items import correction_input, extraction_repair, reference_schema
 from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.schema import ItemExtraction, SharedItemExtraction
 from backend.engine.narrated_items.source_catalog import Catalog
@@ -29,6 +30,7 @@ async def request(
     timeout: float,
     max_context: int,
     accept: Callable[[ItemExtraction, ItemExtraction], Awaitable[bool]],
+    correction_policy: correction_input.Policy | None = None,
 ) -> Result:
     """Keep initial payload admission; additionally bound the correction's prepared wire.
 
@@ -82,6 +84,7 @@ async def request(
         deadline=deadline,
         max_context=max_context,
         accept=accept,
+        correction_policy=correction_policy,
     )
 
 
@@ -98,23 +101,38 @@ async def _repair(
     deadline: float,
     max_context: int,
     accept: Callable[[ItemExtraction, ItemExtraction], Awaitable[bool]],
+    correction_policy: correction_input.Policy | None = None,
 ) -> Result:
     attempted = False
     try:
         context = json.loads(payload)
         context["coverage_correction"] = extraction_repair.feedback(original, missing)
-        content = json.dumps(context, ensure_ascii=False)
-        if len(content) > max_context:
+        domains = set().union(*missing.values())
+        response_schema = extraction_repair.schema(catalog, domains=domains)
+        system = instructions + extraction_repair.INSTRUCTIONS
+        focused_system = (
+            correction_policy.instructions(domains) + extraction_repair.INSTRUCTIONS
+            if correction_policy
+            else None
+        )
+        prepared = correction_input.prepare(
+            llm,
+            system,
+            context,
+            response_schema,
+            max_context,
+            focused_instructions=focused_system,
+        )
+        if prepared is None:
             return Result(original, {"status": "input_budget", "attempted": False})
-        response_schema = extraction_repair.schema(catalog)
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             return Result(original, {"status": "deadline", "attempted": False})
         attempted = True
         additions = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                instructions + extraction_repair.INSTRUCTIONS,
-                content,
+                prepared.instructions,
+                prepared.content,
                 extraction_repair.Additions,
                 llm.model,
                 game_id=game_id,
@@ -132,9 +150,19 @@ async def _repair(
         )
         if corrected is not original and not await _preview(accept, corrected, original, deadline):
             return Result(original, {"status": "invalid_additions", "attempted": True})
-        return Result(corrected, {**audit, "attempted": True})
+        return Result(corrected, {**audit, "attempted": True, "focused_input": prepared.focused})
     except asyncio.CancelledError:
         raise
+    except InputBudgetError as exc:
+        return Result(
+            original,
+            {
+                "status": "input_budget",
+                "attempted": attempted,
+                "input_chars": exc.measured,
+                "limit": exc.limit,
+            },
+        )
     except Exception as exc:
         # The completed initial result is still independently validated and applied.
         return Result(
