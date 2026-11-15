@@ -20,6 +20,7 @@ from weakref import WeakSet
 from backend.core.config import settings
 from backend.core.diagnostic_detail import SECRET_KEYS, entries, operational_message, value
 from backend.core.diagnostic_failures import failure_details
+from backend.core.state_rejection_packets import split
 from backend.core.state_rejection_storage import write_packet
 
 if TYPE_CHECKING:
@@ -188,7 +189,8 @@ def _finish(capture: Capture) -> None:
             },
         ]
         try:
-            write_packet(owner.directory, rows)
+            for packet in split(rows):
+                write_packet(owner.directory, packet)
         except Exception:
             owner.write_failed = True
         finally:
