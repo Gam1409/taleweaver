@@ -30,6 +30,11 @@ available model endpoint; old paid instances must not be polled automatically.
 
 ## Offline checks
 
+When there is explicitly no previous intention, the request contract allows only
+`continuity=new` and an empty `change_basis`. A structurally or semantically invalid
+proposal receives that exact constraint in the existing bounded repair. The host
+does not clear proposed grounds silently or accept a decision without validation.
+
 Run CHPM and logger/usage regressions, then the full backend suite and type checks.
 Regression cases include completed-invalid JSON, explicit truncation, missing usage,
 nested/parallel metadata observers, unchanged state on exhaustion and counterfactual

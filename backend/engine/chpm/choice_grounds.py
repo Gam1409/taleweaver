@@ -29,13 +29,29 @@ def validate(preferred: str, selected: list[str], allowed: Collection[str]) -> N
         raise ChpmError(reason)
 
 
-def repair_hint(candidate: dict | None) -> str:
+def repair_hint(candidate: dict | None, *, no_previous_intention: bool = False) -> str:
     """Inspect bounded IDs for feedback only; never validate or apply psychology."""
     if not isinstance(candidate, dict):
         return ""
     choice, candidates = candidate.get("choice"), candidate.get("candidates")
     if not isinstance(choice, dict) or not isinstance(candidates, dict):
         return ""
+    continuity = _continuity_hint(choice, no_previous_intention)
+    return " ".join(filter(None, (continuity, _motive_hint(choice, candidates))))
+
+
+def _continuity_hint(choice: dict, no_previous_intention: bool) -> str:
+    if not no_previous_intention or (
+        choice.get("continuity", "new") == "new" and not choice.get("change_basis")
+    ):
+        return ""
+    return (
+        "previous_intention is null: set choice.continuity='new' and choice.change_basis=[]. "
+        "Keep your grounded preferred intention; current motives are not a change from a prior intention."
+    )
+
+
+def _motive_hint(choice: dict, candidates: dict) -> str:
     preferred, selected = choice.get("preferred"), choice.get("motive_ids")
     if not isinstance(preferred, str) or len(preferred) > 100 or not _ids(selected):
         return ""

@@ -80,6 +80,9 @@ def pack(
             ids["goal_quote"] = ["", *goals]
         payload = _payload(mind, supplied, window, catalogue, index, dialogue)
         payload.update(extra or {})
+        if "previous_intention" in payload and payload["previous_intention"] is None:
+            ids["continuity"] = ["new"]
+            ids["change_basis"] = []
         system, content = inference.compose(instruction, payload, wire_schema or schema, ids)
         size = len(system) + len(content)
         if size <= settings.max_input_chars:

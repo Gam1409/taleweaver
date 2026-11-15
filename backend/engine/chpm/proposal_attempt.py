@@ -53,9 +53,6 @@ async def request(
             )
             feedback = str(exc)
             candidate = exc.candidate
-            hint = choice_grounds.repair_hint(candidate) if issubclass(schema, Draft) else ""
-            if hint:
-                feedback = f"{feedback}; {hint}"[:600]
         except inference.OutputBudgetError as exc:
             reject(
                 "emotion",
@@ -85,6 +82,18 @@ async def request(
                     else None,
                 )
                 feedback = inference.validation_feedback(exc)
+        hint = (
+            choice_grounds.repair_hint(
+                candidate,
+                no_previous_intention=(
+                    "previous_intention" in payload and payload["previous_intention"] is None
+                ),
+            )
+            if issubclass(schema, Draft)
+            else ""
+        )
+        if hint:
+            feedback = f"{feedback}; {hint}"[:600]
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
