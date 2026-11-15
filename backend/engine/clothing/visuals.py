@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.engine.character_identity import identity_facts, identity_profile
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.settings import clothing_settings
+from backend.engine.physical_conditions.visuals import project as visible_conditions
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity
 
@@ -79,7 +80,14 @@ def _garment_description(item: dict) -> str:
 
 
 def portrait_description(facts: dict) -> str:
-    return "; ".join(str(facts[key]) for key in ("appearance", "clothing") if facts.get(key))
+    parts = [str(facts[key]) for key in ("appearance", "clothing") if facts.get(key)]
+    conditions = "; ".join(
+        f"{row.get('target_name') or facts['name']}: {row['detail']}"
+        for row in facts.get("physical_conditions", [])
+    )
+    if conditions:
+        parts.append("Current visible state (supersedes original descriptions): " + conditions)
+    return "; ".join(parts)
 
 
 def detailed_for_state(state: Any) -> bool:
@@ -107,7 +115,19 @@ async def npc_visuals(db: AsyncSession, state: SessionState, npc: WorldEntity) -
     owned = resolved_inventory(
         inventory, await session_objects(db, state.session_id), state.entity_states or {}
     )
-    facts = character_visuals(npc, owned, profile=profile, detailed=detailed_for_state(state))
+    detailed = detailed_for_state(state)
+    facts = character_visuals(npc, owned, profile=profile, detailed=detailed)
     if facts is not None:
         facts["name"] = override.get("name", npc.name)
+        facts["physical_conditions"] = visible_conditions(
+            state,
+            {
+                npc.id: {
+                    "visual_profile": identity_profile(npc, profile),
+                    "resolved_inventory": owned,
+                    "equipment": value(npc, "equipment"),
+                }
+            },
+            detailed=detailed,
+        )
     return facts
