@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.memory_rag.dirty_queue import queue_refresh
 from backend.engine.turn_replay.control import story_message_filter
-from backend.engine.turn_replay.snapshot import capture, restore
+from backend.engine.turn_replay.snapshot import capture, restore, with_current_controls
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.turn_replay import TurnReplay
@@ -141,11 +141,11 @@ async def begin(manager: Any, message_id: str) -> str:
         raise ReplayUnavailableError("This session cannot replay a turn.")
     row = await ready_snapshot(db, sid, message_id)
     backup = await capture(db, sid, boundary=row.before["boundary"], backup=True)
-    # Debug visibility is a current UI preference, not a consequence to rewind.
-    before = {
-        **row.before,
-        "state": {**row.before["state"], "is_debug_enabled": backup["state"]["is_debug_enabled"]},
-    }
+    before = with_current_controls(
+        row.before,
+        debug_enabled=backup["state"]["is_debug_enabled"],
+        living_world=backup["state"].get("living_world"),
+    )
     text = row.input_text
     row.backup, row.status = backup, "replaying"
     await db.commit()  # Durable recovery record precedes the destructive rewind.

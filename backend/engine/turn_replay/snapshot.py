@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.chpm import recovery_queue
 from backend.engine.chpm.lifecycle import validate as validate_chpm
+from backend.engine.living_world.schema import Settings as LivingWorldSettings
+from backend.engine.living_world.schema import Simulation
 from backend.engine.living_world.state import fork as fork_simulation
 from backend.engine.living_world.state import offline_total
 from backend.engine.npc_journal.clock import clock_fields
@@ -34,6 +36,24 @@ SESSION_FIELDS = (
     "adventure_image_url",
 )
 USER_FIELDS = ("earned_awards", "game_log")
+
+
+def with_current_controls(
+    snapshot: dict, *, debug_enabled: bool | None, living_world: dict | None
+) -> dict:
+    """Keep explicit controls on latest-turn replay; world history still rewinds."""
+    before = deepcopy(snapshot)
+    state = before["state"]
+    state["is_debug_enabled"] = debug_enabled
+    original = state.get("living_world")
+    if original is None and living_world is None:
+        return before
+    settings = LivingWorldSettings.model_validate((living_world or {}).get("settings", {}))
+    if original is None:
+        minute = int(state.get("in_game_time") or 0)
+        original = Simulation(cursor=minute, target=minute).model_dump(mode="json")
+    state["living_world"] = {**original, "settings": settings.model_dump(mode="json")}
+    return before
 
 
 def decoded(table: Any, values: dict) -> dict:

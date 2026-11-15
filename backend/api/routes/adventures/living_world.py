@@ -57,7 +57,7 @@ async def configure(
     state = await owned(db, game_id, user)
     simulation = read_simulation(state)
     check_revision(simulation, payload.expected_revision)
-    if payload.settings.deliberation_enabled and load_chpm(state).settings.mode == "live":
+    if payload.settings.private_decisions_active and load_chpm(state).settings.mode == "live":
         raise HTTPException(
             409, "Disable live CHPM before enabling Living World private decisions."
         )

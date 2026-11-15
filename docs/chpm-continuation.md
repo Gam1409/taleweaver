@@ -35,8 +35,17 @@ Enabled mode offers two failure policies:
 - **Strict** stops a failed turn for inspection and preserves the previous
   rollback behavior. Use it when evaluating models or investigating a problem.
 
-Living World private decisions must be disabled before enabling CHPM. The two
-systems should not independently decide for the same characters.
+Live CHPM conflicts with Living World private decisions only when both the Living
+World feature and its private-decision setting are enabled. A saved private-decision
+preference in a disabled Living World does not block CHPM, including in an existing
+session. Reactivating Living World rechecks the conflict. The two systems should
+not independently decide for the same characters.
+
+Latest-turn regeneration and Undo preserve the current Living World control
+settings. They restore world events, clocks and private simulation history from
+the pre-turn snapshot. An older retry snapshot cannot silently reactivate a
+controller disabled after that turn. Full checkpoint restore retains its existing
+snapshot semantics.
 
 ## What happens on a failure
 
@@ -55,6 +64,13 @@ The indicator reads **NPC Personality: partial** after that review succeeds.
 Session settings identify paused characters and their bounded rejection details;
 these details do not appear in the story. Parallel and sequential analysis use
 the same rule and the same single shared proposal-repair budget.
+
+If the reviewer identifies exact new speech from a paused character in the
+candidate, the host treats that as a rejected narration. It uses the existing
+bounded repair/review path, followed by the ordinary replacement when needed.
+That known violation cannot be released as an unavailable-review fallback.
+An invalid attribution or a quote absent from the candidate remains an
+unconfirmed review; it is not proof that the narration violated the contract.
 
 If no usable decision survives, the existing whole-turn recovery policy applies.
 Shared perception, transport, cancellation, exhausted shared budgets and persistence failures are

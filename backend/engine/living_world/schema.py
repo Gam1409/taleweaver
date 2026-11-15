@@ -32,6 +32,10 @@ class Settings(BaseModel):
     max_deliberations: int = Field(default=8, ge=0, le=128)
     decision_max_tokens: int = Field(default=256, ge=128, le=1024)
 
+    @property
+    def private_decisions_active(self) -> bool:
+        return self.living_world_enabled and self.deliberation_enabled
+
 
 class Event(BaseModel):
     model_config = ConfigDict(extra="forbid")

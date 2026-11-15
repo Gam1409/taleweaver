@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.gameplay.agent_logic import AgentService
 from backend.engine.turn_replay.service import ReplayUnavailableError, ready_snapshot
-from backend.engine.turn_replay.snapshot import after, restore
+from backend.engine.turn_replay.snapshot import after, restore, with_current_controls
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -46,8 +46,9 @@ async def undo_latest(db: AsyncSession, game: GameSession, message_id: str) -> i
         or (before.get("avatar") or {}).get("id") != avatar_id
     ):
         raise ReplayUnavailableError(CHECKPOINT_REQUIRED)
-    # Debug visibility is a current UI preference, as in full turn regeneration.
-    before["state"]["is_debug_enabled"] = state.is_debug_enabled
+    before = with_current_controls(
+        before, debug_enabled=state.is_debug_enabled, living_world=state.living_world
+    )
     count = await db.scalar(
         select(func.count())
         .select_from(ChatMessage)

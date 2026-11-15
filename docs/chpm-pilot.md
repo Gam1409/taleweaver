@@ -50,7 +50,9 @@ The saved data is preserved, not repaired or erased. Observe/Enabled admission
 still validates the full kernel before inference. Unsupported envelope versions
 and invalid settings remain errors; checkpoint/restore/copy validation is unchanged.
 
-Enabled mode requires Living World private decisions to be disabled. Rule-based
+Enabled mode conflicts with Living World private decisions only while Living World
+itself is enabled. Switching Living World off preserves its saved preferences and
+allows CHPM; switching it back on rechecks the controller conflict. Rule-based
 world movement and established mechanics remain host responsibilities. A single
 session should not have two private decision systems controlling the same NPC.
 
