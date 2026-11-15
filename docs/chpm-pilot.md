@@ -2,6 +2,9 @@
 
 Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
 
+See [NPC decision workflows](npc-decision-workflows.md) for the optional integrated
+tool-or-decision path, input budgets and timing comparisons. Staged remains the default.
+
 See [source recovery and report provenance](chpm-source-continuity.md) for bounded
 historical catch-up and observer-to-observer transmission in the existing calls.
 

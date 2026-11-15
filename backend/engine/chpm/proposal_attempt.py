@@ -1,6 +1,6 @@
 """One shared proposal retry, preserving room for the remaining turn and prose review."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -33,21 +33,27 @@ async def request(
     schema: type[T],
     identifiers: dict,
     accept: Callable[[T], R],
+    *,
+    initial: Callable[[], Awaitable[T]] | None = None,
 ) -> R:
     phase = "proposal"
     repair = None
     while True:
         try:
-            raw = await _read(
-                manager,
-                settings,
-                usage,
-                instruction,
-                payload,
-                schema,
-                phase,
-                identifiers,
-                repair,
+            raw = (
+                await initial()
+                if phase == "proposal" and initial is not None
+                else await _read(
+                    manager,
+                    settings,
+                    usage,
+                    instruction,
+                    payload,
+                    schema,
+                    phase,
+                    identifiers,
+                    repair,
+                )
             )
         except inference.InvalidResponseError as exc:
             reject(

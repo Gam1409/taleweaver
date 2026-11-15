@@ -19,6 +19,7 @@ class Contract(BaseModel):
 
 
 class Settings(Contract):
+    workflow: Literal["staged", "integrated"] = "staged"
     npc_concurrency: int = Field(default=1, ge=1, le=4, strict=True)
     mode: Literal["off", "shadow", "live"] = "off"
     actor_ids: list[str] = Field(default_factory=list, max_length=20)
@@ -297,6 +298,7 @@ class Decision(Contract):
 
 
 class Usage(Contract):
+    workflow: Literal["staged", "integrated"] | None = None
     preparation_ms: float | None = Field(default=None, ge=0)
     timings: list[RequestTiming] = Field(default_factory=list, max_length=25)
     calls: int = 0

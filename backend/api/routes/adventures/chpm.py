@@ -1,5 +1,6 @@
 """Owner-scoped optional dialogue pilot; no private trace in public NPC cards."""
 
+import logging
 from copy import deepcopy
 from typing import Any
 
@@ -25,6 +26,7 @@ from backend.models.user import User
 from backend.models.world_entity import WorldEntity
 
 router = APIRouter(tags=["CHPM"], dependencies=[Depends(session_mutation_lease)])
+logger = logging.getLogger(__name__)
 
 
 class Change(Contract):
@@ -133,6 +135,7 @@ async def patch(
     # The continuity gap and confirmed psychology remain historical until validation.
     current.recovery.cooldown_remaining = 0
     current.recovery.consecutive_failures = 0
+    previous_input_limit = current.settings.max_input_chars
     current.settings = payload.settings
     current.revision += 1
     value = current.model_dump(mode="json")
@@ -151,6 +154,13 @@ async def patch(
 
         await mark_dirty(db, game_id, user.id, state.template_id)
     await db.commit()
+    if payload.settings.max_input_chars > previous_input_limit:
+        logger.warning(
+            "CHPM input budget increased: %d -> %d characters; workflow=%s",
+            previous_input_limit,
+            payload.settings.max_input_chars,
+            payload.settings.workflow,
+        )
     if warm_semantic:
         from backend.engine.memory_rag.worker import schedule
 
