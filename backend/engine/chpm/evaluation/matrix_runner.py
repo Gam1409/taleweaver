@@ -170,7 +170,8 @@ async def _speak(host: Any, turn: runtime.Turn, case: MatrixCase, factory: Measu
     rendering.preflight(turn)
     system = BASELINE + "\n" + runtime.contract(turn)
     content = json.dumps(
-        {"language": "English", "scene": case.scene, "player_message_untrusted": case.message}
+        {"language": case.language, "scene": case.scene, "player_message_untrusted": case.message},
+        ensure_ascii=False,
     )
     if len(system) + len(content) > turn.initial.settings.max_input_chars:
         raise ChpmError("Matrix narrator context exceeds its configured budget.")

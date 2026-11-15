@@ -37,7 +37,7 @@ def repair_hint(candidate: dict | None, *, no_previous_intention: bool = False) 
     if not isinstance(choice, dict) or not isinstance(candidates, dict):
         return ""
     continuity = _continuity_hint(choice, no_previous_intention)
-    return " ".join(filter(None, (continuity, _motive_hint(choice, candidates))))
+    return " ".join(filter(None, (continuity, _candidate_hint(candidate, choice, candidates))))
 
 
 def _continuity_hint(choice: dict, no_previous_intention: bool) -> str:
@@ -51,11 +51,24 @@ def _continuity_hint(choice: dict, no_previous_intention: bool) -> str:
     )
 
 
-def _motive_hint(choice: dict, candidates: dict) -> str:
+def _candidate_hint(candidate: dict, choice: dict, candidates: dict) -> str:
     preferred, selected = choice.get("preferred"), choice.get("motive_ids")
-    if not isinstance(preferred, str) or len(preferred) > 100 or not _ids(selected):
+    if not isinstance(preferred, str) or len(preferred) > 100:
         return ""
-    body = candidates.get(preferred)
+    return " ".join(
+        filter(
+            None,
+            (
+                _gate_hint(candidate, preferred),
+                _motive_hint(preferred, selected, candidates.get(preferred)),
+            ),
+        )
+    )
+
+
+def _motive_hint(preferred: str, selected: object, body: object) -> str:
+    if not _ids(selected):
+        return ""
     motives = body.get("motives") if isinstance(body, dict) else None
     if not isinstance(motives, list) or not 1 <= len(motives) <= 3:
         return ""
@@ -63,6 +76,15 @@ def _motive_hint(choice: dict, candidates: dict) -> str:
     if not _ids(allowed) or len(allowed) != len(motives):
         return ""
     return problem(preferred, selected, allowed)
+
+
+def _gate_hint(candidate: dict, preferred: str) -> str:
+    if preferred != "CLARIFY" or candidate.get("question_gate") is not None:
+        return ""
+    return (
+        "CLARIFY requires a valid decision-changing question_gate with two branches to other "
+        "offered keys. Otherwise choose an independent offered intention and use its cited motive IDs."
+    )
 
 
 def _ids(value: object) -> TypeGuard[list[str]]:
