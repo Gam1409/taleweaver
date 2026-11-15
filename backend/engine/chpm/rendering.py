@@ -229,6 +229,10 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             turn, text, resolution, ["Contradictory validation verdict."], verdict, payload
         )
         raise RecoverableChpmError("CHPM validator returned a contradictory verdict.")
+    issues = _deferred_speech(turn, verdict, text)
+    if issues:
+        _reject_review(turn, text, resolution, issues, verdict, payload)
+        return Verdict(matches=False, issues=issues)
     try:
         _validate_hearing(turn, verdict, text)
     except ChpmError as exc:
@@ -240,6 +244,24 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
         raise RecoverableChpmError(str(exc)) from exc
     return verdict
+
+
+def _deferred_speech(turn: Turn, verdict: Verdict, text: str) -> list[str]:
+    speakers = {
+        entry.speaker_id
+        for entry in verdict.heard
+        if entry.actor_id in turn.decisions
+        and entry.speaker_id in turn.deferred_names
+        and entry.speaker_id in turn.present_names
+        and entry.speaker_id != entry.actor_id
+        and entry.quote
+        and entry.quote in text
+    }
+    return [
+        f"Inactive controlled NPC {speaker} has new spoken dialogue; "
+        "retain only its established unchanged presence."
+        for speaker in sorted(speakers)
+    ][:8]
 
 
 def _reject_review(

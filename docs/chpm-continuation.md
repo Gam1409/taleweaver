@@ -65,6 +65,13 @@ Session settings identify paused characters and their bounded rejection details;
 these details do not appear in the story. Parallel and sequential analysis use
 the same rule and the same single shared proposal-repair budget.
 
+If the reviewer identifies exact new speech from a paused character in the
+candidate, the host treats that as a rejected narration. It uses the existing
+bounded repair/review path, followed by the ordinary replacement when needed.
+That known violation cannot be released as an unavailable-review fallback.
+An invalid attribution or a quote absent from the candidate remains an
+unconfirmed review; it is not proof that the narration violated the contract.
+
 If no usable decision survives, the existing whole-turn recovery policy applies.
 Shared perception, transport, cancellation, exhausted shared budgets and persistence failures are
 not reclassified as one bad intention. Strict mode still stops the whole turn.
