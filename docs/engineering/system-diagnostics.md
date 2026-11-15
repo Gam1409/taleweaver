@@ -84,8 +84,23 @@ emotion and cognition, progression/rules, scripts, clothing, Debug recovery and
 failed NPC-journal/RAG maintenance. Deferred background work remains a normal
 queue outcome rather than a rejected state change.
 Partial acceptance retains both the accepted state and rejected proposals.
-Foreground Debug commands stay within their caller's turn packet; explicitly
-scheduled background jobs have independent packets. A trace end marker means
+Independent failing checks within a turn are published as separate packets. Each
+retains its complete requests, responses, retries and nested check results, plus
+the turn's initial input, final state and shared operation metadata. Unrelated
+successful-step snapshots are excluded. Failures in the same check or its parent
+and child checks stay together so the diagnostic cause and repair remain visible.
+Packets have unique trace IDs and a shared `parent_trace_id` for their originating
+capture; their footer counts and summaries describe their own failures.
+
+When step boundaries are missing, inconsistent or exceed the bounded graph work,
+evidence overflowed, or captured rejections are incomplete, the original packet is
+retained whole. The footer's
+`packet_isolation` reports why safe separation was unavailable. Evidence and state
+are never sliced to force separation. New operations always publish fresh generated
+files, including regeneration with the same session/turn IDs; existing files are
+not appended to. Foreground Debug commands retain their caller's check scope;
+explicitly scheduled background jobs have independent captures. A trace end marker
+means
 observation ended, not that a transaction committed. Database COMMIT events record
 commit attempts; use the operation result and persisted state to confirm success.
 
