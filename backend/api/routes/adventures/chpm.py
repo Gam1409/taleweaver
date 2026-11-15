@@ -181,7 +181,7 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
             + ", ".join(sorted(unknown)),
         )
     simulation = load_simulation(state)
-    if settings.mode == "live" and simulation.settings.deliberation_enabled:
+    if settings.mode == "live" and simulation.settings.private_decisions_active:
         raise HTTPException(
             409, "Disable Living World private decisions before enabling live CHPM."
         )

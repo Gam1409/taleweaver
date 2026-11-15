@@ -36,7 +36,11 @@ def initial_states(adventure: Any, entity_states: dict) -> dict:
 
 
 def ensure_compatible(settings: Settings | None, living_world: dict | None) -> None:
-    if settings and settings.mode == "live" and (living_world or {}).get("deliberation_enabled"):
+    if not settings or settings.mode != "live":
+        return
+    from backend.engine.living_world.schema import Settings as LivingWorldSettings
+
+    if LivingWorldSettings.model_validate(living_world or {}).private_decisions_active:
         raise ValueError("Disable Living World private decisions before enabling NPC Personality.")
 
 

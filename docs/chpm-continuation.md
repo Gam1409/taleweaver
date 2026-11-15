@@ -35,8 +35,11 @@ Enabled mode offers two failure policies:
 - **Strict** stops a failed turn for inspection and preserves the previous
   rollback behavior. Use it when evaluating models or investigating a problem.
 
-Living World private decisions must be disabled before enabling CHPM. The two
-systems should not independently decide for the same characters.
+Live CHPM conflicts with Living World private decisions only when both the Living
+World feature and its private-decision setting are enabled. A saved private-decision
+preference in a disabled Living World does not block CHPM, including in an existing
+session. Reactivating Living World rechecks the conflict. The two systems should
+not independently decide for the same characters.
 
 ## What happens on a failure
 
