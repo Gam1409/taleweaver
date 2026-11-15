@@ -50,6 +50,11 @@ The host verifies schemas, size budgets, source quotations, exact spans and sess
 ownership. These checks establish provenance and structure; the review step remains
 necessary to assess interpretation and factual quality.
 
+The existing single correction receives bounded host feedback identifying unassigned,
+repeated or unknown local fact IDs. Feedback does not copy source passages or provider
+error text. Successful correction still requires every extracted fact to belong to
+exactly one record, with valid evidence and unchanged size limits.
+
 ## Find and organize a large collection
 
 The catalog supports **up to 10,000 compact records** with bounded server-side pages.

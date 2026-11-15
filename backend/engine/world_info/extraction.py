@@ -16,6 +16,7 @@ from backend.engine.world_info.extraction_contracts import (
     FactProposal,
     QuoteProposal,
 )
+from backend.engine.world_info.extraction_feedback import describe as correction_feedback
 from backend.engine.world_info.parsing import batch_payload
 from backend.engine.world_info.types import (
     EntryDraft,
@@ -210,13 +211,17 @@ async def extract_batch(
         language or getattr(user, "default_language", None) or "English",
         "fact statements and entry summaries",
     )
+    feedback = None
     for attempt in range(2):
         if before_request is not None:
             await before_request()
-        response = await _request(router, system, payload, sid, batch.index, attempt, timeout)
+        response = await _request(
+            router, system, payload, sid, batch.index, attempt, timeout, feedback=feedback
+        )
         entries = _validated_entries(response, sid, revision_id, source_hash, batch, existing)
         if entries is not None:
             return entries
+        feedback = correction_feedback(response)
         if attempt:
             raise ExtractionValidationError(
                 "Source batch failed extraction validation twice."
@@ -232,13 +237,22 @@ async def _request(
     batch: int,
     attempt: int,
     timeout: float,
+    *,
+    feedback: dict | None = None,
 ) -> object:
     """Only completed invalid output qualifies for an explicit correction request."""
     try:
         return await asyncio.wait_for(
             router.aexecute_complex_task(
                 system_prompt=system,
-                user_prompt=payload + (_CORRECTION if attempt else ""),
+                user_prompt=payload
+                + (
+                    _CORRECTION
+                    + "\nHOST_VALIDATION_FEEDBACK_JSON:\n"
+                    + json.dumps(feedback or {}, ensure_ascii=False)
+                    if attempt
+                    else ""
+                ),
                 response_model=ExtractionProposal,
                 model=router.model,
                 adventure_id=None,
