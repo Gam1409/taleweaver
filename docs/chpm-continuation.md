@@ -41,6 +41,12 @@ preference in a disabled Living World does not block CHPM, including in an exist
 session. Reactivating Living World rechecks the conflict. The two systems should
 not independently decide for the same characters.
 
+Latest-turn regeneration and Undo preserve the current Living World control
+settings. They restore world events, clocks and private simulation history from
+the pre-turn snapshot. An older retry snapshot cannot silently reactivate a
+controller disabled after that turn. Full checkpoint restore retains its existing
+snapshot semantics.
+
 ## What happens on a failure
 
 When one completed NPC proposal remains invalid and another NPC has a usable
