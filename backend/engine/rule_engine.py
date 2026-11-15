@@ -62,7 +62,16 @@ class ExitUpdate(BaseModel):
 class WorldEntityUpdate(BaseModel):
     """Used for changing an entity's name, description or visibility at runtime."""
 
-    entity_id: str = Field(..., validation_alias=AliasChoices("entity_id", "id"))
+    entity_id: str = Field(
+        ...,
+        validation_alias=AliasChoices("entity_id", "id"),
+        description=(
+            "Exact supplied NPC, object or item ID. The player alias __player__ is not a "
+            "world entity ID. Player stats and inventory use the GameEvent player fields; "
+            "player travel uses new_scene_id. Local player observations belong to the "
+            "shared scene/condition check, not updated_entities. Never invent a replacement ID."
+        ),
+    )
     name: Optional[str] = None
     description: Optional[str] = None
     spatial_position: Optional[str] = None
