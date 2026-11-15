@@ -51,7 +51,13 @@ class MeasuredModel:
             payload = json.loads(content)
             call.context_audit = {
                 key: payload[key]
-                for key in ("actor_id", "appraisal_context", "context_packing", "proposal_feedback")
+                for key in (
+                    "actor_id",
+                    "appraisal_context",
+                    "experience_context",
+                    "context_packing",
+                    "proposal_feedback",
+                )
                 if key in payload
             }
         self.inner.max_tokens = self.max_tokens

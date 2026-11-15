@@ -74,6 +74,14 @@ class MatrixCase:
         return list(SITUATIONS).index(self.situation)
 
     @property
+    def language(self) -> str:
+        return "English"
+
+    @property
+    def rubric(self) -> str:
+        return SITUATIONS[self.situation][1]
+
+    @property
     def scene(self) -> str:
         return f"At the {WORLDS[self.world][0]}. {SITUATIONS[self.situation][0]}"
 
@@ -132,12 +140,16 @@ def choose(suite: str, ids: list[str]) -> list[MatrixCase]:
         from backend.engine.chpm.evaluation import continuity_cases
 
         all_cases = list(continuity_cases.catalogue())
+    if suite == "emotion":
+        from backend.engine.chpm.evaluation import emotion_cases
+
+        all_cases = list(emotion_cases.catalogue())
     if ids:
         indexed = {case.id: case for case in all_cases}
         if len(set(ids)) != len(ids) or set(ids) - set(indexed):
             raise ValueError("Choose unique case IDs from the matrix plan.")
         return [indexed[key] for key in ids]
-    if suite in {"full", "stress", "continuity"}:
+    if suite in {"full", "stress", "continuity", "emotion"}:
         return all_cases
     if suite == "large":
         return [c for c in all_cases if c.population == 20 and c.history_turns == 40]
