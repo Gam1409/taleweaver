@@ -37,9 +37,22 @@ def repair_hint(candidate: dict | None) -> str:
     if not isinstance(choice, dict) or not isinstance(candidates, dict):
         return ""
     preferred, selected = choice.get("preferred"), choice.get("motive_ids")
-    if not isinstance(preferred, str) or len(preferred) > 100 or not _ids(selected):
+    if not isinstance(preferred, str) or len(preferred) > 100:
         return ""
-    body = candidates.get(preferred)
+    return " ".join(
+        filter(
+            None,
+            (
+                _gate_hint(candidate, preferred),
+                _motive_hint(preferred, selected, candidates.get(preferred)),
+            ),
+        )
+    )
+
+
+def _motive_hint(preferred: str, selected: object, body: object) -> str:
+    if not _ids(selected):
+        return ""
     motives = body.get("motives") if isinstance(body, dict) else None
     if not isinstance(motives, list) or not 1 <= len(motives) <= 3:
         return ""
@@ -47,6 +60,15 @@ def repair_hint(candidate: dict | None) -> str:
     if not _ids(allowed) or len(allowed) != len(motives):
         return ""
     return problem(preferred, selected, allowed)
+
+
+def _gate_hint(candidate: dict, preferred: str) -> str:
+    if preferred != "CLARIFY" or candidate.get("question_gate") is not None:
+        return ""
+    return (
+        "CLARIFY requires a valid decision-changing question_gate with two branches to other "
+        "offered keys. Otherwise choose an independent offered intention and use its cited motive IDs."
+    )
 
 
 def _ids(value: object) -> TypeGuard[list[str]]:

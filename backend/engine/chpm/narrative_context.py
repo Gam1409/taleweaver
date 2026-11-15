@@ -31,12 +31,16 @@ def experience_reasons(mind: Mind, view: dict) -> dict:
     )
     result["omitted_reasons"] = len(candidates)
     baseline = _size(view)
-    for row in candidates[:EXPERIENCE_REASON_LIMIT]:
+    admitted = 0
+    for row in candidates:
+        if admitted == EXPERIENCE_REASON_LIMIT:
+            break
         row["last_assessed_reason"] = reasons[row["record_id"]]
         if _size(result) - baseline > EXPERIENCE_REASON_EXTRA_CHARS:
             row.pop("last_assessed_reason")
             continue
         result["omitted_reasons"] -= 1
+        admitted += 1
     return result
 
 

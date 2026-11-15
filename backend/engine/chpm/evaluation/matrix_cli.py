@@ -39,6 +39,7 @@ def manifest(
         ),
         "token_cost": "Unknown until measured; logical call bounds exclude transport retries.",
         "rubrics": {key: value[1] for key, value in matrix_cases.SITUATIONS.items()},
+        "case_rubrics": {case.id: case.rubric for case in cases},
         "history": "Authored fixture speech, not model-generated prehistory. Each case records its history length and whether events are daily or two minutes apart.",
         "current_events": "Only explicit author-assigned public test events enter cognition as world observations. Feelings are not supplied as external facts.",
         "review": [
@@ -122,7 +123,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "run"))
     parser.add_argument(
-        "--suite", choices=("smoke", "large", "full", "stress", "continuity"), default="smoke"
+        "--suite",
+        choices=("smoke", "large", "full", "stress", "continuity", "emotion"),
+        default="smoke",
     )
     parser.add_argument(
         "--output-tokens",
