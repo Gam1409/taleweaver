@@ -106,7 +106,7 @@ async def upload_image(
         file_bytes = await file.read()
         if len(file_bytes) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="File too large. Max 10 MB.")
-        image = Image.open(__import__("io").BytesIO(file_bytes))
+        image: Image.Image = Image.open(__import__("io").BytesIO(file_bytes))
 
         # Max dimensions based on type
         max_size = (256, 256) if upload_type == "character" else (512, 512)
