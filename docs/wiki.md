@@ -74,6 +74,10 @@ PowerShell users can pass the published commit SHA directly to `--revision`.
 GitHub repository URL; the default is `https://github.com/Gam1409/taleweaver`.
 Source URLs must use HTTPS without embedded credentials, a query or a fragment.
 
+The selected commit and its objects must already exist locally. Every Git
+subprocess receives `GIT_NO_LAZY_FETCH=1`: missing objects in a partial/promisor
+clone stop the export instead of fetching them during generation.
+
 The exporter resolves the ref to a commit SHA and reads that commit's tree.
 Uncommitted or untracked worktree text is never included, even when its file has
 the same name as a source document. Dry-run performs the same validation and

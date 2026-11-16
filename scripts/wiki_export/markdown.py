@@ -3,11 +3,12 @@
 import html
 import posixpath
 import re
+from collections.abc import Callable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 DESTINATION = r"""(?:<[^>\n]+>|(?:\\.|[^\s()])+(?:\([^()\n]*\)[^\s()]*)*)"""
 INLINE = re.compile(
-    rf"""(!?\[[^\]\n]*\]\(\s*)({DESTINATION})((?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))"""
+    rf"""(!?\[[^\[\]\n]*\]\(\s*)({DESTINATION})((?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))"""
 )
 REFERENCE = re.compile(rf"^(\s{{0,3}}\[[^\]]+\]:\s*)({DESTINATION})(.*)$")
 ATTRIBUTE = re.compile(r"""(\b(href|src)\s*=\s*)(["'])(.*?)\3""", re.IGNORECASE)
@@ -31,6 +32,24 @@ def _restore(line: str, protected: dict[str, str]) -> str:
     for key, value in protected.items():
         line = line.replace(key, value)
     return line
+
+
+def _inline_links(line: str, transform: Callable[[re.Match], str]) -> str:
+    """Mask rewritten inline images so the surrounding link remains parseable."""
+    images = {}
+    prefix = "\x00wiki-image-"
+    while prefix in line:
+        prefix += "-"
+
+    def mask(match: re.Match) -> str:
+        if not match[1].startswith("!"):
+            return match[0]
+        key = prefix + str(len(images)) + "\x00"
+        images[key] = transform(match)
+        return key
+
+    masked = INLINE.sub(mask, line)
+    return _restore(INLINE.sub(transform, masked), images)
 
 
 def _label(value: str) -> str:
@@ -158,5 +177,5 @@ def rewrite(
                 )
             )
             continue
-        lines.append(_restore(ATTRIBUTE.sub(attribute, INLINE.sub(inline, masked)), protected))
+        lines.append(_restore(ATTRIBUTE.sub(attribute, _inline_links(masked, inline)), protected))
     return "".join(lines)

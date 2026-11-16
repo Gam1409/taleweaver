@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 from collections import Counter
@@ -44,6 +45,7 @@ def _git(repo: Path, *args: str) -> bytes:
         ["git", "--no-replace-objects", "--no-pager", "-C", str(repo), *args],
         capture_output=True,
         check=False,
+        env={**os.environ, "GIT_NO_LAZY_FETCH": "1"},
     )
     if result.returncode:
         raise ValueError("Cannot read the requested Git revision.")

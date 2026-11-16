@@ -322,3 +322,63 @@ def test_sidebar_avoids_missing_custom_index_anchors(source, tmp_path):
     sidebar = (tmp_path / "wiki/_Sidebar.md").read_text()
     assert "(Home)" in sidebar
     assert "#current-guides" not in sidebar and "#research-and-history" not in sidebar
+
+
+def test_linked_images_rewrite_both_outer_targets_and_inner_images(source, tmp_path):
+    put(source, "version.json", '{"version":"1.0"}\n')
+    put(source, "LICENSE", "Original license notice.\n")
+    literal = "[![Picture](picture%20space.png)](guide.md)"
+    put(
+        source,
+        "docs/badges.md",
+        "\n".join(
+            [
+                "# Badges",
+                "[![Version](https://example.test/version.svg)](../version.json)",
+                "[![Code: MIT](https://example.test/license.svg)](../LICENSE)",
+                "[![Guide](picture%20space.png)](guide.md#details)",
+                "[![Artwork](picture%20space.png)](picture%20space.png)",
+                f"`{literal}`",
+                "```markdown",
+                literal,
+                "```",
+                "",
+            ]
+        ),
+    )
+    sha = commit(source)
+    result = run(source, tmp_path)
+    text = page(tmp_path, result, "docs/badges.md")
+    raw = f"https://raw.githubusercontent.com/Gam1409/taleweaver/{sha}/docs/picture%20space.png"
+    blob = f"https://github.com/Gam1409/taleweaver/blob/{sha}"
+    assert f"[![Version](https://example.test/version.svg)]({blob}/version.json)" in text
+    assert f"[![Code: MIT](https://example.test/license.svg)]({blob}/LICENSE)" in text
+    assert f"[![Guide]({raw})](guide#details)" in text
+    assert f"[![Artwork]({raw})]({blob}/docs/picture%20space.png)" in text
+    assert f"`{literal}`" in text
+    assert f"```markdown\n{literal}\n```" in text
+
+
+def test_all_git_commands_disable_lazy_fetch_and_preserve_other_environment(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    calls = []
+    monkeypatch.setenv("GIT_NO_LAZY_FETCH", "0")
+    monkeypatch.setenv("WIKI_EXPORT_TEST_SENTINEL", "preserved")
+
+    def command(arguments, **kwargs):
+        environment = kwargs["env"]
+        calls.append(
+            (environment.get("GIT_NO_LAZY_FETCH"), environment.get("WIKI_EXPORT_TEST_SENTINEL"))
+        )
+        return SimpleNamespace(returncode=0, stdout=b"result")
+
+    monkeypatch.setattr(export_wiki.subprocess, "run", command)
+    for args in [("rev-parse", "HEAD"), ("ls-tree", "HEAD"), ("cat-file", "blob", "f" * 40)]:
+        assert export_wiki._git(tmp_path, *args) == b"result"
+    assert calls == [("1", "preserved")] * 3
+
+
+def test_missing_local_object_fails_instead_of_continuing(source):
+    with pytest.raises(ValueError, match="Cannot read"):
+        export_wiki._git(source, "cat-file", "blob", "f" * 40)
