@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "InitialState": {
+      "additionalProperties": true,
+      "properties": {
+        "situation": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Situation",
+          "type": "string"
+        },
+        "relationships": {
+          "items": {
+            "$ref": "#/$defs/RelationshipSeed"
+          },
+          "maxItems": 32,
+          "title": "Relationships",
+          "type": "array"
+        },
+        "knowledge_entry_ids": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Knowledge Entry Ids",
+          "type": "array"
+        }
+      },
+      "title": "InitialState",
+      "type": "object"
+    },
+    "RelationshipSeed": {
+      "additionalProperties": true,
+      "properties": {
+        "target_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 600,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "description"
+      ],
+      "title": "RelationshipSeed",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "autonomy": {
+      "default": "off",
+      "enum": [
+        "off",
+        "reactive",
+        "proactive"
+      ],
+      "title": "Autonomy",
+      "type": "string"
+    },
+    "initial_state": {
+      "$ref": "#/$defs/InitialState"
+    },
+    "visual_reference": {
+      "const": "image_url",
+      "default": "image_url",
+      "title": "Visual Reference",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "title": "NpcAgentRuntime",
+  "type": "object"
+}

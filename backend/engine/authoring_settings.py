@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Any
 
+from backend.core.manifest_extensions import preserve_extensions
 from backend.engine.blueprint.brief import BRIEF_KEY, SOURCES_KEY
 from backend.engine.narrator.settings import preserve_settings as preserve_narrator_settings
 
@@ -14,4 +15,4 @@ def preserve_authoring_settings(manifest: dict, adventure: Any) -> dict:
         result.pop(key, None)
         if isinstance(previous, dict) and key in previous:
             result[key] = deepcopy(previous[key])
-    return result
+    return preserve_extensions(result, previous)

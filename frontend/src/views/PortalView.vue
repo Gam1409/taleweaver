@@ -11,6 +11,8 @@ import { usePortalSessionNavigation } from '@/composables/usePortalSessionNaviga
 import { usePortalSectionRouting } from '@/composables/usePortalSectionRouting'
 import PortalSidebar from '@/components/portal/PortalSidebar.vue'
 import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
+import AdventureLibraryDialog from '@/components/portal/AdventureLibraryDialog.vue'
+import { useAdventureLibrary } from '@/composables/useAdventureLibrary'
 import PortalLibraryToolbar from '@/components/portal/PortalLibraryToolbar.vue'
 import PortalFilterToolbar from '@/components/portal/PortalFilterToolbar.vue'
 import AdventureLibraryGrid from '@/components/portal/AdventureLibraryGrid.vue'
@@ -170,6 +172,8 @@ const { isResuming, playSession, startSession } = usePortalSessionNavigation({
   templates, sessions, isStartingSession, startingSessionTemplateId,
   startingSessionTitle, startSessionForTemplate
 }, router)
+const adventureLibrary = useAdventureLibrary({ onInstalled: fetchPortalData })
+
 const librarySessions = computed(() => indexLibrarySessions(sessions.value))
 
 function editAdventure(templateId: string) {
@@ -350,6 +354,7 @@ onUnmounted(() => {
         </div>
 
         <PortalLibraryToolbar
+          @browse-catalog="adventureLibrary.openDialog()"
           v-if="activeSection !== 'profile'"
           :active-section="activeSection"
           :template-count="templates.length"
@@ -585,6 +590,12 @@ onUnmounted(() => {
       <SetupWarningModal
         :isOpen="showSetupWarningModal"
         @close="dismissSetupWarning"
+      />
+
+      <AdventureLibraryDialog
+        v-if="adventureLibrary.isOpen.value"
+        :library="adventureLibrary"
+        @close="adventureLibrary.closeDialog()"
       />
 
       <ExportProgressModal

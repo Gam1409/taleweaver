@@ -1,5 +1,6 @@
 import logging
 import os
+from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import select
@@ -7,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.core.manifest_extensions import preserve_extensions
 from backend.engine.adventure_export_assets import (
     normalize_exported_equipment,
     serialize_world_location,
 )
+from backend.engine.adventure_identity import stable_origin_id
 from backend.engine.clothing.settings import clothing_settings
 from backend.engine.export_archives import pack_export_adz
 from backend.engine.narrator.settings import manifest_settings as narrator_settings
@@ -325,6 +328,11 @@ def _serialize_world_entity(entity: WorldEntity) -> dict[str, Any]:
         _normalize_exported_object_metadata(filtered)
     elif entity_type == "NPC":
         _normalize_exported_npc_metadata(filtered)
+        metadata = raw.get("metadata_json") or {}
+        if "agent_runtime" in metadata:
+            filtered.setdefault("metadata_json", {})["agent_runtime"] = deepcopy(
+                metadata["agent_runtime"]
+            )
 
     return filtered
 
@@ -377,6 +385,7 @@ class AdventureExporter:
             "format": "TaleWeaver",
             "version": CURRENT_VERSION,
             "adventure": {
+                "origin_id": stable_origin_id(adv),
                 "title": adv.title,
                 "living_world_settings": adv.living_world_settings,
                 "npc_personality_settings": adv.npc_personality_settings,
@@ -477,6 +486,7 @@ class AdventureExporter:
             "awards": adv.awards or [],
             "sequences": adv.sequences or [],
             "scripts": (adv.original_manifest or {}).get("scripts", []),
+            "init_script": getattr(adv, "init_script", None),
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
             "visual_preset_source": (adv.original_manifest or {}).get(
                 "visual_preset_source", "saved"
@@ -488,7 +498,7 @@ class AdventureExporter:
             "world_brief_sources": (adv.original_manifest or {}).get("world_brief_sources"),
         }
 
-        return manifest
+        return preserve_extensions(manifest, adv.original_manifest)
 
     @staticmethod
     async def export_adz(db: AsyncSession, template_id: str) -> bytes:

@@ -1,0 +1,314 @@
+{
+  "format": "TaleWeaver",
+  "version": "1.3",
+  "adventure": {
+    "origin_id": "b3a7bbda-c0ae-432c-bd6f-50bdd34d6ee1",
+    "title": "The Architect",
+    "teaser": "In the space between finished stories and forgotten dreams, anchor reality at the Loom.",
+    "cover_appearance": "vast cosmic machine hall, floating geometric archives, glowing golden loom, teal and amber",
+    "version": "3.0.0",
+    "creator": "Jean Schmitz",
+    "copyright": "Copyright (c) 2026 by Jean Schmitz",
+    "license": "CC BY-NC 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "language": "",
+    "original_prompt": "In the space between finished stories and forgotten dreams lies the Construct, a vast machine-world of floating archives, broken horizons, and half-written realities.\nAt its center stands The Architect, an ancient intelligence bound to the Loom, a living engine that weaves new worlds from memory, myth, and intention.\n\nLong ago, the Loom kept balance by turning imagination into stable realms. But after a catastrophic event known as the Fracture, unfinished worlds began leaking into one another. Cities appear with no history. Forests remember wars that never happened. Entire cultures vanish between one sunrise and the next.\n\nThe Architect can no longer create safely without a human catalyst, someone able to choose, prioritize, and give meaning to raw possibility. That catalyst is you.\n\nEach new adventure you request is more than a game. It is a reconstruction attempt.\nYou define tone, themes, and key elements; the Architect shapes them into a coherent world and anchors it before it collapses into noise. Every successful generation strengthens the Loom. Every unstable world risks spreading the Fracture.\n\nAs you create new adventures, a deeper question emerges:\nAre you merely building stories, or quietly deciding what reality is allowed to survive?",
+    "image_url": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_cover_82d296e6.jpg",
+    "rule_enforcement_mode": "chat",
+    "time_per_turn": 5,
+    "pacing_minutes": 5,
+    "max_time_per_turn": null,
+    "max_memory_turns": 10,
+    "clock_enabled": true,
+    "selected_tone": {
+      "id": "sci-fi",
+      "name": "Sci-Fi",
+      "description": "Futuristic systems, unknown tech, and speculative mystery.",
+      "instruction": "Use futuristic world logic, technical flavor, and discovery-driven narrative beats.",
+      "image_url": "/assets/catalog/tones/sci-fi_0b2e548f.jpg"
+    },
+    "ui_theme": {
+      "skin": "terminal"
+    },
+    "selected_image_styles": [
+      {
+        "id": "science-fiction",
+        "name": "Science-Fiction",
+        "description": "Futuristic tech, vast space, and advanced starships.",
+        "instruction": "futuristic science fiction world, starships in the sky, sleek high tech architecture, glowing neon lights, cinematic composition",
+        "image_url": "/assets/catalog/styles/science-fiction_93659096.jpg"
+      }
+    ],
+    "generate_scene_images": true,
+    "generate_npc_images": true,
+    "generate_item_images": true,
+    "min_scenes": 1,
+    "max_scenes": 1,
+    "min_items": null,
+    "max_items": null,
+    "container_generation_enabled": false,
+    "scripts_generation_enabled": true,
+    "min_containers": null,
+    "max_containers": null,
+    "text_log_generation_enabled": true,
+    "min_text_logs": null,
+    "max_text_logs": null,
+    "quest_generation_enabled": true,
+    "min_quests": null,
+    "max_quests": null,
+    "award_generation_enabled": false,
+    "min_awards": null,
+    "max_awards": null,
+    "plot": "In the space between finished stories and forgotten dreams lies the Construct, a vast machine-world of floating archives, broken horizons, and half-written realities. At its center stands The Architect, an ancient intelligence bound to the Loom. After the catastrophic Fracture, unfinished worlds began leaking into one another. The Architect can no longer create safely without a human catalyst. By examining the Fracture Log, learning the Axiom of Resonance from the Architect, and calibrating the Loom Console, the Catalyst anchors a coherent reality and halts the spread of the Fracture.",
+    "rules": "This is a narrative and puzzle-focused metaphysical realm where combat is disabled. The Architect to align your creative intent, and operating the Loom Console switch with the proper harmonic code.",
+    "intro_text": "Welcome to the Adventure Forge. \n\nThis is not a traditional story, but an in-game creation engine designed to build and launch entirely new adventures from scratch!\n\nJust type what you want to create.",
+    "completed_condition": "",
+    "gameover_condition": "Immediately after each failed Loom Console calibration increments fracture_collapse, check whether tw.vars.get('fracture_collapse', 0) >= 3. If true, the Fracture overwhelms the Loom and the Construct collapses: end the adventure in defeat immediately. Do not allow further calibration attempts or other actions after this terminal outcome.",
+    "completed_guard_expression": "tw.vars.get('loom_stabilized') == True",
+    "gameover_guard_expression": "tw.vars.get('fracture_collapse', 0) >= 3",
+    "tts_director_notes": "",
+    "starting_timestamp": 0,
+    "is_adventure_generator": true,
+    "time_system": "relative",
+    "time_config": {
+      "start_time": "08:00",
+      "day_label": "Day",
+      "initial_day": 1,
+      "time_format": "24h",
+      "unit_name": "Blobs",
+      "initial_value": 0,
+      "calendar_pacing_value": 5,
+      "calendar_pacing_unit": "Minutes",
+      "calendar_max_value": null,
+      "calendar_max_unit": "Minutes"
+    },
+    "game_over_rules": null,
+    "allow_dynamic_items": false,
+    "can_damage_npcs": true,
+    "npcs_can_damage_protagonist": true,
+    "cover_source_adventure_id": "the-architect-p2yhqbxz",
+    "cover_source_adventure_name": "The Architect",
+    "cover_similarity_percent": 50,
+    "allow_reuse_source_assets": true
+  },
+  "protagonist": {
+    "name": "The Catalyst",
+    "role": "Reality Weaver",
+    "description": "A mortal consciousness drawn across the threshold of unfinished stories into the heart of the Construct. Gifted with the rare capacity to choose and anchor raw possibility where machine logic fails.",
+    "goal": "Calibrate the Loom of Realities and assist The Architect in stabilizing a new world before the Fracture consumes the Construct.",
+    "character": "Observant, decisive, imaginative, and calm in the face of metaphysical paradoxes.",
+    "appearance": "hooded traveler, glowing astral threads on cloak, luminous eyes, dark tailored coat",
+    "profile_image": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_protagonist_06fd3cff.jpg",
+    "hp": 100,
+    "max_hp": 100,
+    "stamina": 80,
+    "max_stamina": 80,
+    "mana": 150,
+    "max_mana": 150,
+    "exp": 0,
+    "strength": 10,
+    "dexterity": 12,
+    "intelligence": 16,
+    "wisdom": 15,
+    "charisma": 14,
+    "armor_class": 10,
+    "stats": {
+      "special_actions": [],
+      "unlocked_actions": []
+    },
+    "status_effects": [],
+    "starting_inventory": [],
+    "starting_equipment": {}
+  },
+  "scenes": [
+    {
+      "id": "THE_CONSTRUCT",
+      "label": "The Construct \u2014 Heart of the Loom",
+      "description": "A vast, weightless sanctum suspended in the gulf between finished stories and forgotten dreams. Seven colossal brass astrolabe rings revolve slowly around the central platform, weaving rivers of \u0437\u043e\u043b\u043e\u0442\u043e\u0439 and cerulean light into the Loom. Beyond the obsidian balustrade, fragments of unanchored worlds\u2014a spire of glass, a petrified forest leaf, a clockwork moon\u2014drift through the mist before dissolving into static. The air vibrates with the deep, resonant hum of waiting potential.",
+      "image_url": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_scene_62f93fca.jpg",
+      "decorative_objects": [
+        "seven revolving brass astrolabe rings",
+        "three fractured marble pillars",
+        "two floating hourglasses of silver sand",
+        "obsidian balustrade overlooking the void",
+        "streams of golden story-threads",
+        "drifting shards of crystallized memory",
+        "ethereal canopy of half-written constellations"
+      ],
+      "on_enter_scene_script": "tw.vars.set('visited_construct', True)",
+      "on_enter_scene_text": "The Loom pulses with a low, harmonic chord as your presence registers within the Construct.",
+      "on_leave_scene_script": null,
+      "on_leave_scene_text": null
+    }
+  ],
+  "exits": [],
+  "npcs": [
+    {
+      "id": "ARCHITECT",
+      "entity_type": "NPC",
+      "name": "The Architect",
+      "description": "An ancient, towering intelligence bound to the Loom. Its body is a seamless synthesis of articulated ivory plates, brass filigree, and shifting polyhedrons of warm amber light where a face should be. Every gesture it makes leaves faint trails of geometric notation in the air.",
+      "appearance": "tall construct being, ivory armor plates, glowing geometric halo, brass robes, faceless mask",
+      "current_scene_id": "THE_CONSTRUCT",
+      "spatial_position": "standing beside the central rings of the Loom",
+      "image_url": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_architect_602ce8dd.jpg",
+      "is_hidden": false,
+      "npc_type": "BEING",
+      "movement_type": "STATIONARY",
+      "moveable": false,
+      "allowed_scenes": [
+        "THE_CONSTRUCT"
+      ],
+      "notes": "Knows the final digit of the harmonic calibration code and attunes the Catalyst when spoken to or interacted with.",
+      "goal": "Guide the Catalyst to harmonize the Loom Console and anchor a stable reality before the Fracture widens.",
+      "character": "Solemn, analytical, deeply reverent of human imagination, speaking in measured, poetic cadence.",
+      "hp": 100,
+      "max_hp": 100,
+      "mana": 500,
+      "max_mana": 500,
+      "stamina": 100,
+      "max_stamina": 100,
+      "is_attackable": false,
+      "is_killable": false,
+      "inventory": [],
+      "metadata_json": {
+        "special_actions": [],
+        "attack_mode": "PASSIVE"
+      },
+      "on_protagonist_enters_scene_text": "The Architect turns its luminous polyhedron visage toward you. 'Catalyst. The threads fray. Inspect the Fracture Log and speak with me before you touch the Loom Console.'"
+    }
+  ],
+  "objects": [
+    {
+      "id": "FRACTURE_LOG",
+      "entity_type": "OBJECT",
+      "name": "The Fracture Log",
+      "description": "A crystalline tablet etched with shifting golden glyphs that record the final moments before the Fracture split the Construct's realities apart.",
+      "appearance": "translucent crystal tablet, glowing golden glyphs, brass frame, ancient relic",
+      "current_scene_id": "THE_CONSTRUCT",
+      "spatial_position": "resting upon an obsidian lectern near the balustrade",
+      "image_url": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_fracture-log_7e5da6b1.jpg",
+      "item_type": "READABLE",
+      "wearable_slots": [],
+      "is_in_inventory": false,
+      "is_hidden": false,
+      "is_portable": true,
+      "combination_ingredients": [],
+      "reveals_item_id": "",
+      "is_final_state": false,
+      "stat_modifier_strength": 0,
+      "stat_modifier_dexterity": 0,
+      "stat_modifier_intelligence": 1,
+      "stat_modifier_wisdom": 1,
+      "stat_modifier_charisma": 0,
+      "stat_modifier_armor_class": 0,
+      "inventory": [],
+      "hp_change": 0,
+      "stamina_change": 0,
+      "mana_change": 0,
+      "text_log_content": "ARCHIVE ENTRY 00-FRACTURE:\nWhen the realities bled together, we sealed the Loom Console with a three-digit Harmonic Ratio derived from the sanctum's eternal architecture.\n\nFirst Digit: Count the colossal brass astrolabe rings revolving around the Loom.\nSecond Digit: Count the fractured marble pillars standing at the platform's edge.\nThird Digit: Ask The Architect for the Prime Catalyst Number\u2014the sole integer of unified meaning.",
+      "text_log_format": "DOCUMENT",
+      "on_pickup_script": "tw.vars.set('has_log', True)",
+      "on_pickup_text": "The crystal tablet hums against your fingers, projecting faint lines of verse into your mind.",
+      "on_drop_text": "The tablet settles back onto the obsidian surface with a chime.",
+      "on_read_script": "tw.vars.set('read_fracture_log', True)\ntw.story.show_message('The Harmonic Ratio pattern imprints itself upon your memory.')",
+      "on_read_text": "Light spills from the glyphs as you read the record of the Fracture."
+    },
+    {
+      "id": "LOOM_CONSOLE",
+      "entity_type": "OBJECT",
+      "name": "Harmonic Loom Console",
+      "description": "A semicircular control dais of brass dials, crystalline keys, and resonant tuning forks wired directly into the heart of the Loom. A numeric harmonic input awaits a three-digit calibration code once both the Fracture Log has been studied and The Architect has attuned your mind.",
+      "appearance": "ornate brass control console, glowing crystal dials, golden energy conduits, arcane mechanism",
+      "current_scene_id": "THE_CONSTRUCT",
+      "spatial_position": "mounted at the focal point before the Loom's central core",
+      "image_url": "assets/c9ecc947-de66-45c5-9c52-910c1056964a_loom-console_8b8336cf.jpg",
+      "item_type": "SWITCH",
+      "wearable_slots": [],
+      "is_in_inventory": false,
+      "is_hidden": false,
+      "is_portable": false,
+      "combination_ingredients": [],
+      "reveals_item_id": "",
+      "is_final_state": false,
+      "stat_modifier_strength": 0,
+      "stat_modifier_dexterity": 0,
+      "stat_modifier_intelligence": 0,
+      "stat_modifier_wisdom": 0,
+      "stat_modifier_charisma": 0,
+      "stat_modifier_armor_class": 0,
+      "inventory": [],
+      "metadata_json": {
+        "on_success_script": "tw.vars.set('loom_stabilized', True)",
+        "discovery_visibility": {
+          "mentioned_in_scene": true,
+          "listed_in_discoveries": false,
+          "lootable": false
+        }
+      },
+      "hp_change": 0,
+      "stamina_change": 0,
+      "mana_change": 0,
+      "switch_states": [
+        "UNSTABLE",
+        "ANCHORED"
+      ],
+      "switch_initial_state": "UNSTABLE",
+      "switch_transitions": [
+        {
+          "to": "ANCHORED",
+          "gates": {
+            "item": "",
+            "code": "731",
+            "rule": "",
+            "expression": "tw.vars.get('read_fracture_log') == True and tw.vars.get('architect_attuned') == True",
+            "condition": "tw.vars.get('read_fracture_log') == True and tw.vars.get('architect_attuned') == True"
+          },
+          "fail_message": "The console rejects the calibration! Either the three-digit Harmonic Ratio is incorrect, or you have not yet both read the Fracture Log and attuned with The Architect.",
+          "from": "UNSTABLE",
+          "success_message": "The brass rings lock into perfect synchronicity! A pillar of pure golden light erupts from the Loom as the fractured horizons weave together into a single, coherent reality.",
+          "on_success_script": "tw.vars.set('loom_stabilized', True)\ntw.player.modify_xp(200)",
+          "on_failure_script": "c = tw.vars.get('fracture_collapse', 0) + 1\ntw.vars.set('fracture_collapse', c)\ntw.story.show_message('Dissonant static lashes out from the Loom! Instability level: ' + str(c) + '/3')"
+        }
+      ],
+      "switch_outcomes": [
+        {
+          "on_state": "ANCHORED",
+          "effects": [
+            {
+              "type": "story_flag",
+              "target_id": "",
+              "key": "loom_stabilized"
+            }
+          ]
+        }
+      ],
+      "on_success_script": "tw.vars.set('loom_stabilized', True)",
+      "on_failure_script": ""
+    }
+  ],
+  "quests": [],
+  "awards": [],
+  "sequences": [
+    {
+      "id": "SEQ_1_ANCHOR_REALITY",
+      "order": 1,
+      "title": "Weaving the First Thread",
+      "description": "The Catalyst awakens in the Construct and must help The Architect stabilize the Loom before the Fracture tears the remaining archives apart. Guide the player to inspect the room's decorative features, read the Fracture Log, converse with The Architect to receive attunement and the final digit, and then input the three-digit code into the Harmonic Loom Console.",
+      "walkthrough": "1. Examine or read the ##FRACTURE_LOG on the obsidian lectern (sets 'read_fracture_log' = True). The log explains how to derive the 3-digit Harmonic Ratio:\n   - First digit: number of revolving brass astrolabe rings in the scene's decorative objects = 7.\n   - Second digit: number of fractured marble pillars in the scene's decorative objects = 3.\n   - Third digit: the Prime Catalyst Number known by The Architect.\n2. Talk to or interact with ARCHITECT. The on_interact event script attunes the player ('architect_attuned' = True) and The Architect reveals that the Prime Catalyst Number\u2014the integer of unified meaning\u2014is 1.\n3. Activate/switch the ##LOOM_CONSOLE to 'ANCHORED' using the code '731' while both 'read_fracture_log' and 'architect_attuned' are True. Note: failing the console calibration 3 times triggers a Fracture collapse (game over). Once '##LOOM_CONSOLE' reaches 'ANCHORED', 'loom_stabilized' becomes True, completing the sequence and winning the adventure.",
+      "end_condition": "",
+      "required_item_id": "",
+      "required_scene_id": "",
+      "required_defeated_npc_id": "",
+      "guard_expression": "",
+      "completion_guard_expression": "tw.vars.get('loom_stabilized') == True",
+      "exp_reward": 250,
+      "on_start_sequence_script": "tw.vars.set('fracture_collapse', 0)",
+      "on_start_sequence_text": "The Loom trembles as fragments of unwritten worlds collide in the void above.",
+      "on_end_sequence_script": "",
+      "on_end_sequence_text": "The Loom sings with a steady, eternal resonance. A new reality is born."
+    }
+  ],
+  "scripts": [],
+  "init_script": ""
+}

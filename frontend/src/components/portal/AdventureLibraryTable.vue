@@ -9,6 +9,7 @@ import PortalCreationToolbar from './PortalCreationToolbar.vue'
 import PendingAdventureCard from './PendingAdventureCard.vue'
 import AdventurePlayActions from './AdventurePlayActions.vue'
 import MemoryIndexActions from './MemoryIndexActions.vue'
+import PublicationActions from './PublicationActions.vue'
 
 const props = defineProps<{
   visibleTemplates: AdventureTemplateSummary[]
@@ -333,6 +334,7 @@ function getModeBadge(mode?: string): { label: string; class: string; icon: any 
                     <button type="button" role="menuitem" class="action-menu-item" @click="$emit('export-adz', template.template_id, template.title)"><Download aria-hidden="true" /><span>Export (.adz)</span></button>
                     <button type="button" role="menuitem" class="action-menu-item" @click="$emit('export-adv', template.template_id, template.title)"><Download aria-hidden="true" /><span>Export (.adv)</span></button>
                     <MemoryIndexActions :template-id="template.template_id" :title="template.title" menu-item />
+                    <PublicationActions :template-id="template.template_id" :title="template.title" menu-item />
                     <button type="button" role="menuitem" class="action-menu-item workspace-danger" @click="$emit('delete', template.template_id, template.title)"><Trash2 aria-hidden="true" /><span class="action-menu-title">Delete Adventure</span></button>
                   </ActionGroupMenu>
 

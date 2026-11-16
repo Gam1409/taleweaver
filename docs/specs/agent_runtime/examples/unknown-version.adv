@@ -1,0 +1,44 @@
+{
+  "format": "TaleWeaver",
+  "version": "1.3",
+  "adventure": {
+    "title": "A quiet harbor",
+    "version": "1.0.0",
+    "origin_id": "69d62242-c2cc-4716-8473-a24502955d35",
+    "rule_enforcement_mode": "chat"
+  },
+  "scenes": [
+    {
+      "id": "HARBOR",
+      "name": "Harbor",
+      "description": "A working harbor at dawn."
+    }
+  ],
+  "npcs": [
+    {
+      "id": "GUIDE",
+      "name": "Mira",
+      "description": "A guide preparing for the morning shift.",
+      "character": "Patient, curious, protective of her own time.",
+      "goal": "Repair the harbor beacon.",
+      "start_scene_id": "HARBOR",
+      "metadata_json": {
+        "personality_profile": {
+          "temperament": "calm",
+          "value": "duty"
+        },
+        "agent_runtime": {
+          "schema_version": 1
+        }
+      }
+    }
+  ],
+  "extensions": {
+    "agent_runtime": {
+      "schema_version": 2,
+      "future": {
+        "preserve": null
+      }
+    }
+  }
+}

@@ -333,6 +333,8 @@ In Docker, `localhost` refers to the container. Use an address reachable from th
 
 ## 📚 Guides
 
+[Community adventure catalog and compatible exports](docs/adventure-catalog.md)
+
 | Explore | Read more |
 | --- | --- |
 | Visual Novel play | [VN mode](docs/visual-novel-mode.md) · [Session language](docs/session-content-language.md) |

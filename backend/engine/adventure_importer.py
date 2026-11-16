@@ -184,11 +184,15 @@ class AdventureTemplateImporter:
 
     @staticmethod
     async def import_adz(
-        db: AsyncSession, adz_data: bytes, owner_id: Optional[str] = None, overwrite: bool = False
+        db: AsyncSession,
+        adz_data: bytes,
+        owner_id: Optional[str] = None,
+        overwrite: bool = False,
+        preserve_existing: bool = False,
     ) -> bool:
         from backend.engine.import_archive import import_adz
 
-        return await import_adz(db, adz_data, owner_id, overwrite)
+        return await import_adz(db, adz_data, owner_id, overwrite, preserve_existing)
 
     @staticmethod
     @atomic_import

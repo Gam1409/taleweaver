@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { FolderInput, Settings2, RefreshCw, RotateCcw, Trash2 } from 'lucide-vue-next'
+import { FolderInput, Settings2, RefreshCw, RotateCcw, Trash2, LibraryBig } from 'lucide-vue-next'
 import ActionGroupMenu from '@/components/game/immersive/ActionGroupMenu.vue'
 
 const props = defineProps<{
@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (e: 'delete-all-adventures'): void
   (e: 'delete-all-sessions'): void
   (e: 'update-all'): void
+  (e: 'browse-catalog'): void
 }>()
 const menuOpen = ref(false)
 const isLibrary = computed(() => props.activeSection === 'templates')
@@ -35,6 +36,10 @@ watch(() => props.activeSection, () => { menuOpen.value = false })
       <p class="portal-subtitle">{{ isLibrary ? 'Every world begins with a story.' : 'Pick up a story where you left it.' }}</p>
     </div>
     <div class="portal-heading-actions">
+      <button v-if="isLibrary" type="button" class="workspace-button" @click="emit('browse-catalog')">
+        <LibraryBig aria-hidden="true" />
+        <span>Community Catalog</span>
+      </button>
       <button type="button" class="workspace-button" @click="emit('import', activeSection)">
         <FolderInput aria-hidden="true" />
         <span>{{ isLibrary ? 'Import adventure' : 'Import session' }}</span>

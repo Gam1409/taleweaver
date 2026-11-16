@@ -183,7 +183,11 @@ def _read_archive_manifest(zip_file: zipfile.ZipFile) -> dict[str, Any] | None:
 
 @atomic_import
 async def import_adz(
-    db: AsyncSession, adz_data: bytes, owner_id: Optional[str] = None, overwrite: bool = False
+    db: AsyncSession,
+    adz_data: bytes,
+    owner_id: Optional[str] = None,
+    overwrite: bool = False,
+    preserve_existing: bool = False,
 ) -> bool:
     """Logic for ADZ (ZIP) import, including assets."""
     from backend.engine.adventure_importer import (
@@ -207,7 +211,8 @@ async def import_adz(
             # Check if template with this title or origin_id already exists for this owner
             origin_id = adv_data.get("origin_id") or manifest_data.get("origin_id")
 
-            await _resolve_archive_conflict(db, owner_id, origin_id, adv_data, overwrite)
+            if not preserve_existing:
+                await _resolve_archive_conflict(db, owner_id, origin_id, adv_data, overwrite)
 
             # Create new template ID
             new_template_id = generate_adventure_id(adv_data["title"])

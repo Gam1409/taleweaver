@@ -2,6 +2,10 @@
 
 This document defines the structure, schema, and field definitions for `.adv` (JSON) and `.adz` (ZIP Bundle) adventure formats used in TaleWeaver.
 
+Feature-specific authored data may use top-level `extensions`. The proposed
+[`agent_runtime` version 1 contract](agent_runtime.md) defines portable adventure
+defaults and NPC seeds; changing session state remains outside adventure blueprints.
+
 ---
 
 ## 1. File Formats

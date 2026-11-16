@@ -19,6 +19,7 @@ from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
 from backend.api.routes.adventures.item_repair import router as item_repair_router
+from backend.api.routes.adventures.library import router as library_router
 from backend.api.routes.adventures.living_world import router as living_world_router
 from backend.api.routes.adventures.living_world_capabilities import (
     router as living_world_capabilities_router,
@@ -28,6 +29,7 @@ from backend.api.routes.adventures.living_world_decisions import (
 )
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
 from backend.api.routes.adventures.portrait_settings import router as portrait_settings_router
+from backend.api.routes.adventures.publication import router as publication_router
 from backend.api.routes.adventures.regeneration import router as regeneration_router
 from backend.api.routes.adventures.scene_debug import router as scene_debug_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
@@ -57,6 +59,8 @@ router = APIRouter(prefix="/adventures")
 router.include_router(blueprint_router)
 router.include_router(living_world_capabilities_router)
 router.include_router(imports_router)
+router.include_router(library_router)
+router.include_router(publication_router)
 
 # 2. Assets (specific paths like /{template_id}/visuals/...)
 router.include_router(assets_router)
