@@ -18,6 +18,7 @@ contains installation entry points and a feature summary. The
 | Configure pictures | [ComfyUI](comfyui/README.md), [task templates](comfyui-task-templates.md), [portraits](portrait-regeneration.md) |
 | Diagnose a turn | [Debug controls](in_game_debugging.md), [state consistency](turn-consistency.md), [timing](turn-latency.md), [system diagnostics](engineering/system-diagnostics.md) |
 | Understand a complete turn | [Scene, items, conditions and emotions, with and without NPC Personality](engineering/turn-lifecycle.md) |
+| Run real-model contract checks | [State, tools, emotions and NPC initiative](live-contract-checks.md) |
 
 ### Which version does a page describe?
 
