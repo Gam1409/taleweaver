@@ -34,11 +34,12 @@ def write(value, **arguments):
 def test_native_functions_are_distinct_and_only_notebook_tools_are_optional():
     tools = tool_definitions()
     names = [tool["function"]["name"] for tool in tools]
-    assert len(names) == len(set(names)) == 11
+    assert len(names) == len(set(names)) == 12
     assert {tool["function"]["name"] for tool in tool_definitions(False)} == {
         "search_memory",
         "read_memory",
         "inspect_self",
+        "inspect_entity",
         "visible_clothing",
         "inspect_beliefs",
         "read_belief_basis",
@@ -69,6 +70,7 @@ def test_unknown_tool_names_cannot_copy_private_text_into_metadata(name):
     "name",
     [
         "inspect_self",
+        "inspect_entity",
         "notebook_info",
         "notebook_read",
         "search_memory",

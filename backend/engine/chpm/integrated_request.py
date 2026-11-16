@@ -75,6 +75,8 @@ def _messages(
         key: lookup[key]
         for key in (
             "visible_clothing_actors",
+            "observable_entities",
+            "omitted_entities",
             "personal_notebook",
             "player_actor_id",
             "belief_subject_ids",

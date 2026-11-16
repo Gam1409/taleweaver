@@ -1,5 +1,8 @@
 # NPC decision workflows
 
+See [observable state tools](npc-observable-state.md) for current actor/item
+inspection within the existing optional agent rounds.
+
 Open **Session settings → NPC Personality**. Enabled mode offers two workflows:
 
 - **Staged** is the existing default. Optional memory investigation runs first,

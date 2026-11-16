@@ -13,6 +13,7 @@ class Lookup(Contract):
         "search_memory",
         "read_memory",
         "inspect_self",
+        "inspect_entity",
         "visible_clothing",
         "inspect_beliefs",
         "read_belief_basis",
@@ -49,6 +50,7 @@ including archived events. Current input is already supplied, not a memory searc
 Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
+inspect_entity(argument=id): accessible item/actor state by exact ID; owner is not placement.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.
 inspect_beliefs(argument=subject_id): up to two OWN subjective beliefs about that person.
 Use player_actor_id for the player; other belief subjects are in belief_subject_ids.
@@ -81,6 +83,6 @@ notebook_edit(operations,expected_revision): atomic add/replace/remove/test oper
 Operations use op,path,value_json; remove omits value_json. notebook_delete(path,expected_revision)
 removes a value; root path '' clears this one notebook. Use the current revision in metadata.
 No execution, system files, network, other notebooks or stored document versions exist.
-Return a short purpose, not a monologue. Do not edit psychological or world state.
+Do not edit psychological or world state.
 """
 )

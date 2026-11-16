@@ -6,6 +6,7 @@ from backend.engine.chpm import (
     agent_lookup_payload,
     agent_native,
     inference,
+    tool_feedback,
 )
 from backend.engine.chpm.agent_contracts import (
     INSTRUCTIONS,
@@ -80,7 +81,10 @@ async def investigate(
                 }
             )
             break
-        results = [tools.execute(request) for request in step.requests]
+        results = [
+            tool_feedback.for_model(request.tool, tools.execute(request))
+            for request in step.requests
+        ]
         transcript.append({"requests": [r.model_dump() for r in step.requests], "results": results})
         audit.append(
             {
@@ -142,4 +146,7 @@ def make_tools(
         semantic_scores={hit.record_id: hit.score for hit in hits},
         episode_contexts={hit.record_id: hit.context for hit in hits},
         notebook=notebook,
+        observable=getattr(turn, "observable_views", {}).get(mind.genesis.scope.observer_id)
+        if getattr(turn, "input_id", None) == observation.message_id
+        else None,
     )

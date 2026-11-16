@@ -5,7 +5,7 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from backend.engine.chpm import agent_beliefs, host_observations
+from backend.engine.chpm import agent_beliefs, agent_observable, host_observations
 from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.core.contracts import Belief
@@ -13,6 +13,7 @@ from backend.engine.chpm.host_state import Mind, Source, identifier, record
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.notebook_requests import NotebookRequest
 from backend.engine.chpm.notebook_tools import NotebookDraft
+from backend.engine.chpm.observable_state import View
 from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
@@ -41,6 +42,7 @@ class Tools:
     semantic_scores: dict[str, float] = field(default_factory=dict)
     episode_contexts: dict[str, EpisodeContext] = field(default_factory=dict)
     notebook: NotebookDraft | None = None
+    observable: View | None = None
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
@@ -56,18 +58,18 @@ class Tools:
         return self._lookup(lookup)
 
     def _lookup(self, lookup: Lookup) -> dict:
-        if lookup.tool == "search_memory":
-            return self.search(lookup.argument)
         if lookup.tool == "read_memory":
             item = self.exposed.get(lookup.argument)
             return self.expose(*item, full=True) if item else {"status": "unavailable_source"}
-        if lookup.tool == "inspect_self":
-            return self.inspect_self()
-        if lookup.tool == "inspect_beliefs":
-            return agent_beliefs.inspect(self, lookup.argument)
-        if lookup.tool == "read_belief_basis":
-            return agent_beliefs.basis(self, lookup.argument)
-        return self.visible_clothing(lookup.argument)
+        handlers = {
+            "search_memory": self.search,
+            "inspect_self": lambda _argument: self.inspect_self(),
+            "inspect_entity": lambda argument: agent_observable.inspect(self, argument),
+            "inspect_beliefs": lambda argument: agent_beliefs.inspect(self, argument),
+            "read_belief_basis": lambda argument: agent_beliefs.basis(self, argument),
+            "visible_clothing": self.visible_clothing,
+        }
+        return handlers[lookup.tool](lookup.argument)
 
     def search(self, query: str) -> dict:
         available = {

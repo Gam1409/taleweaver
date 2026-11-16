@@ -1,6 +1,12 @@
 """Build the observer's bounded lookup context for either tool protocol."""
 
-from backend.engine.chpm import agent_beliefs, continuation, host_observations, narrative_context
+from backend.engine.chpm import (
+    agent_beliefs,
+    agent_observable,
+    continuation,
+    host_observations,
+    narrative_context,
+)
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.schema import Observation
@@ -29,6 +35,7 @@ def build(
             continuation.experience_view(mind, supplied.get("_chpm_gap_cursors", {})),
         ),
         **agent_beliefs.subject_view(tools.mind),
+        **agent_observable.index(tools),
         "agenda": supplied.get("declared_agenda_not_world_facts", []),
         **(
             {"causal_continuity_not_world_facts": supplied["causal_continuity_not_world_facts"]}
