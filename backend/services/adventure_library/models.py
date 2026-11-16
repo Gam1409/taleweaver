@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from backend.engine.adventure_identity import normalize_origin_id
 
 SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 BLUEPRINT_NAME = "adventure.adv"
@@ -42,7 +43,7 @@ class LibraryEntry(BaseModel):
     # Unknown fields are ignored so newer indexes stay readable.
     model_config = ConfigDict(extra="ignore")
 
-    id: str = Field(min_length=1, description="adventure.origin_id (UUID), primary key")
+    id: str = Field(min_length=1, max_length=50, description="Stable UUID or legacy story identity")
     slug: str = Field(pattern=SLUG_PATTERN, max_length=64)
     title: str = Field(min_length=1)
     teaser: str = ""
@@ -57,7 +58,7 @@ class LibraryEntry(BaseModel):
     @field_validator("id")
     @classmethod
     def _canonical_identity(cls, value: str) -> str:
-        return str(UUID(value))
+        return normalize_origin_id(value)
 
     @field_validator("files")
     @classmethod

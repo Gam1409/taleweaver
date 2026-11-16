@@ -41,8 +41,8 @@ def _validate_envelope(manifest: dict[str, Any]) -> None:
     except ValueError as exc:
         raise CompatibilityError(str(exc)) from exc
     numbers = tuple(int(part) for part in version.split("."))
-    if numbers > (1, 3):
-        raise CompatibilityError("This converter supports adventure formats 1.0 through 1.3.")
+    if numbers > (1, 3, 1):
+        raise CompatibilityError("This converter supports adventure formats 1.0 through 1.3.1.")
 
 
 def _normalize_metadata(result: dict[str, Any], *, allow_legacy_mode: bool) -> None:

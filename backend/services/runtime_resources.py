@@ -35,7 +35,9 @@ async def resolve_corpora(
     contents = {}
     omitted = []
     for reference in references:
-        library = installed if reference.source == "installed" else remote.get(reference.library_id)
+        library: CorpusLibrary | None = installed
+        if reference.source == "remote":
+            library = remote.get(reference.library_id) if reference.library_id is not None else None
         try:
             contents[reference.id] = await _read_verified(library, reference)
         except ResourceUnavailableError:

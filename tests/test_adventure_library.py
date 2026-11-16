@@ -91,10 +91,13 @@ def test_remote_paths_cannot_escape_catalog_or_archive(path):
         entry(files=["adventure.adv", path])
 
 
-def test_index_requires_canonical_uuid_and_unique_file_paths():
+def test_index_normalizes_uuid_preserves_legacy_ids_and_requires_unique_file_paths():
     assert entry(id=ORIGIN.upper()).id == ORIGIN
+    assert entry(id="original-story").id == "original-story"
     with pytest.raises(ValidationError):
-        entry(id="title-is-not-identity")
+        entry(id="   ")
+    with pytest.raises(ValidationError):
+        entry(id="x" * 51)
     with pytest.raises(ValidationError):
         entry(files=["adventure.adv", "adventure.adv"])
 
@@ -162,9 +165,14 @@ async def test_index_response_and_aggregate_download_are_bounded(monkeypatch):
     ) as client:
         with pytest.raises(catalog.LibraryError, match="limit"):
             await catalog.LibraryService(client).get_library()
-    monkeypatch.setattr(settings, "ADVENTURE_DOWNLOAD_MAX_BYTES", 15)
+    blueprint = payload_files()["adventure.adv"]
+    monkeypatch.setattr(settings, "ADVENTURE_DOWNLOAD_MAX_BYTES", len(blueprint) + 9)
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"x" * 10))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, content=blueprint if request.url.path.endswith(".adv") else b"x" * 10
+            )
+        )
     ) as client:
         with pytest.raises(catalog.LibraryError, match="limit"):
             await installer.fetch_files(entry(), client)

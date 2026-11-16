@@ -1,5 +1,6 @@
 """Reconstruct world fields from an ADZ manifest without changing its defaults."""
 
+from copy import deepcopy
 from typing import Any
 
 
@@ -7,9 +8,14 @@ def build_archive_world(
     manifest_data: dict[str, Any], adv_data: dict[str, Any], resolved_license_url: str | None
 ) -> dict[str, Any]:
     # Reconstruct world
+    manifest_data = deepcopy(manifest_data)
+    adv_data = deepcopy(adv_data)
     prot = manifest_data.get("protagonist")
     world_manifest = {
+        **manifest_data,
+        "adventure": {**adv_data, "license_url": resolved_license_url},
         "protagonist": {
+            **(prot or {}),
             "name": prot.get("name", "You") if prot else "You",
             "role": prot.get("role", "Hero") if prot else "Hero",
             "description": prot.get("description", "") if prot else "",

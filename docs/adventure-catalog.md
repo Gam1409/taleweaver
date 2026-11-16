@@ -17,10 +17,25 @@ The adapter preserves story identity, author, license, characters, items and art
 while mapping supported upstream fields to the local format. Unsupported script
 features are reported instead of being silently discarded.
 
+The blueprint is downloaded and checked before artwork or other large assets.
+Supported records in formats `1.0` through `1.3.1` pass the same field and script
+checks. A recognized format number does not enable an unsupported API: adventures
+using newer interaction functions such as `tw.dialog` are rejected before asset
+downloads. Formats above `1.3.1` require a separate compatibility audit.
+
+The standard award field `is_earned` survives conversion as blueprint data;
+the receiving user's earned awards still come from their own progression records.
+
+ADZ world construction retains the authored adventure metadata, global scripts,
+NPC seed data and source identity through the normal import path. Installing a
+catalog release does not start a playthrough or apply its NPC seeds to a live mind.
+
 An update installs a new template version. Existing games continue using their
 previous template and assets; installing an update does not rewrite their history.
 The catalog recognizes already installed versions by their stable story identity,
 independently of their display title. Different stories may share the same title.
+Existing non-UUID origin keys retain their exact spelling and case. UUID spellings
+are canonicalized for comparison; no stored template or saved-game ID is rewritten.
 
 The default source is the original author's
 [adventure repository](https://github.com/jschm42/taleweaver-adventures).
@@ -83,11 +98,12 @@ preparation CLI do not upload or push anything online.
 
 ## Format baseline
 
-The compatibility adapter targets the upstream format at commit `2e042ef2`.
+The compatibility adapter starts from upstream `2e042ef2` and admits the `1.3.1`
+envelope introduced at `0ea8f204`, while retaining explicit feature checks.
 Its opaque extension handling additionally follows upstream `47fc1292`.
-Both projects currently label their adventure format `1.3`; a matching format
-number alone does not imply identical features. Conversion checks capabilities
-and supported fields, rather than simply replacing a version number.
+The fork exports format `1.3`; the upstream engine has newer formats. A matching
+format number alone does not imply identical features. Conversion checks supported
+fields and script APIs rather than simply replacing a version number.
 
 This integration adapts the catalog originally developed by **jschm42 and the
 TaleWeaver contributors**. Original story attribution and licenses are retained.

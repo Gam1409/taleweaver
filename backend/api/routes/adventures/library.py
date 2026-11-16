@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.engine.adventure_identity import stable_origin_id
+from backend.engine.adventure_identity import normalize_origin_id, stable_origin_id
 from backend.engine.adventure_importer import AdventureConflictError
 from backend.models.user import User
 from backend.services.adventure_library import (
@@ -55,7 +55,7 @@ async def _installed_versions(
         return {}
     installed: dict[str, str | None] = {}
     for template in await owned_templates(db, owner_id, origin_ids):
-        origin_id, version = stable_origin_id(template), template.version
+        origin_id, version = normalize_origin_id(stable_origin_id(template)), template.version
         current = installed.get(origin_id)
         if current is None or is_version_at_least(version or "", current):
             installed[origin_id] = version

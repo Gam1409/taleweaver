@@ -6,15 +6,14 @@ import asyncio
 import io
 import json
 import zipfile
-from uuid import UUID
 
 import httpx
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
 from backend.engine.adventure_compat import CompatibilityError, import_upstream_manifest
-from backend.engine.adventure_identity import stable_origin_id
+from backend.engine.adventure_identity import normalize_origin_id, stable_origin_id
 from backend.engine.adventure_importer import MAX_ADZ_ENTRY_BYTES, AdventureTemplateImporter
 from backend.models.adventure_template import AdventureTemplate
 from backend.services.adventure_library.catalog import library_url
@@ -53,14 +52,19 @@ async def fetch_files(
             )
 
     async with client_context(http_client) as client:
-        tasks = [asyncio.create_task(fetch_one(client, path)) for path in entry.files]
+        blueprint = await fetch_one(client, BLUEPRINT_NAME)
+        # Validate identity and behavior before fetching potentially large assets.
+        preflight = dict.fromkeys(entry.files, b"") | {BLUEPRINT_NAME: blueprint}
+        convert_files(entry, preflight)
+        paths = [path for path in entry.files if path != BLUEPRINT_NAME]
+        tasks = [asyncio.create_task(fetch_one(client, path)) for path in paths]
         try:
             contents = await asyncio.gather(*tasks)
         finally:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-    return dict(zip(entry.files, contents, strict=True))
+    return {BLUEPRINT_NAME: blueprint, **dict(zip(paths, contents, strict=True))}
 
 
 def build_bundle(files: dict[str, bytes]) -> bytes:
@@ -78,9 +82,9 @@ def convert_files(entry: LibraryEntry, files: dict[str, bytes]) -> dict[str, byt
     try:
         payload = json.loads(files[BLUEPRINT_NAME])
         adventure = payload["adventure"]
-        origin = str(UUID(str(adventure["origin_id"])))
+        origin = normalize_origin_id(adventure["origin_id"])
         top_origin = payload.get("origin_id")
-        if top_origin and str(UUID(str(top_origin))) != origin:
+        if top_origin is not None and normalize_origin_id(top_origin) != origin:
             raise ValueError("Conflicting manifest identities")
         if (origin, adventure.get("version"), adventure.get("title")) != (
             entry.id,
@@ -110,10 +114,20 @@ async def owned_templates(
     rows = await db.scalars(
         select(AdventureTemplate).where(
             AdventureTemplate.owner_id == owner_id,
-            or_(AdventureTemplate.origin_id.in_(origin_ids), AdventureTemplate.origin_id.is_(None)),
+            or_(
+                AdventureTemplate.origin_id.in_(origin_ids),
+                func.lower(AdventureTemplate.origin_id).in_(
+                    [value.lower() for value in origin_ids]
+                ),
+                AdventureTemplate.origin_id.is_(None),
+            ),
         )
     )
-    return [template for template in rows if stable_origin_id(template) in origin_ids]
+    return [
+        template
+        for template in rows
+        if normalize_origin_id(stable_origin_id(template)) in origin_ids
+    ]
 
 
 async def install_entry(

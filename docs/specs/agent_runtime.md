@@ -13,6 +13,18 @@ The parent adventure format stays at `1.3`. Each of these two extension objects
 requires the integer `schema_version: 1`; the NPC version is explicit so a copied
 character remains interpretable without its parent manifest.
 
+The extension schema version is independent of the adventure envelope. The catalog
+adapter accepts audited records in adventure formats `1.0` through `1.3.1`, with
+the existing field and script gates still applied. A `1.3.1` manifest using an
+unsupported interaction API does not become compatible just because its version
+is recognized. The blueprint is checked before downloading its larger assets.
+
+Adventure identity remains the existing `adventure.origin_id`, never a display
+title or an extension field. UUID spellings are canonicalized for comparison;
+non-UUID legacy keys remain case-sensitive and retain their original spelling.
+Incoming identities fit the existing 50-character storage bound. Catalog lookup,
+installation and export use the same identity rules without rewriting stored IDs.
+
 Upstream preserves valid namespaces without interpreting their version. Its
 [format specification](https://github.com/jschm42/taleweaver/blob/47fc1292a78e2f995f2b0feb6bec3410e8cd6765/docs/specs/adventure_format.md)
 and [Discussion 92](https://github.com/jschm42/taleweaver/discussions/92) are the
@@ -104,6 +116,8 @@ IDs, unknown field paths and an active feature set. Booleans, strings and floats
 are not valid schema versions. There is no automatic future-version downgrade.
 `inspect_manifest` additionally checks NPC versions and relationship targets.
 NPC-only data without the adventure namespace cannot activate a runtime.
+NPC validation still runs when required adventure capabilities are unavailable;
+an unsupported feature cannot conceal an invalid NPC seed behind core fallback.
 
 Unknown fields are preserved in the source JSON and reported; execution adapters
 must use `known_projection`, which excludes them. A newly added behavior that
@@ -186,6 +200,11 @@ and do not acquire asset packing or extraction semantics.
 The PR 8 converters now accept and preserve the namespace. Preparing an original
 engine copy reports behavioral loss and requires the existing acknowledgment.
 `fallback: block`, invalid or unknown `agent_runtime` versions block that copy.
+Public-copy validation checks both the adventure namespace and every NPC seed,
+including relationship targets, even when required features are unsupported.
+NPC-only runtime data without its adventure namespace also requires review.
+Ordinary opaque import/export remains separate and preserves unknown versions;
+it does not claim that their configuration can activate or safely fall back.
 If publication filtering would alter opaque extension data, preparation fails
 for manual review instead of silently exporting a broken custom contract.
 That preparation action still does not publish an adventure online.

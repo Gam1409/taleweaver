@@ -120,7 +120,7 @@ def inspect_manifest(manifest: dict, supported: frozenset[str] = frozenset()) ->
     if not isinstance(extensions, dict):
         return Inspection("invalid", error_paths=("extensions",))
     result = inspect_runtime(extensions.get("agent_runtime"), supported)
-    if result.status not in {"absent", "ready"}:
+    if result.status not in {"absent", "ready", "missing_required"}:
         return result
     try:
         npcs = validate_npcs(manifest)

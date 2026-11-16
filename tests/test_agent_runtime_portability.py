@@ -95,7 +95,10 @@ def test_schema_and_authoring_edits_preserve_unknown_fields_and_explicit_removal
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("archive", [False, True])
-async def test_real_import_edit_export_roundtrip(auth_client, monkeypatch, tmp_path, archive):
+@pytest.mark.parametrize("seed_version", [1, 99])
+async def test_real_import_edit_export_roundtrip(
+    auth_client, monkeypatch, tmp_path, archive, seed_version
+):
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
     for method in ("generate_placeholder", "generate_svg_placeholder", "ensure_thumbnails"):
         monkeypatch.setattr(
@@ -103,6 +106,7 @@ async def test_real_import_edit_export_roundtrip(auth_client, monkeypatch, tmp_p
             AsyncMock(return_value="/data/fake.svg"),
         )
     original = manifest()
+    original["npcs"][0]["metadata_json"]["agent_runtime"]["schema_version"] = seed_version
     before = deepcopy(original)
     async with TestSessionLocal() as db:
         owner = await db.scalar(select(User).limit(1))

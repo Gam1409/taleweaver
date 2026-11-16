@@ -32,6 +32,12 @@ def test_imported_identity_remains_authoritative():
     assert stable_origin_id(template) == "original-story"
 
 
+def test_existing_legacy_export_identity_is_not_truncated_to_an_incoming_catalog_limit():
+    identity = "legacy-story-" + "x" * 50
+    template = SimpleNamespace(id="local-copy", origin_id=identity)
+    assert stable_origin_id(template) == identity
+
+
 @pytest.mark.asyncio
 async def test_export_keeps_identity_and_global_script_without_mutating_template(auth_client):
     async with TestSessionLocal() as db:

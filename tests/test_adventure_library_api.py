@@ -26,12 +26,18 @@ def catalog_stub(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "identity", [entry().id, entry().id.upper(), "original-story", "История-01"]
+)
 async def test_catalog_reports_owned_version_update_and_refresh(
-    auth_client, db_session, catalog_stub
+    auth_client, db_session, catalog_stub, identity
 ):
+    catalog_stub.get_library.return_value = AdventureLibrary(
+        schema=1, adventures=[entry(id=identity)]
+    )
     owner = await db_session.scalar(select(User.id).where(User.username == "test_user"))
     db_session.add(
-        AdventureTemplate(title="Old title", owner_id=owner, origin_id=entry().id, version="1.0")
+        AdventureTemplate(title="Old title", owner_id=owner, origin_id=identity, version="1.0")
     )
     await db_session.commit()
     response = await auth_client.get(PREFIX + "/catalog")

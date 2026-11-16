@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from backend.engine.adventure_compat.common import CompatibilityError, ConversionReport
-from backend.engine.agent_runtime_contract import inspect_runtime
+from backend.engine.agent_runtime_contract import inspect_manifest
 
 
 def runtime_blocks(manifest: dict) -> list:
@@ -22,10 +22,12 @@ def check_public_extensions(before: dict, after: dict, report: ConversionReport)
             "Extension fields excluded from publication require manual review."
         )
     raw = (after.get("extensions") or {}).get("agent_runtime")
-    if raw is None:
+    if raw is None and all(value is None for value in runtime_blocks(after)[1:]):
         return
-    result = inspect_runtime(raw)
-    if result.status not in {"ready", "missing_required"} or raw.get("fallback", "core") == "block":
+    result = inspect_manifest(after)
+    if result.status not in {"ready", "missing_required"} or (
+        result.config is not None and result.config.fallback == "block"
+    ):
         raise CompatibilityError("This agent runtime cannot fall back to original TaleWeaver.")
     report.warn(
         "Original TaleWeaver preserves agent_runtime but does not execute autonomous NPC, psychology, RAG or Living World settings. Core fallback applies.",

@@ -313,6 +313,7 @@ FIELDS: dict[str, frozenset[str]] = {
         [
             "description",
             "guard_expression",
+            "is_earned",
             "key",
             "required_defeated_npc_id",
             "required_item_id",

@@ -139,7 +139,7 @@ class LibraryService:
         cached = _MEMORY_CACHE["library"]
         age = time.monotonic() - _MEMORY_CACHE["timestamp"]
         if (
-            cached is not None
+            isinstance(cached, AdventureLibrary)
             and not force_refresh
             and age < _MEMORY_CACHE["ttl"]
             and _MEMORY_CACHE["source"] == source
